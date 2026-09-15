@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/peaktrail/map-catalog.schema.json",
+  "title": "PEAK published map-pack catalog",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "activeGameBuildId", "mapPacks"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "activeGameBuildId": {
+      "oneOf": [
+        { "type": "integer", "minimum": 1 },
+        { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        { "type": "null" }
+      ]
+    },
+    "mapPacks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "mapPackId",
+          "identityVersion",
+          "sceneName",
+          "mapSlot",
+          "gameVersion",
+          "gameBuildId",
+          "projectionVersion",
+          "generatedAtUtc",
+          "path"
+        ],
+        "properties": {
+          "mapPackId": { "type": "string", "pattern": "^sha256-[a-f0-9]{64}$" },
+          "identityVersion": { "enum": [2, 3] },
+          "sceneName": { "type": "string", "pattern": "^Level_[0-9]+$" },
+          "mapSlot": { "type": "integer", "minimum": 0 },
+          "gameVersion": { "type": "string", "minLength": 1 },
+          "gameBuildId": {
+            "oneOf": [
+              { "type": "integer", "minimum": 1 },
+              { "type": "string", "pattern": "^[1-9][0-9]*$" }
+            ]
+          },
+          "projectionVersion": { "type": "integer", "minimum": 1 },
+          "generatedAtUtc": { "type": "string", "format": "date-time" },
+          "path": {
+            "type": "string",
+            "pattern": "^\\./packs/sha256-[a-f0-9]{64}/map-pack\\.json$"
+          },
+          "enabled": { "type": "boolean" }
+        }
+      }
+    }
+  }
+}

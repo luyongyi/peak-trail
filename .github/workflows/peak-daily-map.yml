@@ -1,0 +1,89 @@
+name: Update PEAK daily map
+
+on:
+  schedule:
+    # PEAK rotates at 17:00 UTC. GitHub schedules can run a few minutes late.
+    - cron: "10 17 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  update:
+    if: vars.PEAK_DAILY_ENABLED == 'true' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    concurrency:
+      group: peak-daily-update
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Resolve current PEAK map
+        run: node PeakTrailPlatform/tools/update-daily.mjs
+        env:
+          PEAK_API_VERSION: "2.4"
+          PEAK_MAP_COUNT: "21"
+      - name: Validate viewer and data
+        run: |
+          npm --prefix PeakTrailPlatform/web run check
+          npm --prefix PeakTrailPlatform/web test
+          node --test PeakTrailPlatform/tools/tests/*.test.mjs
+      - name: Commit changed daily data
+        shell: bash
+        run: |
+          git add PeakTrailPlatform/data/daily
+          if git diff --cached --quiet; then
+            echo "Daily data is unchanged."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: update PEAK daily map"
+          git push
+
+  deploy:
+    needs: update
+    if: vars.PEAK_PAGES_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: peak-pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Require independently provisioned game assets
+        run: |
+          test -f local/assets/game-assets/catalog.json || {
+            echo "Restore the approved local/assets backup before enabling PEAK_PAGES_ENABLED."
+            exit 1
+          }
+      - name: Validate viewer and data
+        run: |
+          npm --prefix PeakTrailPlatform/web run check
+          npm --prefix PeakTrailPlatform/web test
+          node --test PeakTrailPlatform/tools/tests/*.test.mjs
+          node PeakTrailPlatform/tools/validate-data.mjs
+      - name: Stage static site
+        run: node PeakTrailPlatform/tools/stage-site.mjs
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: PeakTrailPlatform/site-dist
+          include-hidden-files: true
+      - name: Deploy GitHub Pages
+        uses: actions/deploy-pages@v5
+        id: deployment

@@ -1,0 +1,28 @@
+{"type":"participant","t":0,"playerId":"steam:76561198000000001","nickname":"Climber One","actorNumber":1,"platform":"steam"}
+{"type":"participant","t":0,"playerId":"steam:76561198000000002","nickname":"Climber Two","actorNumber":2,"platform":"steam"}
+{"type":"event","event":"join","t":0,"playerId":"steam:76561198000000001","segment":0}
+{"type":"event","event":"join","t":0,"playerId":"steam:76561198000000002","segment":0}
+{"type":"sample","t":0,"playerId":"steam:76561198000000001","pos":[-15,1,-14],"yaw":35,"segment":0}
+{"type":"sample","t":0,"playerId":"steam:76561198000000002","pos":[-14,1,-16],"yaw":30,"segment":0}
+{"type":"sample","t":2000,"playerId":"steam:76561198000000001","pos":[-10,2,-10],"yaw":42,"segment":0}
+{"type":"sample","t":2000,"playerId":"steam:76561198000000002","pos":[-11,2,-12],"yaw":38,"segment":0}
+{"type":"sample","t":4000,"playerId":"steam:76561198000000001","pos":[-6,4,-6],"yaw":48,"segment":0}
+{"type":"sample","t":4000,"playerId":"steam:76561198000000002","pos":[-8,3,-8],"yaw":45,"segment":0}
+{"type":"event","event":"passed_out","t":5500,"playerId":"steam:76561198000000002","pos":[-5,5,-5],"segment":0}
+{"type":"sample","t":6000,"playerId":"steam:76561198000000001","pos":[-2,8,-2],"yaw":52,"segment":0}
+{"type":"sample","t":6000,"playerId":"steam:76561198000000002","pos":[-5,5,-5],"yaw":49,"segment":0}
+{"type":"event","event":"recovered","t":7500,"playerId":"steam:76561198000000002","pos":[-4,6,-4],"segment":0}
+{"type":"sample","t":8000,"playerId":"steam:76561198000000001","pos":[2,9,2],"yaw":55,"segment":0}
+{"type":"sample","t":8000,"playerId":"steam:76561198000000002","pos":[-1,8,-1],"yaw":54,"segment":0}
+{"type":"event","event":"warp","t":9000,"playerId":"steam:76561198000000002","pos":[8,5,8],"segment":0}
+{"type":"sample","t":10000,"playerId":"steam:76561198000000001","pos":[6,6,6],"yaw":62,"segment":0}
+{"type":"sample","t":10000,"playerId":"steam:76561198000000002","pos":[8,5,8],"yaw":65,"segment":0}
+{"type":"sample","t":12000,"playerId":"steam:76561198000000001","pos":[10,3,9],"yaw":70,"segment":0}
+{"type":"sample","t":12000,"playerId":"steam:76561198000000002","pos":[11,3,10],"yaw":72,"segment":0}
+{"type":"event","event":"death","t":13500,"playerId":"steam:76561198000000001","pos":[12,2,11],"segment":0}
+{"type":"event","event":"revive","t":15000,"playerId":"steam:76561198000000001","pos":[13,2,12],"segment":0}
+{"type":"sample","t":16000,"playerId":"steam:76561198000000001","pos":[13,2,12],"yaw":78,"segment":0}
+{"type":"sample","t":16000,"playerId":"steam:76561198000000002","pos":[14,2,13],"yaw":79,"segment":0}
+{"type":"sample","t":20000,"playerId":"steam:76561198000000001","pos":[16,1,16],"yaw":86,"segment":0}
+{"type":"sample","t":20000,"playerId":"steam:76561198000000002","pos":[15,1,15],"yaw":84,"segment":0}
+{"type":"event","event":"run_end","t":20000,"segment":0}

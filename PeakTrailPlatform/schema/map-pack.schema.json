@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/peaktrail/map-pack.schema.json",
+  "title": "PEAK survey and real-scene map pack",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schemaVersion",
+    "identityVersion",
+    "mapPackId",
+    "gameVersion",
+    "gameBuildId",
+    "sceneName",
+    "projectionVersion",
+    "coordinateSpace",
+    "textureUv",
+    "imageOrigin",
+    "layers"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "identityVersion": { "enum": [2, 3] },
+    "mapPackId": { "type": "string", "pattern": "^sha256-[a-f0-9]{64}$" },
+    "generatedAtUtc": { "type": "string", "format": "date-time" },
+    "gameVersion": { "type": "string", "minLength": 1 },
+    "gameBuildId": { "type": ["integer", "string"] },
+    "sceneName": { "type": "string", "minLength": 1 },
+    "mapSlot": { "type": "integer", "minimum": 0 },
+    "projectionVersion": { "type": "integer", "minimum": 1 },
+    "coordinateSpace": { "const": "unity-world-meters" },
+    "textureUv": { "const": "u=(x-minX)/(maxX-minX);v=(z-minZ)/(maxZ-minZ)" },
+    "imageOrigin": { "const": "bottom-left-in-uv;viewer-flips-for-top-left-images" },
+    "layers": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": [
+          "id",
+          "segment",
+          "biome",
+          "texture",
+          "textureSha256",
+          "height",
+          "heightSha256",
+          "columns",
+          "rows",
+          "minX",
+          "maxX",
+          "minY",
+          "maxY",
+          "minZ",
+          "maxZ",
+          "heightEncoding",
+          "noData",
+          "sampleLocation"
+        ],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "segment": { "type": "integer" },
+          "biome": { "type": "string", "minLength": 1 },
+          "texture": { "type": "string" },
+          "textureSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "height": { "type": "string" },
+          "heightSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "geometry": { "oneOf": [
+            { "type": "string", "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[a-zA-Z0-9_./-]+\\.glb(?:\\.gz)?$" },
+            { "type": "object", "description": "Legacy v2 diagnostic geometry counts; never a rendering source." }
+          ] },
+          "geometrySha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "geometryFormat": { "enum": ["glb-instanced-v1", "glb-instanced-v1+gzip"] },
+          "columns": { "type": "integer", "minimum": 2 },
+          "rows": { "type": "integer", "minimum": 2 },
+          "minX": { "type": "number" },
+          "maxX": { "type": "number" },
+          "minY": { "type": "number" },
+          "maxY": { "type": "number" },
+          "minZ": { "type": "number" },
+          "maxZ": { "type": "number" },
+          "heightEncoding": { "const": "float32-le-row-major-minz-minx" },
+          "noData": { "const": "NaN" },
+          "sampleLocation": { "const": "cell-centers" },
+          "textureFlipY": { "const": true }
+        },
+        "allOf": [
+          {
+            "if": { "required": ["geometryFormat"], "properties": { "geometryFormat": { "const": "glb-instanced-v1+gzip" } } },
+            "then": { "properties": { "geometry": { "type": "string", "pattern": "\\.glb\\.gz$" } } }
+          },
+          {
+            "if": { "required": ["geometryFormat"], "properties": { "geometryFormat": { "const": "glb-instanced-v1" } } },
+            "then": { "properties": { "geometry": { "type": "string", "pattern": "\\.glb$" } } }
+          }
+        ]
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "identityVersion": { "const": 3 } } },
+      "then": { "properties": { "layers": { "items": { "required": ["geometry", "geometrySha256", "geometryFormat"], "properties": { "geometry": { "type": "string" } } } } } }
+    },
+    {
+      "if": { "properties": { "identityVersion": { "const": 2 } } },
+      "then": { "properties": { "layers": { "items": { "not": { "anyOf": [
+        { "required": ["geometry"], "properties": { "geometry": { "type": "string" } } },
+        { "required": ["geometrySha256"] },
+        { "required": ["geometryFormat"] }
+      ] } } } } }
+    }
+  ]
+}

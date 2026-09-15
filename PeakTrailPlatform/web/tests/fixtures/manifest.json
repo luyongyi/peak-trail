@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "sessionId": "viewer-smoke-test",
+  "runId": "local-test-run",
+  "startedAtUtc": "2026-09-15T12:00:00Z",
+  "gameVersion": "2.4.c",
+  "gameBuildId": "19492001",
+  "recorderVersion": "0.1.0-test",
+  "sceneName": "Level_7",
+  "levelIndex": 7,
+  "mapSlot": 7,
+  "mapPackId": "sha256-7d6ead8ccdab99c02f3be2aa6b4631bfec87caa973869d1cc73e6c8f3f3d6ed1",
+  "projectionVersion": 1,
+  "sampleHz": 5,
+  "coordinateSpace": "unity-world-meters",
+  "positionAuthority": "xyz",
+  "segmentResolution": "position-inferred-v1",
+  "activeSegmentSemantics": "global-maphandler-segments-index",
+  "identityMode": "platform-user-id",
+  "recordingScope": "all-synchronized-players",
+  "timeUnit": "milliseconds",
+  "participants": [
+    { "playerId": "steam:10001", "nickname": "Climber One", "platform": "steam", "actorNumber": 1 },
+    { "playerId": "steam:10002", "nickname": "Climber Two", "platform": "steam", "actorNumber": 2 }
+  ]
+}

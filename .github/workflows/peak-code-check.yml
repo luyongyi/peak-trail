@@ -1,0 +1,24 @@
+name: Check PEAK Trail code
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Check code and synthetic fixtures without private assets
+        run: |
+          npm --prefix PeakTrailPlatform/web run check
+          npm --prefix PeakTrailPlatform/web test
+          node --test PeakTrailPlatform/tools/tests/*.test.mjs

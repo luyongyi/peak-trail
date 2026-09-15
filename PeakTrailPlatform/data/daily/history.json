@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "observations": [
+    {
+      "observedAtUtc": "2026-09-15T11:45:29.060Z",
+      "levelIndex": 457,
+      "mapSlot": 16,
+      "sceneName": "Level_16",
+      "nextChangeAtUtc": "2026-09-15T16:59:57.060Z"
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "sessionId": "peaktrail-qa-session",
+  "runId": "peaktrail-qa-run",
+  "startedAtUtc": "2026-09-15T12:00:00Z",
+  "endedAtUtc": "2026-09-15T12:00:20Z",
+  "gameVersion": "2.4.c",
+  "gameBuildId": "19492001",
+  "recorderVersion": "0.1.0",
+  "sceneName": "Level_16",
+  "levelIndex": 457,
+  "mapSlot": 16,
+  "mapPackId": "sha256-c73f1a7098111e5176bb710315fb9b7a39c2ea0f643c1869a932a996453460fc",
+  "projectionVersion": 1,
+  "sampleHz": 5,
+  "coordinateSpace": "unity-world-meters",
+  "positionAuthority": "xyz",
+  "segmentResolution": "position-inferred-v1",
+  "activeSegmentSemantics": "global-maphandler-segments-index",
+  "timeUnit": "milliseconds",
+  "identityMode": "platform-user-id",
+  "recordingScope": "all-synchronized-players",
+  "durationMs": 20000,
+  "participants": [
+    {
+      "playerId": "steam:76561198000000001",
+      "nickname": "Climber One",
+      "actorNumber": 1,
+      "platform": "steam"
+    },
+    {
+      "playerId": "steam:76561198000000002",
+      "nickname": "Climber Two",
+      "actorNumber": 2,
+      "platform": "steam"
+    }
+  ]
+}

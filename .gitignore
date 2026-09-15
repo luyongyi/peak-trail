@@ -1,0 +1,53 @@
+# Everything stays in this project directory; these files stay out of Git.
+/local/
+
+# Generated output and machine-local dependencies.
+**/artifacts/
+**/bin/
+**/obj/
+**/node_modules/
+**/.venv/
+**/__pycache__/
+*.pyc
+*.nbi
+*.nbc
+/PeakTrailPlatform/site-dist/
+
+# Guard against accidentally recreating the old in-source asset layout.
+/PeakTrailPlatform/data/maps/packs/
+/PeakTrailPlatform/data/game-assets/
+*.f32
+*.glb
+*.glb.gz
+*.dll
+*.pdb
+*.zip
+*.tar
+*.tgz
+*.7z
+
+# Private recordings are never source code. Only four synthetic test fixtures
+# are explicitly allowed; do not put real sessions in the fixtures folder.
+*.ndjson
+*.partial
+*.log
+!PeakTrailPlatform/web/tests/fixtures/stream.ndjson
+!PeakTrailPlatform/web/tests/fixtures/qa-stream.ndjson
+!PeakTrailPlatform/web/tests/fixtures/qa-history.ndjson
+!PeakTrailPlatform/web/tests/fixtures/qa-player-state-history.ndjson
+
+# Local settings, credentials and editor state.
+.env
+.env.*
+!.env.example
+Config.Build.user.props
+*.user
+*.suo
+*.lock.tmp
+.register-map-pack.lock
+.catalog-*.tmp
+.vs/
+.idea/
+.vscode/
+Thumbs.db
+.DS_Store

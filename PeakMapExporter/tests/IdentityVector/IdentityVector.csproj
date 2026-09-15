@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <NoWarn>$(NoWarn);CS0649</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="../../src/PeakMapExporter/Manifest.cs" Link="Manifest.cs" />
+    <Compile Include="../../src/PeakMapExporter/MapPackIdentity.cs" Link="MapPackIdentity.cs" />
+  </ItemGroup>
+</Project>

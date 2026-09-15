@@ -1,0 +1,1009 @@
+{
+  "gameBuildId": 25306743,
+  "note": "Direct shader-declared fields only. Colors with HDR flag16 are stored linear; ordinary Color flag0 is sRGB. Material alpha may be a shader parameter, not opacity.",
+  "materials": [
+    {
+      "name": "FogSurface void",
+      "shader": "GD/FogSurface",
+      "sourceFile": "sharedassets4.assets",
+      "pathId": 20,
+      "colors": {
+        "_Color": {
+          "rgba": [
+            0.7095718383789062,
+            0.6693217754364014,
+            0.8396226167678833,
+            1.0
+          ],
+          "flags": 0
+        },
+        "_GlowColor": {
+          "rgba": [
+            26.015775680541992,
+            24.321731567382812,
+            39.704708099365234,
+            0.0
+          ],
+          "flags": 16
+        }
+      },
+      "floats": {
+        "_DistortionAmount": -0.38999998569488525,
+        "_EdgeGlow": 1.0,
+        "_Opacity": 0.22100000083446503,
+        "_QueueControl": 0.0,
+        "_QueueOffset": 0.0,
+        "_SurfaceDepth": 0.0,
+        "_Tex1Scale": 0.019999999552965164,
+        "_Tex2Scale": 0.009999999776482582,
+        "_TexSpeed": 0.4000000059604645,
+        "_UseHeightFogFade": 1.0
+      },
+      "passState": {
+        "rtBlend0": {
+          "srcBlend": {
+            "val": 5.0,
+            "name": "<noninit>"
+          },
+          "destBlend": {
+            "val": 10.0,
+            "name": "<noninit>"
+          },
+          "srcBlendAlpha": {
+            "val": 1.0,
+            "name": "<noninit>"
+          },
+          "destBlendAlpha": {
+            "val": 10.0,
+            "name": "<noninit>"
+          },
+          "blendOp": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "blendOpAlpha": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "colMask": {
+            "val": 15.0,
+            "name": "<noninit>"
+          }
+        },
+        "zTest": {
+          "val": 4.0,
+          "name": "<noninit>"
+        },
+        "zWrite": {
+          "val": 0.0,
+          "name": "<noninit>"
+        },
+        "culling": {
+          "val": 0.0,
+          "name": "<noninit>"
+        }
+      }
+    },
+    {
+      "name": "FogSurface",
+      "shader": "GD/FogSurface",
+      "sourceFile": "sharedassets4.assets",
+      "pathId": 21,
+      "colors": {
+        "_Color": {
+          "rgba": [
+            0.2705881893634796,
+            0.45098042488098145,
+            0.9058824181556702,
+            1.0
+          ],
+          "flags": 0
+        },
+        "_GlowColor": {
+          "rgba": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "flags": 16
+        }
+      },
+      "floats": {
+        "_DistortionAmount": 0.10000000149011612,
+        "_EdgeGlow": 10.0,
+        "_Opacity": 0.4169999957084656,
+        "_QueueControl": 0.0,
+        "_QueueOffset": 0.0,
+        "_SurfaceDepth": 4.0,
+        "_Tex1Scale": 0.019999999552965164,
+        "_Tex2Scale": 0.009999999776482582,
+        "_TexSpeed": 0.4000000059604645,
+        "_UseHeightFogFade": 0.0
+      },
+      "passState": {
+        "rtBlend0": {
+          "srcBlend": {
+            "val": 5.0,
+            "name": "<noninit>"
+          },
+          "destBlend": {
+            "val": 10.0,
+            "name": "<noninit>"
+          },
+          "srcBlendAlpha": {
+            "val": 1.0,
+            "name": "<noninit>"
+          },
+          "destBlendAlpha": {
+            "val": 10.0,
+            "name": "<noninit>"
+          },
+          "blendOp": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "blendOpAlpha": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "colMask": {
+            "val": 15.0,
+            "name": "<noninit>"
+          }
+        },
+        "zTest": {
+          "val": 4.0,
+          "name": "<noninit>"
+        },
+        "zWrite": {
+          "val": 0.0,
+          "name": "<noninit>"
+        },
+        "culling": {
+          "val": 0.0,
+          "name": "<noninit>"
+        }
+      }
+    },
+    {
+      "name": "M_Lava",
+      "shader": "Lava",
+      "sourceFile": "sharedassets4.assets",
+      "pathId": 93,
+      "colors": {
+        "_BaseColor": {
+          "rgba": [
+            4.083005905151367,
+            0.33255404233932495,
+            0.021377036347985268,
+            0.9882352948188782
+          ],
+          "flags": 16
+        },
+        "_Color1": {
+          "rgba": [
+            3.03143310546875,
+            0.18750669062137604,
+            0.0,
+            1.0
+          ],
+          "flags": 16
+        },
+        "_Color21": {
+          "rgba": [
+            0.15094339847564697,
+            0.010679955594241619,
+            0.010679955594241619,
+            0.2549019753932953
+          ],
+          "flags": 16
+        },
+        "_Color3": {
+          "rgba": [
+            0.43396228551864624,
+            0.0,
+            0.0040847850032150745,
+            0.4627451002597809
+          ],
+          "flags": 16
+        },
+        "_EdgeColor": {
+          "rgba": [
+            22.627416610717773,
+            3.550306558609009,
+            0.0,
+            0.0
+          ],
+          "flags": 16
+        },
+        "_Tint": {
+          "rgba": [
+            0.900943398475647,
+            0.9468819499015808,
+            1.0,
+            1.0
+          ],
+          "flags": 16
+        }
+      },
+      "floats": {
+        "_BaseTexAmount": 1.0,
+        "_DistortAmount": 0.30000001192092896,
+        "_DistortScale": 0.009999999776482582,
+        "_DistortSpeed": 0.009999999776482582,
+        "_Flip1": 0.0,
+        "_Flip2": 0.0,
+        "_Flip3": 0.0,
+        "_HueStr1": 1.0,
+        "_HueStr2": 0.0,
+        "_Mask1": 0.0,
+        "_QueueControl": 0.0,
+        "_QueueOffset": 45.0,
+        "_TriplanarScale": 1.0,
+        "_UV1": 0.10000000149011612,
+        "_UV2": 0.05000000074505806,
+        "_UV3": 0.009999999776482582
+      },
+      "passState": {
+        "rtBlend0": {
+          "srcBlend": {
+            "val": 5.0,
+            "name": "<noninit>"
+          },
+          "destBlend": {
+            "val": 10.0,
+            "name": "<noninit>"
+          },
+          "srcBlendAlpha": {
+            "val": 1.0,
+            "name": "<noninit>"
+          },
+          "destBlendAlpha": {
+            "val": 10.0,
+            "name": "<noninit>"
+          },
+          "blendOp": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "blendOpAlpha": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "colMask": {
+            "val": 15.0,
+            "name": "<noninit>"
+          }
+        },
+        "zTest": {
+          "val": 4.0,
+          "name": "<noninit>"
+        },
+        "zWrite": {
+          "val": 0.0,
+          "name": "<noninit>"
+        },
+        "culling": {
+          "val": 2.0,
+          "name": "<noninit>"
+        }
+      }
+    },
+    {
+      "name": "M_Void Water",
+      "shader": "GD/Water-GD",
+      "sourceFile": "sharedassets4.assets",
+      "pathId": 99,
+      "colors": {
+        "_CrudColor": {
+          "rgba": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "flags": 0
+        },
+        "_FoamTint": {
+          "rgba": [
+            0.037735819816589355,
+            0.037735819816589355,
+            0.037735819816589355,
+            1.0
+          ],
+          "flags": 16
+        },
+        "_WaterColorPrimary": {
+          "rgba": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "flags": 0
+        },
+        "_WaterColorSecodary": {
+          "rgba": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "flags": 0
+        },
+        "_WaterColorShallow": {
+          "rgba": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "flags": 0
+        },
+        "_WaterTint": {
+          "rgba": [
+            1.0,
+            1.0,
+            1.0,
+            0.0
+          ],
+          "flags": 0
+        },
+        "_WaterTintPreFoam": {
+          "rgba": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "flags": 0
+        }
+      },
+      "floats": {
+        "_AddPrecomputedVelocity": 0.0,
+        "_AddSpecular": 0.0,
+        "_CloudIntensity": 0.0,
+        "_CrudScale": 0.10000000149011612,
+        "_CrudSpeed": 0.009999999776482582,
+        "_Depth": 0.0,
+        "_FlipCrud": 1.0,
+        "_FoamDepth": 10.779999732971191,
+        "_FoamNoisespeed": 0.004999999888241291,
+        "_FoamSeanoiseamount": 0.9800000190734863,
+        "_FoamTexture": 0.6000000238418579,
+        "_FoamTextureScale": 0.019999999552965164,
+        "_NoShadowSpec": 0.0,
+        "_QueueControl": 0.0,
+        "_QueueOffset": 0.0,
+        "_SeaFoamNoisespeed": 0.009999999776482582,
+        "_SeaFoamTextureScale": 0.11999999731779099,
+        "_SeaNoiseAmount": 1.0,
+        "_SeaNoiseScale": 0.009999999776482582,
+        "_SeaNoiseSpeed": 0.009999999776482582,
+        "_SpecularIntensity": 0.10000000149011612,
+        "_SpecularPower": 0.0,
+        "_UseRadialMask": 1.0,
+        "_VertexOffset": 3.0,
+        "_XRMotionVectorsPass": 1.0,
+        "_cloudscale": 0.10000000149011612
+      },
+      "passState": {
+        "rtBlend0": {
+          "srcBlend": {
+            "val": 5.0,
+            "name": "<noninit>"
+          },
+          "destBlend": {
+            "val": 10.0,
+            "name": "<noninit>"
+          },
+          "srcBlendAlpha": {
+            "val": 5.0,
+            "name": "<noninit>"
+          },
+          "destBlendAlpha": {
+            "val": 10.0,
+            "name": "<noninit>"
+          },
+          "blendOp": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "blendOpAlpha": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "colMask": {
+            "val": 15.0,
+            "name": "<noninit>"
+          }
+        },
+        "zTest": {
+          "val": 4.0,
+          "name": "<noninit>"
+        },
+        "zWrite": {
+          "val": 0.0,
+          "name": "<noninit>"
+        },
+        "culling": {
+          "val": 0.0,
+          "name": "<noninit>"
+        }
+      }
+    },
+    {
+      "name": "M_Water_Onsen",
+      "shader": "GD/Water-GD",
+      "sourceFile": "sharedassets4.assets",
+      "pathId": 101,
+      "colors": {
+        "_CrudColor": {
+          "rgba": [
+            1.0,
+            1.0,
+            1.0,
+            0.0
+          ],
+          "flags": 0
+        },
+        "_FoamTint": {
+          "rgba": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "flags": 16
+        },
+        "_WaterColorPrimary": {
+          "rgba": [
+            0.08410467207431793,
+            0.3338019847869873,
+            0.3962264060974121,
+            0.0
+          ],
+          "flags": 0
+        },
+        "_WaterColorSecodary": {
+          "rgba": [
+            0.1875222623348236,
+            0.6690508723258972,
+            0.8113207817077637,
+            0.0
+          ],
+          "flags": 0
+        },
+        "_WaterColorShallow": {
+          "rgba": [
+            0.2671324610710144,
+            0.5277014374732971,
+            0.650943398475647,
+            0.0
+          ],
+          "flags": 0
+        },
+        "_WaterTint": {
+          "rgba": [
+            1.0,
+            1.0,
+            1.0,
+            0.0
+          ],
+          "flags": 0
+        },
+        "_WaterTintPreFoam": {
+          "rgba": [
+            1.0,
+            1.0,
+            1.0,
+            0.0
+          ],
+          "flags": 0
+        }
+      },
+      "floats": {
+        "_AddPrecomputedVelocity": 0.0,
+        "_AddSpecular": 0.0,
+        "_CloudIntensity": 0.20000000298023224,
+        "_CrudScale": 1.0,
+        "_CrudSpeed": 1.0,
+        "_Depth": 4.0,
+        "_FlipCrud": 0.0,
+        "_FoamDepth": 25.739999771118164,
+        "_FoamNoisespeed": 0.004999999888241291,
+        "_FoamSeanoiseamount": 0.9800000190734863,
+        "_FoamTexture": 0.36000001430511475,
+        "_FoamTextureScale": 0.019999999552965164,
+        "_NoShadowSpec": 0.0,
+        "_QueueControl": 0.0,
+        "_QueueOffset": 0.0,
+        "_SeaFoamNoisespeed": 0.05000000074505806,
+        "_SeaFoamTextureScale": 0.11999999731779099,
+        "_SeaNoiseAmount": 1.0,
+        "_SeaNoiseScale": 0.009999999776482582,
+        "_SeaNoiseSpeed": 0.009999999776482582,
+        "_SpecularIntensity": 1.0,
+        "_SpecularPower": 1.0,
+        "_UseRadialMask": 0.0,
+        "_VertexOffset": 0.0,
+        "_XRMotionVectorsPass": 1.0,
+        "_cloudscale": 0.10000000149011612
+      },
+      "passState": {
+        "rtBlend0": {
+          "srcBlend": {
+            "val": 5.0,
+            "name": "<noninit>"
+          },
+          "destBlend": {
+            "val": 10.0,
+            "name": "<noninit>"
+          },
+          "srcBlendAlpha": {
+            "val": 5.0,
+            "name": "<noninit>"
+          },
+          "destBlendAlpha": {
+            "val": 10.0,
+            "name": "<noninit>"
+          },
+          "blendOp": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "blendOpAlpha": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "colMask": {
+            "val": 15.0,
+            "name": "<noninit>"
+          }
+        },
+        "zTest": {
+          "val": 4.0,
+          "name": "<noninit>"
+        },
+        "zWrite": {
+          "val": 0.0,
+          "name": "<noninit>"
+        },
+        "culling": {
+          "val": 0.0,
+          "name": "<noninit>"
+        }
+      }
+    },
+    {
+      "name": "M_Water_forest 1",
+      "shader": "GD/Water-GD",
+      "sourceFile": "sharedassets4.assets",
+      "pathId": 102,
+      "colors": {
+        "_CrudColor": {
+          "rgba": [
+            1.0,
+            0.814465343952179,
+            0.8777157664299011,
+            1.0
+          ],
+          "flags": 0
+        },
+        "_FoamTint": {
+          "rgba": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "flags": 16
+        },
+        "_WaterColorPrimary": {
+          "rgba": [
+            0.595720648765564,
+            0.13830536603927612,
+            0.698113203048706,
+            0.0
+          ],
+          "flags": 0
+        },
+        "_WaterColorSecodary": {
+          "rgba": [
+            0.2183641493320465,
+            0.045488644391298294,
+            0.6289306879043579,
+            0.0
+          ],
+          "flags": 0
+        },
+        "_WaterColorShallow": {
+          "rgba": [
+            0.7295596599578857,
+            0.503883957862854,
+            0.17665430903434753,
+            0.0
+          ],
+          "flags": 0
+        },
+        "_WaterTint": {
+          "rgba": [
+            0.6918238401412964,
+            0.40900275111198425,
+            0.32415643334388733,
+            0.0
+          ],
+          "flags": 0
+        },
+        "_WaterTintPreFoam": {
+          "rgba": [
+            1.0,
+            1.0,
+            1.0,
+            0.0
+          ],
+          "flags": 0
+        }
+      },
+      "floats": {
+        "_AddPrecomputedVelocity": 0.0,
+        "_AddSpecular": 0.0,
+        "_CloudIntensity": -0.10999999940395355,
+        "_CrudScale": 0.009999999776482582,
+        "_CrudSpeed": -0.0020000000949949026,
+        "_Depth": 8.0,
+        "_FlipCrud": 0.0,
+        "_FoamDepth": 150.0,
+        "_FoamNoisespeed": 0.004999999888241291,
+        "_FoamSeanoiseamount": 0.9700000286102295,
+        "_FoamTexture": 0.699999988079071,
+        "_FoamTextureScale": 0.019999999552965164,
+        "_NoShadowSpec": 0.0,
+        "_QueueControl": 0.0,
+        "_QueueOffset": 1.0,
+        "_SeaFoamNoisespeed": 0.009999999776482582,
+        "_SeaFoamTextureScale": 0.11999999731779099,
+        "_SeaNoiseAmount": 1.0,
+        "_SeaNoiseScale": 0.1899999976158142,
+        "_SeaNoiseSpeed": 0.009999999776482582,
+        "_SpecularIntensity": 0.5,
+        "_SpecularPower": 1.0,
+        "_UseRadialMask": 0.0,
+        "_VertexOffset": 0.0,
+        "_XRMotionVectorsPass": 1.0,
+        "_cloudscale": 0.10000000149011612
+      },
+      "passState": {
+        "rtBlend0": {
+          "srcBlend": {
+            "val": 5.0,
+            "name": "<noninit>"
+          },
+          "destBlend": {
+            "val": 10.0,
+            "name": "<noninit>"
+          },
+          "srcBlendAlpha": {
+            "val": 5.0,
+            "name": "<noninit>"
+          },
+          "destBlendAlpha": {
+            "val": 10.0,
+            "name": "<noninit>"
+          },
+          "blendOp": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "blendOpAlpha": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "colMask": {
+            "val": 15.0,
+            "name": "<noninit>"
+          }
+        },
+        "zTest": {
+          "val": 4.0,
+          "name": "<noninit>"
+        },
+        "zWrite": {
+          "val": 0.0,
+          "name": "<noninit>"
+        },
+        "culling": {
+          "val": 0.0,
+          "name": "<noninit>"
+        }
+      }
+    },
+    {
+      "name": "M_Water_forest",
+      "shader": "GD/Water-GD",
+      "sourceFile": "sharedassets4.assets",
+      "pathId": 104,
+      "colors": {
+        "_CrudColor": {
+          "rgba": [
+            0.9114586114883423,
+            0.8414471745491028,
+            0.9339622855186462,
+            0.0
+          ],
+          "flags": 0
+        },
+        "_FoamTint": {
+          "rgba": [
+            0.900943398475647,
+            1.0,
+            0.9377358555793762,
+            1.0
+          ],
+          "flags": 16
+        },
+        "_WaterColorPrimary": {
+          "rgba": [
+            0.08235294371843338,
+            0.3960784375667572,
+            0.2622412145137787,
+            0.0
+          ],
+          "flags": 0
+        },
+        "_WaterColorSecodary": {
+          "rgba": [
+            0.18823525309562683,
+            0.811764657497406,
+            0.5450831651687622,
+            0.0
+          ],
+          "flags": 0
+        },
+        "_WaterColorShallow": {
+          "rgba": [
+            0.45167532563209534,
+            0.6509804129600525,
+            0.2666666805744171,
+            0.0
+          ],
+          "flags": 0
+        },
+        "_WaterTint": {
+          "rgba": [
+            0.7384492754936218,
+            0.801886796951294,
+            0.5257654190063477,
+            0.0
+          ],
+          "flags": 0
+        },
+        "_WaterTintPreFoam": {
+          "rgba": [
+            1.0,
+            1.0,
+            1.0,
+            0.0
+          ],
+          "flags": 0
+        }
+      },
+      "floats": {
+        "_AddPrecomputedVelocity": 0.0,
+        "_AddSpecular": 0.0,
+        "_CloudIntensity": 0.07999999821186066,
+        "_CrudScale": 0.014999999664723873,
+        "_CrudSpeed": -0.0020000000949949026,
+        "_Depth": 8.0,
+        "_FlipCrud": 1.0,
+        "_FoamDepth": 150.0,
+        "_FoamNoisespeed": 0.004999999888241291,
+        "_FoamSeanoiseamount": 0.9700000286102295,
+        "_FoamTexture": 0.699999988079071,
+        "_FoamTextureScale": 0.019999999552965164,
+        "_NoShadowSpec": 0.0,
+        "_QueueControl": 0.0,
+        "_QueueOffset": 1.0,
+        "_SeaFoamNoisespeed": 0.05000000074505806,
+        "_SeaFoamTextureScale": 0.11999999731779099,
+        "_SeaNoiseAmount": 1.0,
+        "_SeaNoiseScale": 0.009999999776482582,
+        "_SeaNoiseSpeed": 0.009999999776482582,
+        "_SpecularIntensity": 0.5,
+        "_SpecularPower": 1.0,
+        "_UseRadialMask": 0.0,
+        "_VertexOffset": 0.0,
+        "_XRMotionVectorsPass": 1.0,
+        "_cloudscale": 0.10000000149011612
+      },
+      "passState": {
+        "rtBlend0": {
+          "srcBlend": {
+            "val": 5.0,
+            "name": "<noninit>"
+          },
+          "destBlend": {
+            "val": 10.0,
+            "name": "<noninit>"
+          },
+          "srcBlendAlpha": {
+            "val": 5.0,
+            "name": "<noninit>"
+          },
+          "destBlendAlpha": {
+            "val": 10.0,
+            "name": "<noninit>"
+          },
+          "blendOp": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "blendOpAlpha": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "colMask": {
+            "val": 15.0,
+            "name": "<noninit>"
+          }
+        },
+        "zTest": {
+          "val": 4.0,
+          "name": "<noninit>"
+        },
+        "zWrite": {
+          "val": 0.0,
+          "name": "<noninit>"
+        },
+        "culling": {
+          "val": 0.0,
+          "name": "<noninit>"
+        }
+      }
+    },
+    {
+      "name": "M_Water_swamp",
+      "shader": "GD/Water-GD",
+      "sourceFile": "sharedassets4.assets",
+      "pathId": 107,
+      "colors": {
+        "_CrudColor": {
+          "rgba": [
+            0.1965433955192566,
+            0.3207545876502991,
+            0.17702016234397888,
+            0.0
+          ],
+          "flags": 0
+        },
+        "_FoamTint": {
+          "rgba": [
+            0.7830188870429993,
+            0.6747536063194275,
+            0.535555362701416,
+            0.0
+          ],
+          "flags": 16
+        },
+        "_WaterColorPrimary": {
+          "rgba": [
+            0.7053561806678772,
+            0.7452830076217651,
+            0.28475427627563477,
+            0.0
+          ],
+          "flags": 0
+        },
+        "_WaterColorSecodary": {
+          "rgba": [
+            0.34540069103240967,
+            0.058823443949222565,
+            0.3686273694038391,
+            0.0
+          ],
+          "flags": 0
+        },
+        "_WaterColorShallow": {
+          "rgba": [
+            0.14728191494941711,
+            0.06274504214525223,
+            0.20784303545951843,
+            0.0
+          ],
+          "flags": 0
+        },
+        "_WaterTint": {
+          "rgba": [
+            0.36078423261642456,
+            0.5154326558113098,
+            0.6235294342041016,
+            0.0
+          ],
+          "flags": 0
+        },
+        "_WaterTintPreFoam": {
+          "rgba": [
+            1.0,
+            1.0,
+            1.0,
+            0.0
+          ],
+          "flags": 0
+        }
+      },
+      "floats": {
+        "_AddPrecomputedVelocity": 0.0,
+        "_AddSpecular": 0.0,
+        "_CloudIntensity": 0.0,
+        "_CrudScale": 0.019999999552965164,
+        "_CrudSpeed": -0.0020000000949949026,
+        "_Depth": 15.960000038146973,
+        "_FlipCrud": 1.0,
+        "_FoamDepth": 8.739999771118164,
+        "_FoamNoisespeed": 0.004999999888241291,
+        "_FoamSeanoiseamount": -25.0,
+        "_FoamTexture": -2.4000000953674316,
+        "_FoamTextureScale": 0.004999999888241291,
+        "_NoShadowSpec": 0.0,
+        "_QueueControl": 0.0,
+        "_QueueOffset": 0.0,
+        "_SeaFoamNoisespeed": 0.0010000000474974513,
+        "_SeaFoamTextureScale": -0.2800000011920929,
+        "_SeaNoiseAmount": 4.650000095367432,
+        "_SeaNoiseScale": 0.009999999776482582,
+        "_SeaNoiseSpeed": 0.0010000000474974513,
+        "_SpecularIntensity": 0.004000000189989805,
+        "_SpecularPower": 1.0,
+        "_UseRadialMask": 0.0,
+        "_VertexOffset": 0.0,
+        "_XRMotionVectorsPass": 1.0,
+        "_cloudscale": 0.009999999776482582
+      },
+      "passState": {
+        "rtBlend0": {
+          "srcBlend": {
+            "val": 5.0,
+            "name": "<noninit>"
+          },
+          "destBlend": {
+            "val": 10.0,
+            "name": "<noninit>"
+          },
+          "srcBlendAlpha": {
+            "val": 5.0,
+            "name": "<noninit>"
+          },
+          "destBlendAlpha": {
+            "val": 10.0,
+            "name": "<noninit>"
+          },
+          "blendOp": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "blendOpAlpha": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "colMask": {
+            "val": 15.0,
+            "name": "<noninit>"
+          }
+        },
+        "zTest": {
+          "val": 4.0,
+          "name": "<noninit>"
+        },
+        "zWrite": {
+          "val": 0.0,
+          "name": "<noninit>"
+        },
+        "culling": {
+          "val": 0.0,
+          "name": "<noninit>"
+        }
+      }
+    }
+  ]
+}

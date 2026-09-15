@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/peaktrail/peaktrace-history.schema.json",
+  "title": "PEAK Trail append-only history journal record",
+  "description": "One JSON object per line in PeakTrailHistory.ndjson",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "sessionId", "manifest"],
+      "properties": {
+        "type": { "const": "session_start" },
+        "sessionId": { "type": "string", "minLength": 1 },
+        "manifest": {
+          "allOf": [
+            { "$ref": "./peaktrace-manifest.schema.json" },
+            {
+              "type": "object",
+              "properties": { "sessionId": { "type": "string", "minLength": 1 } }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "sessionId", "record"],
+      "properties": {
+        "type": { "const": "trace_record" },
+        "sessionId": { "type": "string", "minLength": 1 },
+        "record": { "$ref": "./peaktrace-stream.schema.json" }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "sessionId", "endedAtUtc", "durationMs"],
+      "properties": {
+        "type": { "const": "session_end" },
+        "sessionId": { "type": "string", "minLength": 1 },
+        "endedAtUtc": { "type": "string", "format": "date-time" },
+        "durationMs": { "type": "integer", "minimum": 0 },
+        "status": { "type": "string" },
+        "endReason": { "type": ["string", "null"] }
+      }
+    }
+  ]
+}

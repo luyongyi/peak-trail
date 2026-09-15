@@ -1,0 +1,230 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/peaktrail/peaktrace-stream.schema.json",
+  "title": "PEAK trail NDJSON record",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": ["type", "t", "playerId", "nickname"],
+      "properties": {
+        "type": { "const": "participant" },
+        "t": { "type": "integer", "minimum": 0 },
+        "playerId": { "type": "string", "minLength": 1 },
+        "nickname": { "type": "string" },
+        "actorNumber": { "type": "integer" },
+        "platform": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    {
+      "type": "object",
+      "required": ["type", "t", "playerId", "telemetryReady", "authority"],
+      "properties": {
+        "type": { "const": "state" },
+        "t": { "type": "integer", "minimum": 0 },
+        "playerId": { "type": "string", "minLength": 1 },
+        "telemetryReady": { "type": "boolean" },
+        "authority": { "type": "string", "minLength": 1 },
+        "stamina": { "type": "number" },
+        "maxStamina": { "type": "number", "minimum": 0 },
+        "stamina01": { "type": "number", "minimum": 0, "maximum": 1 },
+        "extraStamina": { "type": "number" },
+        "maxExtraStamina": { "type": "number", "minimum": 0 },
+        "extraStamina01": { "type": "number", "minimum": 0, "maximum": 1 },
+        "totalStamina": { "type": "number" }
+      },
+      "additionalProperties": true
+    },
+    {
+      "type": "object",
+      "required": ["type", "t", "playerId", "inventoryReady", "authority", "slots"],
+      "properties": {
+        "type": { "const": "inventory" },
+        "t": { "type": "integer", "minimum": 0 },
+        "playerId": { "type": "string", "minLength": 1 },
+        "inventoryReady": { "type": "boolean" },
+        "authority": { "type": "string", "minLength": 1 },
+        "selectedSlotKnown": { "type": "boolean" },
+        "selectedSlot": { "type": "integer", "minimum": 0 },
+        "backpackContentsPresent": { "type": "boolean" },
+        "backpackContentsReady": { "type": "boolean" },
+        "heldPresent": { "type": "boolean" },
+        "held": { "oneOf": [{ "type": "null" }, { "type": "object" }] },
+        "slots": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["location", "index", "empty"],
+            "properties": {
+              "location": { "type": "string" },
+              "container": { "type": ["string", "null"] },
+              "index": { "type": "integer", "minimum": 0 },
+              "slotId": { "type": ["string", "integer", "null"] },
+              "empty": { "type": "boolean" },
+              "item": { "oneOf": [{ "type": "null" }, { "type": "object" }] }
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    {
+      "type": "object",
+      "required": ["type", "t", "playerId", "appearance"],
+      "properties": {
+        "type": { "const": "appearance" },
+        "t": { "type": "integer", "minimum": 0 },
+        "playerId": { "type": "string", "minLength": 1 },
+        "appearance": {
+          "type": "object",
+          "required": ["ready", "authority"],
+          "properties": {
+            "ready": { "type": "boolean" },
+            "authority": { "type": "string", "minLength": 1 },
+            "source": {
+              "type": "string",
+              "description": "recorded is historical; local-current must be labelled non-historical by viewers"
+            },
+            "skinIndex": { "type": "integer", "minimum": 0 },
+            "eyesIndex": { "type": "integer", "minimum": 0 },
+            "mouthIndex": { "type": "integer", "minimum": 0 },
+            "accessoryIndex": { "type": "integer", "minimum": 0 },
+            "outfitIndex": { "type": "integer", "minimum": 0 },
+            "hatIndex": { "type": "integer", "minimum": 0 },
+            "effectiveHatIndex": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Hat after the selected fit's overrideHat rule; viewers prefer this over hatIndex"
+            },
+            "sashIndex": { "type": "integer", "minimum": 0 },
+            "medalIndex": { "type": "integer", "minimum": 0 },
+            "outfitName": { "type": "string" },
+            "hatName": { "type": "string" },
+            "skinColor": {
+              "type": "array",
+              "minItems": 3,
+              "maxItems": 4,
+              "items": { "type": "number", "minimum": 0, "maximum": 1 }
+            }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    {
+      "type": "object",
+      "required": ["type", "t", "playerId", "pos", "yaw"],
+      "properties": {
+        "type": { "const": "sample" },
+        "t": { "type": "integer", "minimum": 0 },
+        "playerId": { "type": "string", "minLength": 1 },
+        "pos": {
+          "type": "array",
+          "prefixItems": [
+            { "type": "number" },
+            { "type": "number" },
+            { "type": "number" }
+          ],
+          "items": false
+        },
+        "yaw": { "type": "number" },
+        "segment": {
+          "type": "integer",
+          "description": "High-confidence owning layer index in MapHandler.segments; omitted when unknown"
+        },
+        "activeSegment": {
+          "type": "integer",
+          "description": "Scene-wide MapHandler progression index; never a per-player layer claim"
+        },
+        "stamina": { "type": "number" },
+        "maxStamina": { "type": "number", "minimum": 0 },
+        "stamina01": { "type": "number", "minimum": 0, "maximum": 1 },
+        "extraStamina": { "type": "number" },
+        "maxExtraStamina": { "type": "number", "minimum": 0 },
+        "extraStamina01": { "type": "number", "minimum": 0, "maximum": 1 },
+        "item": {
+          "description": "Current held item; null means the slot was observed empty, absence means not recorded",
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string" },
+            {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "id": { "type": "string" },
+                "name": { "type": "string" },
+                "displayName": { "type": "string" },
+                "slot": { "type": "integer", "minimum": 0 },
+                "count": { "type": "number", "minimum": 0 }
+              }
+            }
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    {
+      "type": "object",
+      "required": ["type", "event", "t"],
+      "properties": {
+        "type": { "const": "event" },
+        "event": {
+          "enum": [
+            "join",
+            "leave",
+            "passed_out",
+            "recovered",
+            "death",
+            "revive",
+            "warp",
+            "segment_change",
+            "run_end",
+            "item_pickup",
+            "item_drop",
+            "item_use",
+            "stamina_empty",
+            "item_acquired",
+            "item_lost",
+            "item_moved",
+            "item_state_changed",
+            "item_consumed",
+            "item_thrown",
+            "item_equipped",
+            "item_unequipped",
+            "equip",
+            "unequip"
+          ]
+        },
+        "t": { "type": "integer", "minimum": 0 },
+        "playerId": { "type": "string" },
+        "segment": {
+          "type": "integer",
+          "description": "High-confidence owning layer index for a positioned player event"
+        },
+        "activeSegment": {
+          "type": "integer",
+          "description": "Scene-wide MapHandler progression index; segment_change reports this global value"
+        },
+        "pos": {
+          "type": "array",
+          "prefixItems": [
+            { "type": "number" },
+            { "type": "number" },
+            { "type": "number" }
+          ],
+          "items": false
+        },
+        "item": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string" },
+            { "type": "object", "additionalProperties": true }
+          ]
+        }
+      },
+      "additionalProperties": true
+    }
+  ]
+}

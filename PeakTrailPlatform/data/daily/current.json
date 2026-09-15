@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "fetchedAtUtc": "2026-09-15T14:18:08.751Z",
+  "nextChangeAtUtc": "2026-09-15T16:59:56.751Z",
+  "source": "https://peaklogin3.azurewebsites.net/api/VersionCheck?version=2.4",
+  "apiVersion": "2.4",
+  "versionOkay": true,
+  "levelIndex": 457,
+  "mapCount": 21,
+  "mapSlot": 16,
+  "sceneName": "Level_16",
+  "secondsRemaining": 9708,
+  "message": "if you had your bookworm badge deleted last week, SORRY ABOUT THAT!!!<br><br> check the patch notes for instructions on getting it back"
+}

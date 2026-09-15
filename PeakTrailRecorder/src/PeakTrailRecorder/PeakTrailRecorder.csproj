@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AssemblyName>PeakTrailRecorder</AssemblyName>
+    <AssemblyTitle>PeakTrailRecorder</AssemblyTitle>
+    <Version>0.4.0</Version>
+    <IsThunderstorePackable>false</IsThunderstorePackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ModFile Include="$(TargetPath)" Destination="plugins/" />
+  </ItemGroup>
+
+  <!--
+    The map capture implementation is compiled into this assembly on purpose.  End users
+    install one PeakTrailRecorder.dll; PeakMapExporter remains only as a developer project
+    and as the canonical source for the shared map-pack format.
+  -->
+  <ItemGroup>
+    <Compile Include="..\..\..\PeakMapExporter\src\PeakMapExporter\Manifest.cs" Link="MapCapture\Manifest.cs" />
+    <Compile Include="..\..\..\PeakMapExporter\src\PeakMapExporter\MapPackExporter.cs" Link="MapCapture\MapPackExporter.cs" />
+    <Compile Include="..\..\..\PeakMapExporter\src\PeakMapExporter\MapPackIdentity.cs" Link="MapCapture\MapPackIdentity.cs" />
+  </ItemGroup>
+</Project>

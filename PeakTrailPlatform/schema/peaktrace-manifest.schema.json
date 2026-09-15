@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/peaktrail/peaktrace-manifest.schema.json",
+  "title": "PEAK trail manifest",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schemaVersion",
+    "sessionId",
+    "startedAtUtc",
+    "gameVersion",
+    "gameBuildId",
+    "sceneName",
+    "coordinateSpace",
+    "timeUnit",
+    "identityMode",
+    "recordingScope"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "sessionId": { "type": "string", "minLength": 1 },
+    "runId": { "type": "string" },
+    "startedAtUtc": { "type": "string", "format": "date-time" },
+    "endedAtUtc": { "type": "string", "format": "date-time" },
+    "status": { "type": "string" },
+    "endReason": { "type": "string" },
+    "gameVersion": { "type": "string", "minLength": 1 },
+    "gameBuildId": { "type": ["integer", "string"] },
+    "recorderVersion": { "type": "string" },
+    "sceneName": { "type": "string", "minLength": 1 },
+    "levelIndex": { "type": "integer" },
+    "mapSlot": { "type": "integer", "minimum": 0 },
+    "mapPackId": { "type": "string" },
+    "projectionVersion": { "type": "integer", "minimum": 1 },
+    "sampleHz": { "type": "number", "exclusiveMinimum": 0 },
+    "coordinateSpace": { "const": "unity-world-meters" },
+    "positionAuthority": {
+      "const": "xyz",
+      "description": "Recorded XYZ is authoritative when no owning segment is available"
+    },
+    "segmentResolution": {
+      "enum": ["unassigned", "position-inferred-v1", "legacy-global-current"],
+      "description": "How sample.segment was assigned; absent legacy manifests are treated as legacy-global-current"
+    },
+    "activeSegmentSemantics": {
+      "const": "global-maphandler-segments-index"
+    },
+    "timeUnit": { "const": "milliseconds" },
+    "identityMode": { "const": "platform-user-id" },
+    "recordingScope": { "const": "all-synchronized-players" },
+    "telemetryFields": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": ["item", "stamina", "extraStamina"]
+      }
+    },
+    "participants": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["playerId", "nickname", "actorNumber"],
+        "properties": {
+          "playerId": { "type": "string", "minLength": 1 },
+          "nickname": { "type": "string" },
+          "actorNumber": { "type": "integer" },
+          "platform": { "type": "string" },
+          "idSource": { "type": "string" },
+          "firstSeenAtMs": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "players": {
+      "description": "Legacy compatibility alias for participants",
+      "oneOf": [
+        { "type": "array" },
+        { "type": "object" }
+      ]
+    }
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "identityVersion": 2,
+  "mapPackId": "sha256-7d6ead8ccdab99c02f3be2aa6b4631bfec87caa973869d1cc73e6c8f3f3d6ed1",
+  "generatedAtUtc": "2026-09-15T00:00:00Z",
+  "gameVersion": "2.4.c",
+  "gameBuildId": "19492001",
+  "sceneName": "Level_7",
+  "mapSlot": 7,
+  "projectionVersion": 1,
+  "coordinateSpace": "unity-world-meters",
+  "textureUv": "u=(x-minX)/(maxX-minX);v=(z-minZ)/(maxZ-minZ)",
+  "imageOrigin": "bottom-left-in-uv;viewer-flips-for-top-left-images",
+  "layers": [
+    {
+      "id": "test-layer",
+      "name": "Test Summit",
+      "segment": 0,
+      "biome": "Test",
+      "texture": "inline.png",
+      "textureSha256": "431ced6916a2a21a156e38701afe55bbd7f88969fbbfc56d7fe099d47f265460",
+      "textureDataUrl": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+      "height": "inline.f32",
+      "heightSha256": "7729b24d47e615dbc0599e783f77242e13092f9a5d65cb0f068bb356f7c5e36c",
+      "heightValues": [0, 2, 0, 3, 10, 4, 1, 5, 1],
+      "heightEncoding": "float32-le-row-major-minz-minx",
+      "sampleLocation": "cell-centers",
+      "columns": 3,
+      "rows": 3,
+      "minX": -15,
+      "maxX": 15,
+      "minY": 0,
+      "maxY": 10,
+      "minZ": -15,
+      "maxZ": 15,
+      "noData": "NaN"
+    }
+  ]
+}

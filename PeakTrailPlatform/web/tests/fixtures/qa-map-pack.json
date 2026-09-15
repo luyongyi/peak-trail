@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "identityVersion": 2,
+  "mapPackId": "sha256-c73f1a7098111e5176bb710315fb9b7a39c2ea0f643c1869a932a996453460fc",
+  "generatedAtUtc": "2026-09-15T12:00:00Z",
+  "gameVersion": "2.4.c",
+  "gameBuildId": "19492001",
+  "sceneName": "Level_16",
+  "mapSlot": 16,
+  "projectionVersion": 1,
+  "coordinateSpace": "unity-world-meters",
+  "textureUv": "u=(x-minX)/(maxX-minX);v=(z-minZ)/(maxZ-minZ)",
+  "imageOrigin": "bottom-left-in-uv;viewer-flips-for-top-left-images",
+  "layers": [
+    {
+      "id": "segment-00-qa",
+      "name": "QA Ridge",
+      "segment": 0,
+      "biome": "QA",
+      "texture": "inline.png",
+      "textureSha256": "ecdc3fd95cd2dc44195a1e7e59d17e3536a49af1a2a7bddcfa87ce7f4f301257",
+      "textureDataUrl": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZK1sAAAAASUVORK5CYII=",
+      "height": "inline.f32",
+      "heightSha256": "4ac378d640541b35096b1d7d0d4d0d788767ed4a28567530a19e4b7e422395d5",
+      "heightValues": [
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 1, 2, 3, 3, 2, 1, 0,
+        0, 2, 4, 6, 6, 4, 2, 0,
+        0, 3, 6, 10, 10, 6, 3, 0,
+        0, 3, 6, 10, 10, 6, 3, 0,
+        0, 2, 4, 6, 6, 4, 2, 0,
+        0, 1, 2, 3, 3, 2, 1, 0,
+        0, 0, 0, 0, 0, 0, 0, 0
+      ],
+      "heightEncoding": "float32-le-row-major-minz-minx",
+      "sampleLocation": "cell-centers",
+      "columns": 8,
+      "rows": 8,
+      "minX": -20,
+      "maxX": 20,
+      "minY": 0,
+      "maxY": 10,
+      "minZ": -20,
+      "maxZ": 20,
+      "noData": "NaN"
+    }
+  ]
+}

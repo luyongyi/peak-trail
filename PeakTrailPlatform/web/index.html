@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="PEAK Trail 本地多人足迹 2.5D 回放器。轨迹只在当前浏览器中解析，不会上传。"
+    />
+    <meta name="theme-color" content="#0b1010" />
+    <title>PEAK Trail · 足迹回放</title>
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b1010'/%3E%3Cpath d='M9 48 25 18l8 15 6-10 16 25H9Z' fill='%23efb74e'/%3E%3Cpath d='M20 48c8-8 17-8 25 0' fill='none' stroke='%23d9f0e8' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="./" aria-label="PEAK Trail 首页">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 32 32" role="img">
+              <path d="m3 25 9-18 5 9 4-6 8 15H3Z" />
+              <path class="brand-path" d="M9 25c5-5 10-5 15 0" />
+            </svg>
+          </span>
+          <span>
+            <strong>PEAK TRAIL</strong>
+            <small>本地足迹回放</small>
+          </span>
+        </a>
+
+        <div class="daily-card" id="dailyCard" aria-live="polite">
+          <span class="eyebrow">今日轮换</span>
+          <strong id="dailyScene">正在获取…</strong>
+          <span id="dailyCountdown">—</span>
+        </div>
+
+        <div class="top-actions">
+          <input
+            id="mapInput"
+            class="visually-hidden"
+            type="file"
+            multiple
+            accept=".json,.png,.f32,.raw,application/json,image/png,application/octet-stream"
+          />
+          <label class="button button-secondary" for="traceFolderInput">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h7l2 2h9v11H3V6Z" /></svg>
+            足迹总目录
+          </label>
+          <label class="button button-primary" for="traceInput">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v3h16v-3" /></svg>
+            导入足迹日志
+          </label>
+          <input id="traceFolderInput" class="visually-hidden" type="file" multiple webkitdirectory directory />
+          <input
+            id="traceInput"
+            class="visually-hidden"
+            type="file"
+            multiple
+            accept=".json,.ndjson,.partial,application/json,application/x-ndjson"
+          />
+        </div>
+      </header>
+
+      <main class="workspace">
+        <section class="viewport-panel" aria-label="2.5D 地图回放视图">
+          <canvas id="sceneCanvas"></canvas>
+
+          <div class="viewport-fade" aria-hidden="true"></div>
+
+          <div class="viewport-toolbar">
+            <div class="viewport-statuses">
+              <div class="compatibility-pill is-neutral" id="compatibilityPill">
+                <span class="status-dot"></span>
+                <span id="compatibilityText">等待地图与足迹</span>
+              </div>
+              <span class="analysis-overlay-note">轨迹透视显示 · 原始 XYZ 与高度不变</span>
+            </div>
+            <div class="camera-actions" aria-label="视角控制">
+              <button class="icon-button" id="topViewButton" type="button" title="俯视视角" aria-label="俯视视角">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 7l8 4 8-4-8-4Zm-8 9 8 4 8-4M4 17l8 4 8-4" /></svg>
+              </button>
+              <button class="icon-button" id="fitViewButton" type="button" title="适配当前视图" aria-label="适配当前视图">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5m13-5h5v5M8 21H3v-5m13 5h5v-5" /></svg>
+              </button>
+            </div>
+          </div>
+
+          <nav class="segment-navigator" id="segmentNavigator" aria-label="关卡分区导航" hidden>
+            <div class="segment-navigation-main">
+              <button class="segment-step-button" id="previousSegmentButton" type="button" aria-label="上一关">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6" /></svg>
+                <span>上一关</span>
+              </button>
+              <div class="segment-current" aria-live="polite">
+                <span id="segmentOrdinal">第 — 关</span>
+                <strong id="segmentName">等待关卡</strong>
+                <small id="segmentOriginalName">—</small>
+              </div>
+              <button class="segment-step-button is-next" id="nextSegmentButton" type="button" aria-label="下一关">
+                <span>下一关</span>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 6 6 6-6 6" /></svg>
+              </button>
+            </div>
+            <div class="segment-navigation-meta">
+              <button class="segment-mode-button is-active" id="followSegmentButton" type="button" aria-pressed="true">
+                跟随进度
+              </button>
+              <span class="segment-load-status" id="segmentLoadStatus" role="status">底图按关加载</span>
+              <button class="segment-mode-button" id="segmentOverviewButton" type="button" aria-pressed="false">
+                所有关概览
+              </button>
+            </div>
+          </nav>
+
+          <div class="empty-state" id="emptyState">
+            <div class="empty-glyph" aria-hidden="true">
+              <span></span><span></span><span></span>
+            </div>
+            <h1>把一次攀登放回地图</h1>
+            <p>选择足迹总目录，或拖入 <code>PeakTrailHistory.ndjson</code>。页面会按本地日期拆分多天、多局，所有数据只在本机解析。</p>
+            <div class="empty-actions">
+              <label class="button button-primary" for="traceFolderInput">选择足迹总目录</label>
+              <label class="button button-ghost" for="traceInput">选择历史日志文件</label>
+            </div>
+          </div>
+
+          <div class="drop-overlay" id="dropOverlay" aria-hidden="true">
+            <div>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0L7 9m5-5 5 5M4 15v5h16v-5" /></svg>
+              <strong>松开以载入本地文件</strong>
+              <span>支持总目录、多会话 manifest + stream、PeakTrailHistory.ndjson</span>
+            </div>
+          </div>
+
+          <div class="scene-meta" id="sceneMeta">
+            <div><span>场景</span><strong id="sceneName">—</strong></div>
+            <div><span>足迹</span><strong id="sampleCount">0</strong></div>
+            <div><span>海拔</span><strong id="altitudeRange">—</strong></div>
+          </div>
+
+          <div class="event-toast" id="eventToast" role="status" aria-live="polite">
+            <span id="eventToastIcon">◆</span>
+            <div><strong id="eventToastTitle"></strong><small id="eventToastMeta"></small></div>
+          </div>
+        </section>
+
+        <aside class="inspector" aria-label="回放信息与筛选">
+          <section class="inspector-section source-section">
+            <div class="section-heading">
+              <div>
+                <span class="eyebrow">数据源</span>
+                <h2>本地会话</h2>
+              </div>
+              <span class="privacy-chip">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10V7a5 5 0 0 1 10 0v3m-12 0h14v11H5V10Z" /></svg>
+                不上传
+              </span>
+            </div>
+
+            <div class="source-list">
+              <button class="source-row" id="traceSourceButton" type="button">
+                <span class="source-icon trace-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><path d="M5 18c3-8 5-2 8-9s5 1 6-4M5 18h.01M19 5h.01" /></svg>
+                </span>
+                <span><strong id="traceSourceName">尚未导入足迹</strong><small id="traceSourceMeta">总目录或 PeakTrailHistory.ndjson</small></span>
+                <span class="row-state" id="traceSourceState">导入</span>
+              </button>
+              <div class="source-row map-status-row" id="mapSourceButton" title="普通回放会自动使用 Pages 内嵌地图">
+                <span class="source-icon map-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><path d="m4 7 5-3 6 3 5-3v13l-5 3-6-3-5 3V7Zm5-3v13m6-10v13" /></svg>
+                </span>
+                <span><strong id="mapSourceName">正在匹配内嵌地图</strong><small id="mapSourceMeta">普通回放自动从 Pages catalog 加载</small></span>
+                <span class="row-state" id="mapSourceState">开发</span>
+              </div>
+            </div>
+            <details class="developer-tools">
+              <summary>地图维护工具</summary>
+              <p>普通用户无需操作；仅在制作或排查地图包时使用。</p>
+              <label class="button button-secondary" for="mapInput">手动导入地图包</label>
+            </details>
+            <p class="fan-disclaimer">
+              非官方粉丝工具，与 Landfall Publishing 或 Aggro Crab Games 无关联、授权或背书。
+            </p>
+          </section>
+
+          <section class="inspector-section players-section">
+            <div class="section-heading compact">
+              <div>
+                <span class="eyebrow">参与者</span>
+                <h2>玩家状态</h2>
+              </div>
+              <span class="count-badge" id="playerCount">0</span>
+            </div>
+            <div class="player-list" id="playerList">
+              <p class="inline-empty">拖动时间线后，这里会同步显示玩家外观、物品槽与体力。</p>
+            </div>
+          </section>
+
+          <section class="inspector-section archive-section">
+            <div class="section-heading compact">
+              <div>
+                <span class="eyebrow">足迹档案</span>
+                <h2>日期与局次</h2>
+              </div>
+            </div>
+            <label class="field-label" for="dateSelect">日期（浏览器本地时区）</label>
+            <div class="select-wrap">
+              <select id="dateSelect" disabled><option>尚未导入</option></select>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 9 5 5 5-5" /></svg>
+            </div>
+            <label class="field-label archive-session-label" for="sessionSelect">局次</label>
+            <div class="select-wrap">
+              <select id="sessionSelect" disabled><option>尚未导入</option></select>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 9 5 5 5-5" /></svg>
+            </div>
+            <p class="archive-summary" id="archiveSummary">等待导入足迹目录</p>
+          </section>
+
+          <section class="inspector-section controls-section">
+            <div class="section-heading compact">
+              <div>
+                <span class="eyebrow">显示</span>
+                <h2>地图视图</h2>
+              </div>
+            </div>
+
+            <label class="field-label" for="layerSelect">关卡分区</label>
+            <div class="select-wrap">
+              <select id="layerSelect" disabled>
+                <option value="all">所有关概览</option>
+              </select>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 9 5 5 5-5" /></svg>
+            </div>
+            <p class="control-note">活动分区只用于关卡导航，不会推断每名玩家所在层；未分配足迹始终保留原始 XYZ。</p>
+
+            <div class="range-header">
+              <label class="field-label" for="heightScale">高度夸张</label>
+              <output id="heightScaleValue" for="heightScale">1.0×</output>
+            </div>
+            <input id="heightScale" class="range" type="range" min="0.4" max="3" step="0.1" value="1" />
+
+            <div class="switch-list">
+              <label class="switch-row">
+                <span><strong>显示轨迹</strong><small>播放到当前位置的路线</small></span>
+                <input id="trackToggle" type="checkbox" checked />
+                <span class="switch-ui"></span>
+              </label>
+              <label class="switch-row">
+                <span><strong>玩家位置</strong><small>当前坐标与朝向</small></span>
+                <input id="markerToggle" type="checkbox" checked />
+                <span class="switch-ui"></span>
+              </label>
+            </div>
+          </section>
+
+          <section class="inspector-section events-section">
+            <div class="section-heading compact">
+              <div>
+                <span class="eyebrow">关键节点</span>
+                <h2>事件</h2>
+              </div>
+              <span class="count-badge" id="eventCount">0</span>
+            </div>
+            <div class="event-list" id="eventList">
+              <p class="inline-empty">死亡、复活、传送和分区变化会显示在这里。</p>
+            </div>
+          </section>
+        </aside>
+      </main>
+
+      <footer class="timeline-panel">
+        <button class="play-button" id="playButton" type="button" disabled aria-label="播放">
+          <svg class="play-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 11 7-11 7V5Z" /></svg>
+          <svg class="pause-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7V5Zm6 0h4v14h-4V5Z" /></svg>
+        </button>
+
+        <div class="time-current" id="currentTime">00:00</div>
+        <div class="timeline-track">
+          <input id="timeline" type="range" min="0" max="0" value="0" step="0.01" disabled aria-label="回放时间" />
+          <div class="timeline-markers" id="timelineMarkers" aria-hidden="true"></div>
+          <span class="scrub-hint">拖拽查看玩家轨迹、事件与状态</span>
+        </div>
+        <div class="time-total" id="totalTime">00:00</div>
+
+        <label class="speed-control">
+          <span class="visually-hidden">播放速度</span>
+          <select id="speedSelect" disabled>
+            <option value="0.25">0.25×</option>
+            <option value="0.5">0.5×</option>
+            <option value="1" selected>1×</option>
+            <option value="2">2×</option>
+            <option value="4">4×</option>
+          </select>
+        </label>
+      </footer>
+    </div>
+
+    <div class="error-banner" id="errorBanner" role="alert">
+      <div>
+        <strong id="errorTitle">无法读取文件</strong>
+        <span id="errorMessage"></span>
+      </div>
+      <button id="dismissError" type="button" aria-label="关闭错误提示">×</button>
+    </div>
+
+    <div id="startupNotice" class="startup-notice" role="alert" hidden></div>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "./vendor/three/0.180.0/build/three.module.js",
+          "three/addons/": "./vendor/three/0.180.0/examples/jsm/"
+        }
+      }
+    </script>
+    <script id="applicationScript" type="module" src="./src/app.js"></script>
+    <script src="./src/startup.js"></script>
+  </body>
+</html>

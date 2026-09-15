@@ -1,0 +1,10 @@
+{"type":"participant","t":0,"playerId":"steam:10001","nickname":"Climber One","actorNumber":1,"platform":"steam"}
+{"type":"participant","t":0,"playerId":"steam:10002","nickname":"Climber Two","actorNumber":2,"platform":"steam"}
+{"type":"sample","t":0,"playerId":"steam:10001","pos":[-10,0,-10],"yaw":45,"segment":0}
+{"type":"sample","t":1000,"playerId":"steam:10001","pos":[0,10,0],"yaw":80,"segment":0}
+{"type":"sample","t":2000,"playerId":"steam:10001","pos":[10,1,10],"yaw":120,"segment":0}
+{"type":"sample","t":0,"playerId":"steam:10002","pos":[10,0,-10],"yaw":315,"segment":0}
+{"type":"sample","t":1000,"playerId":"steam:10002","pos":[0,10,0],"yaw":270,"segment":0}
+{"type":"event","event":"death","t":1400,"playerId":"steam:10002","pos":[0,10,0],"segment":0}
+{"type":"sample","t":2000,"playerId":"steam:10002","pos":[-10,1,10],"yaw":220,"segment":0}
+{"type":"event","event":"run_end","t":2200,"segment":0}

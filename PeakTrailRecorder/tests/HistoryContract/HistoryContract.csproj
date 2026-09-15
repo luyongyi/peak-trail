@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\PeakTrailRecorder\PeakTrailRecorder.csproj" ReferenceOutputAssembly="false" />
+    <None Include="$(PEAKBepInExDir)core\BepInEx.dll" Link="BepInEx.dll" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="$(PEAKBepInExDir)core\0Harmony.dll" Link="0Harmony.dll" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="$(ManagedDir)Newtonsoft.Json.dll" Link="Newtonsoft.Json.dll" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
