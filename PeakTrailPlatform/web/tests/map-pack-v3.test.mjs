@@ -17,6 +17,7 @@ function makeV3() {
 
 test("remote v3 verifies identity while deferring every GLB and survey height download", async (t) => {
   const manifest = makeV3();
+  manifest.mapFog = { authority: 'serialized-map-baseline', volumes: [] };
   const requests = [];
   t.mock.method(globalThis, "fetch", async (url) => {
     requests.push(String(url));
@@ -26,6 +27,7 @@ test("remote v3 verifies identity while deferring every GLB and survey height do
   const pack = await loadMapPackUrl(base);
   assert.deepEqual(requests, [base]);
   assert.equal(pack.identityVersion, 3);
+  assert.deepEqual(pack.mapFog, manifest.mapFog, 'source-checked fog sidecar survives remote hydration');
   for (const layer of pack.layers) {
     assert.equal(layer.geometryUrl, new URL(layer.geometry, base).href);
     assert.equal(layer.geometrySha256, "a".repeat(64));
@@ -40,6 +42,7 @@ test("remote v3 verifies identity while deferring every GLB and survey height do
 
 test("local v3 exposes lazy Blob URLs and releases them on disposal", async (t) => {
   const manifest = makeV3();
+  manifest.mapFog = { authority: 'serialized-map-baseline', volumes: [] };
   const files = [new File([JSON.stringify(manifest)], "map-pack.json", { type: "application/json" })];
   for (const layer of manifest.layers) {
     const geometry = new File(["not read at hydration"], layer.geometry);
@@ -49,6 +52,7 @@ test("local v3 exposes lazy Blob URLs and releases them on disposal", async (t) 
   const revoked = [];
   t.mock.method(URL, "revokeObjectURL", (url) => revoked.push(url));
   const pack = await loadMapPackBundle(files);
+  assert.deepEqual(pack.mapFog, manifest.mapFog, 'source-checked fog sidecar survives local hydration');
   assert.ok(pack.layers.every((layer) => layer.geometryUrl.startsWith("blob:")));
   const urls = pack.layers.flatMap((layer) => [layer.geometryUrl, layer.textureUrl]);
   pack.disposeAssets();

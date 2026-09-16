@@ -154,4 +154,34 @@ and collider placement. The trace check validates the actual recorded session's
 scene/build, X/Z coverage and height residuals. A residual can be large under
 overhangs or while airborne; do not change player coordinates to hide it.
 
+## Baseline Gloom metadata (not a recorded run)
+
+```powershell
+& local/python/.venv/Scripts/python.exe PeakTrailPlatform/tools/offline-maps/export_fog.py
+```
+
+The exporter reads `Peak.StatusFieldGloom` from the entire exact source scene.
+The island `SleepyFog` lives under the shared `Gloom` parent, outside the
+`Swamp_Segment` mesh root. Temple's `RisingGloom` also has a moving Rigidbody.
+Consequently neither is recoverable by treating the exported water surface as
+fog or by only scanning static segment meshes.
+
+`data/maps/fog.<build>.json` binds each map's source configuration to its build,
+canonical pack ID and source-scene SHA-256. Staging checks those identities and
+adds the small `mapFog` object to the generated manifest without modifying
+canonical source packs or their geometry identity. Fire/Kiln maps have no Gloom
+volumes. The Swamp/Temple volumes remain separate chapters.
+
+For Level_17, the island source fog spans Y=737.13..784.00 metres. Temple's source
+initial top is Y=804.13 metres, with a 718-metre field depth. This uses the game's
+`StatusFieldBounds` rule: the top is the object's world Y and the axis-aligned
+center is half `size.y` below it; transform rotation/scale are not field extents.
+
+When world telemetry is absent, the viewer labels this as **地图基础雾** and
+uses only the source initial shape/color. Its actual rising height, run settings
+and lit protection areas are unknown. As soon as a trace has world telemetry,
+only recorded fog is eligible—even a complete empty snapshot or a time before
+the first sample must not be filled with inferred baseline fog. The translucent
+bounded shader is an illustrative fog volume, not Unity's original screen shader.
+
 Upstream parser documentation: [UnityPy](https://github.com/K0lb3/UnityPy).

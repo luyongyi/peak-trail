@@ -43,6 +43,7 @@ test("stage enriches exact-pack route metadata, allowlists assets and preserves 
     copyFile(resolve(platformSource, "tools", "stage-site.mjs"), resolve(tools, "stage-site.mjs")),
     copyFile(resolve(platformSource, "tools", "lib", "game-assets.mjs"), resolve(tools, "lib", "game-assets.mjs")),
     copyFile(resolve(platformSource, "tools", "lib", "local-paths.mjs"), resolve(tools, "lib", "local-paths.mjs")),
+    copyFile(resolve(platformSource, "web", "src", "map-fog.js"), resolve(platform, "web", "src", "map-fog.js")),
     writeFile(resolve(platform, "web", "index.html"), "<!doctype html>"),
     writeFile(resolve(platform, "web", "styles.css"), "body{}"),
     writeFile(resolve(platform, "web", "src", "app.js"), "export {};"),
@@ -93,6 +94,11 @@ test("stage enriches exact-pack route metadata, allowlists assets and preserves 
     }],
   };
   const evidencePath = resolve(platform, "data", "maps", "routes.123.json");
+  const fogEvidence = { schemaVersion: 1, gameBuildId: '123', authority: 'serialized-map-baseline', maps: [{
+    mapPackId: packId, sceneName: manifest.sceneName, mapSlot: manifest.mapSlot,
+    sourceSceneSha256: manifest.source.sceneSha256, volumes: [],
+  }] };
+  const fogPath = resolve(platform, 'data', 'maps', 'fog.123.json');
   const buildCatalog = {
     schemaVersion: 1,
     gameBuildId: "123",
@@ -106,6 +112,7 @@ test("stage enriches exact-pack route metadata, allowlists assets and preserves 
     })),
     writeFile(resolve(pack, "map-pack.json"), manifestBytes),
     writeFile(evidencePath, JSON.stringify(evidence)),
+    writeFile(fogPath, JSON.stringify(fogEvidence)),
     writeFile(resolve(pack, "shore.png"), texture),
     writeFile(resolve(pack, "shore.height.f32"), height),
     writeFile(resolve(pack, "shore.glb.gz"), geometry),
@@ -125,6 +132,8 @@ test("stage enriches exact-pack route metadata, allowlists assets and preserves 
   const stagedManifestBytes = await readFile(stagedManifestPath, "utf8");
   const stagedManifest = JSON.parse(stagedManifestBytes);
   assert.deepEqual(stagedManifest.route, route);
+  assert.deepEqual(stagedManifest.mapFog.volumes, []);
+  assert.equal(stagedManifest.mapFog.authority, 'serialized-map-baseline');
   assert.equal(stagedManifest.mapPackId, packId);
   assert.deepEqual(stagedManifest.layers, manifest.layers);
   assert.equal(await readFile(resolve(pack, "map-pack.json"), "utf8"), manifestBytes);
@@ -134,6 +143,12 @@ test("stage enriches exact-pack route metadata, allowlists assets and preserves 
   await assert.rejects(access(resolve(staged, "local", "recordings", "private-session.ndjson")));
 
   await writeFile(resolve(staged, "preflight-marker.txt"), "keep on failure");
+  const invalidFog = structuredClone(fogEvidence);
+  invalidFog.maps[0].sourceSceneSha256 = '0'.repeat(64);
+  await writeFile(fogPath, JSON.stringify(invalidFog));
+  await assert.rejects(execFileAsync(process.execPath, [resolve(tools, 'stage-site.mjs')], options), /Map fog evidence identity or field mismatch/);
+  assert.equal(await readFile(resolve(staged, 'preflight-marker.txt'), 'utf8'), 'keep on failure');
+  await writeFile(fogPath, JSON.stringify(fogEvidence));
   for (const [field, invalidValue] of [
     ["sceneName", "Level_1"],
     ["mapSlot", 1],

@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { layoutPortraitLabels } from "../src/portrait-layout.js";
-import { isInteriorLayer } from "../src/camera-placement.js";
+import { chooseRecordedInteriorPose, isInteriorLayer } from "../src/camera-placement.js";
+import { ReplayCamera } from "../src/replay-camera.js";
+import * as THREE from "../../vendor/three/0.180.0/build/three.module.js";
 
 // Exercise the actual scene methods without a browser/WebGL context. Only the
 // imported renderer ports are replaced; no lifecycle method is reimplemented.
@@ -31,8 +33,8 @@ function model() {
 function fixture(selected = 0) {
   const requests = [];
   const load = (layer, signal, gameBuildId) => new Promise((resolve, reject) => requests.push({ layer: layer.id, signal, gameBuildId, resolve, reject }));
-  const TrailScene = new Function("THREE", "loadGameGeometry", "cancelAnimationFrame", "layoutPortraitLabels", "isInteriorLayer", `${source}\nreturn TrailScene;`)(
-    {}, load, () => {}, layoutPortraitLabels, isInteriorLayer,
+  const TrailScene = new Function("THREE", "loadGameGeometry", "cancelAnimationFrame", "layoutPortraitLabels", "isInteriorLayer", "chooseRecordedInteriorPose", `${source}\nreturn TrailScene;`)(
+    THREE, load, () => {}, layoutPortraitLabels, isInteriorLayer, chooseRecordedInteriorPose,
   );
   const layers = [
     { id: "A", segment: 0, biome: "shore" },
@@ -46,7 +48,7 @@ function fixture(selected = 0) {
     origin: { clone() { return this; } }, terrainRoot: group(), trailRoot: group(), gridRoot: group(),
     statuses: [], resizeObserver: { disconnect() {} }, controls: { dispose() {} }, renderer: { dispose() {} },
     cameraSelectionRevision: 0,
-    freeCamera: { mode: "orbit", setMode(value) { this.mode = value; }, focus() {}, dispose() {} }, worldRenderer: { dispose() {} },
+    freeCamera: { mode: "orbit", setMode(value) { this.mode = value; }, focus() {}, dispose() {} }, worldRenderer: { dispose() {} }, fogDepthPass: { dispose() {} },
     emitMapStatus(...args) { this.statuses.push(args); }, setTime() {}, fitView() { ++this.cameraSelectionRevision; },
   });
   scene.terrainRoot.children = layers.map(group);
@@ -234,4 +236,56 @@ test("disposing an interior chapter during load cannot run a late camera placeme
   requests[0].resolve(model());
   await flush();
   assert.deepEqual(placements, []);
+});
+
+test("actual scene interior camera uses the recorded torso center without adding a fictitious eye height", () => {
+  const { scene } = fixture();
+  const document = new EventTarget();
+  document.defaultView = new EventTarget();
+  document.activeElement = { tagName: "INPUT" };
+  const initialFocus = document.activeElement;
+  const canvas = new EventTarget();
+  canvas.ownerDocument = document;
+  const attributes = new Map();
+  canvas.getAttribute = (name) => attributes.get(name) ?? null;
+  canvas.setAttribute = (name, value) => attributes.set(name, String(value));
+  canvas.removeAttribute = (name) => attributes.delete(name);
+  Object.defineProperty(canvas, "tabIndex", { get: () => Number(attributes.get("tabindex") ?? -1),
+    set: (value) => attributes.set("tabindex", String(value)) });
+  canvas.focus = () => { document.activeElement = canvas; };
+  const camera = new THREE.PerspectiveCamera(38, 1.5, 0.5, 3200);
+  camera.position.set(50, 60, 70);
+  const controls = { enabled: true, enableDamping: true, autoRotate: false,
+    target: new THREE.Vector3(), update() {} };
+  const freeCamera = new ReplayCamera({ THREE, camera, controls, canvas });
+  const center = [11, 1232, 2238];
+  Object.assign(scene.mapPack.layers[0], { name: "Temple_Segment", minX: 0, maxX: 20,
+    minY: 1200, maxY: 1233, minZ: 2200, maxZ: 2250 });
+  Object.assign(scene, { canvas, camera, controls, freeCamera, currentTime: 5, heightScale: 1.7,
+    origin: new THREE.Vector3(7, 1200, 2200), playerVisibility: new Map(),
+    trace: { manifest: { sampleHz: 5 }, events: [], tracks: new Map([["qa:camera-center", [
+      { t: 0, pos: [10, 1231, 2237], yaw: 0, segment: null },
+      { t: 5, pos: center, yaw: 90, segment: null },
+      { t: 10, pos: [12, 1231, 2239], yaw: 180, segment: null },
+    ]]]) } });
+  const placements = [];
+  canvas.addEventListener("cameraplacement", (event) => placements.push(event.detail.note));
+  scene.enterInteriorView(false);
+  assert.deepEqual(camera.position.toArray(), [4, 32 * 1.7, 38]);
+  assert.ok(camera.position.y < (1233 - 1200) * 1.7, "unrecorded standing height would place the camera above the layer ceiling");
+  assert.ok(camera.getWorldDirection(new THREE.Vector3()).distanceTo(new THREE.Vector3(1, 0, 0)) < 1e-8);
+  assert.equal(document.activeElement, initialFocus);
+  assert.equal(camera.near, 0.05);
+  assert.equal(camera.far, 3200);
+  assert.equal(controls.enabled, false);
+  assert.match(placements.at(-1), /玩家中心.*非眼位/);
+  assert.deepEqual(center, [11, 1232, 2238], "camera placement must not modify the recorded sample");
+  scene.enterInteriorView(true);
+  assert.equal(document.activeElement, canvas);
+  assert.deepEqual(camera.position.toArray(), [4, 32 * 1.7, 38]);
+  freeCamera.setMode("orbit");
+  assert.equal(camera.near, 0.5);
+  assert.equal(controls.enabled, true);
+  assert.deepEqual(camera.position.toArray(), [50, 60, 70]);
+  freeCamera.dispose();
 });

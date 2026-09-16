@@ -3,6 +3,7 @@ import { dirname, isAbsolute, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readGameAssets } from "./lib/game-assets.mjs";
 import { localAssetHint, localAssetPaths } from "./lib/local-paths.mjs";
+import { normalizeMapFog } from "../web/src/map-fog.js";
 
 const toolDirectory = dirname(fileURLToPath(import.meta.url));
 const platformDirectory = resolve(toolDirectory, "..");
@@ -44,7 +45,8 @@ for (const entry of catalog.mapPacks) {
   const sourceDirectory = resolve(mapPacksDirectory, mapPackId);
   const { files, manifest } = await readMapPackAllowlist(sourceDirectory, mapPackId);
   const route = await verifiedRouteMetadata(manifest);
-  mapPacks.push({ mapPackId, sourceDirectory, files, manifest, route });
+  const mapFog = await verifiedFogMetadata(manifest);
+  mapPacks.push({ mapPackId, sourceDirectory, files, manifest, route, mapFog });
 }
 
 // site-dist is generated exclusively by this script and is safe to recreate.
@@ -73,9 +75,10 @@ for (const pack of mapPacks) {
   }
   // Route evidence is additive metadata and is not part of geometry identity.
   // Original canonical packs remain untouched; only the generated site is enriched.
-  if (pack.route) await writeFile(
+  if (pack.route || pack.mapFog) await writeFile(
     resolve(outputDirectory, "data", "maps", "packs", pack.mapPackId, "map-pack.json"),
-    JSON.stringify({ ...pack.manifest, route: pack.route }, null, 2) + "\n",
+    JSON.stringify({ ...pack.manifest, ...(pack.route ? { route: pack.route } : {}),
+      ...(pack.mapFog ? { mapFog: pack.mapFog } : {}) }, null, 2) + "\n",
   );
 }
 for (const reference of gameAssets.files) {
@@ -168,6 +171,27 @@ async function verifiedRouteMetadata(manifest) {
     }
   }
   return entry.route;
+}
+
+async function verifiedFogMetadata(manifest) {
+  const build = String(manifest.gameBuildId || "");
+  if (!/^\d+$/.test(build)) return null;
+  let evidence;
+  try {
+    evidence = JSON.parse(await readFile(resolve(mapsDirectory, `fog.${build}.json`), "utf8"));
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
+  if (evidence.schemaVersion !== 1 || evidence.authority !== "serialized-map-baseline"
+    || String(evidence.gameBuildId) !== build || !Array.isArray(evidence.maps)) throw new Error("Invalid map fog evidence");
+  const matches = evidence.maps.filter((entry) => entry.mapPackId === manifest.mapPackId);
+  if (!matches.length) return null;
+  if (matches.length !== 1) throw new Error("Duplicate map fog evidence");
+  const value = normalizeMapFog({ ...matches[0], schemaVersion: 1, gameBuildId: build,
+    authority: evidence.authority, note: evidence.note }, manifest);
+  if (!value || value.mapSlot !== manifest.mapSlot) throw new Error("Map fog evidence identity or field mismatch");
+  return value;
 }
 
 function assertSafeRelativePath(value, label) {

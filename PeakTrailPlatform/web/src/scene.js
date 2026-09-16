@@ -3,11 +3,13 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
-import { loadGameGeometry, updateRecordedMineVisibility } from "./geometry-loader.js";
+import { loadGameGeometry, updateRecordedMineVisibility, updateMapFogSurfaceVisibility } from "./geometry-loader.js";
 import { layoutPortraitLabels } from "./portrait-layout.js";
 import { ReplayCamera, REPLAY_CAMERA_HELP } from "./replay-camera.js";
 import { chooseRecordedInteriorPose, isInteriorLayer } from "./camera-placement.js";
 import { WorldRenderer } from "./world-renderer.js";
+import { pointInBounds, clipTrailSegment } from "./trail-spatial.js";
+import { FogDepthPass } from "./fog-depth-pass.js";
 
 const PLAYER_COLORS = [
   "#efb74e",
@@ -182,6 +184,7 @@ export class TrailScene {
     this.freeCamera = new ReplayCamera({ THREE, camera: this.camera, controls: this.controls, canvas,
       onModeChange: (mode) => this.canvas.dispatchEvent(new CustomEvent("cameramodechange", { detail: { mode, help: REPLAY_CAMERA_HELP } })) });
     this.worldRenderer = new WorldRenderer(canvas);
+    this.fogDepthPass = new FogDepthPass(THREE);
     this.gameAssetPack = null;
     this.lastFrameTime = null;
     this.cameraSelectionRevision = 0;
@@ -224,6 +227,9 @@ export class TrailScene {
     this.lastFrameTime = timestamp;
     if (this.freeCamera.mode === "free") this.freeCamera.update(delta);
     else this.controls.update();
+    this.updateCameraMarkerVisibility();
+    this.fogDepthPass.render({ renderer: this.renderer, scene: this.scene, camera: this.camera,
+      fogEntries: this.worldRenderer.entries.values(), hiddenRoots: [this.trailRoot, this.gridRoot] });
     this.renderer.render(this.scene, this.camera);
     this.updatePlayerLabelPositions();
     this.worldRenderer.projectLabels(this.camera);
@@ -271,6 +277,7 @@ export class TrailScene {
     this.playerLabels.clear();
     this.buildGrid(this.currentBounds);
     this.worldRenderer.setData(this.trace, this.gameAssetPack, this.origin);
+    this.worldRenderer.setMapFog(this.useMap ? this.mapPack : null);
 
     if (this.useMap) await this.buildTerrain(token);
     if (token !== this.buildToken) return;
@@ -493,6 +500,7 @@ export class TrailScene {
     // without drawing through multi-second dropouts. Lower configured rates get
     // a proportional allowance, shared by both trails and marker interpolation.
     const maxGap = Math.max(1.5, 2.5 / sampleHz);
+    const displayBounds = this.useMap && this.activeSegment !== null ? this.viewBounds() : null;
 
     for (const participant of this.trace.participants) {
       const samples = this.trace.tracks.get(participant.id) || [];
@@ -511,9 +519,10 @@ export class TrailScene {
         worldUnits: false,
         transparent: true,
         opacity: 0.92,
-        // A 2.5D top surface omits caves and overhangs. Keep original XYZ but
-        // draw the analytical trail through terrain so it is never lost in it.
-        depthTest: false,
+        // The opaque map populates depth first. Visible and occluded strokes
+        // use complementary tests so a wall never looks like the route floor.
+        depthTest: true,
+        depthFunc: THREE.LessEqualDepth,
         depthWrite: false,
       });
       const segmentPositions = [];
@@ -526,18 +535,20 @@ export class TrailScene {
         if (end.activeSegment !== start.activeSegment) continue;
         if (crossesDiscontinuity(blockingEvents, start.t, end.t)) continue;
         if (isImplausibleJump(start, end, end.t - start.t)) continue;
-        // A global progression index is not a per-player segment. Keep an
-        // unassigned XYZ route visible when only the base-map layer changes.
+        // Keep recorded layer assignments, but do not infer one from shared
+        // progression. Spatial clipping is a view filter, not a data rewrite.
         if (this.activeSegment !== null && Number.isInteger(end.segment) && end.segment !== this.activeSegment) continue;
+        const clipped = clipTrailSegment(start, end, displayBounds);
+        if (!clipped) continue;
         segmentPositions.push(
-          start.pos[0] - this.origin.x,
-          start.pos[1] - this.origin.y + 0.28,
-          start.pos[2] - this.origin.z,
-          end.pos[0] - this.origin.x,
-          end.pos[1] - this.origin.y + 0.28,
-          end.pos[2] - this.origin.z,
+          clipped.startPos[0] - this.origin.x,
+          clipped.startPos[1] - this.origin.y,
+          clipped.startPos[2] - this.origin.z,
+          clipped.endPos[0] - this.origin.x,
+          clipped.endPos[1] - this.origin.y,
+          clipped.endPos[2] - this.origin.z,
         );
-        segmentEndTimes.push(end.t);
+        segmentEndTimes.push(clipped.visibleAt);
       }
       const lineGeometry = new LineSegmentsGeometry();
       lineGeometry.setPositions(segmentPositions.length ? segmentPositions : [0, 0, 0, 0, 0, 0]);
@@ -547,13 +558,20 @@ export class TrailScene {
       line.renderOrder = 10;
       const outline = new LineSegments2(lineGeometry, new LineMaterial({
         color: 0x081011, linewidth: 5, worldUnits: false,
-        transparent: true, opacity: 0.8, depthTest: false, depthWrite: false,
+        transparent: true, opacity: 0.8, depthTest: true, depthWrite: false,
+        depthFunc: THREE.LessEqualDepth,
       }));
       outline.renderOrder = 9;
+      const occludedLine = new LineSegments2(lineGeometry, new LineMaterial({
+        color, linewidth: 2.5, worldUnits: false,
+        transparent: true, opacity: 0.18, depthTest: true, depthWrite: false,
+        depthFunc: THREE.GreaterDepth,
+      }));
+      occludedLine.renderOrder = 8;
 
       const marker = this.createPlayerMarker(color);
       const group = new THREE.Group();
-      group.add(outline, line, marker);
+      group.add(occludedLine, outline, line, marker);
       group.userData.playerId = participant.id;
       group.visible = this.playerVisibility.get(participant.id) ?? true;
       this.trailRoot.add(group);
@@ -561,6 +579,7 @@ export class TrailScene {
         group,
         line,
         outline,
+        occludedLine,
         marker,
         samples,
         blockingEvents,
@@ -578,25 +597,31 @@ export class TrailScene {
       new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false }),
     );
     halo.rotation.x = -Math.PI / 2;
-    halo.position.y = 0.07;
     const body = new THREE.Mesh(
       new THREE.SphereGeometry(0.52, 18, 12),
       new THREE.MeshBasicMaterial({ color }),
     );
-    body.position.y = 0.52;
     const direction = new THREE.Mesh(
       new THREE.ConeGeometry(0.36, 1.25, 3),
       new THREE.MeshBasicMaterial({ color }),
     );
     direction.rotation.x = Math.PI / 2;
-    direction.position.set(0, 0.35, 0.9);
+    direction.position.set(0, 0, 0.9);
     root.add(halo, body, direction);
-    root.traverse((object) => {
+    for (const object of [...root.children]) {
       if (!object.material) return;
-      object.material.depthTest = false;
+      object.material.transparent = true;
+      object.material.depthTest = true;
       object.material.depthWrite = false;
+      object.material.depthFunc = THREE.LessEqualDepth;
       object.renderOrder = 11;
-    });
+      const ghost = object.clone();
+      ghost.material = object.material.clone();
+      ghost.material.depthFunc = THREE.GreaterDepth;
+      ghost.material.opacity = 0.18;
+      ghost.renderOrder = 8;
+      root.add(ghost);
+    }
     return root;
   }
 
@@ -679,6 +704,20 @@ export class TrailScene {
     }
   }
 
+  updateCameraMarkerVisibility() {
+    // A torso-anchored interior camera can sit inside its own sphere/cone.
+    // Hide only nearby presentation markers, not data or recorded trails;
+    // restore them automatically when the free camera moves away.
+    this.markerWorldPosition ||= new THREE.Vector3();
+    const clearance = 1.8 * Math.max(1, this.heightScale);
+    for (const { marker } of this.playerObjects.values()) {
+      marker.updateWorldMatrix(true, false);
+      marker.getWorldPosition(this.markerWorldPosition);
+      marker.visible = Boolean(marker.userData.replayVisible)
+        && this.camera.position.distanceToSquared(this.markerWorldPosition) > clearance * clearance;
+    }
+  }
+
   setTime(seconds) {
     this.currentTime = Math.max(0, Number(seconds) || 0);
     const worldPlayers = [];
@@ -686,6 +725,7 @@ export class TrailScene {
       group,
       line,
       outline,
+      occludedLine,
       marker,
       samples,
       blockingEvents,
@@ -695,6 +735,7 @@ export class TrailScene {
       line.geometry.instanceCount = binaryUpperBound(line.userData.endTimes, this.currentTime);
       line.visible = this.showTracks;
       outline.visible = this.showTracks;
+      occludedLine.visible = this.showTracks;
       const sample = sampleAtTime(samples, this.currentTime, maxGap, blockingEvents);
       const latestLifecycle = lifecycleEvents.findLast((event) => event.t <= this.currentTime);
       const isPresent = latestLifecycle?.type !== "leave";
@@ -702,11 +743,13 @@ export class TrailScene {
       if (sample && this.currentTime - sample.t <= maxGap && isPresent && life?.type !== "death" && (this.playerVisibility.get(group.userData.playerId) ?? true)) worldPlayers.push(sample);
       const segmentMatches =
         sample && (this.activeSegment === null || !Number.isInteger(sample.segment) || sample.segment === this.activeSegment);
-      marker.visible = Boolean(this.showMarkers && sample && segmentMatches && isPresent);
+      const displayBounds = this.useMap && this.activeSegment !== null ? this.viewBounds() : null;
+      marker.visible = Boolean(this.showMarkers && sample && segmentMatches && isPresent && pointInBounds(sample.pos, displayBounds));
+      marker.userData.replayVisible = marker.visible;
       if (sample) {
         marker.position.set(
           sample.pos[0] - this.origin.x,
-          sample.pos[1] - this.origin.y + 0.36,
+          sample.pos[1] - this.origin.y,
           sample.pos[2] - this.origin.z,
         );
         marker.rotation.y = THREE.MathUtils.degToRad(sample.yaw || 0);
@@ -714,8 +757,15 @@ export class TrailScene {
       group.visible = this.playerVisibility.get(group.userData.playerId) ?? true;
     }
     this.worldRenderer.update(this.currentTime, { players: worldPlayers, heightScale: this.heightScale,
+      segment: this.activeSegment,
       bounds: this.useMap && this.activeSegment !== null ? this.viewBounds() : null });
     updateRecordedMineVisibility(this.terrainRoot, this.worldRenderer.objects, this.trace?.events, this.currentTime);
+    // The verified map sidecar identifies original fog surfaces even when a
+    // captured world is empty or its live fog has moved. Never leave a fixed
+    // initial surface behind the real replay, or guess association by proximity.
+    const fogReplacements = this.trace?.worldTimeline?.captured
+      ? this.worldRenderer.mapFog?.volumes || [] : this.worldRenderer.objects;
+    updateMapFogSurfaceVisibility(this.terrainRoot, this.worldRenderer.enabled ? fogReplacements : []);
   }
 
   setGameAssetPack(pack) {
@@ -805,8 +855,10 @@ export class TrailScene {
     const pose = chooseRecordedInteriorPose(this.trace, this.currentTime, this.viewBounds(), { playerVisibility: this.playerVisibility });
     if (pose) {
       const yaw = THREE.MathUtils.degToRad(pose.yaw || 0);
-      this.freeCamera.enterAt([pose.pos[0] - this.origin.x, (pose.pos[1] - this.origin.y + 1.6) * this.heightScale, pose.pos[2] - this.origin.z], [Math.sin(yaw), 0, Math.cos(yaw)], { focus });
-      this.cameraPlacementNote = pose.t === this.currentTime ? "当前玩家位置" : "已记录的关内玩家位置";
+      // Recorder pos is Character.Center (torso), NOT feet. No head pose was
+      // recorded, so adding a standing eye height could put us above a ceiling.
+      this.freeCamera.enterAt([pose.pos[0] - this.origin.x, (pose.pos[1] - this.origin.y) * this.heightScale, pose.pos[2] - this.origin.z], [Math.sin(yaw), 0, Math.cos(yaw)], { focus });
+      this.cameraPlacementNote = "已记录的玩家中心 · 关内参考视点，非眼位";
     } else {
       // A bounding box centre can be air or solid rock. Require a floor AND a
       // ceiling from real loaded geometry, not a fabricated 'interior' point.
@@ -905,6 +957,7 @@ export class TrailScene {
     this.resizeObserver.disconnect();
     this.freeCamera.dispose();
     this.worldRenderer.dispose();
+    this.fogDepthPass.dispose();
     this.controls.dispose();
     this.geometryAbort?.abort();
     this.geometryLoads.clear();

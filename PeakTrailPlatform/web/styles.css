@@ -508,6 +508,9 @@ svg {
 }
 
 .analysis-overlay-note {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   padding: 4px 9px;
   border: 1px solid rgba(119, 214, 199, 0.16);
   border-radius: 999px;
@@ -517,6 +520,27 @@ svg {
   letter-spacing: 0.02em;
   backdrop-filter: blur(10px);
 }
+
+.analysis-overlay-note i {
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+  background: #b5d86b;
+}
+.analysis-overlay-note .trail-key-occluded { opacity: 0.22; margin-left: 4px; }
+
+.map-fog-note {
+  margin: 6px 0 0;
+  padding: 4px 8px;
+  border: 1px solid rgba(142, 168, 230, 0.3);
+  border-radius: 7px;
+  background: rgba(12, 19, 35, 0.84);
+  color: #c1cef0;
+  font-size: 0.62rem;
+  line-height: 1.6;
+  text-align: center;
+}
+.map-fog-note[hidden] { display: none; }
 
 .compatibility-pill .status-dot {
   width: 7px;

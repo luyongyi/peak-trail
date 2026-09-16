@@ -72,7 +72,9 @@ function choose(candidates, preferredPlayerId) {
 /**
  * Picks an observed Unity-world position in this layer, never a future sample
  * or an interpolated point. activeSegment is shared progression, not a player's
- * location. Caller applies origin / height scale and the camera eye offset.
+ * location. Caller applies only display origin / height scale. Recorder samples
+ * are Character.Center (torso), not feet; no unrecorded eye-height offset should
+ * be added or presented as the original player's camera position.
  * Hidden players are excluded when playerVisibility is supplied as a Map.
  */
 export function chooseRecordedInteriorPose(trace, currentTime, layerOrBounds,

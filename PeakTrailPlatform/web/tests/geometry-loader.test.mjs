@@ -15,7 +15,7 @@ const source = (await readFile(new URL("../src/geometry-loader.js", import.meta.
   .replace(/^import .*;\r?\n/gm, "").replace(/^export (?=(?:async )?function )/gm, "");
 const compile = (ports = {}) => new Function(
   "THREE", "GLTFLoader", "MeshoptDecoder", "decodeGeometryBytes", "GEOMETRY_FORMATS", "positiveInstanceTransform", "getSourceEffectMaterial", "isExplosiveMineMaterial", "recordedHiddenMineIndices", "fetch", "crypto",
-  `${source}\nreturn { loadGameGeometry, batchStaticMeshes, updateRecordedMineVisibility };`,
+  `${source}\nreturn { loadGameGeometry, batchStaticMeshes, updateRecordedMineVisibility, updateMapFogSurfaceVisibility };`,
 )(THREE, ports.GLTFLoader, {}, ports.decode || decodeGeometryBytes, GEOMETRY_FORMATS, positiveInstanceTransform, getSourceEffectMaterial, isExplosiveMineMaterial, recordedHiddenMineIndices, ports.fetch, ports.crypto || webcrypto);
 
 function glb() {
@@ -190,4 +190,57 @@ test("mine bounds use referenced primitive indices, not unrelated static-batch v
   assert.deepEqual(mine.min, [-0.5, 0, 0]);
   assert.deepEqual(mine.max, [0.5, 1, 0]);
   fixture.geometry.dispose(); geometry.dispose(); fixture.material.dispose(); root.children[0].dispose();
+});
+
+test("map baseline fog replaces only matching chapter FogSurface batches and restores visibility", () => {
+  const { batchStaticMeshes, updateMapFogSurfaceVisibility } = compile();
+  const terrain = new THREE.Group();
+  const fixtures = [];
+  const add = (segment, name = "FogSurface", shader = "GD/FogSurface", build = "25306743") => {
+    const fixture = effectFixture(name, shader); fixtures.push(fixture);
+    const model = batchStaticMeshes(fixture.scene, build);
+    const chapter = new THREE.Group(); chapter.userData.mapLayer = { segment }; chapter.add(model); terrain.add(chapter);
+    return { mesh: model.children[0], chapter, model };
+  };
+  const swamp = add(3), temple = add(4), alreadyHidden = add(4);
+  alreadyHidden.mesh.visible = false;
+  temple.chapter.visible = false;
+  const water = add(4, "M_Water_swamp", "GD/Water-GD"), voidFog = add(4, "FogSurface void");
+  const otherBuild = add(4, "FogSurface", "GD/FogSurface", "other"), unknownChapter = add(undefined);
+  const mixed = add(4); mixed.mesh.material = [mixed.mesh.material, water.mesh.material];
+  const fog = (segment) => ({ kind: "sleep_fog", authority: "map-baseline", segment,
+    surfaceMaterial: "FogSurface", surfaceShader: "GD/FogSurface", active: true });
+  assert.equal(updateMapFogSurfaceVisibility(terrain, [fog(4)]), 2);
+  assert.equal(swamp.mesh.visible, true);
+  assert.equal(temple.mesh.visible, false);
+  assert.equal(temple.chapter.visible, false, "the owning chapter's visibility must remain untouched");
+  assert.equal(alreadyHidden.mesh.visible, false);
+  for (const { mesh } of [water, voidFog, otherBuild, unknownChapter, mixed]) assert.equal(mesh.visible, true);
+  assert.equal(updateMapFogSurfaceVisibility(terrain, [fog(3), fog(4)]), 3, "overview replaces each explicit chapter only");
+  assert.equal(swamp.mesh.visible, false);
+  updateMapFogSurfaceVisibility(terrain, [fog(3)]);
+  assert.equal(temple.mesh.visible, true, "switching chapter restores the previous mesh, not its hidden group");
+  assert.equal(temple.chapter.visible, false);
+  assert.equal(alreadyHidden.mesh.visible, false, "an originally hidden mesh stays hidden after restoration");
+  updateMapFogSurfaceVisibility(terrain, []);
+  assert.equal(swamp.mesh.visible, true);
+  assert.equal(swamp.mesh.userData.peakMapFogVisibility, undefined);
+  for (const fixture of fixtures) { fixture.geometry.dispose(); fixture.material.dispose(); }
+  terrain.traverse((mesh) => { if (mesh.isInstancedMesh) mesh.dispose(); });
+});
+
+test("recorded, inactive, ambiguous or wrong-source fog never hides static surfaces", () => {
+  const { batchStaticMeshes, updateMapFogSurfaceVisibility } = compile();
+  const fixture = effectFixture("FogSurface", "GD/FogSurface");
+  const model = batchStaticMeshes(fixture.scene, "25306743");
+  const chapter = new THREE.Group(); chapter.userData.segment = 3; chapter.add(model);
+  const terrain = new THREE.Group(); terrain.add(chapter);
+  const fog = { kind: "sleep_fog", authority: "map-baseline", segment: 3,
+    surfaceMaterial: "FogSurface", surfaceShader: "GD/FogSurface" };
+  for (const override of [{ authority: "recorded" }, { active: false }, { segment: null },
+    { segment: "3" }, { kind: "safe_zone" }, { surfaceMaterial: "FogSurface void" }, { surfaceShader: "GD/Water-GD" }]) {
+    assert.equal(updateMapFogSurfaceVisibility(terrain, [{ ...fog, ...override }]), 0);
+    assert.equal(model.children[0].visible, true);
+  }
+  fixture.geometry.dispose(); fixture.material.dispose(); model.children[0].dispose();
 });

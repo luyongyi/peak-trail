@@ -8,6 +8,7 @@ import {
   worldObjectInBounds, worldWarning, worldEffectsAtTime,
 } from "../src/world-timeline.js";
 import { getSourceEffectMaterial } from "../src/source-materials.js";
+import { normalizeMapFog, mapFogStateAtTime } from "../src/map-fog.js";
 
 // Exercise the real renderer and bundled Three CPU scene graph, replacing only browser
 // DOM/network ports. No WebGL context, remote textures or proprietary assets are needed.
@@ -31,10 +32,10 @@ class Element {
 
 function createHarness(fetchImpl = async () => ({ ok: true, json: async () => modelFixture() })) {
   const WorldRenderer = new Function(
-    "THREE", "resolveGameAssetUrl", "resolveItemAsset", "worldObjectsAtTime", "worldObjectVisible", "worldObjectInBounds", "worldWarning", "worldEffectsAtTime", "createReplayFogMaterial", "getSourceEffectMaterial", "document", "fetch",
+    "THREE", "resolveGameAssetUrl", "resolveItemAsset", "worldObjectsAtTime", "worldObjectVisible", "worldObjectInBounds", "worldWarning", "worldEffectsAtTime", "createReplayFogMaterial", "getSourceEffectMaterial", "normalizeMapFog", "mapFogStateAtTime", "document", "fetch",
     `${worldSource}\nreturn WorldRenderer;`,
   )(THREE, resolveGameAssetUrl, resolveItemAsset, worldObjectsAtTime, worldObjectVisible, worldObjectInBounds, worldWarning, worldEffectsAtTime,
-    createReplayFogMaterial, getSourceEffectMaterial, { createElement: (tag) => new Element(tag) }, fetchImpl);
+    createReplayFogMaterial, getSourceEffectMaterial, normalizeMapFog, mapFogStateAtTime, { createElement: (tag) => new Element(tag) }, fetchImpl);
   const parent = new Element("section"), canvas = new Element("canvas");
   parent.append(canvas); canvas.clientWidth = 800; canvas.clientHeight = 600;
   return { renderer: new WorldRenderer(canvas), parent, canvas };
@@ -195,5 +196,33 @@ test("confirmed mine effects animate at recorded location and rewind out cleanly
   let disposed = 0; burst.children[0].geometry.addEventListener("dispose", () => disposed++);
   renderer.update(4); assert.equal(renderer.effectRoot.children.length, 0); assert.equal(disposed, 1);
   renderer.update(8); assert.equal(renderer.effectRoot.children.length, 0);
+  renderer.dispose();
+});
+
+test("old logs display exact source baseline fog without recording fake world state or lamps", async () => {
+  const evidence = JSON.parse(await readFile(new URL('../../data/maps/fog.25306743.json', import.meta.url), 'utf8'));
+  const metadata = evidence.maps.find((entry) => entry.sceneName === 'Level_17');
+  const mapPack = { ...metadata, gameBuildId: evidence.gameBuildId,
+    source: { sceneSha256: metadata.sourceSceneSha256 }, layers: [{ segment: 3, biome: 'Swamp' }, { segment: 4, biome: 'Swamp' }],
+    mapFog: { ...metadata, schemaVersion: 1, gameBuildId: evidence.gameBuildId, authority: evidence.authority } };
+  const { renderer } = createHarness();
+  const trace = { events: [] };
+  renderer.setData(trace, null, new THREE.Vector3(0, 700, 1400));
+  assert.equal(renderer.setMapFog(mapPack), true);
+  renderer.update(50, { segment: 3 });
+  assert.equal(renderer.fogState.mode, 'map-baseline'); assert.equal(renderer.fogState.count, 1);
+  assert.equal(renderer.entries.size, 1); assert.equal(trace.worldTimeline, undefined);
+  const entry = [...renderer.entries.values()][0];
+  assert.equal(entry.object.topY, 784); assert.match(entry.text.textContent, /地图基础雾/);
+  nearly(entry.group.scale.toArray(), entry.object.size.map((n) => n / 2));
+  assert.equal(entry.fogMaterial.uniforms.replayTime.value, 0);
+  assert.equal(entry.fogMaterial.uniforms.safeCount.value, 0);
+  nearly(entry.fogMaterial.uniforms.fogColor.value.toArray(), getSourceEffectMaterial('25306743', 'FogSurface', 'GD/FogSurface').baseColor);
+  renderer.enabled = false; renderer.update(50, { segment: 3 });
+  assert.equal(renderer.fogState.count, 0); assert.equal(renderer.root.visible, false);
+  renderer.enabled = true;
+  renderer.setData(traceFixture([]), null, new THREE.Vector3()); renderer.update(50, { segment: 3 });
+  assert.equal(renderer.fogState.mode, 'recorded'); assert.equal(renderer.fogState.count, 0);
+  assert.equal(renderer.entries.size, 0, 'recorded empty world must remove the map baseline');
   renderer.dispose();
 });

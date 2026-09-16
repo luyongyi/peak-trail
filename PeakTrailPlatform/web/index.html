@@ -77,10 +77,10 @@
                 <span class="status-dot"></span>
                 <span id="compatibilityText">等待地图与足迹</span>
               </div>
-              <span class="analysis-overlay-note">轨迹透视显示 · 原始 XYZ 与高度不变</span>
+              <span class="analysis-overlay-note"><i class="trail-key-visible"></i>可见轨迹 <i class="trail-key-occluded"></i>遮挡轨迹 · 淡色透视</span>
             </div>
             <div class="camera-actions" aria-label="视角控制">
-              <button class="camera-text-button" id="interiorViewButton" type="button" title="移到已记录玩家位置；没有记录时寻找真实模型内部地板">进入关内</button>
+              <button class="camera-text-button" id="interiorViewButton" type="button" title="移到已记录玩家中心（非眼位）；没有记录时寻找真实模型内部地板">进入关内</button>
               <button class="camera-text-button" id="freeCameraButton" type="button" aria-pressed="false">自由相机 WASD</button>
               <button class="icon-button" id="topViewButton" type="button" title="俯视视角" aria-label="俯视视角">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 7l8 4 8-4-8-4Zm-8 9 8 4 8-4M4 17l8 4 8-4" /></svg>
@@ -122,6 +122,7 @@
                 所有关概览
               </button>
             </div>
+            <p class="map-fog-note" id="mapFogNote" hidden></p>
           </nav>
 
           <div class="empty-state" id="emptyState">
@@ -243,7 +244,7 @@
               </select>
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 9 5 5 5-5" /></svg>
             </div>
-            <p class="control-note">活动分区只用于关卡导航，不会推断每名玩家所在层；未分配足迹始终保留原始 XYZ。</p>
+            <p class="control-note">单关按地图空间边界裁剪足迹，不改变记录坐标或推断玩家分区；亮线可见，淡线被地形遮挡。轨迹记录的是人物中心，并非脚底。</p>
 
             <div class="range-header">
               <label class="field-label" for="heightScale">高度夸张</label>
@@ -280,7 +281,7 @@
 
           <section class="inspector-section world-section">
             <div class="section-heading compact"><div><span class="eyebrow">世界动态</span><h2>物体与危险</h2></div></div>
-            <label class="switch-row"><span><strong>显示世界记录</strong><small>放置物、敌人、雾与爆炸</small></span><input id="worldToggle" type="checkbox" checked /><span class="switch-ui"></span></label>
+            <label class="switch-row"><span><strong>显示世界与雾层</strong><small>无世界实录时显示地图基础雾</small></span><input id="worldToggle" type="checkbox" checked /><span class="switch-ui"></span></label>
             <p class="control-note" id="worldTelemetryNote">等待导入世界记录</p>
             <p class="world-summary" id="worldSummary"></p>
             <div class="world-alerts" id="worldAlerts" role="status"></div>

@@ -184,6 +184,45 @@ export function updateRecordedMineVisibility(terrainRoot, objects = [], events =
   return hidden.size;
 }
 
+/** Replace only a chapter's known static FogSurface with its source-map fog
+ * volume. Recorded fog without a verified static-surface identity must not
+ * hide geometry by proximity, or infer a chapter from the current camera. */
+export function updateMapFogSurfaceVisibility(terrainRoot, fogObjects = []) {
+  const segments = new Set(fogObjects.filter((object) => object?.kind === "sleep_fog"
+    && object.authority === "map-baseline" && object.active !== false
+    && Number.isInteger(object.segment) && object.segment >= 0
+    && object.surfaceMaterial === "FogSurface" && object.surfaceShader === "GD/FogSurface")
+    .map((object) => object.segment));
+  let hidden = 0;
+  terrainRoot?.traverse((mesh) => {
+    if (!mesh.isMesh) return;
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    // A mixed batch cannot be hidden wholesale: it could include water or
+    // ordinary terrain. Adaptation metadata also binds the source build.
+    const sourceFog = materials.length > 0 && materials.every((material) => {
+      const effect = material?.userData?.peakSourceEffect;
+      return effect?.kind === "fog" && effect.source?.material === "FogSurface"
+        && effect.source?.shader === "GD/FogSurface" && String(effect.source?.buildId) === "25306743";
+    });
+    let segment;
+    for (let owner = mesh; owner && owner !== terrainRoot; owner = owner.parent) {
+      const candidate = owner.userData?.mapLayer?.segment ?? owner.userData?.segment;
+      if (Number.isInteger(candidate)) { segment = candidate; break; }
+    }
+    const shouldHide = sourceFog && segments.has(segment);
+    const saved = mesh.userData.peakMapFogVisibility;
+    if (shouldHide) {
+      if (!saved) mesh.userData.peakMapFogVisibility = { visible: mesh.visible };
+      mesh.visible = false;
+      hidden++;
+    } else if (saved) {
+      mesh.visible = saved.visible;
+      delete mesh.userData.peakMapFogVisibility;
+    }
+  });
+  return hidden;
+}
+
 export async function loadGameGeometry(layer, signal, gameBuildId) {
   if (!GEOMETRY_FORMATS.includes(layer.geometryFormat) || !layer.geometryUrl
       || !/^[a-f0-9]{64}$/i.test(layer.geometrySha256 || "")) throw new Error("此关缺少已校验的真实模型引用");

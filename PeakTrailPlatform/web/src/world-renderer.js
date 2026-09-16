@@ -3,6 +3,7 @@ import { resolveGameAssetUrl, resolveItemAsset } from './game-assets.js';
 import { worldObjectsAtTime, worldObjectVisible, worldObjectInBounds, worldWarning, worldEffectsAtTime } from './world-timeline.js';
 import { createReplayFogMaterial } from './fog-material.js';
 import { getSourceEffectMaterial } from './source-materials.js';
+import { normalizeMapFog, mapFogStateAtTime } from './map-fog.js';
 
 const LABELS = { item: '掉落物', placed_object: '放置物', mine: '孢子地雷', zombie: '蘑菇僵尸', zombie_spawn: '僵尸生成点', sleep_fog: '昏睡雾', spore_cloud: '孢子云', fog_safe_zone: '灯光保护区' };
 function disposeTree(root) {
@@ -33,6 +34,13 @@ export class WorldRenderer {
     this.enabled = true;
     this.effectsKey = '';
     this.alerts = [];
+    this.mapFog = null;
+    this.fogState = { mode: 'unavailable', count: 0, note: '' };
+  }
+
+  setMapFog(mapPack) {
+    this.mapFog = normalizeMapFog(mapPack?.mapFog, mapPack);
+    return Boolean(this.mapFog);
   }
 
   setData(trace, pack, origin) {
@@ -123,7 +131,7 @@ export class WorldRenderer {
       material.uniforms.sphere.value = object.shape !== 'box';
       material.uniforms.fogColor.value.set(object.kind === 'sleep_fog' ? '#b698d9' : '#cad77f');
       if (object.source.includes('StatusFieldGloom')) {
-        const source = getSourceEffectMaterial(this.pack?.gameBuildId, 'FogSurface', 'GD/FogSurface');
+        const source = getSourceEffectMaterial(this.pack?.gameBuildId || this.mapFog?.gameBuildId, 'FogSurface', 'GD/FogSurface');
         if (source) material.uniforms.fogColor.value.fromArray(source.baseColor);
       }
       const volume = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2), material);
@@ -133,8 +141,8 @@ export class WorldRenderer {
         if (camera) {
           localCamera.copy(camera.position).applyMatrix4(material.uniforms.inverseWorld.value);
           // Outside: test the front entry surface, not an underground back face.
-          // Inside: the camera is already in the recorded volume; exit faces may
-          // sit behind terrain. This bounded overlay is not a scene-depth shader.
+          // Inside: exit faces may sit behind terrain. The fragment shader
+          // instead limits integration using the opaque scene-depth prepass.
           material.depthTest = Math.max(...localCamera.toArray().map(Math.abs)) >= 1;
         }
       };
@@ -157,11 +165,16 @@ export class WorldRenderer {
     return entry;
   }
 
-  update(time, { bounds = null, players = [], heightScale = 1 } = {}) {
+  update(time, { bounds = null, players = [], heightScale = 1, segment = null } = {}) {
     this.time = time; this.root.scale.y = heightScale; this.heightScale = heightScale;
     this.alerts = [];
     const alive = new Set();
-    const objects = worldObjectsAtTime(this.trace?.worldTimeline, time);
+    const recordedObjects = worldObjectsAtTime(this.trace?.worldTimeline, time);
+    const fogState = mapFogStateAtTime(this.mapFog, this.trace?.worldTimeline, time, segment);
+    const objects = [...recordedObjects, ...fogState.objects];
+    const visibleFog = objects.filter((object) => object.kind === 'sleep_fog'
+      && worldObjectVisible(object) && worldObjectInBounds(object, bounds));
+    this.fogState = { ...fogState, count: this.enabled ? visibleFog.length : 0 };
     const safeZones = objects.filter((object) => object.kind === 'fog_safe_zone' && worldObjectVisible(object) && object.radius > 0);
     this.objects = objects;
     for (const object of objects) {
@@ -181,8 +194,9 @@ export class WorldRenderer {
         entry.group.visible &&= Boolean(size?.every((n) => n > 0));
         if (size) entry.group.scale.set(...size.map((n) => Math.abs(n) / 2));
         const uniforms = entry.fogMaterial.uniforms;
-        uniforms.replayTime.value = time; uniforms.worldOrigin.value.copy(this.origin); uniforms.heightScale.value = heightScale;
-        const nearbySafeZones = object.kind === 'sleep_fog' ? [...safeZones].sort((a, b) => Math.hypot(...a.pos.map((v, i) => v - object.pos[i])) - Math.hypot(...b.pos.map((v, i) => v - object.pos[i]))).slice(0, 32) : [];
+        uniforms.replayTime.value = object.authority === 'map-baseline' ? 0 : time;
+        uniforms.worldOrigin.value.copy(this.origin); uniforms.heightScale.value = heightScale;
+        const nearbySafeZones = object.kind === 'sleep_fog' && object.authority !== 'map-baseline' ? [...safeZones].sort((a, b) => Math.hypot(...a.pos.map((v, i) => v - object.pos[i])) - Math.hypot(...b.pos.map((v, i) => v - object.pos[i]))).slice(0, 32) : [];
         uniforms.safeCount.value = nearbySafeZones.length;
         nearbySafeZones.forEach((safe, i) => uniforms.safeZones.value[i].set(...safe.pos, safe.radius));
       } else if (object.kind === 'fog_safe_zone') {
@@ -190,10 +204,13 @@ export class WorldRenderer {
       } else entry.group.scale.fromArray(object.scale);
       const distance = entry.warning ? ` · ${Math.round(entry.warning.distance)}m` : '';
       const name = ['item', 'placed_object'].includes(object.kind) ? entry.asset.name : LABELS[object.kind];
-      entry.text.textContent = `${name}${distance}${enemy ? entry.warning?.active ? ' · 已激活' : ' · 预警' : ''}${object.statusEnabled === false ? ' · 昏睡关闭' : ''}`;
+      entry.text.textContent = object.authority === 'map-baseline'
+        ? `地图基础雾 · 初始雾顶 ${object.topY.toFixed(1)}m`
+        : `${name}${distance}${enemy ? entry.warning?.active ? ' · 已激活' : ' · 预警' : ''}${object.statusEnabled === false ? ' · 昏睡关闭' : ''}`;
       entry.label.classList.toggle('is-danger', Boolean(entry.warning?.active));
       entry.label.dataset.kind = object.kind;
       entry.label.title = `${object.prefabName} · ${object.activity} · ${object.source}${entry.asset.modelUrl ? '' : ' · 图标/范围示意'}`;
+      if (object.authority === 'map-baseline') entry.label.title = this.fogState.note;
     }
     for (const [id, entry] of this.entries) {
       if (alive.has(id)) continue;

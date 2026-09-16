@@ -76,6 +76,7 @@ const elements = {
   worldToggle: $("worldToggle"),
   worldTelemetryNote: $("worldTelemetryNote"),
   worldSummary: $("worldSummary"),
+  mapFogNote: $("mapFogNote"),
   worldAlerts: $("worldAlerts"),
   eventToast: $("eventToast"),
   eventToastIcon: $("eventToastIcon"),
@@ -405,6 +406,7 @@ function chooseSegment(segment, mode = "manual") {
   if (changed && viewer) {
     markSegmentTransition(normalized);
     viewer.setActiveSegment(normalized);
+    updateWorldTelemetry();
   }
 }
 
@@ -852,8 +854,12 @@ function updatePlayerTelemetry() {
 function updateWorldTelemetry() {
   elements.worldTelemetryNote.textContent = state.trace ? worldTelemetryNote(state.trace.worldTimeline, state.currentTime) : "等待导入世界记录";
   const world = viewer?.worldRenderer;
+  const fog = world?.fogState;
+  elements.mapFogNote.hidden = !fog?.count;
+  elements.mapFogNote.textContent = fog?.mode === "map-baseline" ? "地图基础雾 · 初始配置，非本局实录" : "本局实录雾 · 随时间线回放";
+  elements.mapFogNote.title = fog?.note || "";
   const objects = world?.objects || [];
-  elements.worldSummary.textContent = state.trace?.worldTimeline?.captured ? `此刻记录 ${objects.length} 个世界对象 · 采样状态，不预测中间运动` : "";
+  elements.worldSummary.textContent = [state.trace?.worldTimeline?.captured ? `此刻记录 ${objects.length} 个世界对象 · 采样状态，不预测中间运动` : "", fog?.count ? fog.note : ""].filter(Boolean).join("\n");
   const alerts = (world?.alerts || []).sort((a, b) => a.distance - b.distance).slice(0, 8);
   const key = JSON.stringify(alerts.map((alert) => [alert.object.objectId, Math.round(alert.distance), alert.active]));
   if (elements.worldAlerts.dataset.key === key) return;
@@ -1295,7 +1301,10 @@ elements.topViewButton.addEventListener("click", () => viewer?.topView());
 elements.fitViewButton.addEventListener("click", () => viewer?.fitView());
 elements.freeCameraButton.addEventListener("click", () => viewer?.toggleFreeCamera());
 elements.interiorViewButton.addEventListener("click", () => viewer?.enterInteriorView());
-elements.worldToggle.addEventListener("change", () => viewer?.setWorldVisibility(elements.worldToggle.checked));
+elements.worldToggle.addEventListener("change", () => {
+  viewer?.setWorldVisibility(elements.worldToggle.checked);
+  updateWorldTelemetry();
+});
 elements.sceneCanvas.addEventListener("cameramodechange", (event) => {
   const free = event.detail.mode === "free";
   elements.freeCameraButton.setAttribute("aria-pressed", String(free));

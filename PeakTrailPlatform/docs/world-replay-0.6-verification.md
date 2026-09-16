@@ -45,6 +45,8 @@ server history. The file retains raw player IDs and belongs outside Git.
 World-model shape is the source prefab's reference geometry; child animations,
 Unity particles, shader masks and physics between samples are not reproduced.
 Explosion and fog graphics are labelled replay illustrations. The bounded fog
-overlay does not implement Unity's scene-depth/refraction shader. Its analytic
+overlay does not reproduce Unity's original refraction shader. The subsequent
+[fog and occlusion fix](fog-and-occlusion-verification.md) adds opaque scene-depth
+clipping and explicitly labelled map-baseline fog for older recordings. Its analytic
 integration subtracts recorded lit protection spheres (up to 32 nearest per
 field). Missing source meshes use an explicit icon/location marker.
