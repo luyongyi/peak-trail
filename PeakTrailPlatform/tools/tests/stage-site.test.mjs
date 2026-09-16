@@ -12,7 +12,7 @@ const execFileAsync = promisify(execFile);
 const testDirectory = dirname(fileURLToPath(import.meta.url));
 const platformSource = resolve(testDirectory, "..", "..");
 
-test("stage reads external assets by allowlist and never copies local recordings", async (t) => {
+test("stage enriches exact-pack route metadata, allowlists assets and preserves output on failed preflight", async (t) => {
   const repository = await mkdtemp(resolve(tmpdir(), "peaktrail-stage-"));
   t.after(() => rm(repository, { recursive: true, force: true }));
   const platform = resolve(repository, "PeakTrailPlatform");
@@ -24,6 +24,7 @@ test("stage reads external assets by allowlist and never copies local recordings
   const schemas = [
     "daily-map.schema.json", "map-catalog.schema.json", "map-pack.schema.json",
     "peaktrace-manifest.schema.json", "peaktrace-stream.schema.json", "peaktrace-history.schema.json",
+    "peaktrace-route.schema.json",
   ];
 
   await Promise.all([
@@ -57,12 +58,40 @@ test("stage reads external assets by allowlist and never copies local recordings
   const manifest = {
     identityVersion: 3,
     mapPackId: packId,
-    layers: [{
+    gameBuildId: "123",
+    sceneName: "Level_0",
+    mapSlot: 0,
+    source: { sceneSha256: "b".repeat(64) },
+    layers: [[0, "Shore"], [3, "Volcano"], [4, "Volcano"]].map(([segment, biome]) => ({
+      segment,
+      biome,
       texture: "shore.png",
       height: "shore.height.f32",
       geometry: "shore.glb.gz",
+    })),
+  };
+  const manifestBytes = JSON.stringify(manifest);
+  const route = {
+    authority: "serialized-map-handler",
+    branch: "volcano-kiln",
+    segments: [
+      { index: 0, biome: "Shore", biomeId: 0, name: "Beach_Segment" },
+      { index: 3, biome: "Volcano", biomeId: 3, name: "Caldera_Segment", displayName: "火山" },
+      { index: 4, biome: "Volcano", biomeId: 3, name: "Volcano_Segment", displayName: "熔炉" },
+    ],
+  };
+  const evidence = {
+    schemaVersion: 1,
+    gameBuildId: "123",
+    maps: [{
+      mapPackId: packId,
+      sceneName: manifest.sceneName,
+      mapSlot: manifest.mapSlot,
+      sourceSceneSha256: manifest.source.sceneSha256,
+      route,
     }],
   };
+  const evidencePath = resolve(platform, "data", "maps", "routes.123.json");
   const buildCatalog = {
     schemaVersion: 1,
     gameBuildId: "123",
@@ -74,7 +103,8 @@ test("stage reads external assets by allowlist and never copies local recordings
       schemaVersion: 1,
       mapPacks: [{ mapPackId: packId, path: `./packs/${packId}/map-pack.json` }],
     })),
-    writeFile(resolve(pack, "map-pack.json"), JSON.stringify(manifest)),
+    writeFile(resolve(pack, "map-pack.json"), manifestBytes),
+    writeFile(evidencePath, JSON.stringify(evidence)),
     writeFile(resolve(pack, "shore.png"), texture),
     writeFile(resolve(pack, "shore.height.f32"), height),
     writeFile(resolve(pack, "shore.glb.gz"), geometry),
@@ -90,12 +120,48 @@ test("stage reads external assets by allowlist and never copies local recordings
   const options = { env: { ...process.env, PEAK_TRAIL_ASSET_ROOT: assets } };
   await execFileAsync(process.execPath, [resolve(tools, "stage-site.mjs")], options);
   const staged = resolve(platform, "site-dist");
+  const stagedManifestPath = resolve(staged, "data", "maps", "packs", packId, "map-pack.json");
+  const stagedManifestBytes = await readFile(stagedManifestPath, "utf8");
+  const stagedManifest = JSON.parse(stagedManifestBytes);
+  assert.deepEqual(stagedManifest.route, route);
+  assert.equal(stagedManifest.mapPackId, packId);
+  assert.deepEqual(stagedManifest.layers, manifest.layers);
+  assert.equal(await readFile(resolve(pack, "map-pack.json"), "utf8"), manifestBytes);
   assert.deepEqual(await readFile(resolve(staged, "data", "maps", "packs", packId, "shore.glb.gz")), geometry);
   assert.deepEqual(await readFile(resolve(staged, "data", "game-assets", "123", "icons", "item.png")), item);
   await assert.rejects(access(resolve(staged, "data", "maps", "packs", packId, "private-session.ndjson")));
   await assert.rejects(access(resolve(staged, "local", "recordings", "private-session.ndjson")));
 
   await writeFile(resolve(staged, "preflight-marker.txt"), "keep on failure");
+  for (const [field, invalidValue] of [
+    ["sceneName", "Level_1"],
+    ["mapSlot", 1],
+    ["sourceSceneSha256", "c".repeat(64)],
+  ]) {
+    const invalid = structuredClone(evidence);
+    invalid.maps[0][field] = invalidValue;
+    await writeFile(evidencePath, JSON.stringify(invalid));
+    await assert.rejects(
+      execFileAsync(process.execPath, [resolve(tools, "stage-site.mjs")], options),
+      (error) => /Route evidence identity mismatch/.test(`${error.stderr}\n${error.stdout}`),
+      `wrong ${field} must fail before replacing the previous site`,
+    );
+    assert.equal(await readFile(resolve(staged, "preflight-marker.txt"), "utf8"), "keep on failure");
+    assert.equal(await readFile(stagedManifestPath, "utf8"), stagedManifestBytes);
+    assert.equal(await readFile(resolve(pack, "map-pack.json"), "utf8"), manifestBytes);
+  }
+
+  const wrongBiome = structuredClone(evidence);
+  wrongBiome.maps[0].route.segments[2].biome = "Swamp";
+  await writeFile(evidencePath, JSON.stringify(wrongBiome));
+  await assert.rejects(
+    execFileAsync(process.execPath, [resolve(tools, "stage-site.mjs")], options),
+    (error) => /Route evidence disagrees with geometry/.test(`${error.stderr}\n${error.stdout}`),
+  );
+  assert.equal(await readFile(resolve(staged, "preflight-marker.txt"), "utf8"), "keep on failure");
+  assert.equal(await readFile(stagedManifestPath, "utf8"), stagedManifestBytes);
+
+  await writeFile(evidencePath, JSON.stringify(evidence));
   await rm(resolve(pack, "shore.glb.gz"));
   await assert.rejects(
     execFileAsync(process.execPath, [resolve(tools, "stage-site.mjs")], options),

@@ -45,6 +45,7 @@
     "activeSegmentSemantics": {
       "const": "global-maphandler-segments-index"
     },
+    "route": { "$ref": "./peaktrace-route.schema.json" },
     "timeUnit": { "const": "milliseconds" },
     "identityMode": { "const": "platform-user-id" },
     "recordingScope": { "const": "all-synchronized-players" },
@@ -52,7 +53,7 @@
       "type": "array",
       "uniqueItems": true,
       "items": {
-        "enum": ["item", "stamina", "extraStamina"]
+        "enum": ["item", "stamina", "extraStamina", "appearance", "route"]
       }
     },
     "participants": {

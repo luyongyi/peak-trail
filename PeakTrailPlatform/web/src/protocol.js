@@ -1,3 +1,5 @@
+import { normalizeRoute } from "./map-route.js";
+
 export class ProtocolError extends Error {
   constructor(message, detail = "") {
     super(message);
@@ -304,6 +306,7 @@ function normalizeManifest(raw) {
     coordinateSpace: raw.coordinateSpace,
     positionAuthority: raw.positionAuthority || "xyz",
     segmentResolution,
+    route: normalizeRoute(raw.route),
     activeSegmentSemantics: raw.activeSegmentSemantics || "global-maphandler-segments-index",
     identityMode: raw.identityMode || "platform-user-id",
     timeUnit: raw.timeUnit || "milliseconds",
@@ -541,6 +544,7 @@ async function loadSingleTrace(bundle, manifestMatch, streamFiles, parsedStreams
   const telemetryTracks = new Map();
   const inventoryTracks = new Map();
   const appearanceTracks = new Map();
+  const routeTracks = [];
   const events = [];
   const warnings = [];
   let acceptedSamples = 0;
@@ -590,6 +594,13 @@ async function loadSingleTrace(bundle, manifestMatch, streamFiles, parsedStreams
       const rawTime = asFiniteNumber(record.t ?? record.time ?? record.timestamp);
       if (rawTime === null || rawTime < 0) continue;
       const t = rawTime * timeScale;
+
+      if (type === "route") {
+        const route = normalizeRoute(record.route);
+        if (route) routeTracks.push({ t, rawT: rawTime, route });
+        else warnings.push("一条关卡分支记录无效，未采用该记录。");
+        continue;
+      }
 
       if (type === "state") {
         const playerId = asId(record.playerId ?? record.stableId ?? record.platformUserId ?? record.id);
@@ -721,6 +732,7 @@ async function loadSingleTrace(bundle, manifestMatch, streamFiles, parsedStreams
   for (const samples of inventoryTracks.values()) samples.sort((a, b) => a.t - b.t);
   for (const samples of appearanceTracks.values()) samples.sort((a, b) => a.t - b.t);
   events.sort((a, b) => a.t - b.t);
+  routeTracks.sort((a, b) => a.t - b.t);
   const duration = Math.max(
     asFiniteNumber(manifest.durationMs, 0) * 0.001,
     asFiniteNumber(manifest.durationSeconds, 0),
@@ -743,6 +755,7 @@ async function loadSingleTrace(bundle, manifestMatch, streamFiles, parsedStreams
     telemetryTracks,
     inventoryTracks,
     appearanceTracks,
+    routeTracks,
     events,
     duration,
     sampleCount: acceptedSamples,

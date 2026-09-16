@@ -5,6 +5,7 @@
   <Folder Name="/tests/">
     <Project Path="tests/AppearanceContract/AppearanceContract.csproj" />
     <Project Path="tests/HistoryContract/HistoryContract.csproj" />
+    <Project Path="tests/RouteContract/RouteContract.csproj" />
     <Project Path="tests/TelemetryContract/TelemetryContract.csproj" />
   </Folder>
 </Solution>

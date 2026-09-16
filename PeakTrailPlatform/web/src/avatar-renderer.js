@@ -1,4 +1,4 @@
-import { resolveAppearanceAssets, resolveGameAssetUrl } from "./game-assets.js";
+import { gameAssetFingerprint, resolveAppearanceAssets, resolveGameAssetUrl } from "./game-assets.js";
 
 const renderCache = new Map();
 const jsonCache = new Map();
@@ -18,16 +18,25 @@ export function createAvatarCamera(THREE, viewHeight, aspect) {
 }
 
 function getThree() {
-  threeModulePromise ||= import("three");
+  if (!threeModulePromise) {
+    const task = import("three");
+    threeModulePromise = task;
+    task.catch(() => { if (threeModulePromise === task) threeModulePromise = null; });
+  }
   return threeModulePromise;
 }
 
 async function fetchJson(url) {
   if (!jsonCache.has(url)) {
-    jsonCache.set(url, fetch(url, { cache: "force-cache" }).then(async (response) => {
+    const task = fetch(url, { cache: "force-cache" }).then(async (response) => {
       if (!response.ok) throw new Error(`模型读取失败（${response.status}）`);
       return response.json();
-    }));
+    });
+    jsonCache.set(url, task);
+    task.catch(() => {
+      if (jsonCache.get(url) === task) jsonCache.delete(url);
+    });
+    while (jsonCache.size > 64) jsonCache.delete(jsonCache.keys().next().value);
   }
   return jsonCache.get(url);
 }
@@ -39,7 +48,8 @@ function colorKey(color) {
 export function avatarAppearanceFingerprint(pack, appearance) {
   if (!pack || !appearance?.captured) return "none";
   return [
-    pack.gameBuildId,
+    gameAssetFingerprint(pack),
+    appearance.ready,
     appearance.skinIndex,
     appearance.eyesIndex,
     appearance.mouthIndex,
@@ -51,6 +61,70 @@ export function avatarAppearanceFingerprint(pack, appearance) {
     appearance.medalIndex,
     colorKey(appearance.skinColor),
   ].join(":");
+}
+
+/** A head's identity never depends on sash/medal or body geometry. */
+export function headAppearanceFingerprint(pack, appearance) {
+  if (!pack || !appearance?.captured) return "none";
+  return [
+    gameAssetFingerprint(pack),
+    appearance.ready,
+    appearance.skinIndex,
+    appearance.eyesIndex,
+    appearance.mouthIndex,
+    appearance.accessoryIndex,
+    // Outfit metadata can override a hat and the cap/beret's fabric color.
+    appearance.outfitIndex,
+    appearance.hatIndex,
+    appearance.effectiveHatIndex,
+    colorKey(appearance.skinColor),
+  ].join(":");
+}
+
+export function resolveAvatarHat(pack, appearance, assets = resolveAppearanceAssets(pack, appearance)) {
+  const fit = assets?.components.fit?.entry;
+  const index = Number.isInteger(appearance?.effectiveHatIndex)
+    ? appearance.effectiveHatIndex
+    : fit?.overrideHat && Number.isInteger(fit.overrideHatIndex)
+      ? fit.overrideHatIndex
+      : appearance?.hatIndex;
+  const entry = Number.isInteger(index) ? pack?.customizationIndex.hats.get(index) : null;
+  return {
+    index,
+    entry,
+    modelUrl: resolveGameAssetUrl(pack, entry?.model),
+    material: [0, 1].includes(index) ? fit?.hatMaterial || null : null,
+  };
+}
+
+/** Fail closed instead of substituting a generic face for missing telemetry. */
+export function isHeadAppearanceReady(pack, appearance) {
+  const assets = resolveAppearanceAssets(pack, appearance);
+  const hat = resolveAvatarHat(pack, appearance, assets);
+  const faceAvailable = (role) => Boolean(assets && resolveGameAssetUrl(pack,
+    selectedTextureReference(role, assets)?.reference));
+  const accessory = assets?.components.accessory?.entry;
+  const hasSkin = Array.isArray(appearance?.skinColor) && appearance.skinColor.length >= 3
+    && appearance.skinColor.slice(0, 3).every(Number.isFinite);
+  return Boolean(appearance?.captured && appearance.ready !== false && assets?.avatarModelUrl
+    && assets.components.eyes?.entry && assets.components.mouth?.entry && assets.components.accessory?.entry
+    && faceAvailable("eyes") && faceAvailable("mouth")
+    && (accessory.isBlank || accessory.isThirdEye || faceAvailable("accessory"))
+    && (hasSkin || assets.components.skin?.entry)
+    && (!accessory.isThirdEye
+      || resolveGameAssetUrl(pack, pack.customization.avatar?.thirdEyeModel))
+    && hat.modelUrl
+    // These two hats inherit their material from the selected outfit. This is
+    // metadata only: head rendering never fetches fit/body model geometry.
+    && (![0, 1].includes(hat.index) || hat.material));
+}
+
+/** Select the independently exported head, not an arbitrary crop of the body. */
+export function selectHeadModelParts(model) {
+  const parts = Array.isArray(model?.parts) ? model.parts : [];
+  const head = parts.filter((part) => part.role === "skin" && /^head(?:[ _-]?mesh)?$/i.test(part.name || ""));
+  if (!head.length) return [];
+  return parts.filter((part) => head.includes(part) || ["eyes", "mouth", "accessory"].includes(part.role));
 }
 
 function completeEnoughToRender(appearance, assets) {
@@ -173,14 +247,19 @@ async function loadTexture(THREE, pack, reference, transform, decodeRole = null,
 
 async function materialFor(THREE, pack, materialData, appearance, assets) {
   const role = String(materialData?.role || "").toLowerCase();
-  const card = ["eyes", "mouth", "accessory"].includes(role);
-  const override = selectedTextureReference(role, assets);
+  const faceRole = role === "third-eye" ? "eyes" : role;
+  const card = ["eyes", "mouth", "accessory"].includes(faceRole);
+  // Third-eye cosmetics use their own serialized material, not the player's
+  // selected ordinary-eye artwork or the disabled accessory card.
+  const override = role === "third-eye"
+    ? { reference: materialData.preview || materialData.texture, decodeRole: materialData.preview ? null : "eyes" }
+    : selectedTextureReference(role, assets);
   const reference = override?.reference || materialData?.texture || null;
   const decodeRole = override?.decodeRole || (!override && ["eyes", "mouth", "accessory"].includes(role)
     ? role
     : null);
   const map = reference
-    ? await loadTexture(THREE, pack, reference, materialData, decodeRole, card ? role : null)
+    ? await loadTexture(THREE, pack, reference, materialData, decodeRole, card ? faceRole : null)
     : null;
   const sourceColor = role === "skin"
     ? skinColor(appearance, assets, materialData?.color)
@@ -194,6 +273,7 @@ async function materialFor(THREE, pack, materialData, appearance, assets) {
     ),
     map,
     transparent: card || opacity < 1,
+    depthWrite: !card,
     opacity,
     alphaTest: card ? 0.04 : 0,
     roughness: 0.82,
@@ -202,10 +282,14 @@ async function materialFor(THREE, pack, materialData, appearance, assets) {
   });
 }
 
-async function appendModel(THREE, root, pack, modelUrl, appearance, assets, materialOverride = null) {
+async function appendModel(THREE, root, pack, modelUrl, appearance, assets, materialOverride = null, headOnly = false) {
   const model = await fetchJson(modelUrl);
-  for (const part of Array.isArray(model?.parts) ? model.parts : []) {
+  const parts = headOnly ? selectHeadModelParts(model) : Array.isArray(model?.parts) ? model.parts : [];
+  if (headOnly && !parts.length) throw new Error("该版本缺少独立头部模型，未使用全身裁切替代");
+  for (const part of parts) {
     if (!Array.isArray(part.positions) || !Array.isArray(part.groups)) continue;
+    if (part.role === "accessory" && (assets.components.accessory?.entry?.isBlank
+      || assets.components.accessory?.entry?.isThirdEye)) continue;
     for (const group of part.groups) {
       if (!Array.isArray(group?.indices) || !group.indices.length) continue;
       const geometry = new THREE.BufferGeometry();
@@ -227,15 +311,22 @@ async function appendModel(THREE, root, pack, modelUrl, appearance, assets, mate
       }
       const mesh = new THREE.Mesh(geometry, material);
       mesh.name = `${part.name || "PEAK part"}:${group.material?.name || "material"}`;
+      // Skin writes depth; transparent face cards do not occlude one another.
+      // The recorded accessory's game metadata determines its layering.
+      if (["eyes", "mouth", "accessory", "third-eye"].includes(part.role)) {
+        mesh.renderOrder = part.role === "accessory"
+          ? assets.components.accessory?.entry?.drawUnderEye ? 1 : 3
+          : 2;
+      }
       root.add(mesh);
     }
   }
 }
 
-async function renderAvatar(pack, appearance, width, height) {
+async function renderAvatar(pack, appearance, width, height, headOnly = false) {
   if (typeof document === "undefined") return null;
   const assets = resolveAppearanceAssets(pack, appearance);
-  if (!completeEnoughToRender(appearance, assets)) return null;
+  if (headOnly ? !isHeadAppearanceReady(pack, appearance) : !completeEnoughToRender(appearance, assets)) return null;
   const THREE = await getThree();
   const canvas = document.createElement("canvas");
   canvas.width = width;
@@ -252,26 +343,24 @@ async function renderAvatar(pack, appearance, width, height) {
     const scene = new THREE.Scene();
     root = new THREE.Group();
     scene.add(root);
-    const fit = assets.components.fit.entry;
-    const effectiveHatIndex = Number.isInteger(appearance.effectiveHatIndex)
-      ? appearance.effectiveHatIndex
-      : fit?.overrideHat && Number.isInteger(fit.overrideHatIndex)
-        ? fit.overrideHatIndex
-        : appearance.hatIndex;
-    const effectiveHat = Number.isInteger(effectiveHatIndex)
-      ? pack.customizationIndex.hats.get(effectiveHatIndex)
-      : null;
-    await appendModel(THREE, root, pack, assets.avatarModelUrl, appearance, assets);
-    await appendModel(THREE, root, pack, assets.components.fit.modelUrl, appearance, assets);
-    const hatModelUrl = resolveGameAssetUrl(pack, effectiveHat?.model);
-    const hatMaterial = [0, 1].includes(effectiveHatIndex) ? fit?.hatMaterial || null : null;
-    if (hatModelUrl) {
-      await appendModel(THREE, root, pack, hatModelUrl, appearance, assets, hatMaterial);
+    const fit = assets.components.fit?.entry;
+    const hat = resolveAvatarHat(pack, appearance, assets);
+    await appendModel(THREE, root, pack, assets.avatarModelUrl, appearance, assets, null, headOnly);
+    if (assets.components.accessory?.entry?.isThirdEye) {
+      const thirdEyeUrl = resolveGameAssetUrl(pack, pack.customization.avatar?.thirdEyeModel);
+      if (!thirdEyeUrl) return null;
+      await appendModel(THREE, root, pack, thirdEyeUrl, appearance, assets);
     }
-    if (assets.components.sash?.modelUrl) {
+    if (!headOnly) {
+      await appendModel(THREE, root, pack, assets.components.fit.modelUrl, appearance, assets);
+    }
+    if (hat.modelUrl) {
+      await appendModel(THREE, root, pack, hat.modelUrl, appearance, assets, hat.material);
+    }
+    if (!headOnly && assets.components.sash?.modelUrl) {
       await appendModel(THREE, root, pack, assets.components.sash.modelUrl, appearance, assets);
     }
-    if (assets.components.medal?.modelUrl) {
+    if (!headOnly && assets.components.medal?.modelUrl) {
       await appendModel(THREE, root, pack, assets.components.medal.modelUrl, appearance, assets);
     }
 
@@ -280,7 +369,8 @@ async function renderAvatar(pack, appearance, width, height) {
     const size = box.getSize(new THREE.Vector3());
     root.position.sub(center);
     const aspect = width / height;
-    const viewHeight = Math.max(size.y * 1.14, size.x / aspect * 1.14, 0.1);
+    const padding = headOnly ? 1.2 : 1.14;
+    const viewHeight = Math.max(size.y * padding, size.x / aspect * padding, 0.1);
     const camera = createAvatarCamera(THREE, viewHeight, aspect);
     camera.position.set(0, size.y * 0.02, Math.max(3, size.z + 2.5));
     camera.lookAt(0, size.y * 0.02, 0);
@@ -294,13 +384,13 @@ async function renderAvatar(pack, appearance, width, height) {
     renderer.render(scene, camera);
     return {
       dataUrl: canvas.toDataURL("image/png"),
-      kind: "recorded-model-composite",
-      fitName: String(appearance.outfitName || fit?.name || `Fit ${appearance.outfitIndex}`),
-      hatName: effectiveHat
-        ? String(appearance.hatName || effectiveHat.name || `Hat ${effectiveHatIndex}`)
+      kind: headOnly ? "recorded-head-composite" : "recorded-model-composite",
+      fitName: appearance.outfitName || fit?.name || null,
+      hatName: hat.entry
+        ? String(hat.entry.name || `Hat ${hat.index}`)
         : null,
-      sashName: assets.components.sash?.entry?.name || null,
-      medalName: assets.components.medal?.entry?.name || null,
+      sashName: headOnly ? null : assets.components.sash?.entry?.name || null,
+      medalName: headOnly ? null : assets.components.medal?.entry?.name || null,
     };
   } finally {
     root?.traverse((object) => {
@@ -317,12 +407,32 @@ async function renderAvatar(pack, appearance, width, height) {
 /** Renders extracted PEAK geometry only; it never substitutes generated artwork. */
 export function renderAvatarPreview(pack, appearance, { width = 192, height = 256 } = {}) {
   const fingerprint = avatarAppearanceFingerprint(pack, appearance);
+  return requestPreview(pack, appearance, fingerprint, width, height, false);
+}
+
+/** Exact-build head + selected face + effective hat, with no torso or outfit mesh. */
+export function renderHeadPreview(pack, appearance, { width = 128, height = 128 } = {}) {
+  if (!isHeadAppearanceReady(pack, appearance)) return Promise.resolve(null);
+  return requestPreview(pack, appearance, headAppearanceFingerprint(pack, appearance), width, height, true);
+}
+
+function requestPreview(pack, appearance, fingerprint, requestedWidth, requestedHeight, headOnly) {
   if (fingerprint === "none") return Promise.resolve(null);
-  const cacheKey = `${fingerprint}:${width}x${height}`;
+  const dimension = (value) => Math.min(1024, Math.max(16, Math.round(Number(value) || 128)));
+  const width = dimension(requestedWidth);
+  const height = dimension(requestedHeight);
+  const cacheKey = `${headOnly ? "head" : "body"}:${fingerprint}:${width}x${height}`;
   if (renderCache.has(cacheKey)) return renderCache.get(cacheKey);
-  const task = renderQueue.then(() => renderAvatar(pack, appearance, width, height));
+  // Snapshot the asynchronous request so advancing the timeline cannot mutate a
+  // queued render into a different face under the old cache key.
+  const snapshot = { ...appearance, skinColor: appearance.skinColor?.slice() };
+  const task = renderQueue.then(() => renderAvatar(pack, snapshot, width, height, headOnly));
   renderQueue = task.catch(() => null);
   renderCache.set(cacheKey, task);
+  const forget = () => {
+    if (renderCache.get(cacheKey) === task) renderCache.delete(cacheKey);
+  };
+  task.then((result) => { if (!result) forget(); }, forget);
   while (renderCache.size > MAX_RENDER_CACHE_ENTRIES) {
     renderCache.delete(renderCache.keys().next().value);
   }

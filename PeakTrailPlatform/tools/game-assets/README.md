@@ -37,6 +37,23 @@ Every part uses the **same** airport preview-character coordinate frame. A brows
 must assemble avatar base, outfit, hat, sash and medal, then center the combined
 bounds once. Centering each part separately breaks the character.
 
+The web head portraits use only the separately exported `HeadMesh`, eyes, mouth,
+face accessory and effective hat. They never load or crop an outfit/body mesh.
+Head framing includes the hat so tall hats are not clipped. Hat 0/1 still need
+the selected outfit's material metadata, not its geometry. Missing historical
+appearance or exact-build artwork produces an explicitly unavailable portrait,
+not a default face or the user's current Steam cosmetics.
+
+The third-eye accessory activates `CustomizationRefs.thirdEye`, a separate
+original renderer, and disables the ordinary accessory card. Its mesh and
+offline-decoded mask live in `avatar.thirdEyeModel`; other accessories obey
+`drawUnderEye` layering. Existing resource packs can add this head resource
+without rebuilding their outfit previews:
+
+```powershell
+& local/python/.venv/Scripts/python.exe PeakTrailPlatform/tools/game-assets/export-game-assets.py --build 25306743 --head-only
+```
+
 The `skin` material uses the recorded RGBA color. Face cards use PEAK mask textures:
 eyes encode the outer eye in red and pupil in green; mouth/accessory artwork uses
 white background as transparent. Decoded preview PNGs and material face-scale

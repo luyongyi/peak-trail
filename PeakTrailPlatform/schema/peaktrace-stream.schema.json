@@ -5,6 +5,16 @@
   "oneOf": [
     {
       "type": "object",
+      "required": ["type", "t", "route"],
+      "properties": {
+        "type": { "const": "route" },
+        "t": { "type": "integer", "minimum": 0 },
+        "route": { "$ref": "./peaktrace-route.schema.json" }
+      },
+      "additionalProperties": true
+    },
+    {
+      "type": "object",
       "required": ["type", "t", "playerId", "nickname"],
       "properties": {
         "type": { "const": "participant" },

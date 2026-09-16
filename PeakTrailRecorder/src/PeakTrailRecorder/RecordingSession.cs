@@ -35,6 +35,8 @@ internal sealed class RecordingSession : IDisposable
     private readonly string _manifestPartialPath;
     private readonly string _streamPartialPath;
     private int _lastActiveSegment;
+    private long _nextRouteCheckAtMs;
+    private string _lastRouteFingerprint = string.Empty;
     private bool _disposed;
 
     public RecordingSession(string outputRoot, float sampleHz, ManualLogSource log)
@@ -67,6 +69,7 @@ internal sealed class RecordingSession : IDisposable
             LevelIndex = levelIndex,
             MapSlot = mapSlot,
             SampleHz = sampleHz,
+            Route = RouteTelemetryReader.Read(),
         };
 
         RunManagerInstanceId = RunManager.Instance != null ? RunManager.Instance.GetInstanceID() : 0;
@@ -89,6 +92,7 @@ internal sealed class RecordingSession : IDisposable
 
         _history = AppendOnlyHistoryLog.TryOpen(outputRoot, _log);
         _history?.WriteSessionStart(Manifest);
+        WriteRouteIfChanged(Manifest.Route, 0);
         WriteEvent("segment_change", null, _lastActiveSegment, null, "session_start");
         _log.LogInfo($"Recording PEAK trail to '{SessionDirectory}'.");
     }
@@ -272,6 +276,13 @@ internal sealed class RecordingSession : IDisposable
         if (_disposed)
         {
             return;
+        }
+
+        long routeCheckAtMs = ElapsedMilliseconds;
+        if (routeCheckAtMs >= _nextRouteCheckAtMs)
+        {
+            _nextRouteCheckAtMs = routeCheckAtMs + 1_000L;
+            WriteRouteIfChanged(RouteTelemetryReader.Read(), routeCheckAtMs);
         }
 
         int activeSegment = GetActiveSegment();
@@ -943,6 +954,23 @@ internal sealed class RecordingSession : IDisposable
         {
             return -1;
         }
+    }
+
+    private void WriteRouteIfChanged(RouteTelemetry? route, long nowMs)
+    {
+        if (route == null) return;
+        string fingerprint = route.Fingerprint();
+        if (string.Equals(_lastRouteFingerprint, fingerprint, StringComparison.Ordinal)) return;
+
+        Manifest.Route = route;
+        AtomicWriteManifest();
+        WriteRecord(new Dictionary<string, object?>
+        {
+            ["type"] = "route",
+            ["t"] = nowMs,
+            ["route"] = route,
+        });
+        _lastRouteFingerprint = fingerprint;
     }
 
     private static int GetLevelIndex()

@@ -1,6 +1,40 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createAvatarCamera, selectedTextureReference } from "../src/avatar-renderer.js";
+import {
+  createAvatarCamera,
+  headAppearanceFingerprint,
+  isHeadAppearanceReady,
+  renderHeadPreview,
+  resolveAvatarHat,
+  selectHeadModelParts,
+  selectedTextureReference,
+} from "../src/avatar-renderer.js";
+
+function headFixture() {
+  const entries = {
+    skins: [{ index: 0, color: [0.8, 0.4, 0.2, 1] }],
+    eyes: [{ index: 5, texture: "eyes-5.png" }],
+    mouths: [{ index: 12, texture: "mouth-12.png" }],
+    accessories: [{ index: 5, texture: "accessory-5.png" }],
+    fits: [],
+    hats: [{ index: 0, model: "hat-0.json" }, { index: 2, model: "hat-2.json" }],
+    sashes: [],
+    medals: [],
+  };
+  return {
+    pack: {
+      gameBuildId: "fixture-build",
+      catalogUrl: new URL("https://example.test/data/game-assets/fixture-build/catalog.json"),
+      customization: { avatar: { model: "avatar-base.json" } },
+      customizationIndex: Object.fromEntries(Object.entries(entries)
+        .map(([name, values]) => [name, new Map(values.map((entry) => [entry.index, entry]))])),
+    },
+    appearance: {
+      captured: true, ready: true, skinIndex: 0,
+      eyesIndex: 5, mouthIndex: 12, accessoryIndex: 5, effectiveHatIndex: 2,
+    },
+  };
+}
 
 test("avatar camera supplies a complete, forward-facing orthographic frustum", () => {
   class OrthographicCamera {
@@ -39,4 +73,77 @@ test("avatar face cards use the exact-build decoded mask instead of losing hidde
     decodeRole: null,
     faceRole: "eyes",
   });
+});
+
+test("head preview uses independent head geometry and excludes every body part", () => {
+  const head = { name: "HeadMesh", role: "skin" };
+  const eyes = { name: "Eye Card L", role: "eyes" };
+  const mouth = { name: "Mouth Card", role: "mouth" };
+  const accessory = { name: "Accesory Card", role: "accessory" };
+  const body = { name: "BodyMesh", role: "skin" };
+  const outfit = { name: "Fit", role: "body" };
+  const sash = { name: "Sash", role: "sash" };
+  assert.deepEqual(selectHeadModelParts({ parts: [body, head, eyes, outfit, mouth, sash, accessory] }),
+    [head, eyes, mouth, accessory]);
+  assert.deepEqual(selectHeadModelParts({ parts: [body, eyes, mouth] }), [],
+    "a body crop is not a replacement for the real independent head mesh");
+});
+
+test("head previews need no outfit, sash or medal model", () => {
+  const { pack, appearance } = headFixture();
+  assert.equal(appearance.outfitIndex, undefined);
+  assert.equal(pack.customizationIndex.fits.size, 0);
+  assert.equal(isHeadAppearanceReady(pack, appearance), true);
+  assert.equal(isHeadAppearanceReady(pack, { ...appearance, ready: false }), false);
+  assert.equal(isHeadAppearanceReady(pack, { ...appearance, captured: false }), false);
+  assert.equal(isHeadAppearanceReady(pack, { ...appearance, eyesIndex: 999 }), false);
+  assert.equal(isHeadAppearanceReady(pack, { ...appearance, skinIndex: 999 }), false);
+  assert.equal(isHeadAppearanceReady(pack, { ...appearance, skinIndex: 999, skinColor: [0.5, 0.6, 0.7] }), true);
+  pack.customizationIndex.eyes.get(5).texture = null;
+  assert.equal(isHeadAppearanceReady(pack, appearance), false, "missing face art is not a generic fallback");
+});
+
+test("head hats follow recorded effective hat, then outfit override, then selected hat", () => {
+  const { pack, appearance } = headFixture();
+  const hatMaterial = { role: "hat", color: [1, 0, 0, 1] };
+  pack.customizationIndex.fits.set(21, { index: 21, overrideHat: true, overrideHatIndex: 0, hatMaterial });
+  const selected = { ...appearance, outfitIndex: 21, hatIndex: 2, effectiveHatIndex: undefined };
+  assert.equal(resolveAvatarHat(pack, selected).index, 0);
+  assert.equal(resolveAvatarHat(pack, selected).material, hatMaterial);
+  assert.equal(isHeadAppearanceReady(pack, selected), true, "fit metadata suffices without a fit model");
+  assert.equal(resolveAvatarHat(pack, { ...selected, effectiveHatIndex: 2 }).index, 2);
+  assert.equal(resolveAvatarHat(pack, { ...selected, outfitIndex: undefined }).index, 2);
+  assert.equal(isHeadAppearanceReady(pack, { ...appearance, effectiveHatIndex: 0 }), false,
+    "a cap without its recorded outfit fabric must not silently use another fabric");
+});
+
+test("third-eye heads require the real dedicated renderer rather than a drawn accessory", () => {
+  const { pack, appearance } = headFixture();
+  const accessory = pack.customizationIndex.accessories.get(5);
+  accessory.isThirdEye = true;
+  assert.equal(isHeadAppearanceReady(pack, appearance), false);
+  pack.customization.avatar.thirdEyeModel = "models/head-third-eye.json";
+  assert.equal(isHeadAppearanceReady(pack, appearance), true);
+});
+
+test("head fingerprint separates catalog origins, readiness, face, skin and effective hat", () => {
+  const { pack, appearance } = headFixture();
+  const original = headAppearanceFingerprint(pack, appearance);
+  for (const change of [{ ready: false }, { eyesIndex: 1 }, { mouthIndex: 1 }, { accessoryIndex: 1 },
+    { skinColor: [0.2, 0.3, 0.4] }, { effectiveHatIndex: 0 }, { outfitIndex: 21 }]) {
+    assert.notEqual(headAppearanceFingerprint(pack, { ...appearance, ...change }), original);
+  }
+  assert.notEqual(headAppearanceFingerprint({ ...pack, catalogUrl: new URL("https://elsewhere.test/catalog.json") }, appearance), original);
+  assert.equal(headAppearanceFingerprint(pack, { ...appearance, sashIndex: 9, medalIndex: 1 }), original);
+  assert.equal(headAppearanceFingerprint(pack, { ...appearance, captured: false }), "none");
+});
+
+test("concurrent head requests share work but an unavailable render never poisons the cache", async () => {
+  const { pack, appearance } = headFixture();
+  const first = renderHeadPreview(pack, appearance);
+  assert.equal(renderHeadPreview(pack, appearance), first);
+  assert.equal(await first, null, "Node has no WebGL document");
+  const retry = renderHeadPreview(pack, appearance);
+  assert.notEqual(retry, first);
+  assert.equal(await retry, null);
 });

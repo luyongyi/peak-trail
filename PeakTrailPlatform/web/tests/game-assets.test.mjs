@@ -52,6 +52,9 @@ test("game assets are selected by exact build and item identity", async () => {
   assert.equal(appearance.previewKind, "fit-preview");
   assert.equal(appearance.components.hat.entry.name, "Hat");
   assert.equal(appearance.avatarModelUrl, "https://assets.test/data/game-assets/25306743/models/avatar.json");
+  Object.assign(pack.customizationIndex.fits.get(3), { overrideHat: true, overrideHatIndex: 9 });
+  const legacyHat = resolveAppearanceAssets(pack, { captured: true, outfitIndex: 3, hatIndex: 0 });
+  assert.equal(legacyHat.components.hat.entry.name, "Hat", "the feature chip follows the same outfit override as the head renderer");
   assert.equal(await loadGameAssetPack("other-build", { indexUrl, fetchImpl }), null);
 });
 

@@ -1,4 +1,4 @@
-import { renderAvatarPreview, avatarAppearanceFingerprint } from "./avatar-renderer.js";
+import { renderHeadPreview, headAppearanceFingerprint } from "./avatar-renderer.js";
 import {
   gameAssetFingerprint,
   resolveAppearanceAssets,
@@ -113,6 +113,7 @@ export function createPlayerCard(participant, color, onVisibilityChange) {
   const row = element("article", "player-row player-card");
   row.style.setProperty("--player-color", color);
   row.dataset.playerId = participant.id;
+  row.dataset.playerName = participant.nickname || participant.id;
 
   const header = element("header", "player-card-header");
   const colorBadge = element(
@@ -120,6 +121,12 @@ export function createPlayerCard(participant, color, onVisibilityChange) {
     "player-color",
     Array.from(participant.nickname || participant.id)[0]?.toUpperCase() || "?",
   );
+  const head = element("img", "player-head-image");
+  head.hidden = true;
+  head.alt = `${participant.nickname || participant.id}的游戏头像`;
+  head.decoding = "async";
+  const headFallback = element("span", "player-head-fallback", colorBadge.textContent);
+  colorBadge.replaceChildren(head, headFallback);
   const identity = element("span", "player-identity");
   const name = element("strong", null, participant.nickname || participant.id);
   const stableId = element(
@@ -433,25 +440,11 @@ function featureChip(label, component, color = null) {
 }
 
 function fallbackAppearancePreview(panel, avatar, placeholder, title, meta, badge, assets, appearance) {
-  if (assets?.previewUrl) {
-    imageSource(
-      avatar,
-      assets.previewUrl,
-      `PEAK 原始套装：${assets.components.fit?.entry?.name || appearance.outfitIndex}`,
-      panel,
-    );
-    placeholder.hidden = true;
-    title.textContent = assets.components.fit?.entry?.name || `套装 ${appearance.outfitIndex}`;
-    meta.textContent = "真实套装预览 · 未把缺少的个性化部分伪造出来";
-    badge.textContent = "套装预览";
-    panel.classList.add("is-ready", "is-partial");
-    return;
-  }
   imageSource(avatar, null, "", panel);
   placeholder.hidden = false;
-  placeholder.textContent = "真实模型\n待渲染";
+  placeholder.textContent = "游戏头像\n待渲染";
   title.textContent = assets?.components.fit?.entry?.name || `本局套装 ${appearance.outfitIndex ?? "已记录"}`;
-  meta.textContent = "外观索引可信；此构建暂无可显示的完整预览";
+  meta.textContent = "头部素材未齐全，不用套装预览代替玩家头像";
   badge.textContent = "有记录";
   panel.classList.add("is-partial");
 }
@@ -466,7 +459,7 @@ function updateAppearance(row, playerState, context) {
   const features = row.querySelector('[data-role="appearance-features"]');
   const appearance = playerState.appearance;
   const fingerprint = [
-    avatarAppearanceFingerprint(context.assetPack, appearance),
+    headAppearanceFingerprint(context.assetPack, appearance),
     appearance?.ready,
     appearance?.source,
     appearance?.authority,
@@ -476,6 +469,12 @@ function updateAppearance(row, playerState, context) {
   if (panel.dataset.renderFingerprint === fingerprint) return;
   panel.dataset.renderFingerprint = fingerprint;
   panel.dataset.avatarToken = fingerprint;
+  const headerHead = row.querySelector(".player-head-image");
+  const headerFallback = row.querySelector(".player-head-fallback");
+  headerHead.hidden = true;
+  headerHead.removeAttribute("src");
+  headerFallback.hidden = false;
+  context.onPortrait?.(null);
   panel.classList.remove("is-ready", "is-partial", "is-syncing", "is-unknown", "is-local-current");
   features.replaceChildren();
   imageSource(avatar, null, "", panel);
@@ -504,8 +503,8 @@ function updateAppearance(row, playerState, context) {
   badge.textContent = isLocalCurrent ? "本地当前 · 非历史" : "本局记录";
   if (context.assetStatus === "loading") {
     panel.classList.add("is-syncing");
-    placeholder.textContent = "载入真实\n游戏模型";
-    title.textContent = "正在组装本局角色";
+    placeholder.textContent = "载入真实\n游戏头像";
+    title.textContent = "正在组装本局头像";
     meta.textContent = "只读取与足迹 build 完全一致的本机 PEAK 素材";
     return;
   }
@@ -539,20 +538,27 @@ function updateAppearance(row, playerState, context) {
   if (isLocalCurrent) badge.textContent = "本地当前 · 非历史";
   const token = fingerprint;
   title.textContent = assets?.components.fit?.entry?.name || `套装 ${appearance.outfitIndex}`;
-  meta.textContent = "正在用本局记录装配 PEAK 原始模型…";
-  void renderAvatarPreview(context.assetPack, appearance).then((rendered) => {
-    if (panel.dataset.avatarToken !== token || !rendered) return;
-    imageSource(avatar, rendered.dataUrl, `本局 PEAK 角色：${rendered.fitName}`, panel);
+  meta.textContent = "正在用本局记录装配头部、脸型与帽子…";
+  void renderHeadPreview(context.assetPack, appearance).then((rendered) => {
+    if (panel.dataset.avatarToken !== token) return;
+    if (!rendered) {
+      fallbackAppearancePreview(panel, avatar, placeholder, title, meta, badge, assets, appearance);
+      if (isLocalCurrent) badge.textContent = "本地当前 · 非历史";
+      return;
+    }
+    imageSource(avatar, rendered.dataUrl, `本局 PEAK 头像：${row.dataset.playerName}`, panel);
+    headerHead.src = rendered.dataUrl;
+    headerHead.hidden = false;
+    headerFallback.hidden = true;
+    context.onPortrait?.(rendered.dataUrl);
     placeholder.hidden = true;
     panel.classList.remove("is-partial", "is-syncing");
     panel.classList.add("is-ready");
-    badge.textContent = isLocalCurrent ? "本地当前 · 非历史" : "本局模型";
-    title.textContent = rendered.fitName;
+    badge.textContent = isLocalCurrent ? "本地当前 · 非历史" : "本局头像";
+    title.textContent = appearance.outfitName || assets?.components.fit?.entry?.name || "本局游戏头像";
     meta.textContent = [
-      "PEAK 原始模型与纹理",
+      "原始头部、眼睛与嘴型",
       rendered.hatName,
-      rendered.sashName,
-      rendered.medalName,
     ].filter(Boolean).join(" · ");
   }).catch(() => {
     if (panel.dataset.avatarToken !== token) return;

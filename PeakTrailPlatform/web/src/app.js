@@ -15,6 +15,7 @@ import {
 import { collectDroppedFiles } from "./file-intake.js";
 import { loadGameAssetPack } from "./game-assets.js";
 import { createPlayerCard, updatePlayerCard } from "./player-card.js";
+import { resolveReplayRoute, routeSegmentName } from "./map-route.js";
 
 const $ = (id) => document.getElementById(id);
 const elements = {
@@ -44,6 +45,7 @@ const elements = {
   segmentOrdinal: $("segmentOrdinal"),
   segmentName: $("segmentName"),
   segmentOriginalName: $("segmentOriginalName"),
+  routeSummary: $("routeSummary"),
   followSegmentButton: $("followSegmentButton"),
   segmentOverviewButton: $("segmentOverviewButton"),
   segmentLoadStatus: $("segmentLoadStatus"),
@@ -113,6 +115,7 @@ const state = {
   segmentMapStatuses: new Map(),
   segmentMapKey: null,
   usingCompatibleMap: false,
+  routeView: null,
 };
 
 const gameAssetLoads = new Map();
@@ -188,6 +191,9 @@ function segmentAtTime(seconds) {
 }
 
 function segmentChineseBase(option) {
+  const routed = routeSegmentName(state.routeView?.route, option?.segment);
+  if (routed) return routed;
+  if ([3, 4].includes(option?.segment)) return option.segment === 3 ? "第四关（分支未确认）" : "终关（分支未确认）";
   const source = String(option?.biome || option?.name || "").trim();
   return SEGMENT_NAMES_ZH.get(source.toLowerCase()) || option?.name || `分区 ${option?.segment ?? "?"}`;
 }
@@ -204,7 +210,7 @@ function segmentDisplayName(option) {
 
 function collectSegmentOptions() {
   const bySegment = new Map();
-  for (const layer of state.mapPack?.layers || []) {
+  for (const layer of state.usingCompatibleMap ? state.mapPack?.layers || [] : []) {
     const segment = asSegment(layer.segment);
     if (segment === null) continue;
     bySegment.set(segment, {
@@ -223,6 +229,14 @@ function collectSegmentOptions() {
         isVoid: false,
       });
     }
+  }
+  for (const entry of state.routeView?.route?.segments || []) {
+    const option = bySegment.get(entry.index);
+    bySegment.set(entry.index, {
+      ...option,
+      segment: entry.index, name: entry.name || entry.biome,
+      biome: entry.biome, isVoid: entry.biome.toLowerCase() === "void",
+    });
   }
   for (const samples of state.trace?.tracks?.values?.() || []) {
     for (const sample of samples) {
@@ -253,7 +267,7 @@ function segmentStatusKey(segment) {
 }
 
 function overviewSegmentOptions() {
-  const mountain = state.segmentOptions.filter((option) => !option.isVoid);
+  const mountain = state.segmentOptions.filter((option) => !option.isVoid && !state.routeView?.hiddenSegments.has(option.segment));
   return mountain.length ? mountain : state.segmentOptions;
 }
 
@@ -279,6 +293,9 @@ function markSegmentTransition(segment) {
 }
 
 function selectedSegmentStatus() {
+  if (state.selectedSegment !== null && state.routeView?.hiddenSegments.has(state.selectedSegment)) {
+    return { status: "muted", text: "本关底图与实际分支不符 · 仅显示足迹", message: state.routeView.message };
+  }
   if (!state.usingCompatibleMap) {
     return state.mapPack
       ? { status: "muted", text: "底图版本不匹配 · 仅回放足迹", message: "" }
@@ -305,22 +322,24 @@ function selectedSegmentStatus() {
 
 function renderSegmentNavigation() {
   const options = state.segmentOptions;
+  const chapters = options.filter((option) => !option.isVoid);
   elements.segmentNavigator.hidden = options.length === 0;
   if (!options.length) return;
 
-  const activeIndex = options.findIndex((option) => option.segment === state.selectedSegment);
-  const active = activeIndex >= 0 ? options[activeIndex] : null;
+  const activeIndex = chapters.findIndex((option) => option.segment === state.selectedSegment);
+  const active = options.find((option) => option.segment === state.selectedSegment);
   const isOverview = state.selectedSegment === null;
+  elements.routeSummary.textContent = state.routeView?.message || "关卡分支未确认";
   elements.segmentOrdinal.textContent = isOverview
-    ? `共 ${options.length} 关`
-    : `第 ${activeIndex + 1} / ${options.length} 关`;
+    ? `共 ${chapters.length} 关`
+    : active?.isVoid ? "额外区域 · 非登山终关" : `第 ${activeIndex + 1} / ${chapters.length} 关`;
   elements.segmentName.textContent = isOverview ? "所有关概览" : segmentDisplayName(active);
   elements.segmentOriginalName.textContent = isOverview
     ? "仅在手动选择时加载"
     : `${active?.name || "未知"} · Segment ${active?.segment ?? "?"}`;
 
   elements.previousSegmentButton.disabled = !options.length || (activeIndex === 0 && !isOverview);
-  elements.nextSegmentButton.disabled = !options.length || activeIndex === options.length - 1;
+  elements.nextSegmentButton.disabled = !chapters.length || active?.isVoid || activeIndex === chapters.length - 1;
   elements.followSegmentButton.classList.toggle("is-active", state.segmentSelectionMode === "auto");
   elements.followSegmentButton.setAttribute("aria-pressed", String(state.segmentSelectionMode === "auto"));
   elements.segmentOverviewButton.classList.toggle("is-active", isOverview);
@@ -358,7 +377,7 @@ function populateSegmentControls() {
   state.segmentOptions.forEach((option, index) => {
     const selectOption = document.createElement("option");
     selectOption.value = String(option.segment);
-    selectOption.textContent = `第 ${index + 1} 关 · ${segmentDisplayName(option)} / ${option.name}`;
+    selectOption.textContent = `${option.isVoid ? "额外区域" : `第 ${index + 1} 关`} · ${segmentDisplayName(option)} / ${option.name}`;
     elements.layerSelect.append(selectOption);
   });
   elements.layerSelect.disabled = state.segmentOptions.length === 0;
@@ -668,15 +687,18 @@ async function importMixed(files) {
 
 async function renderData() {
   const useMap = Boolean(state.mapPack && (!state.trace || state.compatibility?.compatible));
+  state.routeView = resolveReplayRoute(useMap ? state.mapPack : null, state.trace, state.currentTime);
   state.usingCompatibleMap = useMap;
   const activeSegment = populateSegmentControls();
   if (viewer) {
     if (useMap) markSegmentTransition(activeSegment);
-    await viewer.setData({ mapPack: state.mapPack, trace: state.trace, useMap, activeSegment });
+    const displayMap = state.mapPack ? { ...state.mapPack, layers: state.routeView.layers } : null;
+    await viewer.setData({ mapPack: displayMap, trace: state.trace, useMap, activeSegment });
     viewer.setHeightScale(elements.heightScale.value);
     viewer.setTrackVisibility(elements.trackToggle.checked);
     viewer.setMarkerVisibility(elements.markerToggle.checked);
     viewer.setTime(state.currentTime);
+    updatePlayerTelemetry();
   }
   updateEmptyState();
   updateSceneMeta();
@@ -738,7 +760,7 @@ function updateSceneMeta() {
   elements.sampleCount.textContent = state.trace ? state.trace.sampleCount.toLocaleString("zh-CN") : "0";
 
   const useMapBounds = state.mapPack && (!state.trace || state.compatibility?.compatible);
-  const layers = useMapBounds ? state.mapPack.layers.filter((layer) => state.selectedSegment === null
+  const layers = useMapBounds ? (state.routeView?.layers || state.mapPack.layers).filter((layer) => state.selectedSegment === null
     ? String(layer.biome).toLowerCase() !== "void" : layer.segment === state.selectedSegment) : [];
   const bounds = layers.length ? {
     min: [0, Math.min(...layers.map((layer) => layer.minY)), 0],
@@ -797,13 +819,19 @@ function updatePlayers() {
 }
 
 function updatePlayerTelemetry() {
+  const trace = state.trace;
   for (const row of elements.playerList.querySelectorAll(".player-row")) {
     const playerState = tracePlayerStateAtTime(state.trace, row.dataset.playerId, state.currentTime);
     updatePlayerCard(row, playerState, {
       assetPack: state.gameAssetPack,
       assetStatus: state.gameAssetStatus,
       assetError: state.gameAssetError,
+      onPortrait: (url) => {
+        if (state.trace === trace && row.isConnected) viewer?.setPlayerPortrait(row.dataset.playerId, url);
+      },
     });
+    const head = row.querySelector(".player-head-image");
+    viewer?.setPlayerPortrait(row.dataset.playerId, head?.hidden ? null : head?.getAttribute("src"));
   }
 }
 
@@ -885,6 +913,11 @@ function updatePlaybackTime(nextTime, detectEvents = true) {
   const duration = state.trace?.duration || 0;
   const previous = state.currentTime;
   state.currentTime = Math.min(duration, Math.max(0, Number(nextTime) || 0));
+  const eligibleMap = !state.trace || state.compatibility?.compatible ? state.mapPack : null;
+  const nextRoute = resolveReplayRoute(eligibleMap, state.trace, state.currentTime);
+  if (nextRoute.key !== state.routeView?.key) {
+    void renderData().catch((error) => showError("关卡分支更新失败", error.message));
+  }
   elements.timeline.value = String(state.currentTime);
   elements.currentTime.textContent = formatTime(state.currentTime);
   const percent = duration ? (state.currentTime / duration) * 100 : 0;
@@ -1235,15 +1268,17 @@ elements.layerSelect.addEventListener("change", () => {
   chooseSegment(elements.layerSelect.value === "all" ? null : Number(elements.layerSelect.value), "manual");
 });
 elements.previousSegmentButton.addEventListener("click", () => {
-  if (!state.segmentOptions.length) return;
-  const index = state.segmentOptions.findIndex((option) => option.segment === state.selectedSegment);
-  const previous = index < 0 ? state.segmentOptions.at(-1) : state.segmentOptions[index - 1];
+  const chapters = state.segmentOptions.filter((option) => !option.isVoid);
+  if (!chapters.length) return;
+  const index = chapters.findIndex((option) => option.segment === state.selectedSegment);
+  const previous = index < 0 ? chapters.at(-1) : chapters[index - 1];
   if (previous) chooseSegment(previous.segment, "manual");
 });
 elements.nextSegmentButton.addEventListener("click", () => {
-  if (!state.segmentOptions.length) return;
-  const index = state.segmentOptions.findIndex((option) => option.segment === state.selectedSegment);
-  const next = index < 0 ? state.segmentOptions[0] : state.segmentOptions[index + 1];
+  const chapters = state.segmentOptions.filter((option) => !option.isVoid);
+  if (!chapters.length) return;
+  const index = chapters.findIndex((option) => option.segment === state.selectedSegment);
+  const next = index < 0 ? chapters[0] : chapters[index + 1];
   if (next) chooseSegment(next.segment, "manual");
 });
 elements.followSegmentButton.addEventListener("click", () => {

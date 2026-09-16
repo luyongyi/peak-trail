@@ -356,6 +356,8 @@ svg {
   display: none;
 }
 
+.route-summary { margin: 0 8px 7px; font-size: 10px; color: var(--muted-strong); line-height: 1.5; }
+
 .segment-navigation-main {
   display: grid;
   grid-template-columns: minmax(76px, auto) minmax(150px, 1fr) minmax(76px, auto);
@@ -1371,8 +1373,62 @@ button:disabled {
 }
 
 .player-card .player-color {
-  width: 31px;
-  height: 31px;
+  width: 42px;
+  height: 42px;
+  overflow: hidden;
+  border-radius: 50%;
+  border: 1px solid var(--player-color);
+  background: #122322;
+}
+
+.player-head-image { width: 100%; height: 100%; object-fit: contain; }
+.player-head-image[hidden], .player-head-fallback[hidden] { display: none; }
+
+.trail-player-labels {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.trail-player-label {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  will-change: transform;
+}
+.trail-player-label[hidden], .trail-player-portrait img[hidden], .trail-player-portrait span[hidden] { display: none; }
+.trail-player-leader { position: absolute; top: 0; left: 0; height: 1px; transform-origin: 0 0; background: var(--player-color); opacity: .7; }
+.trail-player-leader[hidden] { display: none; }
+.trail-player-portrait {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 2px solid var(--player-color);
+  border-radius: 50%;
+  background: rgba(11, 25, 24, .94);
+  color: var(--player-color);
+  box-shadow: 0 3px 12px #0008;
+  overflow: hidden;
+}
+.trail-player-portrait img { width: 100%; height: 100%; object-fit: contain; }
+.trail-player-name {
+  max-width: 120px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(5, 16, 15, .86);
+  color: #f4fff9;
+  font-size: 10px;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .player-overview {

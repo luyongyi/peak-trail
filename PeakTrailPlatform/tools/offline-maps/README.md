@@ -83,6 +83,43 @@ signs the projection metadata and all texture/height digests.
 
 ## Appearance and limitations
 
+### Mutually exclusive terminal routes
+
+In verified Steam build **25306743**, the mountain's zero-based stages 3 and 4
+are a linked pair, not two independently selectable biomes:
+
+| Resolved biome values | Stage 3 root / label | Stage 4 root / label |
+| --- | --- | --- |
+| `Volcano (3)`, `Volcano (3)` | `Caldera_Segment` / 火山 | `Volcano_Segment` / 熔炉 |
+| `Swamp (8)`, `Swamp (8)` | `Swamp_Segment` / 雾岛 | `Temple_Segment` / 城塞 |
+
+The terminal Temple root does **not** mean the runtime enum is `Temple (9)`;
+it remains `Swamp (8)`. Keep original enum values and geometry identity intact,
+and distinguish presentation labels by the selected stage chain. `VoidBiome`
+is an additional runtime layer, not a sixth mountain stage in either chain.
+The existing 21 packs already contain the correct selected roots. Their
+geometry should not be rebaked or renamed merely to fix the terminal labels.
+
+`route_metadata.py` mirrors the runtime's variant getters. Both future raster
+and GLB manifests include a `route` object with source authority, branch and
+resolved segment names. That metadata is descriptive; the signed geometry
+continues to use the existing canonical identity fields.
+
+For current packs, regenerate the lightweight, exact-pack-bound evidence:
+
+```powershell
+& local/python/.venv/Scripts/python.exe PeakTrailPlatform/tools/offline-maps/export_routes.py
+```
+
+This writes `data/maps/routes.<build ID>.json`, after checking the installed
+scene SHA-256 against each canonical pack and checking its selected layer
+biomes. A mismatch fails instead of attaching the other branch to existing
+geometry. `--catalog`, `--packs`, `--output`, and `--game` override the sources.
+For this build only, the audited even slots use 火山→熔炉 and odd slots use
+雾岛→城塞. Do not infer another build's route, a recording's route, or a daily
+rotation from that observed parity. Recorded resolved runtime metadata takes
+precedence; a conflicting pack must not display as an exact match.
+
 The result is a **survey rendering from the actual game assets**, not a game
 screenshot. Basic textures, UVs and artist-authored colors are retained. For
 PEAK's custom terrain shaders, the baker blends `_BaseColor` and `_TopColor`

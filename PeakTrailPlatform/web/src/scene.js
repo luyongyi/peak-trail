@@ -4,6 +4,7 @@ import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { loadGameGeometry } from "./geometry-loader.js";
+import { layoutPortraitLabels } from "./portrait-layout.js";
 
 const PLAYER_COLORS = [
   "#efb74e",
@@ -134,6 +135,13 @@ export class TrailScene {
     this.playerVisibility = new Map();
     this.playerColors = new Map();
     this.playerObjects = new Map();
+    this.playerPortraits = new Map();
+    this.playerLabels = new Map();
+    this.labelPosition = new THREE.Vector3();
+    this.labelOverlay = document.createElement("div");
+    this.labelOverlay.className = "trail-player-labels";
+    this.labelOverlay.setAttribute("aria-hidden", "true");
+    canvas.parentElement.append(this.labelOverlay);
     this.origin = new THREE.Vector3();
     this.currentBounds = null;
     this.buildToken = 0;
@@ -204,10 +212,12 @@ export class TrailScene {
   animate() {
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
+    this.updatePlayerLabelPositions();
     this.animationFrame = requestAnimationFrame(this.animate);
   }
 
   async setData({ mapPack, trace, useMap, activeSegment }) {
+    if (this.trace !== trace) this.playerPortraits.clear();
     this.mapPack = mapPack || null;
     this.trace = trace || null;
     this.useMap = Boolean(useMap && mapPack);
@@ -242,6 +252,8 @@ export class TrailScene {
     disposeObject(this.terrainRoot);
     disposeObject(this.trailRoot);
     this.playerObjects.clear();
+    this.labelOverlay.replaceChildren();
+    this.playerLabels.clear();
     this.buildGrid(this.currentBounds);
 
     if (this.useMap) await this.buildTerrain(token);
@@ -536,6 +548,7 @@ export class TrailScene {
         maxGap,
       });
     }
+    this.rebuildPlayerLabels();
   }
 
   createPlayerMarker(color) {
@@ -565,6 +578,85 @@ export class TrailScene {
       object.renderOrder = 11;
     });
     return root;
+  }
+
+  setPlayerPortrait(playerId, url) {
+    if (url) this.playerPortraits.set(playerId, url);
+    else this.playerPortraits.delete(playerId);
+    const label = this.playerLabels.get(playerId);
+    if (!label || label.url === (url || null)) return;
+    label.url = url || null;
+    label.image.hidden = !url;
+    label.fallback.hidden = Boolean(url);
+    if (url) label.image.src = url;
+    else label.image.removeAttribute("src");
+  }
+
+  rebuildPlayerLabels() {
+    this.labelOverlay.replaceChildren();
+    this.playerLabels.clear();
+    for (const participant of this.trace?.participants || []) {
+      if (!this.playerObjects.has(participant.id)) continue;
+      const label = document.createElement("div");
+      const leader = document.createElement("div");
+      leader.className = "trail-player-leader";
+      leader.style.setProperty("--player-color", this.getPlayerColor(participant.id));
+      leader.hidden = true;
+      label.className = "trail-player-label";
+      label.style.setProperty("--player-color", this.getPlayerColor(participant.id));
+      label.hidden = true;
+      const portrait = document.createElement("span");
+      portrait.className = "trail-player-portrait";
+      const image = document.createElement("img");
+      image.alt = "";
+      image.hidden = true;
+      const fallback = document.createElement("span");
+      fallback.textContent = Array.from(participant.nickname || participant.id)[0] || "?";
+      portrait.append(image, fallback);
+      const name = document.createElement("span");
+      name.className = "trail-player-name";
+      name.textContent = participant.nickname || participant.id;
+      label.append(portrait, name);
+      this.labelOverlay.append(leader, label);
+      this.playerLabels.set(participant.id, { element: label, leader, image, fallback, url: null });
+      this.setPlayerPortrait(participant.id, this.playerPortraits.get(participant.id));
+    }
+  }
+
+  updatePlayerLabelPositions() {
+    const width = this.canvas.clientWidth;
+    const height = this.canvas.clientHeight;
+    const anchors = [];
+    for (const [id, label] of this.playerLabels) {
+      const object = this.playerObjects.get(id);
+      let visible = Boolean(object?.group.visible && object?.marker.visible);
+      if (visible) {
+        object.marker.getWorldPosition(this.labelPosition);
+        this.labelPosition.project(this.camera);
+        const { x, y, z } = this.labelPosition;
+        visible = Number.isFinite(x + y + z) && z >= -1 && z <= 1 && Math.abs(x) < 1 && Math.abs(y) < 1;
+        if (visible) {
+          label.element.hidden = false;
+          anchors.push({ id, x: (x + 1) * width / 2, y: (1 - y) * height / 2,
+            width: label.element.offsetWidth || 80, height: label.element.offsetHeight || 62 });
+        }
+      }
+      label.element.hidden = !visible;
+      if (label.leader) label.leader.hidden = true;
+    }
+    for (const position of layoutPortraitLabels(anchors, { width, height })) {
+      const label = this.playerLabels.get(position.id);
+      label.element.style.transform = `translate(${position.left}px, ${position.top}px)`;
+      if (label.leader) {
+        const endX = Math.max(position.left, Math.min(position.left + position.width, position.anchorX));
+        const endY = position.top + position.height;
+        const dx = endX - position.anchorX, dy = endY - position.anchorY;
+        const length = Math.hypot(dx, dy);
+        label.leader.hidden = length < 12;
+        label.leader.style.width = `${length}px`;
+        label.leader.style.transform = `translate(${position.anchorX}px, ${position.anchorY}px) rotate(${Math.atan2(dy, dx)}rad)`;
+      }
+    }
   }
 
   setTime(seconds) {
@@ -717,6 +809,9 @@ export class TrailScene {
     disposeObject(this.terrainRoot);
     disposeObject(this.trailRoot);
     disposeObject(this.gridRoot);
+    this.labelOverlay?.remove();
+    this.playerLabels?.clear();
+    this.playerPortraits?.clear();
     this.renderer.dispose();
   }
 }

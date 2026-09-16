@@ -204,6 +204,7 @@ def export_one(args,slot):
     manifest['source']['kind']='offline-unity-original-mesh'; manifest['source']['geometrySource']='original indexed MeshFilter geometry, shared meshes and exact world transforms; no height-field reconstruction or decimation'
     manifest['source']['limitations']=['Game-specific custom shader effects remain approximated with source material colors and original UV/base textures.','Moving props and spawned loot are not part of the static scene model.','Legacy height/PNG data is retained only as a separate planar reference, never used to build this 3D geometry.']
     scene=Scene(args.game/'PEAK_Data'/f'level{mapping[name]}',args.game)
+    manifest['route']=scene.route()
     selected={int(v) for v in args.layers.split(',')} if args.layers!='all' else None
     reports=[]
     for index,segment in scene.layers():

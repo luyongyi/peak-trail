@@ -55,6 +55,22 @@ build ID is captured so the viewer can refuse to overlay a trace on geometry fro
 
 ## Sampling and events
 
+- Since 0.5.0, `manifest.route` and timestamped `route` records preserve the resolved
+  scene branch and every stage's real biome ID/name, parent name and selected variant.
+  A `route` record is written at session start and only when its contents change; the
+  append-only history mirrors it as an ordinary `trace_record`. It does not alter the
+  map-pack identity or infer an individual player's owning stage.
+- In PEAK build `25306743`, the regular route's stages 3 and 4 share a biome enum:
+  `Volcano` (3) means 火山 → 熔炉 (`volcano-kiln`), while `Swamp` (8) means
+  雾岛 → 城塞 (`swamp-temple`). The public `Segment` enum still calls these stages
+  `Caldera` and `TheKiln` for both branches. The recorder therefore reads
+  `MapHandler.MapSegment.biome` and `segmentParent`, whose getters resolve variants
+  through `hasVariant` and `BiomeIsPresent`; it never checks `activeSelf`, since PEAK
+  deliberately disables future/past stage parents during progression. Missing state
+  produces no route; an unfamiliar or inconsistent pair remains `branch: unknown`.
+- Old recordings have no runtime route evidence. A viewer may use a separately verified
+  map-pack route for the exact scene/build, explicitly labelled as offline metadata;
+  it must not infer the branch from `activeSegment` or the legacy `Segment` enum alone.
 - Since 0.4.0, `appearance` records capture each synchronized player's skin, eyes,
   mouth, accessory, outfit, raw/effective hat, sash and medal indices, actual skin
   color and outfit names. The source is the same `PersistentPlayerDataService`
@@ -122,10 +138,21 @@ session. Avoid committing recordings to a public Git repository.
 With PEAK installed in the default Steam directory:
 
 ```powershell
-dotnet build .\PeakTrailRecorder.slnx -c Release
+dotnet build .\PeakTrailRecorder.slnx -c Release -p:DeployModFiles=false
 Copy-Item .\artifacts\bin\PeakTrailRecorder\release\PeakTrailRecorder.dll `
   'C:\Program Files (x86)\Steam\steamapps\common\PEAK\BepInEx\plugins\PeakTrailRecorder.dll' -Force
 ```
 
 If PEAK is installed elsewhere, build with `-p:PEAKGameRootDir="D:/.../PEAK/"` and copy the DLL
 to that installation's `BepInEx/plugins/` directory.
+
+Close PEAK before replacing the installed DLL; building alone does not install it.
+For the route reader's synthetic game-boundary tests, run:
+
+```powershell
+dotnet run --project .\tests\RouteContract -c Release
+```
+
+The new route contract is additive to schema version 1. Head portraits can reuse the
+appearance fields already recorded by 0.4.0; older logs without an appearance snapshot
+must retain an explicit unknown-avatar state rather than borrowing today's cosmetics.

@@ -185,9 +185,10 @@ function previewMatches(preview, appearance) {
 
 export function resolveAppearanceAssets(pack, appearance) {
   if (!pack || !appearance?.captured) return null;
+  const fit = pack.customizationIndex.fits.get(appearance.outfitIndex);
   const effectiveHatIndex = Number.isInteger(appearance.effectiveHatIndex)
     ? appearance.effectiveHatIndex
-    : appearance.hatIndex;
+    : fit?.overrideHat && Number.isInteger(fit.overrideHatIndex) ? fit.overrideHatIndex : appearance.hatIndex;
   const components = {
     skin: appearanceComponent(pack, "skins", appearance.skinIndex, ["preview", "texture", "image", "path"]),
     eyes: appearanceComponent(pack, "eyes", appearance.eyesIndex),

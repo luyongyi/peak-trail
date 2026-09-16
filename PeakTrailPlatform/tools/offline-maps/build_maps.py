@@ -12,8 +12,8 @@ import UnityPy
 from UnityPy.classes import PPtr
 from UnityPy.helpers.MeshHelper import MeshHandler
 from UnityPy.helpers.TypeTreeGenerator import TypeTreeGenerator
+from route_metadata import BIOMES, resolved_segments, route_metadata
 
-BIOMES = {0:'Shore',1:'Tropics',2:'Alpine',3:'Volcano',5:'Peak',6:'Mesa',7:'Roots',8:'Swamp',17:'Void'}
 FIELDS = ('_segmentParent','_segmentCampfire','wallNext','wallPrevious')
 GEOMETRY_ROOT_FIELDS = ('_segmentParent','_segmentCampfire')
 
@@ -140,16 +140,12 @@ class Scene:
         return self.matrices[transform]
 
     def layers(self):
-        handler=self.special['MapHandler']; result=[]
-        for index,base in enumerate(handler['segments']):
-            selected=base.copy()
-            if base['hasVariant']:
-                alt=handler['variantSegments'][base['variantBiomeIndex']]
-                if alt['_biome'] in handler['biomes']:
-                    for key in ('_biome','_segmentParent','_segmentCampfire'): selected[key]=alt[key]
-            result.append((index,selected))
+        result=resolved_segments(self.special['MapHandler'])
         if 'VoidBiome' in self.special: result.append((len(result),self.special['VoidBiome']['segment']))
         return result
+
+    def route(self):
+        return route_metadata(self.special['MapHandler'], lambda ptr: self.read(pid(ptr))['m_Name'] if pid(ptr) else None)
 
     def collect(self,segment):
         # Fog wall roots are visual transition effects / blockers, not terrain.
@@ -284,6 +280,7 @@ def build_one(game,slot,out,res,hres):
     scene=Scene(game/'PEAK_Data'/scene_file,game); dest=out/str(build_id)/name; dest.mkdir(parents=True,exist_ok=True)
     manifest={'schemaVersion':1,'identityVersion':2,'mapPackId':'','generatedAtUtc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'gameVersion':version,'gameBuildId':build_id,'sceneName':name,'mapSlot':slot,'projectionVersion':1,'coordinateSpace':'unity-world-meters','textureUv':'u=(x-minX)/(maxX-minX);v=(z-minZ)/(maxZ-minZ)','imageOrigin':'bottom-left-in-uv;viewer-flips-for-top-left-images','layers':[], 'source':{'kind':'offline-unity-scene','sceneFile':scene_file,'sceneSha256':sha(game/'PEAK_Data'/scene_file),'unityVersion':scene.file.unity_version,'renderer':'Mesh UV/base texture; terrain _BaseColor/_TopColor with slope; prop _Tint; orthographic albedo survey rasterizer','heightSource':'highest non-trigger MeshCollider/BoxCollider/SphereCollider/CapsuleCollider surface, excluding fog wall roots','transformSource':'full serialized parent-chain TRS; static-batch root when present','limitations':['Custom game shader lighting and material-layer masks are approximated; this is an albedo survey render, not a game screenshot.','Moving props and spawned items are not baked. Sphere/capsule colliders use 16-sided tessellation.','Top-surface height field cannot preserve stacked caves/overhangs.','Void has a very large static collision plane and consequently coarser horizontal sample spacing.']}}
     print(name,scene_file,'loaded',flush=True)
+    manifest['route']=scene.route()
     for index,segment in scene.layers():
         biome=BIOMES.get(segment['_biome'],str(segment['_biome'])); renders,colliders,stats=scene.collect(segment)
         print('collect',name,index,biome,stats,flush=True)

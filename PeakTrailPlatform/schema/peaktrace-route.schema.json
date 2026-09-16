@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/peaktrail/peaktrace-route.schema.json",
+  "title": "Resolved PEAK runtime route",
+  "description": "Scene-wide route selected through MapHandler's biome/parent getters. This does not assign individual players to a stage.",
+  "type": "object",
+  "required": ["authority", "branch", "segments"],
+  "properties": {
+    "authority": { "const": "maphandler-resolved-biomes" },
+    "branch": { "enum": ["volcano-kiln", "swamp-temple", "unknown"] },
+    "segments": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["index", "biome", "biomeId", "name", "variantSelected"],
+        "properties": {
+          "index": { "type": "integer", "minimum": 0 },
+          "biome": { "type": "string", "minLength": 1 },
+          "biomeId": { "type": "integer", "minimum": 0 },
+          "name": { "type": "string" },
+          "variantSelected": { "type": "boolean" },
+          "variantBiomeIndex": { "type": "integer", "minimum": 0 }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}

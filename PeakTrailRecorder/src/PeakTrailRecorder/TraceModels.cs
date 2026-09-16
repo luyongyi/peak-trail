@@ -63,6 +63,9 @@ internal sealed class TraceManifest
     [JsonProperty("activeSegmentSemantics")]
     public string ActiveSegmentSemantics { get; set; } = "global-maphandler-segments-index";
 
+    [JsonProperty("route", NullValueHandling = NullValueHandling.Ignore)]
+    public RouteTelemetry? Route { get; set; }
+
     [JsonProperty("timeUnit")]
     public string TimeUnit { get; set; } = "milliseconds";
 
@@ -79,6 +82,7 @@ internal sealed class TraceManifest
         "stamina",
         "extraStamina",
         "appearance",
+        "route",
     };
 
     [JsonProperty("staminaAuthority")]

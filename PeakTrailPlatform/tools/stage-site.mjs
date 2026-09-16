@@ -26,6 +26,7 @@ const publishedSchemas = [
   "peaktrace-manifest.schema.json",
   "peaktrace-stream.schema.json",
   "peaktrace-history.schema.json",
+  "peaktrace-route.schema.json",
 ];
 
 const catalog = JSON.parse(await readFile(resolve(mapsDirectory, "catalog.json"), "utf8"));
@@ -40,8 +41,9 @@ for (const entry of catalog.mapPacks) {
     throw new Error(`Cannot stage unsafe map catalog path: ${entry?.path}`);
   }
   const sourceDirectory = resolve(mapPacksDirectory, mapPackId);
-  const files = await readMapPackAllowlist(sourceDirectory, mapPackId);
-  mapPacks.push({ mapPackId, sourceDirectory, files });
+  const { files, manifest } = await readMapPackAllowlist(sourceDirectory, mapPackId);
+  const route = await verifiedRouteMetadata(manifest);
+  mapPacks.push({ mapPackId, sourceDirectory, files, manifest, route });
 }
 
 // site-dist is generated exclusively by this script and is safe to recreate.
@@ -68,6 +70,12 @@ for (const pack of mapPacks) {
     await mkdir(dirname(destination), { recursive: true });
     await cp(resolve(pack.sourceDirectory, reference), destination);
   }
+  // Route evidence is additive metadata and is not part of geometry identity.
+  // Original canonical packs remain untouched; only the generated site is enriched.
+  if (pack.route) await writeFile(
+    resolve(outputDirectory, "data", "maps", "packs", pack.mapPackId, "map-pack.json"),
+    JSON.stringify({ ...pack.manifest, route: pack.route }, null, 2) + "\n",
+  );
 }
 for (const reference of gameAssets.files) {
   const destination = resolve(outputDirectory, "data", "game-assets", reference);
@@ -131,7 +139,34 @@ async function readMapPackAllowlist(directory, expectedMapPackId) {
     }
     if (!entry.isFile()) throw new Error(`Local map asset must be a regular file: ${source}`);
   }
-  return [...files];
+  return { files: [...files], manifest };
+}
+
+async function verifiedRouteMetadata(manifest) {
+  const build = String(manifest.gameBuildId || "");
+  if (!/^\d+$/.test(build)) return null;
+  let evidence;
+  try {
+    evidence = JSON.parse(await readFile(resolve(mapsDirectory, `routes.${build}.json`), "utf8"));
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
+  if (evidence.schemaVersion !== 1 || String(evidence.gameBuildId) !== build || !Array.isArray(evidence.maps)) {
+    throw new Error(`Invalid route evidence for build ${build}`);
+  }
+  const entries = evidence.maps.filter((entry) => entry.mapPackId === manifest.mapPackId);
+  if (!entries.length) return null;
+  const entry = entries[0];
+  if (entries.length !== 1 || entry.sceneName !== manifest.sceneName || entry.mapSlot !== manifest.mapSlot
+      || entry.sourceSceneSha256 !== manifest.source?.sceneSha256 || !Array.isArray(entry.route?.segments)
+      || !["volcano-kiln", "swamp-temple"].includes(entry.route.branch)) throw new Error("Route evidence identity mismatch");
+  for (const segment of entry.route.segments) {
+    if (!manifest.layers.some((layer) => layer.segment === segment.index && layer.biome === segment.biome)) {
+      throw new Error(`Route evidence disagrees with geometry: ${manifest.sceneName}, segment ${segment.index}`);
+    }
+  }
+  return entry.route;
 }
 
 function assertSafeRelativePath(value, label) {

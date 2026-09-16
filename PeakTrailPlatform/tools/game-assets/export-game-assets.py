@@ -10,6 +10,7 @@ import re
 from pathlib import Path
 from datetime import datetime, timezone
 import numpy as np
+from PIL import Image
 import UnityPy
 from UnityPy.classes import PPtr
 from UnityPy.helpers.TypeTreeGenerator import TypeTreeGenerator
@@ -79,7 +80,7 @@ class Exporter:
         tex=textures.get("_BaseMap",textures.get("_MainTex"))
         result={"name":data["m_Name"],"color":[col[k] for k in "rgba"],"role":role}
         floats=dict(props.get("m_Floats",[]))
-        if role in ("eyes","mouth","accessory"):
+        if role in ("eyes","mouth","accessory","third-eye"):
             result["faceScale"]=floats.get("_BaseScale",1)
             result["pupilScale"]=floats.get("_PupilScale",1)
             result["faceOffset"]=[colors.get("_EyePosition",{}).get(k,0) for k in "rg"]
@@ -105,8 +106,8 @@ class Exporter:
         self.matrices[key]=m
         return m
 
-    def renderer_model(self, pointer, mesh_override=None, material_overrides=None, role=None):
-        obj=self.resolve(self.refs_obj,pointer)
+    def renderer_model(self, pointer, mesh_override=None, material_overrides=None, role=None, origin=None):
+        obj=self.resolve(origin or self.refs_obj,pointer)
         d=obj.read()
         go=d.m_GameObject.read()
         comps=[c.component.deref() for c in go.m_Component]
@@ -136,6 +137,47 @@ class Exporter:
                 "uv":np.round(np.array(handler.m_UV0 or [[0,0]]*len(verts))[:,:2],6).reshape(-1).tolist(),
                 "groups":[{"indices":np.array(tris,dtype=int).reshape(-1).tolist(),"material":materials[min(i,len(materials)-1)]}
                     for i,tris in enumerate(handler.get_triangles())]}
+
+    def head_models(self):
+        """Third-eye cosmetics use a separate real renderer, not the accessory card."""
+        obj=self.resolve(self.refs_obj,self.refs.get("thirdEye"))
+        if obj is None: return {}
+        parts=[]
+        for component in obj.read().m_Component:
+            renderer=component.component.deref()
+            if renderer.type.name not in ("MeshRenderer","SkinnedMeshRenderer"): continue
+            pointer={"m_FileID":component.component.m_FileID,"m_PathID":component.component.m_PathID}
+            parts.append(self.renderer_model(pointer,role="third-eye",origin=obj))
+        if not parts: return {}
+        for part in parts:
+            for group in part["groups"]:
+                material=group["material"]
+                if not material.get("texture"): continue
+                # Face masks keep meaningful RGB under transparent alpha. Decode
+                # before browser PNG premultiplication can discard those values.
+                pixels=np.array(Image.open(self.root/material["texture"]).convert("RGBA"))
+                alpha=pixels[:,:,0].copy()
+                shade=255-pixels[:,:,1].copy()
+                pixels[:,:,:3]=shade[:,:,None]
+                pixels[:,:,3]=alpha
+                preview="previews/head-third-eye.png"
+                (self.root/preview).parent.mkdir(parents=True,exist_ok=True)
+                Image.fromarray(pixels).save(self.root/preview)
+                material.update(preview=preview,textureEncoding="peak-face-mask")
+        return {"thirdEyeModel":self.save("models/head-third-eye.json",{"parts":parts})}
+
+    def update_head_models(self):
+        """Add head-only resources without discarding existing decoded previews."""
+        catalog_path=self.root/"catalog.json"
+        catalog=json.loads(catalog_path.read_text(encoding="utf8"))
+        if str(catalog.get("gameBuildId"))!=self.build:
+            raise ValueError("Head export requires the exact installed build catalog")
+        catalog["customization"]["avatar"].update(self.head_models())
+        catalog["assets"]=[{"path":str(p.relative_to(self.root)).replace("\\","/"),
+                            "sha256":hashlib.sha256(p.read_bytes()).hexdigest(),"bytes":p.stat().st_size}
+            for p in sorted(self.root.rglob("*")) if p.is_file() and p.suffix in (".png",".json") and p.name!="catalog.json"]
+        self.save("catalog.json",catalog)
+        print(json.dumps({"head":catalog["customization"]["avatar"],"assets":len(catalog["assets"])}))
 
     def run(self):
         catalog={"schemaVersion":1,"gameBuildId":self.build,"source":"local-unity-assets",
@@ -174,6 +216,7 @@ class Exporter:
             base.append(self.renderer_model(ref,role=role))
         catalog["customization"]["avatar"]={"model":self.save("models/avatar-base.json",{"parts":base}),
             "coordinateSpace":"unity-prefab-neutral-pose","rendering":"original-game-mesh-and-texture"}
+        catalog["customization"]["avatar"].update(self.head_models())
         for group in ("skins","eyes","mouths","accessories","fits","hats","sashes","medals"):
             options=[]
             for index,ptr in enumerate(self.custom_data[group]):
@@ -226,5 +269,7 @@ if __name__=="__main__":
     parser.add_argument("--game",default=r"C:\Program Files (x86)\Steam\steamapps\common\PEAK")
     parser.add_argument("--output",default=str(Path(__file__).resolve().parents[3]/"local/assets/game-assets"))
     parser.add_argument("--build",default="25306743")
+    parser.add_argument("--head-only",action="store_true",help="Add separate head cosmetic models to an existing catalog")
     args=parser.parse_args()
-    Exporter(args.game,args.output,args.build).run()
+    exporter=Exporter(args.game,args.output,args.build)
+    exporter.update_head_models() if args.head_only else exporter.run()

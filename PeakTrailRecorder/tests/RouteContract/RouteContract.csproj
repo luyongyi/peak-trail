@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- This boundary test uses deliberate game doubles, never the real Unity assembly. -->
+    <ImportDirectoryBuildTargets>false</ImportDirectoryBuildTargets>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\..\src\PeakTrailRecorder\RouteTelemetry.cs" Link="RouteTelemetry.cs" />
+    <Compile Include="..\..\src\PeakTrailRecorder\RouteTelemetryReader.cs" Link="RouteTelemetryReader.cs" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+</Project>

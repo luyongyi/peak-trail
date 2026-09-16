@@ -26,7 +26,7 @@
 *.tgz
 *.7z
 
-# Private recordings are never source code. Only four synthetic test fixtures
+# Private recordings are never source code. Only five synthetic test fixtures
 # are explicitly allowed; do not put real sessions in the fixtures folder.
 *.ndjson
 *.partial
@@ -35,6 +35,7 @@
 !PeakTrailPlatform/web/tests/fixtures/qa-stream.ndjson
 !PeakTrailPlatform/web/tests/fixtures/qa-history.ndjson
 !PeakTrailPlatform/web/tests/fixtures/qa-player-state-history.ndjson
+!PeakTrailPlatform/web/tests/fixtures/qa-route-head-history.ndjson
 
 # Local settings, credentials and editor state.
 .env

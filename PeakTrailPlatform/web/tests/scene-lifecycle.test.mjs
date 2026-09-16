@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { layoutPortraitLabels } from "../src/portrait-layout.js";
 
 // Exercise the actual scene methods without a browser/WebGL context. Only the
 // imported renderer ports are replaced; no lifecycle method is reimplemented.
@@ -29,8 +30,8 @@ function model() {
 function fixture(selected = 0) {
   const requests = [];
   const load = (layer, signal, gameBuildId) => new Promise((resolve, reject) => requests.push({ layer: layer.id, signal, gameBuildId, resolve, reject }));
-  const TrailScene = new Function("THREE", "loadGameGeometry", "cancelAnimationFrame", `${source}\nreturn TrailScene;`)(
-    {}, load, () => {},
+  const TrailScene = new Function("THREE", "loadGameGeometry", "cancelAnimationFrame", "layoutPortraitLabels", `${source}\nreturn TrailScene;`)(
+    {}, load, () => {}, layoutPortraitLabels,
   );
   const layers = [
     { id: "A", segment: 0, biome: "shore" },
@@ -156,4 +157,42 @@ test("map overview fits the entire mountain instead of a short imported route", 
   Object.assign(scene.mapPack.layers[1], { minX: 10, minY: 20, minZ: 30, maxX: 40, maxY: 50, maxZ: 60 });
   scene.useMap = true; scene.activeSegment = 1;
   assert.deepEqual(scene.viewBounds(), { min: [10, 20, 30], max: [40, 50, 60] });
+});
+
+test("portrait overlays follow visible players and are clipped outside the camera", () => {
+  const { scene } = fixture();
+  const label = { element: { hidden: true, style: {} } };
+  let point = { x: 0, y: 0, z: 0 };
+  const marker = { visible: true, getWorldPosition(vector) { Object.assign(vector, point); } };
+  scene.labelPosition = { project() {} };
+  scene.canvas = { clientWidth: 1000, clientHeight: 600 };
+  scene.playerLabels = new Map([["qa", label]]);
+  scene.playerObjects = new Map([["qa", { group: { visible: true }, marker }]]);
+  scene.updatePlayerLabelPositions();
+  assert.equal(label.element.hidden, false);
+  assert.equal(label.element.style.transform, "translate(460px, 230px)");
+  marker.visible = false;
+  scene.updatePlayerLabelPositions();
+  assert.equal(label.element.hidden, true);
+  marker.visible = true; point = { x: 0, y: 0, z: 2 };
+  scene.updatePlayerLabelPositions();
+  assert.equal(label.element.hidden, true);
+  point = { x: 0, y: 0, z: 0 }; scene.playerObjects.get("qa").group.visible = false;
+  scene.updatePlayerLabelPositions();
+  assert.equal(label.element.hidden, true);
+});
+
+test("rewinding to unknown appearance removes the image instead of retaining the future face", () => {
+  const { scene } = fixture();
+  const label = { url: null, image: { hidden: true, removeAttribute() { delete this.src; } }, fallback: { hidden: false } };
+  scene.playerPortraits = new Map();
+  scene.playerLabels = new Map([["qa", label]]);
+  scene.setPlayerPortrait("qa", "data:image/png;base64,fixture");
+  assert.equal(label.image.hidden, false);
+  assert.equal(label.fallback.hidden, true);
+  scene.setPlayerPortrait("qa", null);
+  assert.equal(label.image.hidden, true);
+  assert.equal(label.fallback.hidden, false);
+  assert.equal(label.image.src, undefined);
+  assert.equal(scene.playerPortraits.size, 0);
 });
