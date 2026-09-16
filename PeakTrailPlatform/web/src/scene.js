@@ -3,8 +3,11 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
-import { loadGameGeometry } from "./geometry-loader.js";
+import { loadGameGeometry, updateRecordedMineVisibility } from "./geometry-loader.js";
 import { layoutPortraitLabels } from "./portrait-layout.js";
+import { ReplayCamera, REPLAY_CAMERA_HELP } from "./replay-camera.js";
+import { chooseRecordedInteriorPose, isInteriorLayer } from "./camera-placement.js";
+import { WorldRenderer } from "./world-renderer.js";
 
 const PLAYER_COLORS = [
   "#efb74e",
@@ -176,12 +179,19 @@ export class TrailScene {
     this.controls.maxDistance = 12000;
     this.controls.maxPolarAngle = Math.PI * 0.495;
     this.controls.target.set(0, 0, 0);
+    this.freeCamera = new ReplayCamera({ THREE, camera: this.camera, controls: this.controls, canvas,
+      onModeChange: (mode) => this.canvas.dispatchEvent(new CustomEvent("cameramodechange", { detail: { mode, help: REPLAY_CAMERA_HELP } })) });
+    this.worldRenderer = new WorldRenderer(canvas);
+    this.gameAssetPack = null;
+    this.lastFrameTime = null;
+    this.cameraSelectionRevision = 0;
+    this.controls.addEventListener("start", () => { ++this.cameraSelectionRevision; });
 
     this.worldRoot = new THREE.Group();
     this.terrainRoot = new THREE.Group();
     this.trailRoot = new THREE.Group();
     this.gridRoot = new THREE.Group();
-    this.worldRoot.add(this.gridRoot, this.terrainRoot, this.trailRoot);
+    this.worldRoot.add(this.gridRoot, this.terrainRoot, this.trailRoot, this.worldRenderer.root);
     this.scene.add(this.worldRoot);
 
     const hemisphere = new THREE.HemisphereLight(0xbad9d2, 0x17201e, 1.7);
@@ -209,14 +219,19 @@ export class TrailScene {
     this.renderer.setSize(width, height, false);
   }
 
-  animate() {
-    this.controls.update();
+  animate(timestamp) {
+    const delta = this.lastFrameTime === null ? 0 : (timestamp - this.lastFrameTime) / 1000;
+    this.lastFrameTime = timestamp;
+    if (this.freeCamera.mode === "free") this.freeCamera.update(delta);
+    else this.controls.update();
     this.renderer.render(this.scene, this.camera);
     this.updatePlayerLabelPositions();
+    this.worldRenderer.projectLabels(this.camera);
     this.animationFrame = requestAnimationFrame(this.animate);
   }
 
   async setData({ mapPack, trace, useMap, activeSegment }) {
+    const cameraRevision = this.cameraSelectionRevision;
     if (this.trace !== trace) this.playerPortraits.clear();
     this.mapPack = mapPack || null;
     this.trace = trace || null;
@@ -255,6 +270,7 @@ export class TrailScene {
     this.labelOverlay.replaceChildren();
     this.playerLabels.clear();
     this.buildGrid(this.currentBounds);
+    this.worldRenderer.setData(this.trace, this.gameAssetPack, this.origin);
 
     if (this.useMap) await this.buildTerrain(token);
     if (token !== this.buildToken) return;
@@ -262,7 +278,10 @@ export class TrailScene {
     this.applyHeightScale();
     this.applyLayerVisibility();
     this.setTime(this.currentTime);
-    this.fitView();
+    if (cameraRevision === this.cameraSelectionRevision) {
+      this.fitView();
+      if (isInteriorLayer(this.selectedLayer(), this.mapPack?.route)) this.enterInteriorView(false);
+    }
   }
 
   buildGrid(bounds) {
@@ -458,6 +477,7 @@ export class TrailScene {
         }
       }
       this.applyLayerVisibility();
+      this.setTime(this.currentTime);
       this.emitMapStatus("ready", selected === null ? "真实网格概览" : "本关真实网格已就绪", selected);
     } catch (error) {
       if (!isCurrent() || error.name === "AbortError") return;
@@ -661,6 +681,7 @@ export class TrailScene {
 
   setTime(seconds) {
     this.currentTime = Math.max(0, Number(seconds) || 0);
+    const worldPlayers = [];
     for (const {
       group,
       line,
@@ -677,6 +698,8 @@ export class TrailScene {
       const sample = sampleAtTime(samples, this.currentTime, maxGap, blockingEvents);
       const latestLifecycle = lifecycleEvents.findLast((event) => event.t <= this.currentTime);
       const isPresent = latestLifecycle?.type !== "leave";
+      const life = this.trace.events.findLast((event) => event.playerId === group.userData.playerId && event.t <= this.currentTime && ["death", "revive", "join"].includes(event.type));
+      if (sample && this.currentTime - sample.t <= maxGap && isPresent && life?.type !== "death" && (this.playerVisibility.get(group.userData.playerId) ?? true)) worldPlayers.push(sample);
       const segmentMatches =
         sample && (this.activeSegment === null || !Number.isInteger(sample.segment) || sample.segment === this.activeSegment);
       marker.visible = Boolean(this.showMarkers && sample && segmentMatches && isPresent);
@@ -690,16 +713,32 @@ export class TrailScene {
       }
       group.visible = this.playerVisibility.get(group.userData.playerId) ?? true;
     }
+    this.worldRenderer.update(this.currentTime, { players: worldPlayers, heightScale: this.heightScale,
+      bounds: this.useMap && this.activeSegment !== null ? this.viewBounds() : null });
+    updateRecordedMineVisibility(this.terrainRoot, this.worldRenderer.objects, this.trace?.events, this.currentTime);
+  }
+
+  setGameAssetPack(pack) {
+    this.gameAssetPack = pack;
+    this.worldRenderer.setData(this.trace, pack, this.origin);
+    this.setTime(this.currentTime);
+  }
+
+  setWorldVisibility(visible) {
+    this.worldRenderer.enabled = Boolean(visible);
+    this.setTime(this.currentTime);
   }
 
   setHeightScale(value) {
     this.heightScale = THREE.MathUtils.clamp(Number(value) || 1, 0.2, 5);
     this.applyHeightScale();
+    this.setTime(this.currentTime);
   }
 
   applyHeightScale() {
     this.terrainRoot.scale.y = this.heightScale;
     this.trailRoot.scale.y = this.heightScale;
+    this.worldRenderer.root.scale.y = this.heightScale;
   }
 
   setTrackVisibility(visible) {
@@ -716,6 +755,7 @@ export class TrailScene {
     this.playerVisibility.set(playerId, Boolean(visible));
     const object = this.playerObjects.get(playerId);
     if (object) object.group.visible = Boolean(visible);
+    this.setTime(this.currentTime);
   }
 
   setActiveSegment(segment) {
@@ -727,7 +767,12 @@ export class TrailScene {
     if (this.trace) this.buildTracks();
     this.setTime(this.currentTime);
     this.fitView();
-    void this.ensureGeometryLayers();
+    const selected = this.activeSegment;
+    const cameraRevision = this.cameraSelectionRevision;
+    const buildRevision = this.buildToken;
+    void this.ensureGeometryLayers().then(() => {
+      if (selected === this.activeSegment && buildRevision === this.buildToken && cameraRevision === this.cameraSelectionRevision && isInteriorLayer(this.selectedLayer(), this.mapPack?.route)) this.enterInteriorView(false);
+    });
   }
 
   applyLayerVisibility() {
@@ -753,7 +798,59 @@ export class TrailScene {
     return this.useMap ? this.currentBounds : this.trace?.bounds || this.currentBounds;
   }
 
+  selectedLayer() { return this.mapPack?.layers.find((entry) => entry.segment === this.activeSegment) || null; }
+
+  enterInteriorView(focus = true) {
+    ++this.cameraSelectionRevision;
+    const pose = chooseRecordedInteriorPose(this.trace, this.currentTime, this.viewBounds(), { playerVisibility: this.playerVisibility });
+    if (pose) {
+      const yaw = THREE.MathUtils.degToRad(pose.yaw || 0);
+      this.freeCamera.enterAt([pose.pos[0] - this.origin.x, (pose.pos[1] - this.origin.y + 1.6) * this.heightScale, pose.pos[2] - this.origin.z], [Math.sin(yaw), 0, Math.cos(yaw)], { focus });
+      this.cameraPlacementNote = pose.t === this.currentTime ? "当前玩家位置" : "已记录的关内玩家位置";
+    } else {
+      // A bounding box centre can be air or solid rock. Require a floor AND a
+      // ceiling from real loaded geometry, not a fabricated 'interior' point.
+      const bounds = this.viewBounds();
+      let point = null;
+      this.terrainRoot.updateMatrixWorld(true);
+      const meshes = this.terrainRoot.children.filter((group) => group.visible);
+      const ray = new THREE.Raycaster(), probe = new THREE.Vector3();
+      for (const h of [0.25, 0.4, 0.55, 0.7]) {
+        for (const [x, z] of [[0.5, 0.5], [0.35, 0.5], [0.65, 0.5], [0.5, 0.3], [0.5, 0.7]]) {
+          probe.set(THREE.MathUtils.lerp(bounds.min[0], bounds.max[0], x) - this.origin.x,
+            (THREE.MathUtils.lerp(bounds.min[1], bounds.max[1], h) - this.origin.y) * this.heightScale,
+            THREE.MathUtils.lerp(bounds.min[2], bounds.max[2], z) - this.origin.z);
+          ray.set(probe, new THREE.Vector3(0, -1, 0));
+          const floor = ray.intersectObjects(meshes, true)[0];
+          ray.set(probe, new THREE.Vector3(0, 1, 0));
+          const ceiling = ray.intersectObjects(meshes, true)[0];
+          if (floor && ceiling && ceiling.point.y - floor.point.y > 2.4 * this.heightScale) {
+            point = floor.point.clone(); point.y += 1.6 * this.heightScale; break;
+          }
+        }
+        if (point) break;
+      }
+      if (point) { this.freeCamera.enterAt(point, [0, 0, 1], { focus }); this.cameraPlacementNote = "内部几何参考点（非玩家位置）"; }
+      else { this.freeCamera.setMode("free", { focus }); this.cameraPlacementNote = "未找到可靠内部落点，可用 WASD 自行移入"; }
+    }
+    this.canvas.dispatchEvent(new CustomEvent("cameraplacement", { detail: { note: this.cameraPlacementNote } }));
+    if (focus) this.freeCamera.focus();
+  }
+
+  toggleFreeCamera() { ++this.cameraSelectionRevision; this.freeCamera.setMode(this.freeCamera.mode === "free" ? "orbit" : "free"); this.freeCamera.focus(); }
+
+  focusWorldEvent(event) {
+    if (!event.objectId || !event.pos) return;
+    ++this.cameraSelectionRevision;
+    const target = new THREE.Vector3(event.pos[0] - this.origin.x, (event.pos[1] - this.origin.y) * this.heightScale, event.pos[2] - this.origin.z);
+    const position = target.clone().add(new THREE.Vector3(9, 10, -12));
+    this.freeCamera.enterAt(position, target.clone().sub(position), { focus: false });
+    this.canvas.dispatchEvent(new CustomEvent("cameraplacement", { detail: { note: "事件近景 · 特效为回放示意" } }));
+  }
+
   fitView() {
+    ++this.cameraSelectionRevision;
+    this.freeCamera.setMode("orbit");
     const bounds = this.viewBounds();
     if (!bounds) return;
     const width = Math.max(5, bounds.max[0] - bounds.min[0]);
@@ -778,6 +875,8 @@ export class TrailScene {
   }
 
   topView() {
+    ++this.cameraSelectionRevision;
+    this.freeCamera.setMode("orbit");
     const bounds = this.viewBounds();
     if (!bounds) return;
     const width = Math.max(5, bounds.max[0] - bounds.min[0]);
@@ -799,10 +898,13 @@ export class TrailScene {
   }
 
   dispose() {
+    ++this.cameraSelectionRevision;
     ++this.buildToken;
     ++this.geometrySelectionToken;
     cancelAnimationFrame(this.animationFrame);
     this.resizeObserver.disconnect();
+    this.freeCamera.dispose();
+    this.worldRenderer.dispose();
     this.controls.dispose();
     this.geometryAbort?.abort();
     this.geometryLoads.clear();

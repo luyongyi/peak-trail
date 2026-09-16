@@ -53,7 +53,19 @@
       "type": "array",
       "uniqueItems": true,
       "items": {
-        "enum": ["item", "stamina", "extraStamina", "appearance", "route"]
+        "enum": ["item", "stamina", "extraStamina", "appearance", "route", "world"]
+      }
+    },
+    "worldTelemetry": {
+      "type": "object",
+      "description": "Observer coverage, sampling and mine postfix availability; missing in pre-0.6 logs means world state unknown",
+      "properties": {
+        "version": { "const": 1 },
+        "sampleHz": { "type": "number", "exclusiveMinimum": 0 },
+        "discoveryIntervalMs": { "type": "integer", "minimum": 0 },
+        "snapshotIntervalMs": { "type": "integer", "minimum": 0 },
+        "mineExplosionObservation": { "enum": ["SpawnGameObject.Go.postfix", "unavailable"] },
+        "networkSpawnObservation": { "enum": ["PhotonNetwork.NetworkInstantiate.postfix", "polling-only"] }
       }
     },
     "participants": {

@@ -82,3 +82,34 @@ preserves its cache modification time. It never changes or supplements a trail.
 
 The recorder's `appearance` records are the historical source for player outfits.
 Version 0.3 logs did not record this data and must show that limitation.
+
+## Recorded world objects (recorder 0.6+)
+
+```powershell
+& local/python/.venv/Scripts/python.exe PeakTrailPlatform/tools/game-assets/export-world-assets.py --build 25306743
+& local/python/.venv/Scripts/python.exe PeakTrailPlatform/tools/game-assets/test_world_assets.py
+```
+
+This additive step retains avatar previews and adds original enabled renderer
+geometry for all 194 canonical items, plus the three solid deployed prefabs
+`ShelfShroomSpawn`, `BounceShroomSpawn` and `CloudFungusPlaced`. A healing puff is
+particles/AOE only in the source; it is deliberately not given an invented mesh.
+Runtime RenderTextures (e.g. the guidebook's UI) are also not fabricated.
+
+`items[].worldModel` and `worldObjects[].model` reference JSON with the same
+`parts/positions/uv/groups/material` layout as avatar models. Unlike avatars,
+world models are in **prefab-local metres**: apply the recorded world position,
+rotation and scale without centering or fitting them to a unit box. LOD0 is used
+once; inactive descendants and duplicate lower LOD renderers are excluded.
+Material `colorSpace` is derived from the source shader's property flags.
+Custom Unity layer masks, deformation and illumination remain approximations.
+
+`worldObjects[].icon` for `MushroomZombie` is rendered from its source head,
+zombie eye texture, skin material and fully grown head mushrooms. It is an NPC
+reference icon, not a claim about its historical growth stage or attack pose.
+The source prefab wakes at 20 m and enables at 40 m in this build; the recorder's
+actual instance fields take precedence over these reference values.
+
+Only existing allowlisted resources and newly exported references enter the
+updated pack allowlist. A source export cannot reconstruct historical dropped
+items, surviving/cull-randomized zombies or triggered mines from 0.5 logs.

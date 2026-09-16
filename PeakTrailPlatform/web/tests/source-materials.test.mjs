@@ -23,7 +23,18 @@ test("all effect lookup entries reproduce their exact-build raw Unity source evi
     assert.equal(effect.source.pass.zWrite, source.passState.zWrite.val);
     if (effect.kind === "fog") assert.equal(effect.opacity, source.floats._Opacity);
   }
-  assert.equal(checked, 8);
+  assert.equal(checked, 12);
+});
+
+test("Roots explosive mushroom uses source orange HDR albedo, not neutral tint or emission", () => {
+  const mine = getSourceEffectMaterial("25306743", "M_SporeShroomExplo", "W/Peak_Standard");
+  assert.deepEqual(mine.baseColor, [0.7169811725616455, 0.25232812762260437, 0]);
+  assert.deepEqual(mine.emissive, [0, 0, 0]);
+  assert.equal(mine.transparent, false);
+  assert.equal(mine.depthWrite, true);
+  assert.equal(mine.opacity, 1);
+  assert.match(mine.source.approximation, /multilayer.*not reproduced/);
+  assert.notDeepEqual(mine.baseColor, getSourceEffectMaterial("25306743", "M_SporeShroomPoison", "W/Peak_Standard").baseColor);
 });
 
 test("source effects require exact build, material name and shader", () => {

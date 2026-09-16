@@ -1004,6 +1004,534 @@
           "name": "<noninit>"
         }
       }
+    },
+    {
+      "name": "M_SporeShroomExplo",
+      "shader": "W/Peak_Standard",
+      "sourceFile": "sharedassets4.assets",
+      "pathId": 144,
+      "colors": {
+        "_BaseColor": {
+          "rgba": [
+            0.7169811725616455,
+            0.25232812762260437,
+            0.0,
+            1.0
+          ],
+          "flags": 16
+        },
+        "_Color1": {
+          "rgba": [
+            0.7169811725616455,
+            0.21925929188728333,
+            0.0,
+            1.0
+          ],
+          "flags": 16
+        },
+        "_Color21": {
+          "rgba": [
+            1.0,
+            0.3913043439388275,
+            0.0,
+            1.0
+          ],
+          "flags": 16
+        },
+        "_Color3": {
+          "rgba": [
+            0.10746707767248154,
+            0.33018869161605835,
+            0.1811549812555313,
+            1.0
+          ],
+          "flags": 16
+        },
+        "_Tint": {
+          "rgba": [
+            0.5377358198165894,
+            0.5377358198165894,
+            0.5377358198165894,
+            1.0
+          ],
+          "flags": 16
+        }
+      },
+      "floats": {
+        "_AddSpecular": 0.0,
+        "_AlphaClip": 0.0,
+        "_BaseMetallic": 0.0,
+        "_BaseSmooth": 0.3059999942779541,
+        "_BaseTexAmount": 1.0,
+        "_Flip1": 0.0,
+        "_Flip2": 0.0,
+        "_Flip3": 0.0,
+        "_HueStr1": 1.0,
+        "_HueStr2": 0.0,
+        "_INTERACTABLE": 1.0,
+        "_Interactable": 0.0,
+        "_Mask1": 0.0,
+        "_NoShadowSpec": 0.0,
+        "_QueueControl": 0.0,
+        "_QueueOffset": 0.0,
+        "_Smooth1": 0.0,
+        "_Smooth2": 0.1589999943971634,
+        "_Smooth3": 0.0,
+        "_SpecularPower": 1.0,
+        "_TopDown1On": 0.0,
+        "_TopDown2On": 0.0,
+        "_TopDown3On": 0.0,
+        "_Triplanar1On": 0.0,
+        "_Triplanar2On": 0.0,
+        "_Triplanar3On": 0.0,
+        "_UV1": 2.0,
+        "_UV2": 1.0,
+        "_UV3": 1.0,
+        "_UseAlpha": 0.0,
+        "_UseUV2": 1.0,
+        "_VertexColorAmount": 1.0,
+        "_ViewDirBlend": 0.0
+      },
+      "passState": {
+        "rtBlend0": {
+          "srcBlend": {
+            "val": 1.0,
+            "name": "<noninit>"
+          },
+          "destBlend": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "srcBlendAlpha": {
+            "val": 1.0,
+            "name": "<noninit>"
+          },
+          "destBlendAlpha": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "blendOp": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "blendOpAlpha": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "colMask": {
+            "val": 15.0,
+            "name": "<noninit>"
+          }
+        },
+        "zTest": {
+          "val": 4.0,
+          "name": "<noninit>"
+        },
+        "zWrite": {
+          "val": 1.0,
+          "name": "<noninit>"
+        },
+        "culling": {
+          "val": 2.0,
+          "name": "<noninit>"
+        }
+      }
+    },
+    {
+      "name": "M_SporeShroomPoison",
+      "shader": "W/Peak_Standard",
+      "sourceFile": "sharedassets4.assets",
+      "pathId": 145,
+      "colors": {
+        "_BaseColor": {
+          "rgba": [
+            0.1094617173075676,
+            0.3564002513885498,
+            0.2746773660182953,
+            1.0
+          ],
+          "flags": 16
+        },
+        "_Color1": {
+          "rgba": [
+            0.10702311247587204,
+            0.3277781307697296,
+            0.14995981752872467,
+            1.0
+          ],
+          "flags": 16
+        },
+        "_Color21": {
+          "rgba": [
+            0.038314349949359894,
+            0.38679248094558716,
+            0.2676923871040344,
+            1.0
+          ],
+          "flags": 16
+        },
+        "_Color3": {
+          "rgba": [
+            0.5471698045730591,
+            0.13679245114326477,
+            0.3610246181488037,
+            1.0
+          ],
+          "flags": 16
+        },
+        "_Tint": {
+          "rgba": [
+            0.5377358198165894,
+            0.5377358198165894,
+            0.5377358198165894,
+            1.0
+          ],
+          "flags": 16
+        }
+      },
+      "floats": {
+        "_AddSpecular": 0.0,
+        "_AlphaClip": 0.0,
+        "_BaseMetallic": 0.0,
+        "_BaseSmooth": 0.3059999942779541,
+        "_BaseTexAmount": 1.0,
+        "_Flip1": 0.0,
+        "_Flip2": 0.0,
+        "_Flip3": 0.0,
+        "_HueStr1": 1.0,
+        "_HueStr2": 0.0,
+        "_INTERACTABLE": 1.0,
+        "_Interactable": 0.0,
+        "_Mask1": 0.0,
+        "_NoShadowSpec": 0.0,
+        "_QueueControl": 0.0,
+        "_QueueOffset": 0.0,
+        "_Smooth1": 0.0,
+        "_Smooth2": 0.1589999943971634,
+        "_Smooth3": 0.0,
+        "_SpecularPower": 1.0,
+        "_TopDown1On": 0.0,
+        "_TopDown2On": 0.0,
+        "_TopDown3On": 0.0,
+        "_Triplanar1On": 0.0,
+        "_Triplanar2On": 0.0,
+        "_Triplanar3On": 0.0,
+        "_UV1": 2.0,
+        "_UV2": 2.0,
+        "_UV3": 5.0,
+        "_UseAlpha": 0.0,
+        "_UseUV2": 1.0,
+        "_VertexColorAmount": 1.0,
+        "_ViewDirBlend": 0.0
+      },
+      "passState": {
+        "rtBlend0": {
+          "srcBlend": {
+            "val": 1.0,
+            "name": "<noninit>"
+          },
+          "destBlend": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "srcBlendAlpha": {
+            "val": 1.0,
+            "name": "<noninit>"
+          },
+          "destBlendAlpha": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "blendOp": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "blendOpAlpha": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "colMask": {
+            "val": 15.0,
+            "name": "<noninit>"
+          }
+        },
+        "zTest": {
+          "val": 4.0,
+          "name": "<noninit>"
+        },
+        "zWrite": {
+          "val": 1.0,
+          "name": "<noninit>"
+        },
+        "culling": {
+          "val": 2.0,
+          "name": "<noninit>"
+        }
+      }
+    },
+    {
+      "name": "M_SporeShroomPoison_Ivy",
+      "shader": "W/Peak_Standard",
+      "sourceFile": "sharedassets4.assets",
+      "pathId": 146,
+      "colors": {
+        "_BaseColor": {
+          "rgba": [
+            0.14036913216114044,
+            0.10980391502380371,
+            0.35686275362968445,
+            1.0
+          ],
+          "flags": 16
+        },
+        "_Color1": {
+          "rgba": [
+            0.1339964121580124,
+            0.10588234663009644,
+            0.3294117748737335,
+            1.0
+          ],
+          "flags": 16
+        },
+        "_Color21": {
+          "rgba": [
+            0.07609469443559647,
+            0.07841835170984268,
+            0.28301888704299927,
+            1.0
+          ],
+          "flags": 16
+        },
+        "_Color3": {
+          "rgba": [
+            0.13725490868091583,
+            0.13901475071907043,
+            0.5490196347236633,
+            1.0
+          ],
+          "flags": 16
+        },
+        "_Tint": {
+          "rgba": [
+            0.5377358198165894,
+            0.5377358198165894,
+            0.5377358198165894,
+            1.0
+          ],
+          "flags": 16
+        }
+      },
+      "floats": {
+        "_AddSpecular": 0.0,
+        "_AlphaClip": 0.0,
+        "_BaseMetallic": 0.0,
+        "_BaseSmooth": 0.3059999942779541,
+        "_BaseTexAmount": 1.0,
+        "_Flip1": 0.0,
+        "_Flip2": 0.0,
+        "_Flip3": 0.0,
+        "_HueStr1": 1.0,
+        "_HueStr2": 0.0,
+        "_INTERACTABLE": 1.0,
+        "_Interactable": 0.0,
+        "_Mask1": 0.0,
+        "_NoShadowSpec": 0.0,
+        "_QueueControl": 0.0,
+        "_QueueOffset": 0.0,
+        "_Smooth1": 0.0,
+        "_Smooth2": 0.1589999943971634,
+        "_Smooth3": 0.0,
+        "_SpecularPower": 1.0,
+        "_TopDown1On": 0.0,
+        "_TopDown2On": 0.0,
+        "_TopDown3On": 0.0,
+        "_Triplanar1On": 0.0,
+        "_Triplanar2On": 0.0,
+        "_Triplanar3On": 0.0,
+        "_UV1": 2.0,
+        "_UV2": 2.0,
+        "_UV3": 5.0,
+        "_UseAlpha": 0.0,
+        "_UseUV2": 1.0,
+        "_VertexColorAmount": 1.0,
+        "_ViewDirBlend": 0.0
+      },
+      "passState": {
+        "rtBlend0": {
+          "srcBlend": {
+            "val": 1.0,
+            "name": "<noninit>"
+          },
+          "destBlend": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "srcBlendAlpha": {
+            "val": 1.0,
+            "name": "<noninit>"
+          },
+          "destBlendAlpha": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "blendOp": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "blendOpAlpha": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "colMask": {
+            "val": 15.0,
+            "name": "<noninit>"
+          }
+        },
+        "zTest": {
+          "val": 4.0,
+          "name": "<noninit>"
+        },
+        "zWrite": {
+          "val": 1.0,
+          "name": "<noninit>"
+        },
+        "culling": {
+          "val": 2.0,
+          "name": "<noninit>"
+        }
+      }
+    },
+    {
+      "name": "M_SporeShroomSpores",
+      "shader": "W/Peak_Standard",
+      "sourceFile": "sharedassets4.assets",
+      "pathId": 147,
+      "colors": {
+        "_BaseColor": {
+          "rgba": [
+            0.24045296013355255,
+            0.40566039085388184,
+            0.10906906425952911,
+            1.0
+          ],
+          "flags": 16
+        },
+        "_Color1": {
+          "rgba": [
+            0.40566039085388184,
+            0.23834849894046783,
+            0.06314525753259659,
+            1.0
+          ],
+          "flags": 16
+        },
+        "_Color21": {
+          "rgba": [
+            0.43529412150382996,
+            0.09974312037229538,
+            0.06666665524244308,
+            1.0
+          ],
+          "flags": 16
+        },
+        "_Color3": {
+          "rgba": [
+            0.8584905862808228,
+            0.30371129512786865,
+            0.4767681956291199,
+            1.0
+          ],
+          "flags": 16
+        },
+        "_Tint": {
+          "rgba": [
+            0.5943396091461182,
+            0.5228506326675415,
+            0.5186454057693481,
+            1.0
+          ],
+          "flags": 16
+        }
+      },
+      "floats": {
+        "_AddSpecular": 0.0,
+        "_AlphaClip": 0.0,
+        "_BaseMetallic": 0.0,
+        "_BaseSmooth": 0.3059999942779541,
+        "_BaseTexAmount": 1.0,
+        "_Flip1": 0.0,
+        "_Flip2": 1.0,
+        "_Flip3": 0.0,
+        "_HueStr1": 0.2809999883174896,
+        "_HueStr2": 0.0,
+        "_INTERACTABLE": 1.0,
+        "_Interactable": 0.0,
+        "_Mask1": 0.0,
+        "_NoShadowSpec": 0.0,
+        "_QueueControl": 0.0,
+        "_QueueOffset": 0.0,
+        "_Smooth1": 0.0,
+        "_Smooth2": 0.1589999943971634,
+        "_Smooth3": 0.0,
+        "_SpecularPower": 1.0,
+        "_TopDown1On": 0.0,
+        "_TopDown2On": 0.0,
+        "_TopDown3On": 0.0,
+        "_Triplanar1On": 0.0,
+        "_Triplanar2On": 0.0,
+        "_Triplanar3On": 0.0,
+        "_UV1": 2.0,
+        "_UV2": 2.0,
+        "_UV3": 5.0,
+        "_UseAlpha": 0.0,
+        "_UseUV2": 1.0,
+        "_VertexColorAmount": 1.0,
+        "_ViewDirBlend": 0.0
+      },
+      "passState": {
+        "rtBlend0": {
+          "srcBlend": {
+            "val": 1.0,
+            "name": "<noninit>"
+          },
+          "destBlend": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "srcBlendAlpha": {
+            "val": 1.0,
+            "name": "<noninit>"
+          },
+          "destBlendAlpha": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "blendOp": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "blendOpAlpha": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "colMask": {
+            "val": 15.0,
+            "name": "<noninit>"
+          }
+        },
+        "zTest": {
+          "val": 4.0,
+          "name": "<noninit>"
+        },
+        "zWrite": {
+          "val": 1.0,
+          "name": "<noninit>"
+        },
+        "culling": {
+          "val": 2.0,
+          "name": "<noninit>"
+        }
+      }
     }
   ]
 }

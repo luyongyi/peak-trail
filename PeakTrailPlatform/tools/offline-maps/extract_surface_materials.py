@@ -11,7 +11,8 @@ parser.add_argument('--output',type=Path,default=Path(__file__).resolve().parent
 args=parser.parse_args()
 if str(game_info(args.game)[2])!='25306743':raise RuntimeError('This evidence extractor is pinned to Steam build 25306743')
 source=args.game/'PEAK_Data/sharedassets4.assets'
-env=UnityPy.load(str(source)); wanted={'M_Lava','M_Water_forest','M_Water_forest 1','M_Water_Onsen','M_Water_swamp','M_Void Water','FogSurface void','FogSurface'}
+env=UnityPy.load(str(source)); wanted={'M_Lava','M_Water_forest','M_Water_forest 1','M_Water_Onsen','M_Water_swamp','M_Void Water','FogSurface void','FogSurface',
+    'M_SporeShroomExplo','M_SporeShroomPoison','M_SporeShroomPoison_Ivy','M_SporeShroomSpores'}
 records=[]
 for obj in list(env.objects):
     if obj.type.name!='Material':continue

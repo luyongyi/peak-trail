@@ -16,6 +16,7 @@ import { collectDroppedFiles } from "./file-intake.js";
 import { loadGameAssetPack } from "./game-assets.js";
 import { createPlayerCard, updatePlayerCard } from "./player-card.js";
 import { resolveReplayRoute, routeSegmentName } from "./map-route.js";
+import { worldTelemetryNote } from "./world-timeline.js";
 
 const $ = (id) => document.getElementById(id);
 const elements = {
@@ -68,6 +69,14 @@ const elements = {
   speedSelect: $("speedSelect"),
   topViewButton: $("topViewButton"),
   fitViewButton: $("fitViewButton"),
+  freeCameraButton: $("freeCameraButton"),
+  interiorViewButton: $("interiorViewButton"),
+  cameraHelp: $("cameraHelp"),
+  cameraPlacement: $("cameraPlacement"),
+  worldToggle: $("worldToggle"),
+  worldTelemetryNote: $("worldTelemetryNote"),
+  worldSummary: $("worldSummary"),
+  worldAlerts: $("worldAlerts"),
   eventToast: $("eventToast"),
   eventToastIcon: $("eventToastIcon"),
   eventToastTitle: $("eventToastTitle"),
@@ -427,12 +436,14 @@ function cachedGameAssetPack(gameBuildId) {
 function syncGameAssetsForTrace(trace, selectionRevision) {
   const buildId = String(trace?.manifest?.gameBuildId || "").trim();
   state.gameAssetPack = null;
+  viewer?.setGameAssetPack(null);
   state.gameAssetError = null;
   state.gameAssetStatus = buildId ? "loading" : "missing";
   if (!buildId) return;
   void cachedGameAssetPack(buildId).then((pack) => {
     if (selectionRevision !== state.traceSelectionRevision || state.trace !== trace) return;
     state.gameAssetPack = pack;
+    viewer?.setGameAssetPack(pack);
     state.gameAssetStatus = pack ? "ready" : "missing";
     updatePlayerTelemetry();
   }).catch((error) => {
@@ -694,6 +705,8 @@ async function renderData() {
     if (useMap) markSegmentTransition(activeSegment);
     const displayMap = state.mapPack ? { ...state.mapPack, layers: state.routeView.layers } : null;
     await viewer.setData({ mapPack: displayMap, trace: state.trace, useMap, activeSegment });
+    viewer.setGameAssetPack(state.gameAssetPack);
+    viewer.setWorldVisibility(elements.worldToggle.checked);
     viewer.setHeightScale(elements.heightScale.value);
     viewer.setTrackVisibility(elements.trackToggle.checked);
     viewer.setMarkerVisibility(elements.markerToggle.checked);
@@ -819,6 +832,7 @@ function updatePlayers() {
 }
 
 function updatePlayerTelemetry() {
+  updateWorldTelemetry();
   const trace = state.trace;
   for (const row of elements.playerList.querySelectorAll(".player-row")) {
     const playerState = tracePlayerStateAtTime(state.trace, row.dataset.playerId, state.currentTime);
@@ -832,6 +846,25 @@ function updatePlayerTelemetry() {
     });
     const head = row.querySelector(".player-head-image");
     viewer?.setPlayerPortrait(row.dataset.playerId, head?.hidden ? null : head?.getAttribute("src"));
+  }
+}
+
+function updateWorldTelemetry() {
+  elements.worldTelemetryNote.textContent = state.trace ? worldTelemetryNote(state.trace.worldTimeline, state.currentTime) : "等待导入世界记录";
+  const world = viewer?.worldRenderer;
+  const objects = world?.objects || [];
+  elements.worldSummary.textContent = state.trace?.worldTimeline?.captured ? `此刻记录 ${objects.length} 个世界对象 · 采样状态，不预测中间运动` : "";
+  const alerts = (world?.alerts || []).sort((a, b) => a.distance - b.distance).slice(0, 8);
+  const key = JSON.stringify(alerts.map((alert) => [alert.object.objectId, Math.round(alert.distance), alert.active]));
+  if (elements.worldAlerts.dataset.key === key) return;
+  elements.worldAlerts.dataset.key = key;
+  elements.worldAlerts.replaceChildren();
+  for (const alert of alerts) {
+    const row = document.createElement("p");
+    row.className = alert.active ? "world-alert is-danger" : "world-alert";
+    row.textContent = `${alert.object.kind.includes("zombie") ? "蘑菇僵尸" : "危险物"} · ${Math.round(alert.distance)}m · ${alert.active ? "已激活" : "接近预警"}`;
+    row.title = `记录状态：${alert.object.activity}；提示距离 ${alert.range}m（游戏激活还可能依赖朝向、视线等条件）`;
+    elements.worldAlerts.append(row);
   }
 }
 
@@ -860,6 +893,7 @@ function updateEvents() {
       setPlaying(false);
       updatePlaybackTime(event.t, true);
       showEventToast(event);
+      viewer?.focusWorldEvent(event);
     });
 
     const symbol = document.createElement("span");
@@ -1259,6 +1293,16 @@ elements.sessionSelect.addEventListener("change", () => {
 elements.dismissError.addEventListener("click", hideError);
 elements.topViewButton.addEventListener("click", () => viewer?.topView());
 elements.fitViewButton.addEventListener("click", () => viewer?.fitView());
+elements.freeCameraButton.addEventListener("click", () => viewer?.toggleFreeCamera());
+elements.interiorViewButton.addEventListener("click", () => viewer?.enterInteriorView());
+elements.worldToggle.addEventListener("change", () => viewer?.setWorldVisibility(elements.worldToggle.checked));
+elements.sceneCanvas.addEventListener("cameramodechange", (event) => {
+  const free = event.detail.mode === "free";
+  elements.freeCameraButton.setAttribute("aria-pressed", String(free));
+  elements.cameraHelp.hidden = !free;
+  elements.sceneCanvas.setAttribute("aria-label", free ? event.detail.help : "地图回放，可切换自由相机");
+});
+elements.sceneCanvas.addEventListener("cameraplacement", (event) => { elements.cameraPlacement.textContent = event.detail.note; });
 elements.heightScale.addEventListener("input", () => {
   elements.heightScaleValue.textContent = `${Number(elements.heightScale.value).toFixed(1)}×`;
   updateRangeFill(elements.heightScale);

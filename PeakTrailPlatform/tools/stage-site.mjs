@@ -27,6 +27,7 @@ const publishedSchemas = [
   "peaktrace-stream.schema.json",
   "peaktrace-history.schema.json",
   "peaktrace-route.schema.json",
+  "peaktrace-world.schema.json",
 ];
 
 const catalog = JSON.parse(await readFile(resolve(mapsDirectory, "catalog.json"), "utf8"));

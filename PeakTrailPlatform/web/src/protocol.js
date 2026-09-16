@@ -1,4 +1,5 @@
 import { normalizeRoute } from "./map-route.js";
+import { normalizeWorldRecord, buildWorldTimeline } from "./world-timeline.js";
 
 export class ProtocolError extends Error {
   constructor(message, detail = "") {
@@ -545,6 +546,7 @@ async function loadSingleTrace(bundle, manifestMatch, streamFiles, parsedStreams
   const inventoryTracks = new Map();
   const appearanceTracks = new Map();
   const routeTracks = [];
+  const worldRecords = [];
   const events = [];
   const warnings = [];
   let acceptedSamples = 0;
@@ -594,6 +596,12 @@ async function loadSingleTrace(bundle, manifestMatch, streamFiles, parsedStreams
       const rawTime = asFiniteNumber(record.t ?? record.time ?? record.timestamp);
       if (rawTime === null || rawTime < 0) continue;
       const t = rawTime * timeScale;
+
+      if (type === "world_snapshot" || type === "world_delta") {
+        const worldRecord = normalizeWorldRecord(record, t);
+        if (worldRecord) worldRecords.push(worldRecord);
+        continue;
+      }
 
       if (type === "route") {
         const route = normalizeRoute(record.route);
@@ -718,6 +726,9 @@ async function loadSingleTrace(bundle, manifestMatch, streamFiles, parsedStreams
           confidence: record.confidence ? String(record.confidence) : null,
           fromLocation: record.fromLocation ? String(record.fromLocation) : null,
           toLocation: record.toLocation ? String(record.toLocation) : null,
+          objectId: typeof record.objectId === "string" ? record.objectId : null,
+          kind: type === "world_event" ? record.kind : null,
+          radius: asFiniteNumber(record.radius),
         });
       }
     }
@@ -741,6 +752,7 @@ async function loadSingleTrace(bundle, manifestMatch, streamFiles, parsedStreams
     ...Array.from(telemetryTracks.values(), (samples) => samples.at(-1)?.t || 0),
     ...Array.from(inventoryTracks.values(), (samples) => samples.at(-1)?.t || 0),
     ...Array.from(appearanceTracks.values(), (samples) => samples.at(-1)?.t || 0),
+    ...worldRecords.map((record) => record.t),
   );
 
   const allPositions = Array.from(tracks.values()).flatMap((samples) => samples.map((sample) => sample.pos));
@@ -756,6 +768,7 @@ async function loadSingleTrace(bundle, manifestMatch, streamFiles, parsedStreams
     inventoryTracks,
     appearanceTracks,
     routeTracks,
+    worldTimeline: buildWorldTimeline(worldRecords),
     events,
     duration,
     sampleCount: acceptedSamples,
@@ -1604,6 +1617,16 @@ export function formatTime(seconds) {
 }
 
 export const EVENT_PRESENTATION = {
+  mine_explosion: { label: "地雷爆开", symbol: "✹", color: "#ff7449" },
+  mine_exploded: { label: "地雷爆开", symbol: "✹", color: "#ff7449" },
+  zombie_activated: { label: "僵尸激活", symbol: "!", color: "#fb886b" },
+  zombie_woke: { label: "僵尸苏醒", symbol: "!", color: "#fb886b" },
+  world_spawn: { label: "世界物体出现", symbol: "+", color: "#83d9a2" },
+  world_despawn: { label: "世界物体消失", symbol: "−", color: "#92aba6" },
+  fog_activated: { label: "昏睡雾激活", symbol: "≈", color: "#cb9bfb" },
+  fog_enabled: { label: "昏睡雾出现", symbol: "≈", color: "#cb9bfb" },
+  fog_disabled: { label: "昏睡雾消退", symbol: "≈", color: "#91cab1" },
+  zombie_state: { label: "僵尸状态变化", symbol: "!", color: "#fb886b" },
   join: { label: "加入攀登", symbol: "+", color: "#6fd3a6" },
   leave: { label: "离开攀登", symbol: "−", color: "#93a39f" },
   passed_out: { label: "失去意识", symbol: "!", color: "#ffad62" },

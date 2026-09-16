@@ -83,7 +83,11 @@ internal sealed class TraceManifest
         "extraStamina",
         "appearance",
         "route",
+        "world",
     };
+
+    [JsonProperty("worldTelemetry")]
+    public object WorldTelemetry { get; set; } = WorldTelemetryTracker.Capabilities(false);
 
     [JsonProperty("staminaAuthority")]
     public string StaminaAuthority { get; set; } =

@@ -25,6 +25,7 @@ test("stage enriches exact-pack route metadata, allowlists assets and preserves 
     "daily-map.schema.json", "map-catalog.schema.json", "map-pack.schema.json",
     "peaktrace-manifest.schema.json", "peaktrace-stream.schema.json", "peaktrace-history.schema.json",
     "peaktrace-route.schema.json",
+    "peaktrace-world.schema.json",
   ];
 
   await Promise.all([

@@ -2350,3 +2350,20 @@ button:disabled {
     transition-duration: 0.01ms !important;
   }
 }
+/* The recording world overlay is distinct from the static map and player trail. */
+.world-labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 4; }
+.world-label { position: absolute; top: 0; left: 0; display: flex; gap: 5px; align-items: center; max-width: 190px; padding: 4px 7px; background: #172827e6; border: 1px solid #8fc8a766; border-radius: 7px; color: #e5f1d8; font-size: 10px; box-shadow: 0 2px 8px #0007; }
+.world-label[hidden], .camera-help[hidden] { display: none; }
+.world-label img { width: 32px; height: 32px; object-fit: contain; }
+.world-label span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.world-label[data-kind="zombie"], .world-label[data-kind="zombie_spawn"] { border-color: #f5bd67; background: #382b20ed; }
+.world-label.is-danger, .world-alert.is-danger { border-color: #ff795d; color: #ffb29f; }
+.camera-text-button { border: 1px solid #6a89816e; background: #152422eb; color: #dcebe6; border-radius: 9px; padding: 8px 10px; cursor: pointer; font: inherit; font-size: 11px; }
+.camera-text-button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.camera-help { position: absolute; left: 22px; bottom: 77px; z-index: 5; max-width: calc(100% - 44px); display: grid; gap: 5px; background: #11211fdf; border: 1px solid #789a7855; border-radius: 10px; padding: 10px 14px; pointer-events: none; font-size: 11px; color: #d1e7da; }
+.camera-help strong { color: var(--accent); }
+.camera-help small { color: #a0b3aa; }
+#sceneCanvas:focus-visible { outline: 1px solid #efb74e80; outline-offset: -2px; }
+.world-summary { color: #adc2ba; font-size: 11px; line-height: 1.6; }
+.world-alert { border-left: 2px solid #e3ae63; padding: 5px 9px; color: #edd5a1; background: #30271d66; font-size: 11px; }
+@media (max-width: 700px) { .camera-actions { flex-wrap: wrap; justify-content: flex-end; } .camera-text-button { padding: 6px; font-size: 10px; } .camera-help { left: 12px; bottom: 75px; max-width: calc(100% - 24px); } }

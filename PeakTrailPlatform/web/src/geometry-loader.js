@@ -4,6 +4,7 @@ import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { decodeGeometryBytes, GEOMETRY_FORMATS } from "./geometry-bytes.js";
 import { positiveInstanceTransform } from "./geometry-matrices.js";
 import { getSourceEffectMaterial } from "./source-materials.js";
+import { isExplosiveMineMaterial, recordedHiddenMineIndices } from "./mine-visibility.js";
 
 function assertEmbeddedGlb(bytes) {
   const view = new DataView(bytes);
@@ -87,6 +88,18 @@ function useExactInstanceNormals(material) {
   material.needsUpdate = true;
 }
 
+function indexedBounds(geometry) {
+  const bounds = new THREE.Box3();
+  const position = geometry.getAttribute("position");
+  const vertex = new THREE.Vector3();
+  const index = geometry.getIndex();
+  // Shared Unity static-batch vertex buffers may contain an entire scene. Only
+  // the vertices addressed by this primitive's index buffer belong to this mine.
+  const count = index?.count ?? position.count;
+  for (let i = 0; i < count; i++) bounds.expandByPoint(vertex.fromBufferAttribute(position, index ? index.getX(i) : i));
+  return bounds;
+}
+
 /** Keep every original triangle; share repeated rocks/trees and preserve full
  * matrixWorld, including shear that glTF's TRS instancing cannot represent. */
 function batchStaticMeshes(scene, gameBuildId) {
@@ -97,6 +110,11 @@ function batchStaticMeshes(scene, gameBuildId) {
   scene.traverse((object) => {
     if (!object.isMesh || object.isSkinnedMesh) return;
     const materials = Array.isArray(object.material) ? object.material : [object.material];
+    const mine = materials.length > 0 && materials.every((material) => {
+      const source = material.userData?.peakTerrain;
+      return isExplosiveMineMaterial(gameBuildId, source?.sourceMaterial || material.name, source?.sourceColors?.shader);
+    });
+    const mineBounds = mine ? indexedBounds(object.geometry) : null;
     for (const material of materials) {
       if (!prepared.has(material)) {
         if (!applySourceEffectMaterial(material, gameBuildId)) applyTerrainMaterial(material);
@@ -107,8 +125,16 @@ function batchStaticMeshes(scene, gameBuildId) {
     const addMatrix = (worldMatrix) => {
       const transform = positiveInstanceTransform(worldMatrix.elements);
       const key = `${object.geometry.uuid}:${materials.map((material) => material.uuid).join(":")}:${transform.reflected}`;
-      if (!batches.has(key)) batches.set(key, { geometry: object.geometry, material: object.material, reflected: transform.reflected, matrices: [] });
-      batches.get(key).matrices.push(new THREE.Matrix4().fromArray(transform.matrix));
+      if (!batches.has(key)) batches.set(key, { geometry: object.geometry, material: object.material, reflected: transform.reflected, matrices: [], mines: [] });
+      const batch = batches.get(key);
+      batch.matrices.push(new THREE.Matrix4().fromArray(transform.matrix));
+      if (mineBounds) {
+        // Record original Unity-world bounds BEFORE reflection factoring and
+        // before scene.js subtracts its display origin from the loaded root.
+        const bounds = mineBounds.clone().applyMatrix4(worldMatrix);
+        batch.mines.push({ index: batch.matrices.length - 1, center: bounds.getCenter(new THREE.Vector3()).toArray(),
+          min: bounds.min.toArray(), max: bounds.max.toArray() });
+      }
     };
     if (object.isInstancedMesh) {
       for (let index = 0; index < object.count; index++) {
@@ -122,6 +148,9 @@ function batchStaticMeshes(scene, gameBuildId) {
     const mesh = new THREE.InstancedMesh(batch.geometry, batch.material, batch.matrices.length);
     mesh.scale.x = batch.reflected ? -1 : 1;
     batch.matrices.forEach((matrix, index) => mesh.setMatrixAt(index, matrix));
+    if (batch.mines.length) mesh.userData.peakRecordedMines = batch.mines.map((mine) => ({
+      ...mine, originalMatrix: batch.matrices[mine.index].clone(), hidden: false,
+    }));
     mesh.instanceMatrix.needsUpdate = true;
     mesh.computeBoundingBox();
     mesh.computeBoundingSphere();
@@ -130,6 +159,29 @@ function batchStaticMeshes(scene, gameBuildId) {
   root.userData.drawBatches = batches.size;
   scene.clear();
   return root;
+}
+
+/** Reversible static geometry overlay driven only by observed mine state/events.
+ * Missing world samples never hide anything. Scrubbing back restores exact
+ * original affine matrices, including mirrored instances and scene offsets. */
+export function updateRecordedMineVisibility(terrainRoot, objects = [], events = [], time = 0) {
+  const candidates = [];
+  terrainRoot?.traverse((mesh) => {
+    for (const mine of mesh.userData?.peakRecordedMines || []) candidates.push({ ...mine, mesh, mine });
+  });
+  const hidden = recordedHiddenMineIndices(candidates, objects, events, time);
+  const collapsed = new THREE.Matrix4();
+  candidates.forEach(({ mesh, mine }, index) => {
+    const shouldHide = hidden.has(index);
+    if (mine.hidden === shouldHide) return;
+    if (shouldHide) {
+      collapsed.copy(mine.originalMatrix).scale(new THREE.Vector3(0, 0, 0));
+      mesh.setMatrixAt(mine.index, collapsed);
+    } else mesh.setMatrixAt(mine.index, mine.originalMatrix);
+    mine.hidden = shouldHide;
+    mesh.instanceMatrix.needsUpdate = true;
+  });
+  return hidden.size;
 }
 
 export async function loadGameGeometry(layer, signal, gameBuildId) {

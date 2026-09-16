@@ -55,6 +55,40 @@ build ID is captured so the viewer can refuse to overlay a trace on geometry fro
 
 ## Sampling and events
 
+- Since 0.6.0, `world_snapshot` (initial and every 10 seconds), `world_delta` (changed
+  objects, sampled at 4 Hz) and `world_event` preserve observed world state. A shared
+  2-second scene discovery pass supplies cached references; there is no scan per player.
+  An observation-only Photon `NetworkInstantiate` postfix captures the actual newly returned
+  deployed-mushroom object immediately (both local and remote instantiations), without waiting
+  for discovery; unavailable hooks are labelled `polling-only` in the manifest.
+  Ground items and deployed Shelf/Bounce/Cloud/Healing Puff mushroom prefabs retain their
+  original item IDs, Unity world positions/quaternions/scales and active state. Held or
+  backpack items are inactive for ground replay. Removed/destroyed objects produce explicit
+  removals; recycled Photon/Unity IDs receive a new session lifecycle suffix.
+- Mines are the game's `Jungle_SporeMushroom*` + `SpawnGameObject.toSpawn=VFX_SporeExplo*`
+  components. `mine_explosion` is emitted only after `SpawnGameObject.Go` actually completes
+  through an observation-only Harmony postfix. It is never inferred from player damage,
+  death, object disappearance or a nearby movement path. `manifest.worldTelemetry` reports
+  whether this postfix was installed. A disabled/spent mine is not drawn as armed.
+- Zombie snapshots include surviving scene spawners (not culled prefab candidates), actual
+  `MushroomZombie.currentState`, wake/spawn distances and target identity when observed.
+  The installed build's serialized NPC prefab uses 20 m wake / 40 m spawn distance; runtime
+  fields always take precedence over the C# class's 30 m default. Warning distance is the
+  observed wake radius plus an explicitly labelled 20 m replay UI margin. Wake-up also
+  depends on visibility, player look angle, line of sight and target validity: the warning
+  radius is not a claim that crossing a circle actually activated the enemy.
+- Drowsiness fields record live enabled state and exact sphere/axis-aligned box extent;
+  Drowsy/Spores/Poison emitters include wind suppression. This captures observable volume
+  state, not Unity's exact volumetric shader. The real Swamp `StatusFieldGloom` additionally
+  records sight distance, status delay and the `Hazard_SleepyGloom` run-setting gate. Lit
+  `GloomSafeZone` objects record actual protection and visual radii; their protected spheres
+  are excluded from the gloom's harmful volume (being inside the box alone is insufficient).
+  Old logs without the `world` capability are
+  unknown, not empty: their missing mine bursts, spawned objects and fog cannot be recovered.
+- World telemetry is limited to the recording client's loaded/synchronized scene. Fast
+  unsupported non-mine effects shorter than a discovery interval can be missed; no server omniscience
+  or retroactive reconstruction is claimed. Unchanged snapshots are heartbeat checkpoints,
+  not extra spawn events, and do not replay an earlier explosion on timeline seek.
 - Since 0.5.0, `manifest.route` and timestamped `route` records preserve the resolved
   scene branch and every stage's real biome ID/name, parent name and selected variant.
   A `route` record is written at session start and only when its contents change; the
@@ -117,7 +151,8 @@ build ID is captured so the viewer can refuse to overlay a trace on geometry fro
   not the public `Segment` enum value (the two differ for special zones such as Void).
   `segment_change` is therefore a global event. Future high-confidence position inference may
   add `segment` separately as the owning map-layer index.
-- No Harmony patches and no game/network state writes are used. Inventory is observed after
+- No game/network state writes are used. Harmony postfixes observe completed mine effects
+  and spawned network instances without changing arguments/results. Inventory is observed after
   PEAK's master-client RPC synchronization; brief spawn/RPC transitions are nullable instead
   of being written as fabricated values.
 

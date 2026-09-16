@@ -34,13 +34,14 @@ export async function readGameAssets(directory) {
     const checkReferences = (value) => {
       if (!value || typeof value !== "object") return;
       for (const [key, child] of Object.entries(value)) {
-        if (["icon", "preview", "texture", "model"].includes(key) && typeof child === "string") {
+        if (["icon", "preview", "texture", "model", "worldModel", "headModel", "thirdEyeModel"].includes(key) && typeof child === "string") {
           assert(assets.has(child), `Unlisted game asset reference: ${child}`);
         } else if (child && typeof child === "object") checkReferences(child);
       }
     };
     checkReferences(build.items);
     checkReferences(build.customization);
+    checkReferences(build.worldObjects);
     for (const reference of Object.values(build.ui || {})) {
       if (typeof reference === "string") assert(assets.has(reference), `Unlisted UI asset: ${reference}`);
     }

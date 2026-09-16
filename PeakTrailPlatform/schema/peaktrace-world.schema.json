@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/peaktrail/peaktrace-world.schema.json",
+  "title": "Observed PEAK world telemetry (additive schema 1, recorder 0.6+)",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": ["type", "t", "complete", "objects"],
+      "properties": {
+        "type": { "const": "world_snapshot" },
+        "t": { "type": "integer", "minimum": 0 },
+        "complete": { "const": true },
+        "objects": { "type": "array", "items": { "$ref": "#/$defs/worldObject" } }
+      }
+    },
+    {
+      "type": "object",
+      "required": ["type", "t", "upserts", "removed"],
+      "properties": {
+        "type": { "const": "world_delta" },
+        "t": { "type": "integer", "minimum": 0 },
+        "upserts": { "type": "array", "items": { "$ref": "#/$defs/worldObject" } },
+        "removed": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true }
+      }
+    },
+    {
+      "type": "object",
+      "required": ["type", "t", "event", "objectId", "kind", "pos", "source"],
+      "properties": {
+        "type": { "const": "world_event" },
+        "t": { "type": "integer", "minimum": 0 },
+        "event": { "enum": ["mine_explosion", "zombie_state", "fog_enabled", "fog_disabled"] },
+        "objectId": { "type": "string", "minLength": 1 },
+        "kind": { "type": "string" },
+        "pos": { "$ref": "#/$defs/vec3" },
+        "source": { "type": "string", "minLength": 1 },
+        "radius": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+        "activity": { "type": "string" }
+      }
+    }
+  ],
+  "$defs": {
+    "vec3": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "type": "number" } },
+    "worldObject": {
+      "type": "object",
+      "required": ["objectId", "kind", "prefabName", "pos", "rot", "scale", "active", "activity", "source"],
+      "properties": {
+        "objectId": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["item", "placed_object", "mine", "zombie", "zombie_spawn", "sleep_fog", "spore_cloud", "fog_safe_zone"] },
+        "prefabName": { "type": "string" },
+        "pos": { "$ref": "#/$defs/vec3" },
+        "rot": { "type": "array", "minItems": 4, "maxItems": 4, "items": { "type": "number" }, "description": "World quaternion, Unity XYZW" },
+        "scale": { "$ref": "#/$defs/vec3" },
+        "active": { "type": "boolean", "description": "Eligible for world replay display; false for held/stashed/dead/spent objects" },
+        "activity": { "type": "string" },
+        "source": { "type": "string", "minLength": 1 },
+        "itemId": { "type": ["integer", "null"], "minimum": 0 },
+        "itemInstanceId": { "type": ["string", "null"] },
+        "lastThrownByPlayerId": { "type": ["string", "null"] },
+        "photonViewId": { "type": ["integer", "null"] },
+        "activationRadius": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+        "warningRadius": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+        "warningRadiusSource": { "type": ["string", "null"] },
+        "activationRequires": { "type": ["array", "null"], "items": { "type": "string" } },
+        "spawnRadius": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+        "radius": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+        "shape": { "enum": ["box", "sphere", null] },
+        "size": { "oneOf": [{ "$ref": "#/$defs/vec3" }, { "type": "null" }] },
+        "statusType": { "type": ["string", "null"] },
+        "statusAmountPerSecond": { "type": ["number", "null"] },
+        "statusEnabled": { "type": ["boolean", "null"] },
+        "statusDelaySeconds": { "type": ["number", "null"], "minimum": 0 },
+        "sightDistance": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+        "visualRadius": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+        "falloff": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+        "targetPlayerId": { "type": ["string", "null"] },
+        "relatedObjectId": { "type": ["string", "null"] },
+        "scenePath": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

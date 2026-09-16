@@ -7,15 +7,16 @@ import * as THREE from "../../vendor/three/0.180.0/build/three.module.js";
 import { decodeGeometryBytes, GEOMETRY_FORMATS } from "../src/geometry-bytes.js";
 import { positiveInstanceTransform } from "../src/geometry-matrices.js";
 import { getSourceEffectMaterial } from "../src/source-materials.js";
+import { isExplosiveMineMaterial, recordedHiddenMineIndices } from "../src/mine-visibility.js";
 
 // Use the bundled Three implementation, replacing only network and GLTF parse
 // ports so the loader and batching contracts run without a WebGL canvas.
 const source = (await readFile(new URL("../src/geometry-loader.js", import.meta.url), "utf8"))
-  .replace(/^import .*;\r?\n/gm, "").replace("export async function loadGameGeometry", "async function loadGameGeometry");
+  .replace(/^import .*;\r?\n/gm, "").replace(/^export (?=(?:async )?function )/gm, "");
 const compile = (ports = {}) => new Function(
-  "THREE", "GLTFLoader", "MeshoptDecoder", "decodeGeometryBytes", "GEOMETRY_FORMATS", "positiveInstanceTransform", "getSourceEffectMaterial", "fetch", "crypto",
-  `${source}\nreturn { loadGameGeometry, batchStaticMeshes };`,
-)(THREE, ports.GLTFLoader, {}, ports.decode || decodeGeometryBytes, GEOMETRY_FORMATS, positiveInstanceTransform, getSourceEffectMaterial, ports.fetch, ports.crypto || webcrypto);
+  "THREE", "GLTFLoader", "MeshoptDecoder", "decodeGeometryBytes", "GEOMETRY_FORMATS", "positiveInstanceTransform", "getSourceEffectMaterial", "isExplosiveMineMaterial", "recordedHiddenMineIndices", "fetch", "crypto",
+  `${source}\nreturn { loadGameGeometry, batchStaticMeshes, updateRecordedMineVisibility };`,
+)(THREE, ports.GLTFLoader, {}, ports.decode || decodeGeometryBytes, GEOMETRY_FORMATS, positiveInstanceTransform, getSourceEffectMaterial, isExplosiveMineMaterial, recordedHiddenMineIndices, ports.fetch, ports.crypto || webcrypto);
 
 function glb() {
   const text = JSON.stringify({ asset: { version: "2.0" }, scenes: [{ nodes: [] }] });
@@ -151,4 +152,42 @@ test("loadGameGeometry carries the explicit map build into material adaptation",
   assert.equal(fixture.material.userData.peakSourceEffect.kind, "lava");
   assert.ok(fixture.material.emissive.r > 1);
   fixture.geometry.dispose(); fixture.material.dispose(); root.children.forEach((mesh) => mesh.dispose());
+});
+
+test("recorded mine hiding is reversible with reflected matrices and shifted display origin", () => {
+  const { batchStaticMeshes, updateRecordedMineVisibility } = compile();
+  const fixture = effectFixture("M_SporeShroomExplo", "W/Peak_Standard");
+  fixture.scene.children[0].position.set(-50, 20, 70);
+  fixture.scene.children[0].scale.set(-2, 2, 2);
+  const root = batchStaticMeshes(fixture.scene, "25306743");
+  root.position.set(50, -20, -70);
+  root.updateMatrixWorld(true);
+  const mesh = root.children[0];
+  const before = new THREE.Matrix4(); mesh.getMatrixAt(0, before);
+  assert.deepEqual(mesh.userData.peakRecordedMines[0].center, [-50, 20, 70]);
+  assert.equal(mesh.scale.x, -1);
+  const events = [{ type: "mine_explosion", t: 10, pos: [-50, 20, 70] }];
+  assert.equal(updateRecordedMineVisibility(root, [], events, 12), 1);
+  const hidden = new THREE.Matrix4(); mesh.getMatrixAt(0, hidden);
+  assert.equal(hidden.determinant(), 0);
+  assert.equal(updateRecordedMineVisibility(root, [], events, 9), 0);
+  const restored = new THREE.Matrix4(); mesh.getMatrixAt(0, restored);
+  assert.deepEqual(restored.elements, before.elements);
+  fixture.geometry.dispose(); fixture.material.dispose(); mesh.dispose();
+});
+
+test("mine bounds use referenced primitive indices, not unrelated static-batch vertices", () => {
+  const { batchStaticMeshes } = compile();
+  const fixture = effectFixture("M_SporeShroomExplo", "W/Peak_Standard");
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute([
+    -0.5, 0, 0, 0.5, 0, 0, 0, 1, 0, 9999, 9999, 9999,
+  ], 3));
+  geometry.setIndex([0, 1, 2]);
+  fixture.scene.children[0].geometry = geometry;
+  const root = batchStaticMeshes(fixture.scene, "25306743");
+  const mine = root.children[0].userData.peakRecordedMines[0];
+  assert.deepEqual(mine.min, [-0.5, 0, 0]);
+  assert.deepEqual(mine.max, [0.5, 1, 0]);
+  fixture.geometry.dispose(); geometry.dispose(); fixture.material.dispose(); root.children[0].dispose();
 });

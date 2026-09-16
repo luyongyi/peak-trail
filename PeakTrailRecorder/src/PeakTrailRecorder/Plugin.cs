@@ -15,7 +15,7 @@ namespace PeakTrailRecorder;
 [BepInAutoPlugin]
 public partial class Plugin : BaseUnityPlugin
 {
-    internal const string RecorderVersion = "0.5.0";
+    internal const string RecorderVersion = "0.6.0";
 
     internal static ManualLogSource Log { get; private set; } = null!;
 
@@ -92,13 +92,14 @@ public partial class Plugin : BaseUnityPlugin
 
         SceneManager.sceneLoaded += OnSceneLoaded;
         PlayerAppearanceReader.Subscribe();
+        WorldTelemetryHooks.Install(Log);
         SubscribeGlobalEvents();
         Log.LogWarning(
             "PeakTrailRecorder records every synchronized human player's location trail, stamina, held items and inventory, "
             + "together with raw stable IDs/nicknames. These local files are sensitive multiplayer telemetry; obtain "
             + "every participant's consent before recording or sharing them.");
         Log.LogInfo(
-            $"Plugin {Name} {RecorderVersion} loaded (read-only, no Harmony patches). "
+            $"Plugin {Name} {RecorderVersion} loaded (read-only telemetry; observation-only mine-effect/network-spawn postfixes). "
             + $"Press {_mapExportKey.Value} in a loaded island to create its 2.5D map pack; no separate exporter DLL is needed.");
     }
 
@@ -138,6 +139,8 @@ public partial class Plugin : BaseUnityPlugin
         {
             return;
         }
+
+        _session!.SampleWorld();
 
         float hz = Mathf.Clamp(_sampleHz.Value, 1f, 30f);
         if (Time.realtimeSinceStartup < _nextSampleAt)
@@ -347,6 +350,7 @@ public partial class Plugin : BaseUnityPlugin
     private void OnDestroy()
     {
         PlayerAppearanceReader.Unsubscribe();
+        WorldTelemetryHooks.Uninstall();
         SceneManager.sceneLoaded -= OnSceneLoaded;
         UnsubscribeGlobalEvents();
         if (!_applicationQuitting)

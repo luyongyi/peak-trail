@@ -44,3 +44,25 @@ test("game assets reject corruption, missing references and traversal", async ()
     await assert.rejects(readGameAssets(f.root), /escapes/);
   } finally { await f.clean(); }
 });
+
+test("world models and NPC head references must belong to the checksummed allowlist", async () => {
+  const f = await fixture();
+  try {
+    for (const key of ['worldModel', 'headModel', 'model', 'icon']) {
+      f.build.worldObjects = [{ objectId: 'MushroomZombie', [key]: '../private-save.json' }];
+      await f.save();
+      await assert.rejects(readGameAssets(f.root), /Unlisted game asset reference/);
+      f.build.worldObjects = [{ objectId: 'MushroomZombie', [key]: 'https://external.invalid/asset.json' }];
+      await f.save();
+      await assert.rejects(readGameAssets(f.root), /Unlisted game asset reference/);
+    }
+    f.build.worldObjects = [];
+    f.build.items[0].worldModel = 'models/unlisted.json';
+    await f.save();
+    await assert.rejects(readGameAssets(f.root), /Unlisted game asset reference/);
+    f.build.items[0].worldModel = 'icons/item.png';
+    f.build.worldObjects = [{ icon: 'icons/item.png', headModel: 'icons/item.png' }];
+    await f.save();
+    assert.equal((await readGameAssets(f.root)).files.length, 3);
+  } finally { await f.clean(); }
+});

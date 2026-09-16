@@ -80,6 +80,8 @@
               <span class="analysis-overlay-note">轨迹透视显示 · 原始 XYZ 与高度不变</span>
             </div>
             <div class="camera-actions" aria-label="视角控制">
+              <button class="camera-text-button" id="interiorViewButton" type="button" title="移到已记录玩家位置；没有记录时寻找真实模型内部地板">进入关内</button>
+              <button class="camera-text-button" id="freeCameraButton" type="button" aria-pressed="false">自由相机 WASD</button>
               <button class="icon-button" id="topViewButton" type="button" title="俯视视角" aria-label="俯视视角">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 7l8 4 8-4-8-4Zm-8 9 8 4 8-4M4 17l8 4 8-4" /></svg>
               </button>
@@ -87,6 +89,11 @@
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5m13-5h5v5M8 21H3v-5m13 5h5v-5" /></svg>
               </button>
             </div>
+          </div>
+
+          <div class="camera-help" id="cameraHelp" role="status" hidden>
+            <strong>自由相机</strong><span>点击地图 · WASD 移动 · Q/E 升降 · Shift 加速 · 拖动转向 · Esc 返回</span>
+            <small id="cameraPlacement">可穿墙的回放摄像机，不模拟玩家碰撞</small>
           </div>
 
           <nav class="segment-navigator" id="segmentNavigator" aria-label="关卡分区导航" hidden>
@@ -269,6 +276,14 @@
             <div class="event-list" id="eventList">
               <p class="inline-empty">死亡、复活、传送和分区变化会显示在这里。</p>
             </div>
+          </section>
+
+          <section class="inspector-section world-section">
+            <div class="section-heading compact"><div><span class="eyebrow">世界动态</span><h2>物体与危险</h2></div></div>
+            <label class="switch-row"><span><strong>显示世界记录</strong><small>放置物、敌人、雾与爆炸</small></span><input id="worldToggle" type="checkbox" checked /><span class="switch-ui"></span></label>
+            <p class="control-note" id="worldTelemetryNote">等待导入世界记录</p>
+            <p class="world-summary" id="worldSummary"></p>
+            <div class="world-alerts" id="worldAlerts" role="status"></div>
           </section>
         </aside>
       </main>

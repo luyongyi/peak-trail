@@ -73,6 +73,39 @@ colors; lava uses its HDR emission, not the near-white tint multiplier. These
 effects keep their original meshes but do not reproduce depth/refraction/flow.
 See `tools/offline-maps/MESH-CONTRACT.md` for the export and loader contract.
 
+## 0.6 world replay and interior camera
+
+The same recorder DLL now writes additive `world_snapshot`, `world_delta` and
+`world_event` records: ground/held item state, deployed mushroom prefabs, observed
+Roots explosive-mushroom effects, zombie states/ranges, and sleep-fog fields with
+lit protective zones. World data is sampled at 4 Hz; full checkpoints every 10 s
+support reversible scrubbing. Object discovery is shared every 2 s, with an
+observation-only Photon instantiation hook for short-lived placed mushrooms.
+Missing client observations and old 0.5 logs remain unknown; player item events
+are **not** converted to guessed impact positions or fake explosions.
+
+The browser uses exact-build original world meshes for 194 item prefabs and three
+deployed mushrooms, plus the actual zombie head asset for proximity warnings.
+Warning distance is the observed wake range plus a labelled 20 m viewer margin;
+it does not override the game's view-angle, line-of-sight or valid-target rules.
+Explosion rings and bounded fog volumes are analytical replay illustrations,
+not the original Unity particles. Lit recorded protection spheres cut holes in
+the sleep-fog visualization. Particle-only deployments use an explicit location
+marker rather than an invented solid model.
+
+Citadel (`Temple_Segment`) and Kiln (`Volcano_Segment`, not outdoor
+`Caldera_Segment`) prefer an already-recorded in-chapter player position for the
+camera. Without one, the viewer searches actual loaded geometry for a floor and
+ceiling and labels that point as a geometry reference, not a player position.
+Use **进入关内** to reposition, **自由相机 WASD** to toggle, WASD to move, Q/E to
+descend/ascend, Shift for faster movement, mouse-drag to look, and Esc to return
+to the saved orbit view. Keyboard movement requires viewport focus. This is a
+spectator camera without collision physics; the fitted overview remains available.
+
+World telemetry and remote-player synchronization still need an in-game 0.6
+multiplayer acceptance run. Automated contracts and synthetic UI fixtures cannot
+prove capture coverage or frame cost in every modded lobby.
+
 ## Delivery plan
 
 1. Export one active scene and record a 30-60 second solo run.

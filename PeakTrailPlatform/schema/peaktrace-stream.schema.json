@@ -3,6 +3,7 @@
   "$id": "https://example.invalid/peaktrail/peaktrace-stream.schema.json",
   "title": "PEAK trail NDJSON record",
   "oneOf": [
+    { "$ref": "./peaktrace-world.schema.json" },
     {
       "type": "object",
       "required": ["type", "t", "route"],

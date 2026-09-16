@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { layoutPortraitLabels } from "../src/portrait-layout.js";
+import { isInteriorLayer } from "../src/camera-placement.js";
 
 // Exercise the actual scene methods without a browser/WebGL context. Only the
 // imported renderer ports are replaced; no lifecycle method is reimplemented.
@@ -30,8 +31,8 @@ function model() {
 function fixture(selected = 0) {
   const requests = [];
   const load = (layer, signal, gameBuildId) => new Promise((resolve, reject) => requests.push({ layer: layer.id, signal, gameBuildId, resolve, reject }));
-  const TrailScene = new Function("THREE", "loadGameGeometry", "cancelAnimationFrame", "layoutPortraitLabels", `${source}\nreturn TrailScene;`)(
-    {}, load, () => {}, layoutPortraitLabels,
+  const TrailScene = new Function("THREE", "loadGameGeometry", "cancelAnimationFrame", "layoutPortraitLabels", "isInteriorLayer", `${source}\nreturn TrailScene;`)(
+    {}, load, () => {}, layoutPortraitLabels, isInteriorLayer,
   );
   const layers = [
     { id: "A", segment: 0, biome: "shore" },
@@ -44,7 +45,9 @@ function fixture(selected = 0) {
     buildToken: 1, geometrySelectionToken: 1, geometryAbort: new AbortController(), geometryLoads: new Map(),
     origin: { clone() { return this; } }, terrainRoot: group(), trailRoot: group(), gridRoot: group(),
     statuses: [], resizeObserver: { disconnect() {} }, controls: { dispose() {} }, renderer: { dispose() {} },
-    emitMapStatus(...args) { this.statuses.push(args); }, setTime() {}, fitView() {},
+    cameraSelectionRevision: 0,
+    freeCamera: { mode: "orbit", setMode(value) { this.mode = value; }, focus() {}, dispose() {} }, worldRenderer: { dispose() {} },
+    emitMapStatus(...args) { this.statuses.push(args); }, setTime() {}, fitView() { ++this.cameraSelectionRevision; },
   });
   scene.terrainRoot.children = layers.map(group);
   return { scene, requests };
@@ -195,4 +198,40 @@ test("rewinding to unknown appearance removes the image instead of retaining the
   assert.equal(label.fallback.hidden, false);
   assert.equal(label.image.src, undefined);
   assert.equal(scene.playerPortraits.size, 0);
+});
+
+test("delayed interior geometry cannot override a camera mode the user chose while loading", async () => {
+  const { scene, requests } = fixture();
+  scene.mapPack.layers[1].name = "Temple_Segment";
+  const placements = [];
+  scene.enterInteriorView = (focus) => placements.push(focus);
+  scene.setActiveSegment(1);
+  scene.toggleFreeCamera();
+  requests[0].resolve(model());
+  await flush();
+  assert.equal(scene.freeCamera.mode, "free");
+  assert.deepEqual(placements, []);
+});
+
+test("uninterrupted interior chapter load requests automatic placement without stealing focus", async () => {
+  const { scene, requests } = fixture();
+  scene.mapPack.layers[1].name = "Temple_Segment";
+  const placements = [];
+  scene.enterInteriorView = (focus) => placements.push(focus);
+  scene.setActiveSegment(1);
+  requests[0].resolve(model());
+  await flush();
+  assert.deepEqual(placements, [false]);
+});
+
+test("disposing an interior chapter during load cannot run a late camera placement", async () => {
+  const { scene, requests } = fixture();
+  scene.mapPack.layers[1].name = "Temple_Segment";
+  const placements = [];
+  scene.enterInteriorView = (focus) => placements.push(focus);
+  scene.setActiveSegment(1);
+  scene.dispose();
+  requests[0].resolve(model());
+  await flush();
+  assert.deepEqual(placements, []);
 });

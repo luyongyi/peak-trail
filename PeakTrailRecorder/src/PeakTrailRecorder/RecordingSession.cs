@@ -29,6 +29,7 @@ internal sealed class RecordingSession : IDisposable
     private readonly FileStream _stream;
     private readonly StreamWriter _writer;
     private readonly AppendOnlyHistoryLog? _history;
+    private readonly WorldTelemetryReader _world;
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private readonly Dictionary<int, TrackedPlayer> _tracked = new();
     private readonly Dictionary<int, PlayerIdentity> _announced = new();
@@ -70,6 +71,7 @@ internal sealed class RecordingSession : IDisposable
             MapSlot = mapSlot,
             SampleHz = sampleHz,
             Route = RouteTelemetryReader.Read(),
+            WorldTelemetry = WorldTelemetryTracker.Capabilities(WorldTelemetryHooks.Installed, WorldTelemetryHooks.NetworkSpawnInstalled),
         };
 
         RunManagerInstanceId = RunManager.Instance != null ? RunManager.Instance.GetInstanceID() : 0;
@@ -91,6 +93,8 @@ internal sealed class RecordingSession : IDisposable
         };
 
         _history = AppendOnlyHistoryLog.TryOpen(outputRoot, _log);
+        _world = new WorldTelemetryReader(WriteRecord, () => ElapsedMilliseconds, _log);
+        WorldTelemetryHooks.Active = _world;
         _history?.WriteSessionStart(Manifest);
         WriteRouteIfChanged(Manifest.Route, 0);
         WriteEvent("segment_change", null, _lastActiveSegment, null, "session_start");
@@ -106,6 +110,11 @@ internal sealed class RecordingSession : IDisposable
     public string SceneName => Manifest.SceneName;
 
     public long ElapsedMilliseconds => _clock.ElapsedMilliseconds;
+
+    public void SampleWorld()
+    {
+        if (!_disposed) _world.Sample();
+    }
 
     public void UpdateRunId()
     {
@@ -795,6 +804,7 @@ internal sealed class RecordingSession : IDisposable
         }
         _tracked.Clear();
         _announced.Clear();
+        if (ReferenceEquals(WorldTelemetryHooks.Active, _world)) WorldTelemetryHooks.Active = null;
 
         try
         {
