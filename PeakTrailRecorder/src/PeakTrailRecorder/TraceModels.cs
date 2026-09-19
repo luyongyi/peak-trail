@@ -84,6 +84,7 @@ internal sealed class TraceManifest
         "appearance",
         "route",
         "world",
+        "status",
     };
 
     [JsonProperty("worldTelemetry")]
@@ -93,6 +94,17 @@ internal sealed class TraceManifest
     public string StaminaAuthority { get; set; } =
         "local-owner-authoritative-or-photon-owner-sync-after-first-packet";
 
+    [JsonProperty("statusTelemetry")]
+    public object StatusTelemetry { get; set; } = new
+    {
+        version = 1,
+        snapshots = "complete-replacement-on-change-and-1-second-heartbeat",
+        statusTypes = "all-CharacterAfflictions.STATUSTYPE-values",
+        effects = "all-observed-AfflictionType-identities-no-remote-countdown",
+        remoteReadiness = "independent-status-and-affliction-RPC-observation",
+        staminaUnit = "fraction-of-original-capacity-1",
+    };
+
     [JsonProperty("inventoryAuthority")]
     public string InventoryAuthority { get; set; } = "master-client-rpc-snapshot";
 
@@ -101,7 +113,7 @@ internal sealed class TraceManifest
 
     [JsonProperty("privacyWarning")]
     public string PrivacyWarning { get; set; } =
-        "This file contains stable/raw player IDs and nicknames plus location trails, stamina and item/inventory telemetry. Keep it private unless every participant agrees to the recording and sharing.";
+        "This file contains stable/raw player IDs and nicknames plus location trails, stamina, statuses, appearance and item/inventory telemetry. Keep it private unless every participant agrees to the recording and sharing.";
 }
 
 internal sealed class ParticipantInfo
@@ -156,6 +168,17 @@ internal sealed class TrackedPlayer
 
     public long LastSampleAtMs { get; set; }
 
+    // Live-only stream bookkeeping: the relay path samples at a higher rate than
+    // the offline files and gates on its own last-sent state, so the two pipelines
+    // never distort each other's adaptive filters.
+    public bool HasLiveSample { get; set; }
+
+    public UnityEngine.Vector3 LastLivePosition { get; set; }
+
+    public float LastLiveYaw { get; set; }
+
+    public long LastLiveSampleAtMs { get; set; }
+
     public bool WasDead { get; set; }
 
     public bool WasPassedOut { get; set; }
@@ -165,6 +188,12 @@ internal sealed class TrackedPlayer
     public StaminaTelemetry? LastStamina { get; set; }
 
     public long LastStateAtMs { get; set; }
+
+    public StatusTelemetry? LastStatus { get; set; }
+
+    public string LastStatusFingerprint { get; set; } = string.Empty;
+
+    public long LastStatusAtMs { get; set; }
 
     public InventoryTelemetry? LastInventory { get; set; }
 

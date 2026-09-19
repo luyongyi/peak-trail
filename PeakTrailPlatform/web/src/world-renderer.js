@@ -240,8 +240,13 @@ export class WorldRenderer {
     this.root.visible = this.enabled;
   }
 
-  projectLabels(camera) {
-    const width = this.canvas.clientWidth, height = this.canvas.clientHeight, point = new THREE.Vector3();
+  /** `viewportWidth`/`viewportHeight` come from the scene's ResizeObserver cache;
+   * reading the canvas directly here would force a layout pass every frame.
+   * The Z delta is negated because the scene root mirrors Unity LH → three RH. */
+  projectLabels(camera, viewportWidth = null, viewportHeight = null, mirrorZ = false) {
+    const width = Number.isFinite(viewportWidth) ? viewportWidth : this.canvas.clientWidth;
+    const height = Number.isFinite(viewportHeight) ? viewportHeight : this.canvas.clientHeight;
+    const point = new THREE.Vector3();
     let count = 0;
     // Prewarned enemies are always prioritized over ordinary item labels.
     const sorted = [...this.entries.values()].sort((a, b) => Number(Boolean(b.warning)) - Number(Boolean(a.warning)));
@@ -249,7 +254,8 @@ export class WorldRenderer {
       entry.label.hidden = true;
       if (!entry.group.visible || !this.enabled || count >= 36) continue;
       const object = entry.object;
-      point.set(object.pos[0] - this.origin.x, (object.pos[1] - this.origin.y + (object.kind.includes('zombie') ? 2 : 0.6)) * this.heightScale, object.pos[2] - this.origin.z).project(camera);
+      const renderedZ = mirrorZ ? -(object.pos[2] - this.origin.z) : object.pos[2] - this.origin.z;
+      point.set(object.pos[0] - this.origin.x, (object.pos[1] - this.origin.y + (object.kind.includes('zombie') ? 2 : 0.6)) * this.heightScale, renderedZ).project(camera);
       if (point.z < -1 || point.z > 1 || Math.abs(point.x) > 0.98 || Math.abs(point.y) > 0.92) continue;
       entry.label.hidden = false; count++;
       entry.label.style.transform = `translate(${(point.x * 0.5 + 0.5) * width}px, ${(-point.y * 0.5 + 0.5) * height}px) translate(-50%,-100%)`;

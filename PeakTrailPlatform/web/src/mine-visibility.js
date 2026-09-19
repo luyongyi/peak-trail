@@ -28,12 +28,26 @@ function score(candidate, pos) {
   return distance(candidate.center, pos);
 }
 
+// Replay calls this every animation frame; filtering the full event list each time
+// is O(events). Mine explosions are a tiny, immutable slice — cache them per array.
+const explosionEventsCache = new WeakMap();
+
+function recordedExplosionEvents(events) {
+  if (!Array.isArray(events)) return [];
+  let cached = explosionEventsCache.get(events);
+  if (!cached) {
+    cached = events.filter((event) => ['mine_explosion', 'mine_exploded'].includes(event.type)
+      && Number.isFinite(event.t) && point(event.pos));
+    explosionEventsCache.set(events, cached);
+  }
+  return cached;
+}
+
 export function recordedHiddenMineIndices(candidates, objects = [], events = [], time = 0) {
   const positions = objects.filter((object) => object.kind === 'mine'
     && ['spent', 'exploded'].includes(object.activity) && point(object.pos)).map((object) => object.pos);
-  for (const event of events) {
-    if (['mine_explosion', 'mine_exploded'].includes(event.type)
-      && Number.isFinite(event.t) && event.t <= time && point(event.pos)) positions.push(event.pos);
+  for (const event of recordedExplosionEvents(events)) {
+    if (event.t <= time) positions.push(event.pos);
   }
   const hidden = new Set();
   for (const pos of positions) {

@@ -183,6 +183,24 @@ function previewMatches(preview, appearance) {
   return compared > 0;
 }
 
+/** Form telemetry is independent of selected cosmetics. Unknown old logs keep
+ * their recorded cosmetic baseline; an observed replacement never falls back
+ * to that human face when its real model is missing. */
+export function resolveAppearanceForm(pack, appearance) {
+  const form = appearance?.formReady === true ? String(appearance.form || "unknown") : "unknown";
+  const transformed = !["normal", "unknown"].includes(form);
+  // null/absent means legacy telemetry. An explicit failed observation must
+  // clear a prior form, not silently claim that the player became human again.
+  const unavailable = appearance?.formReady === false || appearance?.formReady === true && form === "unknown";
+  const entry = transformed && Array.isArray(pack?.customization?.forms)
+    ? pack.customization.forms.find((entry) => entry.form === form) || null : null;
+  return {
+    form, transformed, unavailable, entry,
+    headModelUrl: resolveGameAssetUrl(pack, entry?.headModel),
+    modelUrl: resolveGameAssetUrl(pack, entry?.model),
+  };
+}
+
 export function resolveAppearanceAssets(pack, appearance) {
   if (!pack || !appearance?.captured) return null;
   const fit = pack.customizationIndex.fits.get(appearance.outfitIndex);
@@ -208,10 +226,12 @@ export function resolveAppearanceAssets(pack, appearance) {
   const exactAsset = exactEntry
     ? assetFromEntry(pack, exactEntry, ["preview", "image", "texture", "path"])
     : null;
+  const form = resolveAppearanceForm(pack, appearance);
   return {
-    previewUrl: exactAsset?.url || components.fit?.assetUrl || null,
-    previewKind: exactAsset ? "recorded-composite" : components.fit?.assetUrl ? "fit-preview" : null,
-    avatarModelUrl: resolveGameAssetUrl(pack, pack.customization.avatar?.model),
+    previewUrl: form.transformed || form.unavailable ? null : exactAsset?.url || components.fit?.assetUrl || null,
+    previewKind: form.transformed || form.unavailable ? null : exactAsset ? "recorded-composite" : components.fit?.assetUrl ? "fit-preview" : null,
+    avatarModelUrl: form.unavailable ? null : form.transformed ? form.modelUrl : resolveGameAssetUrl(pack, pack.customization.avatar?.model),
+    form,
     components,
     source: pack.source,
   };

@@ -32,10 +32,13 @@ internal static class PlayerTelemetryReader
 
             float stamina = character.data.currentStamina;
             float extraStamina = character.data.extraStamina;
-            float maxStamina = character.GetMaxStamina();
+            // Statuses have their own RPC; a received movement/stamina packet does not prove
+            // that a remote character's initially-zero status array has ever synchronized.
+            bool capacityReady = PlayerStatusReader.HasStatusCapacity(character);
+            float? maxStamina = capacityReady ? character.GetMaxStamina() : null;
             float maxExtraStamina = Mathf.Clamp01(1f - character.data.petrifyAmount * 0.01f);
             float totalStamina = stamina + extraStamina;
-            if (!IsFinite(stamina) || !IsFinite(extraStamina) || !IsFinite(maxStamina)
+            if (!IsFinite(stamina) || !IsFinite(extraStamina) || (maxStamina.HasValue && !IsFinite(maxStamina.Value))
                 || !IsFinite(maxExtraStamina) || !IsFinite(totalStamina))
             {
                 return UnavailableStamina(isLocalOwner ? "local-owner-authoritative" : remoteAuthority);
@@ -45,9 +48,12 @@ internal static class PlayerTelemetryReader
             {
                 Ready = true,
                 Authority = isLocalOwner ? "local-owner-authoritative" : remoteAuthority,
+                CapacityReady = capacityReady,
+                BaseMaxStamina = 1f,
+                BaseMaxExtraStamina = 1f,
                 Stamina = stamina,
                 MaxStamina = maxStamina,
-                Stamina01 = SafeRatio(stamina, maxStamina),
+                Stamina01 = maxStamina.HasValue ? SafeRatio(stamina, maxStamina.Value) : null,
                 ExtraStamina = extraStamina,
                 MaxExtraStamina = maxExtraStamina,
                 ExtraStamina01 = SafeRatio(extraStamina, maxExtraStamina),

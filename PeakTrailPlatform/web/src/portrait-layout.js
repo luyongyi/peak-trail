@@ -1,6 +1,45 @@
 const finite = (value, fallback) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
+export const GROUP_RADIUS_METERS = 10;
+
+/** Transitive world-space clustering of `{ id, pos:[x,y,z] }` entries: players within
+ * `radius` metres of a chain-mate share one badge (A–B 9 m, B–C 9 m groups all
+ * three). Screen distance is never used — "10米" describes the recorded mountain,
+ * not the current camera. Entries without a finite position become their own
+ * cluster so a broken sample cannot swallow other players' labels. */
+export function clusterPlayerEntries(entries, radius = GROUP_RADIUS_METERS) {
+  const valid = [];
+  const clusters = [];
+  for (const entry of entries || []) {
+    const pos = Array.isArray(entry?.pos) && entry.pos.length === 3
+      && entry.pos.every((value) => Number.isFinite(value)) ? entry.pos : null;
+    if (pos) valid.push({ entry, pos });
+    else clusters.push([entry]);
+  }
+  const parent = valid.map((_, index) => index);
+  const find = (index) => {
+    while (parent[index] !== index) { parent[index] = parent[parent[index]]; index = parent[index]; }
+    return index;
+  };
+  const limit = Math.max(0, finite(radius, GROUP_RADIUS_METERS));
+  for (let i = 0; i < valid.length; i += 1) {
+    for (let j = i + 1; j < valid.length; j += 1) {
+      if (find(i) === find(j)) continue;
+      const [ax, ay, az] = valid[i].pos;
+      const [bx, by, bz] = valid[j].pos;
+      if (Math.hypot(ax - bx, ay - by, az - bz) <= limit) parent[find(j)] = find(i);
+    }
+  }
+  const grouped = new Map();
+  for (let index = 0; index < valid.length; index += 1) {
+    const root = find(index);
+    if (!grouped.has(root)) grouped.set(root, []);
+    grouped.get(root).push(valid[index].entry);
+  }
+  return [...grouped.values(), ...clusters];
+}
+
 /** Deterministic, small-group label layout. Anchors stay untouched for leader lines. */
 export function layoutPortraitLabels(anchors, viewport, { gap = 6, padding = 4 } = {}) {
   const width = Math.max(1, finite(viewport?.width, 1));

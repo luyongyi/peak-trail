@@ -4,6 +4,7 @@ import { realpath, stat } from "node:fs/promises";
 import { dirname, extname, isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
+import { cacheControlFor } from "./lib/serve-headers.mjs";
 
 await import("./stage-site.mjs");
 const root = await realpath(resolve(dirname(fileURLToPath(import.meta.url)), "../site-dist"));
@@ -42,7 +43,7 @@ const server = createServer(async (request, response) => {
     response.writeHead(200, {
       "Content-Type": mime[extname(target)] || "application/octet-stream",
       "Content-Length": info.size,
-      "Cache-Control": "no-store",
+      "Cache-Control": cacheControlFor(pathname),
       "X-Content-Type-Options": "nosniff",
     });
     if (request.method === "HEAD") response.end();
@@ -54,13 +55,18 @@ const server = createServer(async (request, response) => {
 
 // Bind only loopback. If another viewer already uses the preferred port, use an OS-assigned
 // free port instead of opening an unrelated service or terminating another user's process.
+// Loopback by default; --host 0.0.0.0 (or a LAN IP) serves other devices on the network.
+const hostFlag = process.argv.indexOf("--host");
+const portFlag = process.argv.indexOf("--port");
+const listenHost = hostFlag >= 0 ? process.argv[hostFlag + 1] : "127.0.0.1";
+const listenPort = portFlag >= 0 ? Number(process.argv[portFlag + 1]) : 4173;
 await new Promise((done, reject) => {
   server.once("error", (error) => {
     if (error.code !== "EADDRINUSE") return reject(error);
     server.once("error", reject);
-    server.listen(0, "127.0.0.1", done);
+    server.listen(0, listenHost, done);
   });
-  server.listen(4173, "127.0.0.1", done);
+  server.listen(listenPort, listenHost, done);
 });
 const url = `http://127.0.0.1:${server.address().port}/`;
 console.log(`PEAK Trail is ready: ${url}`);

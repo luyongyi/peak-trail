@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/peaktrail/peaktrace-status.schema.json",
+  "title": "PEAK observed player status snapshot (recorder 0.7+)",
+  "type": "object",
+  "required": ["type", "t", "playerId", "status"],
+  "properties": {
+    "type": { "const": "status" },
+    "t": { "type": "integer", "minimum": 0 },
+    "playerId": { "type": "string", "minLength": 1 },
+    "activeSegment": { "type": "integer" },
+    "reason": { "enum": ["initial", "changed", "heartbeat", "death", "revive", "cleared"] },
+    "status": {
+      "type": "object",
+      "required": ["ready", "complete", "authority", "source", "values", "effectsReady", "effectsAuthority", "effects"],
+      "properties": {
+        "ready": { "type": "boolean" },
+        "complete": { "type": "boolean" },
+        "authority": { "type": "string", "minLength": 1 },
+        "source": { "const": "recorded" },
+        "gameSource": { "type": "string" },
+        "dead": { "type": "boolean" },
+        "values": {
+          "type": "array",
+          "description": "Full replacement, including observed zero values. ready=false means unknown, never a healthy zero snapshot. All STATUSTYPE entries are present when ready; unknown future enum IDs retain their numeric IDs.",
+          "items": {
+            "type": "object",
+            "required": ["id", "type", "amount", "staminaBlock", "extraStaminaBlock"],
+            "properties": {
+              "id": { "type": "integer", "minimum": 0 },
+              "type": { "type": "string", "minLength": 1 },
+              "amount": { "type": "number", "minimum": 0 },
+              "staminaBlock": { "type": "number", "minimum": 0 },
+              "extraStaminaBlock": { "type": "number", "minimum": 0 }
+            },
+            "additionalProperties": true
+          }
+        },
+        "statusSum": { "type": "number", "minimum": 0 },
+        "baseMaxStamina": { "const": 1 },
+        "maxStamina": { "type": "number", "minimum": 0, "maximum": 1 },
+        "baseMaxExtraStamina": { "const": 1 },
+        "maxExtraStamina": { "type": "number", "minimum": 0, "maximum": 1 },
+        "effectsReady": { "type": "boolean" },
+        "effectsAuthority": { "type": "string", "minLength": 1 },
+        "effects": {
+          "type": "array",
+          "description": "Independent full active AfflictionType identity list. No countdown: remote Affliction objects do not Tick, so their elapsed time is not a synchronized clock.",
+          "items": {
+            "type": "object",
+            "required": ["typeId", "type"],
+            "properties": {
+              "typeId": { "type": "integer", "minimum": 0 },
+              "type": { "type": "string", "minLength": 1 }
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "ready": { "const": true } } },
+          "then": {
+            "required": ["statusSum", "baseMaxStamina", "maxStamina", "baseMaxExtraStamina", "maxExtraStamina"],
+            "properties": { "complete": { "const": true }, "values": { "minItems": 1 } }
+          },
+          "else": { "properties": { "complete": { "const": false }, "values": { "maxItems": 0 } } }
+        },
+        {
+          "if": { "properties": { "effectsReady": { "const": false } } },
+          "then": { "properties": { "effects": { "maxItems": 0 } } }
+        }
+      ],
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

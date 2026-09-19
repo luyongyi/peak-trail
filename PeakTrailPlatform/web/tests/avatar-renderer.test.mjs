@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   createAvatarCamera,
+  createAvatarRenderPlan,
+  avatarAppearanceFingerprint,
   headAppearanceFingerprint,
   isHeadAppearanceReady,
   renderHeadPreview,
@@ -9,6 +11,7 @@ import {
   selectHeadModelParts,
   selectedTextureReference,
 } from "../src/avatar-renderer.js";
+import { resolveAppearanceAssets, resolveAppearanceForm } from "../src/game-assets.js";
 
 function headFixture() {
   const entries = {
@@ -146,4 +149,69 @@ test("concurrent head requests share work but an unavailable render never poison
   const retry = renderHeadPreview(pack, appearance);
   assert.notEqual(retry, first);
   assert.equal(await retry, null);
+});
+
+function addFormFixture(pack) {
+  pack.customization.forms = ["skeleton", "mushroom", "chicken"].map((form) => ({
+    form, headModel: `forms/${form}-head.json`, model: `forms/${form}.json`,
+    retainHat: form !== "mushroom", hatOffset: form === "chicken" ? [0, -0.225622, -0.00773] : [0, 0, 0],
+  }));
+}
+
+test("recorded transformations render real form heads without human cosmetics or readiness", () => {
+  const { pack, appearance } = headFixture(); addFormFixture(pack);
+  pack.customizationIndex.accessories.get(5).isThirdEye = true;
+  for (const form of ["skeleton", "mushroom", "chicken"]) {
+    const transformed = { captured: true, ready: false, formReady: true, form };
+    assert.equal(isHeadAppearanceReady(pack, transformed), true);
+    const plan = createAvatarRenderPlan(pack, transformed, true);
+    assert.equal(plan.models.length, 1, "unknown hats must not be invented");
+    assert.ok(plan.models[0].url.endsWith(`/forms/${form}-head.json`));
+    assert.equal(plan.models[0].headOnly, true);
+    assert.equal(createAvatarRenderPlan(pack, transformed).models[0].url.endsWith(`/forms/${form}.json`), true);
+    const dressed = createAvatarRenderPlan(pack, { ...appearance, formReady: true, form }, true);
+    assert.equal(dressed.models.length, form === "mushroom" ? 1 : 2);
+    assert.equal(dressed.models.some((model) => /third-eye|avatar-base|fit-/.test(model.url)), false);
+    if (form === "chicken") assert.deepEqual(dressed.models[1].offset, [0, -0.225622, -0.00773]);
+  }
+});
+
+test("missing or unsafe transformed resources never fall back to human face or outfit preview", () => {
+  const { pack, appearance } = headFixture(); addFormFixture(pack);
+  pack.customizationIndex.fits.set(1, { index: 1, preview: "fit.png", model: "fit.json" });
+  const skeleton = { ...appearance, outfitIndex: 1, formReady: true, form: "skeleton" };
+  pack.customization.forms[0].headModel = "https://unrelated.test/skull.json";
+  assert.equal(isHeadAppearanceReady(pack, skeleton), false);
+  assert.equal(createAvatarRenderPlan(pack, skeleton, true), null);
+  assert.equal(resolveAppearanceAssets(pack, skeleton).previewUrl, null);
+  pack.customization.forms = [];
+  assert.equal(createAvatarRenderPlan(pack, skeleton), null);
+  assert.equal(isHeadAppearanceReady(pack, { ...skeleton, form: "future-form" }), false);
+});
+
+test("unknown old form keeps the recorded cosmetic baseline without claiming a normal state", () => {
+  const { pack, appearance } = headFixture(); addFormFixture(pack);
+  assert.equal(resolveAppearanceForm(pack, appearance).form, "unknown");
+  assert.equal(isHeadAppearanceReady(pack, appearance), true);
+  assert.equal(resolveAppearanceForm(pack, { ...appearance, form: "skeleton", formReady: false }).transformed, false);
+  assert.equal(isHeadAppearanceReady(pack, { ...appearance, form: "unknown", formReady: null }), true);
+  for (const failed of [{ form: "unknown", formReady: false }, { form: "unknown", formReady: true },
+    { form: "skeleton", formReady: false }]) {
+    assert.equal(isHeadAppearanceReady(pack, { ...appearance, ...failed }), false);
+    assert.equal(createAvatarRenderPlan(pack, { ...appearance, ...failed }, true), null);
+    assert.equal(resolveAppearanceAssets(pack, { ...appearance, ...failed }).previewUrl, null);
+  }
+  const original = headAppearanceFingerprint(pack, appearance);
+  for (const form of ["normal", "skeleton", "mushroom", "chicken"]) {
+    assert.notEqual(headAppearanceFingerprint(pack, { ...appearance, formReady: true, form }), original);
+    assert.notEqual(avatarAppearanceFingerprint(pack, { ...appearance, formReady: true, form }), avatarAppearanceFingerprint(pack, appearance));
+  }
+});
+
+test("head selection accepts only explicitly exported form-head topology", () => {
+  const head = { role: "form-head", name: "Skeleton Head" };
+  const body = { role: "form-body", name: "Skeleton" };
+  const eyes = { role: "eyes", name: "Human eye card" };
+  assert.deepEqual(selectHeadModelParts({ purpose: "form-head", form: "skeleton", parts: [body, head, eyes] }), [head]);
+  assert.deepEqual(selectHeadModelParts({ form: "skeleton", parts: [body, head] }), []);
 });

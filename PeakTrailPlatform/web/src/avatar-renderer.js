@@ -50,6 +50,8 @@ export function avatarAppearanceFingerprint(pack, appearance) {
   return [
     gameAssetFingerprint(pack),
     appearance.ready,
+    appearance.formReady,
+    appearance.form,
     appearance.skinIndex,
     appearance.eyesIndex,
     appearance.mouthIndex,
@@ -69,6 +71,8 @@ export function headAppearanceFingerprint(pack, appearance) {
   return [
     gameAssetFingerprint(pack),
     appearance.ready,
+    appearance.formReady,
+    appearance.form,
     appearance.skinIndex,
     appearance.eyesIndex,
     appearance.mouthIndex,
@@ -100,6 +104,7 @@ export function resolveAvatarHat(pack, appearance, assets = resolveAppearanceAss
 /** Fail closed instead of substituting a generic face for missing telemetry. */
 export function isHeadAppearanceReady(pack, appearance) {
   const assets = resolveAppearanceAssets(pack, appearance);
+  if (assets?.form.transformed) return Boolean(appearance?.captured && assets.form.headModelUrl);
   const hat = resolveAvatarHat(pack, appearance, assets);
   const faceAvailable = (role) => Boolean(assets && resolveGameAssetUrl(pack,
     selectedTextureReference(role, assets)?.reference));
@@ -122,12 +127,16 @@ export function isHeadAppearanceReady(pack, appearance) {
 /** Select the independently exported head, not an arbitrary crop of the body. */
 export function selectHeadModelParts(model) {
   const parts = Array.isArray(model?.parts) ? model.parts : [];
+  if (model?.purpose === "form-head" && ["skeleton", "mushroom", "chicken"].includes(model.form)) {
+    return parts.filter((part) => part.role === "form-head");
+  }
   const head = parts.filter((part) => part.role === "skin" && /^head(?:[ _-]?mesh)?$/i.test(part.name || ""));
   if (!head.length) return [];
   return parts.filter((part) => head.includes(part) || ["eyes", "mouth", "accessory"].includes(part.role));
 }
 
 function completeEnoughToRender(appearance, assets) {
+  if (assets?.form.transformed) return Boolean(appearance?.captured && assets.form.modelUrl);
   return appearance?.ready !== false
     && Number.isInteger(appearance?.outfitIndex)
     && Number.isInteger(appearance?.eyesIndex)
@@ -135,6 +144,32 @@ function completeEnoughToRender(appearance, assets) {
     && Number.isInteger(appearance?.accessoryIndex)
     && (Array.isArray(appearance?.skinColor) || Number.isInteger(appearance?.skinIndex))
     && Boolean(assets?.avatarModelUrl && assets?.components.fit?.modelUrl);
+}
+
+/** Pure model plan lets tests verify that a transformed head cannot retain
+ * ordinary face cards, skin, third eye or a human outfit by accident. */
+export function createAvatarRenderPlan(pack, appearance, headOnly = false) {
+  const assets = resolveAppearanceAssets(pack, appearance);
+  if (headOnly ? !isHeadAppearanceReady(pack, appearance) : !completeEnoughToRender(appearance, assets)) return null;
+  const form = assets.form;
+  const hat = resolveAvatarHat(pack, appearance, assets);
+  const models = [{ url: headOnly && form.transformed ? form.headModelUrl : assets.avatarModelUrl, headOnly }];
+  if (!form.transformed && assets.components.accessory?.entry?.isThirdEye) {
+    const url = resolveGameAssetUrl(pack, pack.customization.avatar?.thirdEyeModel);
+    if (!url) return null;
+    models.push({ url });
+  }
+  if (!headOnly && !form.transformed) models.push({ url: assets.components.fit.modelUrl });
+  const hatReady = hat.modelUrl && (![0, 1].includes(hat.index) || hat.material);
+  if (hatReady && (!form.transformed || form.entry?.retainHat === true)) {
+    const offset = form.entry?.hatOffset;
+    models.push({ url: hat.modelUrl, material: hat.material,
+      offset: Array.isArray(offset) && offset.length === 3 && offset.every(Number.isFinite) ? [...offset] : [0, 0, 0] });
+  }
+  if (!headOnly && (!form.transformed || form.form === "skeleton")) {
+    for (const role of ["sash", "medal"]) if (assets.components[role]?.modelUrl) models.push({ url: assets.components[role].modelUrl });
+  }
+  return { assets, form, hat: hatReady && (!form.transformed || form.entry?.retainHat) ? hat : null, models };
 }
 
 export function selectedTextureReference(role, assets) {
@@ -265,12 +300,14 @@ async function materialFor(THREE, pack, materialData, appearance, assets) {
     ? skinColor(appearance, assets, materialData?.color)
     : Array.isArray(materialData?.color) ? materialData.color : [1, 1, 1, 1];
   const opacity = Math.min(1, Math.max(0, Number(sourceColor?.[3] ?? 1)));
-  return new THREE.MeshStandardMaterial({
-    color: new THREE.Color(
+  const color = new THREE.Color(
       Number(sourceColor?.[0] ?? 1),
       Number(sourceColor?.[1] ?? 1),
       Number(sourceColor?.[2] ?? 1),
-    ),
+    );
+  if (materialData?.colorSpace === "srgb") color.convertSRGBToLinear();
+  return new THREE.MeshStandardMaterial({
+    color,
     map,
     transparent: card || opacity < 1,
     depthWrite: !card,
@@ -282,7 +319,7 @@ async function materialFor(THREE, pack, materialData, appearance, assets) {
   });
 }
 
-async function appendModel(THREE, root, pack, modelUrl, appearance, assets, materialOverride = null, headOnly = false) {
+async function appendModel(THREE, root, pack, modelUrl, appearance, assets, materialOverride = null, headOnly = false, offset = [0, 0, 0]) {
   const model = await fetchJson(modelUrl);
   const parts = headOnly ? selectHeadModelParts(model) : Array.isArray(model?.parts) ? model.parts : [];
   if (headOnly && !parts.length) throw new Error("该版本缺少独立头部模型，未使用全身裁切替代");
@@ -294,6 +331,9 @@ async function appendModel(THREE, root, pack, modelUrl, appearance, assets, mate
       if (!Array.isArray(group?.indices) || !group.indices.length) continue;
       const geometry = new THREE.BufferGeometry();
       geometry.setAttribute("position", new THREE.Float32BufferAttribute(part.positions, 3));
+      const hasColors = Array.isArray(part.colors) && part.colors.length === part.positions.length
+        && part.colors.every(Number.isFinite);
+      if (hasColors) geometry.setAttribute("color", new THREE.Float32BufferAttribute(part.colors, 3));
       if (Array.isArray(part.uv) && part.uv.length === (part.positions.length / 3) * 2) {
         geometry.setAttribute("uv", new THREE.Float32BufferAttribute(part.uv, 2));
       }
@@ -305,11 +345,13 @@ async function appendModel(THREE, root, pack, modelUrl, appearance, assets, mate
       let material;
       try {
         material = await materialFor(THREE, pack, materialData, appearance, assets);
+        material.vertexColors = hasColors;
       } catch (error) {
         geometry.dispose();
         throw error;
       }
       const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.fromArray(offset);
       mesh.name = `${part.name || "PEAK part"}:${group.material?.name || "material"}`;
       // Skin writes depth; transparent face cards do not occlude one another.
       // The recorded accessory's game metadata determines its layering.
@@ -325,8 +367,9 @@ async function appendModel(THREE, root, pack, modelUrl, appearance, assets, mate
 
 async function renderAvatar(pack, appearance, width, height, headOnly = false) {
   if (typeof document === "undefined") return null;
-  const assets = resolveAppearanceAssets(pack, appearance);
-  if (headOnly ? !isHeadAppearanceReady(pack, appearance) : !completeEnoughToRender(appearance, assets)) return null;
+  const plan = createAvatarRenderPlan(pack, appearance, headOnly);
+  if (!plan) return null;
+  const { assets, form, hat } = plan;
   const THREE = await getThree();
   const canvas = document.createElement("canvas");
   canvas.width = width;
@@ -344,24 +387,8 @@ async function renderAvatar(pack, appearance, width, height, headOnly = false) {
     root = new THREE.Group();
     scene.add(root);
     const fit = assets.components.fit?.entry;
-    const hat = resolveAvatarHat(pack, appearance, assets);
-    await appendModel(THREE, root, pack, assets.avatarModelUrl, appearance, assets, null, headOnly);
-    if (assets.components.accessory?.entry?.isThirdEye) {
-      const thirdEyeUrl = resolveGameAssetUrl(pack, pack.customization.avatar?.thirdEyeModel);
-      if (!thirdEyeUrl) return null;
-      await appendModel(THREE, root, pack, thirdEyeUrl, appearance, assets);
-    }
-    if (!headOnly) {
-      await appendModel(THREE, root, pack, assets.components.fit.modelUrl, appearance, assets);
-    }
-    if (hat.modelUrl) {
-      await appendModel(THREE, root, pack, hat.modelUrl, appearance, assets, hat.material);
-    }
-    if (!headOnly && assets.components.sash?.modelUrl) {
-      await appendModel(THREE, root, pack, assets.components.sash.modelUrl, appearance, assets);
-    }
-    if (!headOnly && assets.components.medal?.modelUrl) {
-      await appendModel(THREE, root, pack, assets.components.medal.modelUrl, appearance, assets);
+    for (const model of plan.models) {
+      await appendModel(THREE, root, pack, model.url, appearance, assets, model.material, model.headOnly, model.offset);
     }
 
     const box = new THREE.Box3().setFromObject(root);
@@ -385,10 +412,13 @@ async function renderAvatar(pack, appearance, width, height, headOnly = false) {
     return {
       dataUrl: canvas.toDataURL("image/png"),
       kind: headOnly ? "recorded-head-composite" : "recorded-model-composite",
-      fitName: appearance.outfitName || fit?.name || null,
-      hatName: hat.entry
+      form: form.form,
+      portraitScope: form.transformed ? form.entry?.portraitScope || "source-form-head" : "cosmetic-head",
+      fitName: form.transformed ? null : appearance.outfitName || fit?.name || null,
+      hatName: hat?.entry
         ? String(hat.entry.name || `Hat ${hat.index}`)
         : null,
+      hasHat: Boolean(hat),
       sashName: headOnly ? null : assets.components.sash?.entry?.name || null,
       medalName: headOnly ? null : assets.components.medal?.entry?.name || null,
     };

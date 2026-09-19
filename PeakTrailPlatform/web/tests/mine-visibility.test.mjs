@@ -34,3 +34,22 @@ test('Unity-world matching remains independent of display origin and mirrored sc
   assert.deepEqual([...recordedHiddenMineIndices([mine(-500, 4), mine(-470)], [], [explosion(-500)], 10)], [0]);
   assert.equal(recordedHiddenMineIndices([mine(-500)], [], [{ type: 'spore_explosion', t: 2, pos: [-500, 0, 0] }], 10).size, 0);
 });
+
+test('cached explosion extraction stays per-events and time-monotonic across replay frames', () => {
+  const events = [
+    explosion(0, 10),
+    { type: 'spore_explosion', t: 5, pos: [0, 0, 0] },
+    { type: 'mine_exploded', t: 30, pos: [20, 0, 0] },
+    { type: 'mine_explosion', t: 40, pos: [Number.NaN, 0, 0] },
+    { type: 'mine_explosion', t: Number.NaN, pos: [0, 0, 0] },
+  ];
+  // Rewinding restores, and repeated frames reuse the same filtered slice.
+  assert.equal(recordedHiddenMineIndices([mine()], [], events, 9).size, 0);
+  assert.equal(recordedHiddenMineIndices([mine()], [], events, 10).size, 1);
+  assert.equal(recordedHiddenMineIndices([mine()], [], events, 20).size, 1);
+  assert.equal(recordedHiddenMineIndices([mine()], [], events, 9).size, 0);
+  assert.equal(recordedHiddenMineIndices([mine(20)], [], events, 30).size, 1);
+  // Absent event lists never hide anything and never throw.
+  assert.equal(recordedHiddenMineIndices([mine()], [], null, 50).size, 0);
+  assert.equal(recordedHiddenMineIndices([mine()], [], undefined, 50).size, 0);
+});

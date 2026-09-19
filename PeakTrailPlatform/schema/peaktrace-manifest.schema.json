@@ -53,8 +53,14 @@
       "type": "array",
       "uniqueItems": true,
       "items": {
-        "enum": ["item", "stamina", "extraStamina", "appearance", "route", "world"]
+        "enum": ["item", "stamina", "extraStamina", "appearance", "route", "world", "status"]
       }
+    },
+    "statusTelemetry": {
+      "type": "object",
+      "description": "Independent observed bar statuses and active effect identities; missing before 0.7 means kinds of stamina damage are unknown",
+      "properties": { "version": { "const": 1 } },
+      "additionalProperties": true
     },
     "worldTelemetry": {
       "type": "object",

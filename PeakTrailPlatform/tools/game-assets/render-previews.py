@@ -43,6 +43,7 @@ class Renderer:
             screen=np.column_stack(((pos[:,0]-center[0])*scale+n/2,
                                    n/2-(pos[:,1]-center[1])*scale,pos[:,2]))
             uv=np.array(part["uv"]).reshape(-1,2)
+            vertex_colors=np.array(part["colors"]).reshape(-1,3) if part.get("colors") else None
             for group in part["groups"]:
                 mat=group["material"]; role=mat.get("role") or part.get("role")
                 texture=self.texture(mat["texture"],role) if mat.get("texture") else None
@@ -61,6 +62,9 @@ class Renderer:
                     area=(a>=-1e-6)&(b>=-1e-6)&(c>=-1e-6)&(z>depth[ymin:ymax+1,xmin:xmax+1])
                     if not area.any(): continue
                     color=np.broadcast_to(base,(*a.shape,4)).copy()
+                    if vertex_colors is not None:
+                        col=vertex_colors[inds]
+                        color[:,:,:3]*=a[:,:,None]*col[0]+b[:,:,None]*col[1]+c[:,:,None]*col[2]
                     if texture is not None:
                         t=uv[inds]; tuv=a[:,:,None]*t[0]+b[:,:,None]*t[1]+c[:,:,None]*t[2]
                         if role in ("eyes","mouth","accessory"):

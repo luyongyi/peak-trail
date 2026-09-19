@@ -55,6 +55,24 @@ build ID is captured so the viewer can refuse to overlay a trace on geometry fro
 
 ## Sampling and events
 
+- Since 0.7.0, independent `status` records capture every `CharacterAfflictions.STATUSTYPE`
+  (including observed zeros), plus every currently active `AfflictionType` identity. Changes,
+  death observations and a one-second heartbeat write complete replacement snapshots.
+  `ready=false` and `effectsReady=false` mean unknown, never healthy/no buffs. Remote status
+  and timed-effect RPC receipt are tracked independently of the movement/stamina packet,
+  per character, Photon owner/view, room and initialized array. Hooks only observe successful
+  receiver callbacks; they never send RPCs or modify game state. No remote effect countdown
+  is fabricated because PEAK only ticks those clocks on the character's owner.
+- Stamina numbers use the game's original capacity of **1**, not a re-normalized damaged bar.
+  Normal capacity is `max(1 - sum(currentStatuses), 0)`. Cold/Curse and every ordinary status
+  directly occupy that bar. Petrify is special: `petrifyAmount / 100` occupies the extra bar
+  and its remaining capacity is `1 - petrifyAmount / 100`. Each value reports separate
+  `staminaBlock` / `extraStaminaBlock`. State records expose `baseMaxStamina`,
+  `baseMaxExtraStamina` and `capacityReady`; missing remote status packets omit ordinary
+  `maxStamina` / `stamina01`, while independently synchronized current stamina remains usable.
+  Death does **not** mean all statuses became zero: real death/clear/revive observations replace
+  earlier snapshots, and game-retained curse/petrification are retained. Pre-0.7 logs cannot
+  reveal which status caused a missing-capacity segment.
 - Since 0.6.0, `world_snapshot` (initial and every 10 seconds), `world_delta` (changed
   objects, sampled at 4 Hz) and `world_event` preserve observed world state. A shared
   2-second scene discovery pass supplies cached references; there is no scan per player.
@@ -112,11 +130,26 @@ build ID is captured so the viewer can refuse to overlay a trace on geometry fro
   object received through `SyncPersistentPlayerDataPackage`; default placeholder
   values and actor IDs reused in another room are not accepted. Local appearance
   waits for Steam cosmetic stats. Changes emit a new timestamped snapshot.
+- The sync references are observed with read-only Harmony postfixes on
+  `PersistentPlayerDataService.OnSyncReceived` and `SetPlayerData` — the only two
+  methods that write the service's per-actor data. A `CustomCommands` listener
+  cannot be used: the game's `CustomCommandListener` keeps a single listener per
+  package type, silently removes earlier registrations, and its `UnregisterListener`
+  is a no-op, so the game's own service always displaces a plugin listener.
 - Older logs contain no appearance facts. A separate current-local Steam cache
   preview is explicitly current-only and must never be inserted into historical
   trails. Static game meshes, materials, icons and outfit references are exported
   by `PeakTrailPlatform/tools/game-assets`, and selected by exact Steam build.
 - Maximum frequency: 5 Hz by default.
+- Optional live publishing (`[Live] Enabled`, default **off**): while recording, a
+  background thread uploads the same records to a relay over outbound HTTP only.
+  The relay confirms a 4-character run code derived from the room-shared RunId and
+  merges every teammate's upload of the same run into one stream: records carry a
+  `roomTs` envelope (Photon's shared clock) and the relay deduplicates on
+  `type|playerId|roomTs`. The code and protocol are pinned by cross-language
+  vectors (`tests/LiveContract` ↔ `PeakTrailPlatform/server/run-code.mjs`). See
+  `PeakTrailPlatform/server/README.md`; the code is the only credential in v1, so
+  put access control in front of any public relay.
 - Adaptive thresholds: 0.25 m movement, 5 degrees yaw, or a 1 second stationary heartbeat.
 - A separate `state` record is emitted whenever stamina changes by at least `0.002`, and at
   least once per second even if the player does not move. It contains `stamina`, `maxStamina`,

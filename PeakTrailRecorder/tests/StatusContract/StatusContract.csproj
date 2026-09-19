@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ImportDirectoryBuildTargets>false</ImportDirectoryBuildTargets>
+    <EnableNETAnalyzers>false</EnableNETAnalyzers>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../src/PeakTrailRecorder/StatusTelemetry.cs" Link="StatusTelemetry.cs" />
+    <Compile Include="../../src/PeakTrailRecorder/TelemetryModels.cs" Link="TelemetryModels.cs" />
+    <Compile Include="../../src/PeakTrailRecorder/PlayerStatusReader.cs" Link="PlayerStatusReader.cs" />
+    <Compile Include="../../src/PeakTrailRecorder/SessionFinalization.cs" Link="SessionFinalization.cs" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+</Project>

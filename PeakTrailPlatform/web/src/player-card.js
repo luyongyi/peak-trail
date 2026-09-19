@@ -1,4 +1,5 @@
 import { renderHeadPreview, headAppearanceFingerprint } from "./avatar-renderer.js";
+import { staminaLayout, conditionPresentation, conditionSummary, appearanceFormPresentation, effectPresentation } from "./player-conditions.js";
 import {
   gameAssetFingerprint,
   resolveAppearanceAssets,
@@ -101,11 +102,18 @@ function makeVital(title, rolePrefix, extra = false) {
   const track = element("span", "vital-track is-unknown");
   const fill = element("i");
   fill.dataset.role = `${rolePrefix}-bar`;
-  track.append(fill);
+  const blocked = element("span", "vital-blocked");
+  blocked.dataset.role = `${rolePrefix}-blocked`;
+  const conditions = element("span", "vital-conditions");
+  conditions.dataset.role = `${rolePrefix}-conditions`;
+  track.append(blocked, fill, conditions);
   const output = element("output");
   output.dataset.role = `${rolePrefix}-value`;
   output.textContent = "未记录";
   vital.append(heading, track, output);
+  const cap = element("small", "vital-cap", "上限未知");
+  cap.dataset.role = `${rolePrefix}-cap`;
+  vital.append(cap);
   return vital;
 }
 
@@ -144,7 +152,11 @@ export function createPlayerCard(participant, color, onVisibilityChange) {
   const toggle = element("label", "player-toggle");
   toggle.title = `显示或隐藏 ${participant.nickname || participant.id}`;
   toggle.append(input, check);
-  header.append(colorBadge, identity, toggle);
+  const followButton = element("button", "player-follow-button", "◎");
+  followButton.type = "button";
+  followButton.dataset.role = "follow-button";
+  followButton.title = `跟随镜头 ${participant.nickname || participant.id}`;
+  header.append(colorBadge, identity, followButton, toggle);
 
   const overview = element("div", "player-overview");
   const appearance = element("section", "appearance-panel is-unknown");
@@ -185,6 +197,16 @@ export function createPlayerCard(participant, color, onVisibilityChange) {
   status.append(heldSummary, vitals, telemetryAuthority);
   overview.append(appearance, status);
 
+  const conditions = element("section", "player-conditions");
+  const conditionHeading = element("div", "loadout-heading");
+  conditionHeading.append(element("strong", null, "身体状态"));
+  const life = element("span", "condition-life"); life.dataset.role = "condition-life";
+  conditionHeading.append(life);
+  const conditionList = element("div", "condition-list"); conditionList.dataset.role = "condition-list";
+  const conditionNote = element("p", "condition-note"); conditionNote.dataset.role = "condition-note";
+  const effects = element("div", "condition-effects"); effects.dataset.role = "condition-effects";
+  conditions.append(conditionHeading, conditionList, conditionNote, effects);
+
   const loadout = element("section", "player-loadout");
   const loadoutHeader = element("div", "loadout-heading");
   loadoutHeader.append(
@@ -213,44 +235,74 @@ export function createPlayerCard(participant, color, onVisibilityChange) {
   const inventoryAuthority = element("small", "snapshot-authority inventory-authority");
   inventoryAuthority.dataset.role = "inventory-authority";
   loadout.append(loadoutHeader, baseSlots, backpack, inventoryAuthority);
-  row.append(header, overview, loadout);
+  row.append(header, overview, conditions, loadout);
   return row;
 }
 
-function telemetryRatio(value, max, normalized) {
-  if (Number.isFinite(normalized)) return Math.min(1, Math.max(0, normalized));
-  if (Number.isFinite(value) && max === 0) return 0;
-  if (Number.isFinite(value) && Number.isFinite(max) && max > 0) {
-    return Math.min(1, Math.max(0, value / max));
-  }
-  if (Number.isFinite(value) && value >= 0 && value <= 1) return value;
-  return null;
-}
-
-function telemetryValue(value, max, normalized) {
-  if (Number.isFinite(normalized)) return `${Math.round(normalized * 100)}%`;
-  if (Number.isFinite(value) && max === 0) return "0%";
-  if (Number.isFinite(value) && Number.isFinite(max) && max > 0) {
-    return `${Math.round(Math.min(1, Math.max(0, value / max)) * 100)}%`;
-  }
-  if (Number.isFinite(value) && value >= 0 && value <= 1) return `${Math.round(value * 100)}%`;
-  if (Number.isFinite(value)) return value.toFixed(2).replace(/\.00$/, "");
-  return "未记录";
-}
-
-function updateVital(row, telemetry, role, value, max, normalized) {
-  const ratio = telemetryRatio(value, max, normalized);
-  const bar = row.querySelector(`[data-role="${role}-bar"]`);
+function updateVital(row, playerState, role) {
+  const telemetry = playerState.telemetry;
+  const layout = staminaLayout(telemetry, playerState.status, role === "extra");
+  const { ratio } = layout;
   const output = row.querySelector(`[data-role="${role}-value"]`);
+  // Everything below derives from these fields; skip identical DOM writes. Sidebar
+  // cards are also throttled during playback, and this keeps seeks and 8 Hz ticks cheap.
+  const signature = [
+    layout.output,
+    ratio,
+    layout.blocked,
+    layout.capText,
+    playerState.status?.ready === true,
+    JSON.stringify(layout.blocks),
+  ].join("|");
+  if (output.dataset.vitalSignature === signature) return;
+  output.dataset.vitalSignature = signature;
+  const bar = row.querySelector(`[data-role="${role}-bar"]`);
   bar.style.width = `${(ratio ?? 0) * 100}%`;
   bar.parentElement.classList.toggle("is-unknown", ratio === null);
   bar.parentElement.classList.toggle("is-low", ratio !== null && ratio <= 0.2);
-  output.textContent = telemetry?.ready === false
-    ? "同步中"
-    : telemetryValue(value, max, normalized);
-  output.title = Number.isFinite(value)
-    ? `${value}${Number.isFinite(max) ? ` / ${max}` : ""}`
-    : output.textContent;
+  output.textContent = layout.output;
+  output.title = `当前 ${layout.value ?? "未知"} · 可用上限 ${layout.cap ?? "未知"} · 完整容量 ${layout.base ?? "未知"}`;
+  row.querySelector(`[data-role="${role}-cap"]`).textContent = layout.capText;
+  const blocked = row.querySelector(`[data-role="${role}-blocked"]`);
+  blocked.style.width = `${(layout.blocked ?? 0) * 100}%`;
+  blocked.title = layout.blocked === null ? "受限容量未知" : `受限容量 ${Math.round(layout.blocked * 100)}%${playerState.status?.ready === true ? "" : " · 原因未记录"}`;
+  const conditions = row.querySelector(`[data-role="${role}-conditions"]`);
+  const key = JSON.stringify(layout.blocks);
+  if (conditions.dataset.key !== key) {
+    conditions.dataset.key = key; conditions.replaceChildren();
+    for (const block of layout.blocks) {
+      const segment = element("span", "vital-condition");
+      segment.style.left = `${block.left * 100}%`; segment.style.width = `${block.width * 100}%`;
+      segment.style.background = block.color;
+      segment.title = `${block.label}占用 ${Math.round(block.width * 100)}%`;
+      conditions.append(segment);
+    }
+  }
+}
+
+function updateConditions(row, playerState) {
+  const status = playerState.status;
+  const life = row.querySelector('[data-role="condition-life"]');
+  life.textContent = { dead: "已死亡", alive: "存活", absent: "已离开", unknown: "生死未记录" }[playerState.life || "unknown"];
+  row.querySelector('[data-role="condition-note"]').textContent = conditionSummary(status);
+  const list = row.querySelector('[data-role="condition-list"]');
+  const values = status?.ready === true ? status.values.filter((value) => value.amount > 0 || value.staminaBlock > 0 || value.extraStaminaBlock > 0) : [];
+  const key = JSON.stringify(values);
+  if (list.dataset.key !== key) {
+    list.dataset.key = key; list.replaceChildren();
+    for (const value of values) {
+      const info = conditionPresentation(value.type);
+      const chip = element("span", "condition-chip"); chip.style.setProperty("--condition-color", info.color);
+      chip.append(element("i"), element("strong", null, info.label), element("span", null, `${Math.round(value.amount * 100)}%`));
+      chip.title = `${value.type} · 普通体力占用 ${(value.staminaBlock * 100).toFixed(1)}% · 额外体力占用 ${(value.extraStaminaBlock * 100).toFixed(1)}%`;
+      list.append(chip);
+    }
+  }
+  const effects = row.querySelector('[data-role="condition-effects"]');
+  effects.textContent = status?.effectsReady === true
+    ? status.effects.length ? `持续效果：${status.effects.map((effect) => effectPresentation(effect.type)).join(" · ")}（未记录可靠倒计时）` : "持续效果：已记录，无活动效果"
+    : "持续效果：未记录或未同步，不等于没有效果";
+  effects.title = [status?.effectsAuthority, ...(status?.effects || []).map((effect) => effect.type)].filter(Boolean).join(" · ");
 }
 
 function imageSource(image, url, alt, owner) {
@@ -440,11 +492,12 @@ function featureChip(label, component, color = null) {
 }
 
 function fallbackAppearancePreview(panel, avatar, placeholder, title, meta, badge, assets, appearance) {
+  const form = appearanceFormPresentation(appearance);
   imageSource(avatar, null, "", panel);
   placeholder.hidden = false;
   placeholder.textContent = "游戏头像\n待渲染";
-  title.textContent = assets?.components.fit?.entry?.name || `本局套装 ${appearance.outfitIndex ?? "已记录"}`;
-  meta.textContent = "头部素材未齐全，不用套装预览代替玩家头像";
+  title.textContent = form.transformed ? form.label : assets?.components.fit?.entry?.name || `本局套装 ${appearance.outfitIndex ?? "已记录"}`;
+  meta.textContent = form.transformed ? "真实变形已记录；对应头部素材暂不可用，不以普通人脸替代" : "头部素材未齐全，不用套装预览代替玩家头像";
   badge.textContent = "有记录";
   panel.classList.add("is-partial");
 }
@@ -458,6 +511,7 @@ function updateAppearance(row, playerState, context) {
   const meta = row.querySelector('[data-role="appearance-meta"]');
   const features = row.querySelector('[data-role="appearance-features"]');
   const appearance = playerState.appearance;
+  const form = appearanceFormPresentation(appearance);
   const fingerprint = [
     headAppearanceFingerprint(context.assetPack, appearance),
     appearance?.ready,
@@ -465,6 +519,8 @@ function updateAppearance(row, playerState, context) {
     appearance?.authority,
     context.assetStatus,
     playerState.appearanceTime,
+    appearance?.formReady,
+    appearance?.form,
   ].join("|");
   if (panel.dataset.renderFingerprint === fingerprint) return;
   panel.dataset.renderFingerprint = fingerprint;
@@ -489,7 +545,15 @@ function updateAppearance(row, playerState, context) {
     meta.textContent = "不会用本地当前套装冒充历史记录";
     return;
   }
-  if (appearance.ready === false) {
+  if (appearance.formReady === false || (appearance.formReady === true && !form.known)) {
+    panel.classList.add("is-unknown");
+    placeholder.textContent = "形态\n未知";
+    badge.textContent = "形态未同步";
+    title.textContent = "当前人物形态尚未确认";
+    meta.textContent = "已清除上一时刻头像，等待新的真实形态记录";
+    return;
+  }
+  if (appearance.ready === false && !form.transformed) {
     panel.classList.add("is-syncing");
     placeholder.textContent = "外观\n同步中";
     badge.textContent = "同步中";
@@ -528,17 +592,19 @@ function updateAppearance(row, playerState, context) {
     ["肩带", assets?.components.sash],
     ["徽章", assets?.components.medal],
   ]) {
+    if (form.transformed && !["帽子"].includes(label)) continue;
+    if (appearance.form === "mushroom" && label === "帽子") continue;
     const chip = featureChip(label, component);
     if (chip) features.append(chip);
   }
   const skinChip = featureChip("肤色", assets?.components.skin, skin);
-  if (skinChip) features.prepend(skinChip);
+  if (skinChip && !form.transformed) features.prepend(skinChip);
 
   fallbackAppearancePreview(panel, avatar, placeholder, title, meta, badge, assets, appearance);
   if (isLocalCurrent) badge.textContent = "本地当前 · 非历史";
   const token = fingerprint;
-  title.textContent = assets?.components.fit?.entry?.name || `套装 ${appearance.outfitIndex}`;
-  meta.textContent = "正在用本局记录装配头部、脸型与帽子…";
+  title.textContent = form.transformed ? form.label : assets?.components.fit?.entry?.name || `套装 ${appearance.outfitIndex}`;
+  meta.textContent = form.transformed ? "正在读取游戏中的真实变形头部…" : "正在用本局记录装配头部、脸型与帽子…";
   void renderHeadPreview(context.assetPack, appearance).then((rendered) => {
     if (panel.dataset.avatarToken !== token) return;
     if (!rendered) {
@@ -554,10 +620,11 @@ function updateAppearance(row, playerState, context) {
     placeholder.hidden = true;
     panel.classList.remove("is-partial", "is-syncing");
     panel.classList.add("is-ready");
-    badge.textContent = isLocalCurrent ? "本地当前 · 非历史" : "本局头像";
-    title.textContent = appearance.outfitName || assets?.components.fit?.entry?.name || "本局游戏头像";
+    badge.textContent = isLocalCurrent ? "本地当前 · 非历史" : form.known ? form.label : "装扮头像 · 形态未知";
+    title.textContent = form.transformed ? form.label : appearance.outfitName || assets?.components.fit?.entry?.name || "本局游戏头像";
     meta.textContent = [
-      "原始头部、眼睛与嘴型",
+      rendered.portraitScope === "whole-form-no-head" ? "此形态无头部 · 使用游戏原模型图标"
+        : form.transformed ? "游戏原生变形头部" : form.known ? "原始头部、眼睛与嘴型" : "装扮已记录；旧日志未记录途中变形",
       rendered.hatName,
     ].filter(Boolean).join(" · ");
   }).catch(() => {
@@ -569,15 +636,9 @@ function updateAppearance(row, playerState, context) {
 
 export function updatePlayerCard(row, playerState, context = {}) {
   const telemetry = playerState.telemetry;
-  updateVital(row, telemetry, "stamina", telemetry?.stamina, telemetry?.maxStamina, telemetry?.stamina01);
-  updateVital(
-    row,
-    telemetry,
-    "extra",
-    telemetry?.extraStamina,
-    telemetry?.maxExtraStamina,
-    telemetry?.extraStamina01,
-  );
+  updateVital(row, playerState, "stamina");
+  updateVital(row, playerState, "extra");
+  updateConditions(row, playerState);
   const telemetryAuthority = row.querySelector('[data-role="telemetry-authority"]');
   telemetryAuthority.textContent = telemetry?.ready === false
     ? "体力：等待玩家同步"

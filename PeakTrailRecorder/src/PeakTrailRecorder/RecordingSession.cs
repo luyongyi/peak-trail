@@ -19,7 +19,7 @@ internal sealed class RecordingSession : IDisposable
     private const long StateHeartbeatMilliseconds = 1_000L;
     private const long InventorySynchronizationGraceMilliseconds = 2_000L;
 
-    private static readonly JsonSerializerSettings CompactJsonSettings = new()
+    internal static readonly JsonSerializerSettings CompactJsonSettings = new()
     {
         NullValueHandling = NullValueHandling.Ignore,
         Culture = CultureInfo.InvariantCulture,
@@ -29,6 +29,7 @@ internal sealed class RecordingSession : IDisposable
     private readonly FileStream _stream;
     private readonly StreamWriter _writer;
     private readonly AppendOnlyHistoryLog? _history;
+    private readonly LivePublisher? _live;
     private readonly WorldTelemetryReader _world;
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private readonly Dictionary<int, TrackedPlayer> _tracked = new();
@@ -40,7 +41,7 @@ internal sealed class RecordingSession : IDisposable
     private string _lastRouteFingerprint = string.Empty;
     private bool _disposed;
 
-    public RecordingSession(string outputRoot, float sampleHz, ManualLogSource log)
+    public RecordingSession(string outputRoot, float sampleHz, ManualLogSource log, LivePublisher? live = null)
     {
         _log = log;
         Scene scene = SceneManager.GetActiveScene();
@@ -93,6 +94,8 @@ internal sealed class RecordingSession : IDisposable
         };
 
         _history = AppendOnlyHistoryLog.TryOpen(outputRoot, _log);
+        _live = live;
+        live?.Configure(Manifest, TryResolveLocalPlayerId());
         _world = new WorldTelemetryReader(WriteRecord, () => ElapsedMilliseconds, _log);
         WorldTelemetryHooks.Active = _world;
         _history?.WriteSessionStart(Manifest);
@@ -204,6 +207,7 @@ internal sealed class RecordingSession : IDisposable
         player.WasDead = true;
         player.WasPassedOut = true;
         WritePlayerEvent("death", player, "game_event");
+        WriteStatusIfChanged(player, GetActiveSegment(), ElapsedMilliseconds, "death");
     }
 
     public void OnItemConsumed(Item item, Character character)
@@ -357,6 +361,7 @@ internal sealed class RecordingSession : IDisposable
                 }
             }
 
+            WriteStatusIfChanged(player, activeSegment, nowMs);
             StaminaTelemetry stamina = PlayerTelemetryReader.ReadStamina(character);
             bool staminaChanged = TelemetryChangeDetector.HasMeaningfulStaminaChange(
                 player.LastStamina,
@@ -415,6 +420,64 @@ internal sealed class RecordingSession : IDisposable
         }
     }
 
+    /// <summary>
+    /// High-rate relay-only position sampling. The offline files keep their own
+    /// adaptive low-rate gate (<see cref="SamplePlayers"/>); this path feeds only
+    /// the live relay so viewers get smooth interpolation without inflating the
+    /// archival stream. Reuses the last observed stamina/inventory instead of
+    /// re-reading game state every tick — the change-driven records above keep
+    /// those fresh.
+    /// </summary>
+    public void SampleLivePositions(float minimumDistance, float minimumYawDegrees, float maximumSilenceSeconds)
+    {
+        if (_disposed || _live == null)
+        {
+            return;
+        }
+
+        long nowMs = ElapsedMilliseconds;
+        long maxSilenceMs = Math.Max(1L, (long)Math.Round(maximumSilenceSeconds * 1000.0));
+        int activeSegment = GetActiveSegment();
+        foreach (TrackedPlayer player in _tracked.Values)
+        {
+            Character character = player.Character;
+            if (character == null)
+            {
+                continue;
+            }
+
+            Vector3 position = GetPosition(character);
+            float yaw = GetYaw(character);
+            bool moved = !player.HasLiveSample
+                || Vector3.Distance(position, player.LastLivePosition) >= minimumDistance;
+            bool turned = !player.HasLiveSample
+                || Mathf.Abs(Mathf.DeltaAngle(yaw, player.LastLiveYaw)) >= minimumYawDegrees;
+            bool stale = !player.HasLiveSample || nowMs - player.LastLiveSampleAtMs >= maxSilenceMs;
+            if (!moved && !turned && !stale)
+            {
+                continue;
+            }
+
+            WriteSample(
+                player.Identity.PlayerId,
+                position,
+                yaw,
+                activeSegment,
+                nowMs,
+                player.LastStamina ?? new StaminaTelemetry(),
+                player.LastInventory ?? new InventoryTelemetry(),
+                liveOnly: true);
+            player.HasLiveSample = true;
+            player.LastLivePosition = position;
+            player.LastLiveYaw = yaw;
+            player.LastLiveSampleAtMs = nowMs;
+        }
+    }
+
+    /// <summary>Whether this session streams to the relay (drives the higher
+    /// live sampling rate in the plugin ticker).</summary>
+    public bool LiveEnabled => _live != null;
+
     public void Complete(string reason)
     {
         if (_disposed)
@@ -422,6 +485,17 @@ internal sealed class RecordingSession : IDisposable
             return;
         }
 
+        // On the last death, the host's RPCA_Die raises RunEnded before CharacterDied.
+        // Read the already-mutated game state now, without waiting a frame or changing
+        // game execution. Poll reconciliation emits the missing death/status/stamina.
+        SessionFinalization.Run(
+            () => SamplePlayers(float.MaxValue, float.MaxValue, 0.001f),
+            () => CompleteFiles(reason),
+            exception => _log.LogWarning("Final player-state capture unavailable: " + exception.Message));
+    }
+
+    private void CompleteFiles(string reason)
+    {
         WriteEvent("run_end", null, GetActiveSegment(), null, reason);
         Manifest.Status = "complete";
         Manifest.EndReason = reason;
@@ -576,7 +650,8 @@ internal sealed class RecordingSession : IDisposable
         int activeSegment,
         long nowMs,
         StaminaTelemetry stamina,
-        InventoryTelemetry inventory)
+        InventoryTelemetry inventory,
+        bool liveOnly = false)
     {
         var record = new Dictionary<string, object?>
         {
@@ -595,7 +670,29 @@ internal sealed class RecordingSession : IDisposable
         {
             record["item"] = inventory.Held;
         }
-        WriteRecord(record);
+        if (liveOnly) WriteLiveOnly(record);
+        else WriteRecord(record);
+    }
+
+    private void WriteStatusIfChanged(TrackedPlayer player, int activeSegment, long nowMs, string? forceReason = null)
+    {
+        StatusTelemetry status = PlayerStatusReader.Read(player.Character);
+        string fingerprint = status.Fingerprint();
+        bool changed = !string.Equals(fingerprint, player.LastStatusFingerprint, StringComparison.Ordinal);
+        if (forceReason == null && !changed && nowMs - player.LastStatusAtMs < StateHeartbeatMilliseconds) return;
+        string reason = forceReason ?? (changed ? status.ChangeReason(player.LastStatus) : "heartbeat");
+        WriteRecord(new Dictionary<string, object?>
+        {
+            ["type"] = "status",
+            ["t"] = nowMs,
+            ["playerId"] = player.Identity.PlayerId,
+            ["activeSegment"] = activeSegment,
+            ["reason"] = reason,
+            ["status"] = status,
+        });
+        player.LastStatus = status;
+        player.LastStatusFingerprint = fingerprint;
+        player.LastStatusAtMs = nowMs;
     }
 
     private void WriteState(string playerId, StaminaTelemetry stamina, int activeSegment, long nowMs)
@@ -706,6 +803,9 @@ internal sealed class RecordingSession : IDisposable
         }
 
         record["stamina"] = stamina.Stamina;
+        record["capacityReady"] = stamina.CapacityReady;
+        record["baseMaxStamina"] = stamina.BaseMaxStamina;
+        record["baseMaxExtraStamina"] = stamina.BaseMaxExtraStamina;
         record["maxStamina"] = stamina.MaxStamina;
         record["stamina01"] = stamina.Stamina01;
         record["extraStamina"] = stamina.ExtraStamina;
@@ -750,10 +850,62 @@ internal sealed class RecordingSession : IDisposable
         {
             _writer.WriteLine(JsonConvert.SerializeObject(record, Formatting.None, CompactJsonSettings));
             _history?.WriteTraceRecord(Manifest.SessionId, record);
+            // Live publishing is additive: the offline files above stay the
+            // archival record and the relay path must never affect them.
+            if (record is Dictionary<string, object?> dictionary) _live?.Publish(dictionary, RoomTimestamp());
         }
         catch (Exception exception)
         {
             _log.LogError($"Failed to append trail record: {exception}");
+        }
+    }
+
+    /// <summary>Relay-only record: never touches the offline files. Used by the
+    /// high-rate live position sampler so stream smoothness does not inflate
+    /// the archival stream.ndjson.</summary>
+    private void WriteLiveOnly(Dictionary<string, object?> record)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        try
+        {
+            _live?.Publish(record, RoomTimestamp());
+        }
+        catch (Exception exception)
+        {
+            _log.LogError($"Failed to publish live record: {exception}");
+        }
+    }
+
+    /// <summary>Photon's room-shared millisecond clock (raw). All clients in one
+    /// room observe the same server time — including its sign, which is typically
+    /// negative early in a master server's uptime — so the relay can rebase the
+    /// whole run onto one shared timeline and deduplicate across producers.</summary>
+    private static int RoomTimestamp()
+    {
+        try
+        {
+            return Photon.Pun.PhotonNetwork.ServerTimestamp;
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
+    private static string? TryResolveLocalPlayerId()
+    {
+        try
+        {
+            Character? local = Character.localCharacter;
+            return local == null ? null : IdentityResolver.FromCharacter(local).PlayerId;
+        }
+        catch
+        {
+            return null;
         }
     }
 
@@ -810,6 +962,7 @@ internal sealed class RecordingSession : IDisposable
         {
             _writer.Flush();
             _stream.Flush(flushToDisk: true);
+            _live?.Dispose();
         }
         catch (Exception exception)
         {

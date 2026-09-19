@@ -64,6 +64,19 @@ try
             ["route"] = route,
         },
     });
+    Type statusType = recorder.GetType("PeakTrailRecorder.StatusTelemetry", throwOnError: true)!;
+    object unknownStatus = Activator.CreateInstance(statusType)!;
+    trace.Invoke(history, new object[]
+    {
+        "history-contract-session",
+        new Dictionary<string, object?>
+        {
+            ["type"] = "status",
+            ["t"] = 789L,
+            ["playerId"] = "steam:42",
+            ["status"] = unknownStatus,
+        },
+    });
 
     SetManifest("EndedAtUtc", "2026-09-15T10:01:00.0000000+00:00");
     SetManifest("Status", "complete");
@@ -78,11 +91,12 @@ try
     {
         lines = reader.ReadToEnd().Split('\n', StringSplitOptions.RemoveEmptyEntries);
     }
-    Assert(lines.Length == 4, $"Expected 4 journal lines, received {lines.Length}.");
+    Assert(lines.Length == 5, $"Expected 5 journal lines, received {lines.Length}.");
     using JsonDocument first = JsonDocument.Parse(lines[0]);
     using JsonDocument second = JsonDocument.Parse(lines[1]);
     using JsonDocument routeLine = JsonDocument.Parse(lines[2]);
-    using JsonDocument third = JsonDocument.Parse(lines[3]);
+    using JsonDocument statusLine = JsonDocument.Parse(lines[3]);
+    using JsonDocument third = JsonDocument.Parse(lines[4]);
     Assert(first.RootElement.GetProperty("type").GetString() == "session_start", "session_start missing");
     Assert(first.RootElement.GetProperty("manifest").GetProperty("sessionId").GetString() == "history-contract-session", "manifest not embedded");
     Assert(first.RootElement.GetProperty("manifest").GetProperty("route").GetProperty("branch").GetString() == "swamp-temple", "route not embedded in initial manifest");
@@ -90,6 +104,10 @@ try
     Assert(second.RootElement.GetProperty("record").GetProperty("t").GetInt64() == 123L, "record not preserved");
     Assert(routeLine.RootElement.GetProperty("record").GetProperty("type").GetString() == "route", "route update not mirrored into history");
     Assert(routeLine.RootElement.GetProperty("record").GetProperty("route").GetProperty("branch").GetString() == "swamp-temple", "route branch not preserved");
+    Assert(first.RootElement.GetProperty("manifest").GetProperty("statusTelemetry").GetProperty("version").GetInt32() == 1, "status capability not embedded");
+    Assert(statusLine.RootElement.GetProperty("record").GetProperty("type").GetString() == "status", "status update not mirrored into history");
+    Assert(statusLine.RootElement.GetProperty("record").GetProperty("status").GetProperty("ready").GetBoolean() == false, "unknown status readiness not preserved");
+    Assert(statusLine.RootElement.GetProperty("record").GetProperty("status").GetProperty("values").GetArrayLength() == 0, "unknown statuses must not become healthy zeros");
     Assert(third.RootElement.GetProperty("type").GetString() == "session_end", "session_end missing");
     Assert(third.RootElement.GetProperty("durationMs").GetInt64() == 60_000L, "duration missing");
     Assert(third.RootElement.GetProperty("status").GetString() == "complete", "status missing");

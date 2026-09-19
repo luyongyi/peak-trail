@@ -66,3 +66,20 @@ test("world models and NPC head references must belong to the checksummed allowl
     assert.equal((await readGameAssets(f.root)).files.length, 3);
   } finally { await f.clean(); }
 });
+
+test("transformed avatar models and heads remain inside the explicit deployment allowlist", async () => {
+  const f = await fixture();
+  try {
+    for (const key of ["model", "headModel"]) {
+      f.build.customization = { forms: [{ form: "skeleton", [key]: "models/unlisted.json" }] };
+      await f.save();
+      await assert.rejects(readGameAssets(f.root), /Unlisted game asset reference/);
+      f.build.customization.forms[0][key] = "../private-save.json";
+      await f.save();
+      await assert.rejects(readGameAssets(f.root), /Unlisted game asset reference/);
+    }
+    f.build.customization.forms = [{ form: "skeleton", model: "icons/item.png", headModel: "icons/item.png" }];
+    await f.save();
+    assert.equal((await readGameAssets(f.root)).files.length, 3);
+  } finally { await f.clean(); }
+});

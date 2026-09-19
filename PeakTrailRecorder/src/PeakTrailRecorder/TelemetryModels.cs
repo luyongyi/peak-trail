@@ -18,6 +18,15 @@ internal sealed class StaminaTelemetry
     [JsonProperty("authority")]
     public string Authority { get; set; } = "unavailable";
 
+    [JsonProperty("capacityReady")]
+    public bool CapacityReady { get; set; }
+
+    [JsonProperty("baseMaxStamina", NullValueHandling = NullValueHandling.Ignore)]
+    public float? BaseMaxStamina { get; set; }
+
+    [JsonProperty("baseMaxExtraStamina", NullValueHandling = NullValueHandling.Ignore)]
+    public float? BaseMaxExtraStamina { get; set; }
+
     [JsonProperty("stamina", NullValueHandling = NullValueHandling.Ignore)]
     public float? Stamina { get; set; }
 
@@ -193,7 +202,7 @@ internal static class TelemetryChangeDetector
         StaminaTelemetry current,
         float threshold)
     {
-        if (previous == null || previous.Ready != current.Ready
+        if (previous == null || previous.Ready != current.Ready || previous.CapacityReady != current.CapacityReady
             || !string.Equals(previous.Authority, current.Authority, StringComparison.Ordinal))
         {
             return true;

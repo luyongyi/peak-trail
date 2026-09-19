@@ -5,8 +5,10 @@
   <Folder Name="/tests/">
     <Project Path="tests/AppearanceContract/AppearanceContract.csproj" />
     <Project Path="tests/HistoryContract/HistoryContract.csproj" />
+    <Project Path="tests/LiveContract/LiveContract.csproj" />
     <Project Path="tests/RouteContract/RouteContract.csproj" />
     <Project Path="tests/TelemetryContract/TelemetryContract.csproj" />
+    <Project Path="tests/StatusContract/StatusContract.csproj" />
     <Project Path="tests/WorldContract/WorldContract.csproj" />
   </Folder>
 </Solution>

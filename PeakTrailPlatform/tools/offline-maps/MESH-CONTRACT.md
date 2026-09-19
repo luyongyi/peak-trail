@@ -144,6 +144,18 @@ palette. The shader approximation blends the base and top color by
 linear. Multiply the resulting color by the base texture sampled at original
 UVs. Correctly transformed world normals matter for rotated/scaled instances.
 
+That world-up blend is only reproduced for `W/Peak_Rock`, where the build's own
+survey capture confirms it (sand-coloured tops on sand and rock matching each
+material's authored top colour). Three shader families contradict the same
+capture and must not be painted by surface slope: `GD/FoliageGD` and
+`W/Peak_Mirage` store one shared default `_TopColor` `[0.11, 0.19, 0.19]` for
+every material (a tall cactus crown stays pink in the capture, not teal), and
+`W/Peak_Petrified_Rock` would turn desert stone cyan or black while the capture
+shows warm tan. The viewer therefore zeroes `amount` for those shaders
+(`verifiableTopBlend` in `web/src/geometry-loader.js`). Prop albedo, alpha masks
+and vertex AO are still approximated from the layered foliage shader; see the
+known limitations in the material report.
+
 Color conversion is selected using the installed shader's property metadata.
 `sourceColors` records the shader name, selected base property, raw stored colors,
 and base/top property flags. HDR/Gamma Color flags (16/32) retain the stored linear

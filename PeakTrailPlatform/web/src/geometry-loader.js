@@ -5,6 +5,7 @@ import { decodeGeometryBytes, GEOMETRY_FORMATS } from "./geometry-bytes.js";
 import { positiveInstanceTransform } from "./geometry-matrices.js";
 import { getSourceEffectMaterial } from "./source-materials.js";
 import { isExplosiveMineMaterial, recordedHiddenMineIndices } from "./mine-visibility.js";
+import { sha256Hex } from "./sha256.js";
 
 function assertEmbeddedGlb(bytes) {
   const view = new DataView(bytes);
@@ -37,6 +38,23 @@ function applySourceEffectMaterial(material, gameBuildId) {
   return true;
 }
 
+// The world-up _TopColor blend is only reproduced where this build's own survey
+// capture supports it (W/Peak_Rock: sand-coloured tops on sand and rock, matching
+// W/Peak_Rock's authored per-material top colour). Three shader families contradict
+// that capture, so painting them by surface slope is not reproducible:
+//   GD/FoliageGD  - every material stores the same default _TopColor [0.11,0.19,0.19];
+//                   a tall cactus crown stays pink in the capture, not teal.
+//   W/Peak_Mirage - same shared default top colour as the foliage shader.
+//   W/Peak_Petrified_Rock - M_Petrified_Stone_Char would go cyan [0.11,0.70,0.78]
+//                   and M_Petrified_Stone black; the capture shows warm tan stone.
+const UNREPRODUCED_TOP_COLOR_SHADERS = new Set(["GD/FoliageGD", "W/Peak_Mirage", "W/Peak_Petrified_Rock"]);
+
+/** Top blend amount that is actually supported by the material evidence. */
+export function verifiableTopBlend(shader, amount) {
+  const value = Number.isFinite(amount) ? amount : 1;
+  return UNREPRODUCED_TOP_COLOR_SHADERS.has(shader) ? 0 : value;
+}
+
 function applyTerrainMaterial(material) {
   const terrain = material.userData?.peakTerrain;
   if (!terrain) return;
@@ -49,7 +67,7 @@ function applyTerrainMaterial(material) {
     shader.uniforms.peakTop = { value: new THREE.Color(top[0], top[1], top[2]) };
     const ramp = Array.isArray(terrain.tightness) ? terrain.tightness : [0, 1];
     shader.uniforms.peakRamp = { value: new THREE.Vector2(Number(ramp[0]) || 0, Number(ramp[1]) || 1) };
-    shader.uniforms.peakAmount = { value: Number.isFinite(terrain.amount) ? terrain.amount : 1 };
+    shader.uniforms.peakAmount = { value: verifiableTopBlend(terrain.sourceColors?.shader, terrain.amount) };
     shader.uniforms.peakTopAlpha = { value: Number.isFinite(terrain.topAlpha) ? terrain.topAlpha : 1 };
     shader.vertexShader = "varying float vPeakUp;\n" + shader.vertexShader;
     shader.vertexShader = shader.vertexShader.replace("#include <defaultnormal_vertex>",
@@ -229,8 +247,9 @@ export async function loadGameGeometry(layer, signal, gameBuildId) {
   const response = await fetch(layer.geometryUrl, { signal, cache: "force-cache" });
   if (!response.ok) throw new Error(`真实模型读取失败（${response.status}）`);
   let bytes = await response.arrayBuffer();
-  const digest = [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))]
-    .map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  // Works on insecure origins too (plain-HTTP LAN viewing) via the JS fallback.
+  // `crypto` is the caller-injected port in tests, the browser global in production.
+  const digest = await sha256Hex(new Uint8Array(bytes), crypto?.subtle);
   if (digest !== layer.geometrySha256.toLowerCase()) throw new Error("真实模型内容哈希不匹配，已拒绝显示");
   bytes = await decodeGeometryBytes(bytes, layer.geometryFormat, signal);
   assertEmbeddedGlb(bytes);

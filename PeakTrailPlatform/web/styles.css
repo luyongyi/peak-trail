@@ -906,6 +906,143 @@ svg {
   background: rgba(255, 255, 255, 0.045);
 }
 
+.source-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin-bottom: 10px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.25);
+}
+.source-tab {
+  padding: 6px 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+.source-tab.is-active {
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--text);
+}
+.live-relay-row { display: flex; gap: 6px; }
+.live-relay-row input[type="text"] {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text);
+  font-size: 0.72rem;
+}
+.live-relay-row button {
+  padding: 4px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  font-size: 0.72rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.live-relay-row button:hover { background: rgba(255, 255, 255, 0.1); }
+.live-run-list { display: grid; gap: 6px; }
+.live-run-empty {
+  margin: 0;
+  padding: 10px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 0.7rem;
+  text-align: center;
+}
+.live-run-card {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.live-run-card:hover { border-color: var(--line-strong); background: rgba(255, 255, 255, 0.05); }
+.live-run-card.is-connected { border-color: var(--accent); }
+.live-run-card strong { font-size: 0.76rem; }
+.live-run-card small { color: var(--muted); font-size: 0.66rem; }
+.live-state-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+}
+.live-state-row[hidden] { display: none; }
+.live-state-row small { flex: 1; min-width: 0; color: var(--text); font-size: 0.7rem; }
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ff6b5e;
+  animation: live-pulse 1.4s ease-in-out infinite;
+}
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.live-follow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 0.68rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+/* Following is off while the live edge runs ahead: invite the user back. */
+.live-follow.is-behind {
+  color: var(--accent);
+  animation: live-follow-pulse 1.6s ease-in-out infinite;
+}
+@keyframes live-follow-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+/* 屏幕常亮徽标：Wake Lock 生效时提示"常亮"；API 不可用时给出原因。 */
+.wake-chip {
+  padding: 1px 7px;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  border-radius: 999px;
+  color: var(--accent);
+  font-size: 0.6rem;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+.wake-chip[hidden] { display: none; }
+.wake-chip.is-unavailable {
+  border-style: dashed;
+  border-color: var(--line-strong);
+  color: var(--muted);
+}
+.live-state-row button {
+  padding: 3px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  font-size: 0.68rem;
+  cursor: pointer;
+}
+
 .source-icon {
   display: grid;
   width: 35px;
@@ -1159,11 +1296,23 @@ button:disabled {
   transform: translateX(16px);
 }
 
-.player-list,
-.event-list {
+.player-list {
   display: grid;
   gap: 5px;
 }
+
+/* Rows are absolutely positioned by the windowed renderer; only the rows inside
+   the scroll view exist in the DOM, so a session with thousands of events no
+   longer makes every layout pass walk thousands of grid items. */
+.event-list {
+  position: relative;
+  display: block;
+  max-height: 400px;
+  overflow-y: auto;
+  scrollbar-color: var(--line-strong) transparent;
+  scrollbar-width: thin;
+}
+.event-list-spacer { width: 100%; }
 
 .inline-empty {
   margin: 0;
@@ -1350,6 +1499,7 @@ button:disabled {
 }
 
 .vital-track {
+  position: relative;
   overflow: hidden;
   height: 5px;
   border-radius: 999px;
@@ -1357,6 +1507,8 @@ button:disabled {
 }
 
 .vital-track i {
+  position: relative;
+  z-index: 1;
   display: block;
   width: 0;
   height: 100%;
@@ -1372,6 +1524,18 @@ button:disabled {
 .vital-track.is-unknown {
   background: repeating-linear-gradient(90deg, rgba(255,255,255,.06) 0 4px, transparent 4px 7px);
 }
+
+.vital-cap { grid-column: 2 / -1; font-size: .5rem; text-align: right; color: #a1aba8; }
+.vital-blocked { position: absolute; right: 0; top: 0; bottom: 0; background: repeating-linear-gradient(135deg,#656d72 0 3px,#343d43 3px 6px); }
+.vital-conditions { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+.vital-condition { position: absolute; top: 0; bottom: 0; border-left: 1px solid rgba(0,0,0,.35); opacity: .95; }
+.player-conditions { min-width: 0; display: grid; gap: 6px; padding: 9px 0; border-top: 1px solid var(--line); }
+.condition-list { display: flex; flex-wrap: wrap; gap: 5px; }
+.condition-chip { display: inline-flex; align-items: center; gap: 5px; border: 1px solid color-mix(in srgb,var(--condition-color),transparent 65%); background: color-mix(in srgb,var(--condition-color),transparent 92%); border-radius: 6px; padding: 4px 6px; font-size: .62rem; color: var(--condition-color); }
+.condition-chip i { width: 5px; height: 5px; border-radius: 50%; background: var(--condition-color); }
+.condition-chip strong { font-size: inherit; font-weight: 600; }
+.condition-note,.condition-effects { margin: 0; color: #99aba5; font-size: .57rem; line-height: 1.65; overflow-wrap: anywhere; }
+.condition-life { color: var(--muted); font-size: .58rem; }
 
 /* Timeline-driven player card. Every image in these cards is resolved from the
    exact-build PEAK asset catalog; unknown history stays visibly unknown. */
@@ -1454,6 +1618,63 @@ button:disabled {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.trail-player-group {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  will-change: transform;
+}
+.trail-player-group[hidden] { display: none; }
+.trail-player-group-ring {
+  --group-portrait: 26px;
+  --group-gap: 4px;
+  --group-padding: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: center;
+  justify-content: center;
+  gap: var(--group-gap);
+  /* The badge hugs its heads: width follows the column count JS supplies, height
+     follows the wrapped rows, so no empty circle is framed around a few faces. */
+  width: calc(var(--group-columns, 1) * var(--group-portrait)
+    + (var(--group-columns, 1) - 1) * var(--group-gap) + var(--group-padding) * 2);
+  padding: 6px var(--group-padding);
+  border-radius: 16px;
+  background: rgba(11, 25, 24, .94);
+  box-shadow: 0 3px 14px #0009, inset 0 0 0 1px rgba(244, 255, 249, .14);
+}
+.trail-player-group-portrait {
+  display: grid;
+  place-items: center;
+  width: var(--group-portrait);
+  height: var(--group-portrait);
+  border: 2px solid var(--player-color);
+  border-radius: 50%;
+  background: rgba(5, 16, 15, .9);
+  color: var(--player-color);
+  overflow: hidden;
+  font-size: 11px;
+}
+.trail-player-group-portrait img { width: 100%; height: 100%; object-fit: contain; }
+.trail-player-group-portrait img[hidden] { display: none; }
+.trail-player-group-names {
+  max-width: 150px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(5, 16, 15, .86);
+  color: #f4fff9;
+  font-size: 10px;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.trail-player-group-leader { background: rgba(244, 255, 249, .5); }
 
 .player-overview {
   display: grid;
@@ -1879,6 +2100,11 @@ button:disabled {
 }
 
 .event-button {
+  position: absolute;
+  left: 0;
+  right: 0;
+  box-sizing: border-box;
+  height: 41px;
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr) auto;
   align-items: center;
@@ -2391,3 +2617,224 @@ button:disabled {
 .world-summary { color: #adc2ba; font-size: 11px; line-height: 1.6; }
 .world-alert { border-left: 2px solid #e3ae63; padding: 5px 9px; color: #edd5a1; background: #30271d66; font-size: 11px; }
 @media (max-width: 700px) { .camera-actions { flex-wrap: wrap; justify-content: flex-end; } .camera-text-button { padding: 6px; font-size: 10px; } .camera-help { left: 12px; bottom: 75px; max-width: calc(100% - 24px); } }
+
+/* ============ 极简入口门：回放 / 直播 ============ */
+.mode-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(1200px 600px at 50% -10%, #16211f 0%, transparent 60%),
+    radial-gradient(900px 500px at 85% 110%, #1b2410 0%, transparent 55%),
+    #0b1010;
+}
+.mode-gate[hidden] { display: none; }
+body.gate-open .app-shell { visibility: hidden; }
+.gate-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: center;
+  margin-bottom: 34px;
+  color: #d9f0e8;
+}
+.gate-brand strong { font-size: 1.35rem; letter-spacing: 0.12em; }
+.gate-brand .brand-mark svg { width: 34px; height: 34px; }
+.mode-gate-inner { text-align: center; padding: 24px; width: min(760px, 94vw); }
+.gate-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 22px;
+}
+.gate-card {
+  appearance: none;
+  border: 3px solid #2b3d38;
+  border-radius: 26px;
+  background: linear-gradient(180deg, #14201d 0%, #0f1816 100%);
+  color: #d9f0e8;
+  padding: 30px 18px 24px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 10px 0 rgba(0, 0, 0, 0.4), 0 18px 40px rgba(0, 0, 0, 0.45);
+  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease, filter 0.2s ease;
+  font: inherit;
+}
+.gate-card strong { font-size: 1.5rem; letter-spacing: 0.2em; }
+.gate-card small { color: #93a89f; font-size: 0.82rem; }
+.gate-icon { width: 84px; height: 84px; border-radius: 24px; display: grid; place-items: center;
+  background: #0b1311; border: 3px solid #33473f; margin-bottom: 6px; }
+.gate-icon svg { width: 54px; height: 54px; fill: none; stroke: #efb74e; stroke-width: 3.4; stroke-linecap: round; stroke-linejoin: round; }
+.gate-icon .live-core { fill: #efb74e; stroke: none; }
+.gate-replay:hover { transform: translateY(-5px) rotate(-0.6deg); border-color: #efb74e; box-shadow: 0 15px 0 rgba(0,0,0,0.4), 0 24px 46px rgba(0,0,0,0.5); }
+.gate-live.is-empty { filter: saturate(0.25) brightness(0.55); cursor: default; box-shadow: 0 6px 0 rgba(0,0,0,0.35); }
+.gate-live.is-empty:hover { transform: none; border-color: #2b3d38; }
+.gate-live.has-runs:hover { transform: translateY(-5px) rotate(0.6deg); border-color: #ff8a5e; }
+.gate-live.has-runs .gate-icon svg { stroke: #ff8a5e; }
+.gate-live.has-runs .gate-icon .live-core { fill: #ff8a5e; }
+.gate-live-list { display: flex; flex-direction: column; gap: 6px; width: 100%; margin-top: 8px; }
+.gate-live-row {
+  appearance: none; border: 2px solid #33473f; background: #0b1311; color: #d9f0e8;
+  border-radius: 14px; padding: 8px 12px; font: inherit; font-size: 0.86rem;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer;
+}
+.gate-live-row:hover { border-color: #ff8a5e; }
+.gate-live-row.is-connected { border-color: #ff8a5e; color: #ffd9a1; }
+.gate-live-row small { color: #93a89f; }
+.gate-footnote { margin-top: 30px; color: #5d716a; font-size: 0.72rem; }
+@media (max-width: 640px) { .gate-cards { grid-template-columns: 1fr; } }
+
+/* ============ 顶栏瘦身 ============ */
+.topbar { padding: 8px 14px; gap: 10px; }
+.topbar .brand strong { font-size: 0.95rem; }
+.topbar .brand small { font-size: 0.66rem; color: #efb74e; }
+.daily-card { display: flex; align-items: baseline; gap: 8px; padding: 4px 12px; border: 1px solid #26363200; }
+.daily-card .eyebrow { display: none; }
+.daily-card strong { font-size: 0.85rem; }
+.daily-card span { font-size: 0.72rem; }
+.import-menu { position: relative; }
+.import-menu summary { list-style: none; cursor: pointer; }
+.import-menu summary::-webkit-details-marker { display: none; }
+.import-menu-pop {
+  position: absolute; right: 0; top: calc(100% + 8px); z-index: 40;
+  display: flex; flex-direction: column; min-width: 180px;
+  background: #101a17; border: 2px solid #33473f; border-radius: 14px;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5); overflow: hidden;
+}
+.import-menu-pop label { padding: 10px 14px; cursor: pointer; color: #d9f0e8; font-size: 0.85rem; }
+.import-menu-pop label:hover { background: #182722; color: #efb74e; }
+.import-menu[open] summary { border-color: #efb74e; color: #efb74e; }
+
+/* ============ 侧栏手风琴 ============ */
+.inspector-section .section-heading { cursor: pointer; user-select: none; }
+.inspector-section .section-heading h2::after {
+  content: "▾"; margin-left: 8px; color: #5d716a; font-size: 0.8em;
+  display: inline-block; transition: transform 0.15s ease;
+}
+.inspector-section.is-collapsed .section-heading h2::after { transform: rotate(-90deg); }
+.inspector-section.is-collapsed > *:not(.section-heading) { display: none; }
+.inspector-section { padding: 10px 12px; }
+.inspector-section .section-heading h2 { font-size: 0.95rem; margin: 0; }
+.inspector-section .section-heading .eyebrow { display: none; }
+
+/* ============ 玩家卡默认极简，点击展开 ============ */
+.player-list .player-row { cursor: pointer; }
+.player-row .player-loadout,
+.player-row .player-conditions,
+.player-row .appearance-panel,
+.player-row .snapshot-authority,
+.player-row .vital-cap,
+.player-row .held-meta,
+.player-row .condition-note { display: none; }
+.player-row .visual-slot.is-unknown { display: none; }
+.player-row.is-expanded .player-loadout,
+.player-row.is-expanded .player-conditions { display: block; }
+.player-row.is-expanded .appearance-panel:not(.is-unknown) { display: block; }
+.player-row.is-expanded .vital-cap,
+.player-row.is-expanded .held-meta { display: inline-block; }
+.player-row.is-expanded .snapshot-authority { display: inline; }
+
+/* ============ 跟随相机 ============ */
+.player-follow-button {
+  appearance: none;
+  border: 2px solid var(--line);
+  border-radius: 9px;
+  width: 26px;
+  height: 26px;
+  display: inline-grid;
+  place-items: center;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: border-color 140ms ease, color 140ms ease, transform 140ms ease;
+}
+.player-follow-button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  transform: translateY(-1px);
+}
+.player-follow-button.is-following {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+.follow-hud {
+  position: absolute;
+  z-index: 6;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 14px;
+  border: 2px solid var(--accent);
+  border-radius: 999px;
+  background: rgba(10, 15, 14, 0.86);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  color: var(--text);
+  font-size: 0.8rem;
+  backdrop-filter: blur(10px);
+  pointer-events: none;
+}
+.follow-hud[hidden] { display: none; }
+.follow-hud .follow-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: live-pulse 1.4s ease-in-out infinite;
+}
+.follow-hud small { color: var(--muted); font-size: 0.68rem; }
+
+/* 入门诊断面板 */
+.gate-diag { display: flex; flex-direction: column; gap: 4px; text-align: left; }
+.gate-diag p { margin: 0; font-size: 0.78rem; color: #93a89f; }
+.gate-diag .is-ok { color: var(--success); }
+.gate-diag .is-error { color: var(--danger); }
+.gate-diag .gate-diag-tip { color: #5d716a; font-size: 0.72rem; line-height: 1.55; }
+.gate-diag .gate-live-row { justify-content: center; margin-top: 4px; }
+
+.gate-debug {
+  appearance: none;
+  border: none;
+  background: none;
+  color: #5d716a;
+  font-size: 0.72rem;
+  cursor: pointer;
+  text-decoration: underline dotted;
+  padding: 0 4px;
+}
+.gate-debug:hover { color: var(--accent); }
+
+/* 关卡导航条：默认收起成胶囊，点击展开 */
+.segment-navigator.is-collapsed {
+  width: auto;
+  min-width: 0;
+  padding: 3px 12px;
+  cursor: pointer;
+}
+.segment-navigator.is-collapsed .route-summary,
+.segment-navigator.is-collapsed .segment-navigation-meta,
+.segment-navigator.is-collapsed .map-fog-note { display: none; }
+.segment-navigator.is-collapsed .segment-step-button { display: none; }
+.segment-navigator.is-collapsed .segment-current small { display: none; }
+.segment-navigator.is-collapsed .segment-current {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.segment-navigator.is-collapsed .segment-current span { font-size: 0.68rem; color: var(--muted); }
+.segment-navigator.is-collapsed .segment-current strong { font-size: 0.85rem; }
+.segment-navigator.is-collapsed .segment-current strong::after {
+  content: " ▾";
+  color: var(--muted);
+  font-size: 0.8em;
+}
+.segment-navigator:not(.is-collapsed) .segment-current { cursor: pointer; }

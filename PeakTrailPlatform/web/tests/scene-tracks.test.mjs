@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import * as THREE from "../../vendor/three/0.180.0/build/three.module.js";
 import { pointInBounds, clipTrailSegment } from "../src/trail-spatial.js";
+import { latestLifeEventBefore, MARKER_LIFE_EVENT_TYPES } from "../src/protocol.js";
 
 // Load the bundled Three line implementations unchanged apart from their import/export
 // wiring. These are real instanced geometries and shader materials, not hand-written
@@ -21,7 +22,7 @@ const sceneSource = (await readFile(new URL("../src/scene.js", import.meta.url),
   .replace(/^import .*;\r?\n/gm, "").replace("export class TrailScene", "class TrailScene");
 
 function fixture({ samples = defaultSamples(), events = [], activeSegment = null, spatial = {} } = {}) {
-  const ports = { THREE, LineSegmentsGeometry, LineMaterial, LineSegments2, pointInBounds, clipTrailSegment, updateRecordedMineVisibility() {}, updateMapFogSurfaceVisibility() {}, ...spatial };
+  const ports = { THREE, LineSegmentsGeometry, LineMaterial, LineSegments2, pointInBounds, clipTrailSegment, updateRecordedMineVisibility() {}, updateMapFogSurfaceVisibility() {}, latestLifeEventBefore, MARKER_LIFE_EVENT_TYPES, ...spatial };
   const TrailScene = new Function(...Object.keys(ports), `${sceneSource}\nreturn TrailScene;`)(...Object.values(ports));
   const scene = Object.create(TrailScene.prototype);
   Object.assign(scene, {
@@ -31,7 +32,7 @@ function fixture({ samples = defaultSamples(), events = [], activeSegment = null
     camera: new THREE.PerspectiveCamera(60, 1, 0.01, 5000),
     origin: new THREE.Vector3(100, 200, 300), heightScale: 1, useMap: false, activeSegment,
     currentTime: 0, showTracks: true, showMarkers: true,
-    playerVisibility: new Map(), playerObjects: new Map(),
+    playerVisibility: new Map(), playerObjects: new Map(), playerGroups: new Map(),
     getPlayerColor() { return "#efb74e"; }, rebuildPlayerLabels() {},
     worldRenderer: { objects: [], root: new THREE.Group(), update() {} },
   });

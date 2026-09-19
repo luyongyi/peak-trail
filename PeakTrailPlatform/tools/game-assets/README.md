@@ -81,6 +81,54 @@ preserves its cache modification time. It never changes or supplements a trail.
 ```
 
 The recorder's `appearance` records are the historical source for player outfits.
+
+## Recorded transformations (Book of Bones)
+
+```powershell
+& local/python/.venv/Scripts/python.exe PeakTrailPlatform/tools/game-assets/export-form-assets.py --build 25306743
+& local/python/.venv/Scripts/python.exe PeakTrailPlatform/tools/game-assets/test_form_assets.py
+```
+
+This additive export preserves existing previews and the strict deployment
+allowlist. Six mesh derivatives (body and portrait per form) stay in ignored
+`local/assets/game-assets/25306743/models/forms/`; the catalog records source
+mesh/material IDs, selected bones and triangle counts. No game files change.
+
+Verified in installed build 25306743:
+
+- `Action_BecomeSkeleton.RunAction` toggles `CharacterData.isSkeleton` through
+  `SetSkeleton` / `RPC_SyncSkeleton`. Possession of the book proves nothing.
+- `CustomizationRefs.SetSkeleton` uses third-person `resources.assets` mesh 1110
+  (`Skeleton`) and material 141 (`M_Skeleton`). Its independent skull is selected
+  from Head/Face bone weights: 1,015 original vertices, 1,604 original triangles.
+  First-person mesh 1109 has no suitable head and is deliberately not used.
+  The ordinary skin, eyes, mouth, accessory and third-eye renderers are disabled;
+  hats remain. Known hats retain their source placement and outfit material.
+- `SetMushroomMan` uses mesh 1054 (`Mushroom Chubby`) and material 305. Its real
+  cap/head contains 292 vertices and 493 triangles. `HideAllRenderers` disables
+  `hatTransform`, so mushroom portraits have no human face cards or hat.
+- `BecomeChicken` uses `chickenRenderer`, mesh 1224 and material 236. This is an
+  intentionally headless roast chicken. Head-weighted triangles are only a neck
+  stump, so its portrait is the **whole original form**, explicitly labelled
+  `portraitScope: whole-form-no-head`, not a fabricated head. The actual hat's
+  final local Y of -4.66 is transformed by its source parent matrix; the catalog
+  stores the resulting offset, not an assumed 0.68-metre world translation.
+
+Models retain original UVs, source material base color and vertex RGB. Custom
+Unity layered shaders and transition animation are not claimed to be reproduced.
+The web renderer respects source color space; no generated artwork is involved.
+
+`appearance.formReady` is independent of cosmetic `ready`. A recorded skeleton
+can display with missing face indices; unknown hats are omitted, not defaulted
+to index 0. `customization.forms[]` supplies `form`, `model`, `headModel`,
+`retainHat`, `hatOffset` and `portraitScope`. The render result exposes `form`,
+`hasHat` and `portraitScope`. Missing transformed resources fail closed instead
+of substituting the normal outfit preview. Old logs without form telemetry may
+still show their recorded cosmetic baseline, explicitly marked form-unknown by
+the UI; this is not evidence that they never transformed.
+An explicit new `formReady: false` observation clears the portrait entirely;
+it is not equivalent to absent/null legacy telemetry and cannot reuse a cached
+skeleton or silently return to a human face.
 Version 0.3 logs did not record this data and must show that limitation.
 
 ## Recorded world objects (recorder 0.6+)

@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { layoutPortraitLabels } from "../src/portrait-layout.js";
+import { layoutPortraitLabels, clusterPlayerEntries } from "../src/portrait-layout.js";
+import { latestLifeEventBefore, MARKER_LIFE_EVENT_TYPES } from "../src/protocol.js";
 import { chooseRecordedInteriorPose, isInteriorLayer } from "../src/camera-placement.js";
 import { ReplayCamera } from "../src/replay-camera.js";
 import * as THREE from "../../vendor/three/0.180.0/build/three.module.js";
@@ -33,8 +34,8 @@ function model() {
 function fixture(selected = 0) {
   const requests = [];
   const load = (layer, signal, gameBuildId) => new Promise((resolve, reject) => requests.push({ layer: layer.id, signal, gameBuildId, resolve, reject }));
-  const TrailScene = new Function("THREE", "loadGameGeometry", "cancelAnimationFrame", "layoutPortraitLabels", "isInteriorLayer", "chooseRecordedInteriorPose", `${source}\nreturn TrailScene;`)(
-    THREE, load, () => {}, layoutPortraitLabels, isInteriorLayer, chooseRecordedInteriorPose,
+  const TrailScene = new Function("THREE", "loadGameGeometry", "cancelAnimationFrame", "layoutPortraitLabels", "clusterPlayerEntries", "latestLifeEventBefore", "MARKER_LIFE_EVENT_TYPES", "isInteriorLayer", "chooseRecordedInteriorPose", `${source}\nreturn TrailScene;`)(
+    THREE, load, () => {}, layoutPortraitLabels, clusterPlayerEntries, latestLifeEventBefore, MARKER_LIFE_EVENT_TYPES, isInteriorLayer, chooseRecordedInteriorPose,
   );
   const layers = [
     { id: "A", segment: 0, biome: "shore" },
@@ -46,6 +47,8 @@ function fixture(selected = 0) {
     mapPack: { identityVersion: 3, gameBuildId: "25306743", layers }, useMap: true, activeSegment: selected,
     buildToken: 1, geometrySelectionToken: 1, geometryAbort: new AbortController(), geometryLoads: new Map(),
     origin: { clone() { return this; } }, terrainRoot: group(), trailRoot: group(), gridRoot: group(),
+    playerGroups: new Map(), playerPortraits: new Map(), playerLabels: new Map(), playerObjects: new Map(),
+    playerColors: new Map(),
     statuses: [], resizeObserver: { disconnect() {} }, controls: { dispose() {} }, renderer: { dispose() {} },
     cameraSelectionRevision: 0,
     freeCamera: { mode: "orbit", setMode(value) { this.mode = value; }, focus() {}, dispose() {} }, worldRenderer: { dispose() {} }, fogDepthPass: { dispose() {} },
@@ -187,6 +190,62 @@ test("portrait overlays follow visible players and are clipped outside the camer
   assert.equal(label.element.hidden, true);
 });
 
+test("players within 10 recorded metres pack into one badge holding every member head", () => {
+  const { scene } = fixture();
+  const fakeElement = (tag) => ({
+    tag, className: "", hidden: false, title: "", textContent: "", alt: "",
+    children: [], dataset: {}, style: { setProperty() {} },
+    append(...nodes) { this.children.push(...nodes); },
+    removeAttribute() {},
+  });
+  const previousDocument = globalThis.document;
+  globalThis.document = { createElement: (tag) => fakeElement(tag) };
+  try {
+    const overlay = { children: [], append(...nodes) { this.children.push(...nodes); } };
+    scene.labelOverlay = overlay;
+    scene.canvas = { clientWidth: 1000, clientHeight: 600 };
+    // A linear world → NDC stand-in for the camera so world offsets stay observable.
+    scene.labelPosition = { project() { this.x /= 100; this.y /= 100; this.z = 0; } };
+    const positions = { a: { x: 0, y: 0, z: 0 }, b: { x: 2, y: 0, z: 0 }, c: { x: 4, y: 0, z: 0 },
+      d: { x: 6, y: 0, z: 0 }, e: { x: 8, y: 0, z: 0 } };
+    for (const id of Object.keys(positions)) {
+      scene.playerLabels.set(id, { element: fakeElement("div"), leader: fakeElement("div") });
+      scene.playerObjects.set(id, { group: { visible: true },
+        marker: { visible: true, getWorldPosition(vector) { Object.assign(vector, positions[id]); } } });
+    }
+
+    scene.updatePlayerLabelPositions();
+    assert.equal(scene.playerGroups.size, 1, "one badge for the five players inside 10 m");
+    for (const id of Object.keys(positions)) assert.equal(scene.playerLabels.get(id).element.hidden, true,
+      "the individual label yields to the shared badge");
+    const group = scene.playerGroups.values().next().value;
+    assert.equal(group.element.hidden, false);
+    assert.equal(group.members.size, 5);
+    assert.deepEqual([...group.members.keys()].sort(), ["a", "b", "c", "d", "e"]);
+    assert.equal(group.ring.children.length, 5, "every member keeps a portrait slot");
+    assert.equal(group.columns, 3, "five heads wrap as a 3 + 2 block instead of one wide row");
+    assert.equal(group.names.textContent.startsWith("5 人 · "), true);
+    // The badge sits on the members' average anchor (500…540 px), not on one member.
+    assert.deepEqual(group.element.style.transform, "translate(472px, 196px)");
+    assert.ok(overlay.children.includes(group.element));
+    assert.ok(overlay.children.includes(group.leader));
+
+    // Walking apart restores the original label for everyone who left the badge.
+    Object.assign(positions, { c: { x: 60, y: 0, z: 0 }, d: { x: 71, y: 0, z: 0 }, e: { x: 82, y: 0, z: 0 } });
+    scene.updatePlayerLabelPositions();
+    assert.equal(group.element.hidden, true, "the old badge is hidden once the party splits");
+    for (const id of ["c", "d", "e"]) {
+      assert.equal(scene.playerLabels.get(id).element.hidden, false, `${id} returns to its own label`);
+    }
+    const pair = [...scene.playerGroups.values()].find((entry) => entry.element.hidden === false);
+    assert.deepEqual([...pair.members.keys()].sort(), ["a", "b"], "only the two still together stay grouped");
+    assert.equal(pair.columns, 2);
+    assert.equal(scene.playerLabels.get("a").element.hidden, true);
+  } finally {
+    globalThis.document = previousDocument;
+  }
+});
+
 test("rewinding to unknown appearance removes the image instead of retaining the future face", () => {
   const { scene } = fixture();
   const label = { url: null, image: { hidden: true, removeAttribute() { delete this.src; } }, fallback: { hidden: false } };
@@ -271,7 +330,7 @@ test("actual scene interior camera uses the recorded torso center without adding
   const placements = [];
   canvas.addEventListener("cameraplacement", (event) => placements.push(event.detail.note));
   scene.enterInteriorView(false);
-  assert.deepEqual(camera.position.toArray(), [4, 32 * 1.7, 38]);
+  assert.deepEqual(camera.position.toArray(), [4, 32 * 1.7, -38], "rendered space is Z-mirrored (Unity LH → three RH)");
   assert.ok(camera.position.y < (1233 - 1200) * 1.7, "unrecorded standing height would place the camera above the layer ceiling");
   assert.ok(camera.getWorldDirection(new THREE.Vector3()).distanceTo(new THREE.Vector3(1, 0, 0)) < 1e-8);
   assert.equal(document.activeElement, initialFocus);
@@ -282,10 +341,35 @@ test("actual scene interior camera uses the recorded torso center without adding
   assert.deepEqual(center, [11, 1232, 2238], "camera placement must not modify the recorded sample");
   scene.enterInteriorView(true);
   assert.equal(document.activeElement, canvas);
-  assert.deepEqual(camera.position.toArray(), [4, 32 * 1.7, 38]);
+  assert.deepEqual(camera.position.toArray(), [4, 32 * 1.7, -38], "rendered space is Z-mirrored (Unity LH → three RH)");
   freeCamera.setMode("orbit");
   assert.equal(camera.near, 0.5);
   assert.equal(controls.enabled, true);
   assert.deepEqual(camera.position.toArray(), [50, 60, 70]);
   freeCamera.dispose();
+});
+
+test("a stale settled task is retried with a fresh request instead of leaving the chapter unloaded", async () => {
+  const { scene, requests } = fixture();
+  // A task left over from an aborted round settles without mounting and removes
+  // itself from the map, exactly like the real stale-dispose path does.
+  scene.geometryLoads.set("A", Promise.resolve().then(() => scene.geometryLoads.delete("A")));
+  const pending = scene.ensureGeometryLayers();
+  await flush();
+  assert.deepEqual(requests.map((request) => request.layer), ["A"], "the round retries with a fresh request");
+  requests[0].resolve(model());
+  await pending;
+  assert.equal(scene.terrainRoot.children[0].children.length, 1);
+  assert.deepEqual(scene.statuses.filter(([status]) => status === "ready").map(([, , segment]) => segment), [0]);
+});
+
+test("a task that repeatedly settles without mounting surfaces an error instead of spinning forever", async () => {
+  const { scene, requests } = fixture();
+  // Pathological entry: never mounts and never removes itself.
+  scene.geometryLoads.set("A", Promise.resolve());
+  await scene.ensureGeometryLayers();
+  assert.deepEqual(requests, []);
+  const error = scene.statuses.find(([status]) => status === "error");
+  assert.ok(error, "the wedged chapter reports an error status");
+  assert.match(error[1], /未能就绪/);
 });

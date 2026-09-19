@@ -17,6 +17,42 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
+    <!-- 极简入口：回放 / 直播 两张卡片，其余一切在进入后再出现 -->
+    <div class="mode-gate" id="modeGate">
+      <div class="mode-gate-inner">
+        <div class="gate-brand">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 32 32" role="img">
+              <path d="m3 25 9-18 5 9 4-6 8 15H3Z" />
+              <path class="brand-path" d="M9 25c5-5 10-5 15 0" />
+            </svg>
+          </span>
+          <strong>PEAK TRAIL</strong>
+        </div>
+        <div class="gate-cards">
+          <button class="gate-card gate-replay" id="gateReplay" type="button">
+            <span class="gate-icon" aria-hidden="true">
+              <svg viewBox="0 0 48 48"><path d="m8 38 12-24 7 13 5-8 8 19H8Z" /><path class="gate-icon-path" d="M17 38c6-6 12-6 18 0" /></svg>
+            </span>
+            <strong>回放</strong>
+            <small>浏览本地录制的攀登足迹</small>
+          </button>
+          <button class="gate-card gate-live is-empty" id="gateLive" type="button" aria-disabled="true">
+            <span class="gate-icon" aria-hidden="true">
+              <svg viewBox="0 0 48 48"><circle class="live-core" cx="24" cy="26" r="6" /><path d="M13 15a16 16 0 0 1 22 0M17.5 20a9 9 0 0 1 13 0" /><path class="live-core" d="M24 22v8" /></svg>
+            </span>
+            <strong>直播</strong>
+            <small id="gateLiveHint">正在寻找直播中的对局…</small>
+            <span class="gate-live-list" id="gateLiveList" hidden></span>
+          </button>
+        </div>
+        <p class="gate-footnote">
+          <button class="gate-debug" id="gateDebug" type="button">调试模式 · 进入直播界面（演示数据，无需游戏）</button>
+          <br />非官方粉丝工具，与 Landfall Publishing 或 Aggro Crab Games 无关联
+        </p>
+      </div>
+    </div>
+
     <div class="app-shell">
       <header class="topbar">
         <a class="brand" href="./" aria-label="PEAK Trail 首页">
@@ -28,12 +64,11 @@
           </span>
           <span>
             <strong>PEAK TRAIL</strong>
-            <small>本地足迹回放</small>
+            <small id="modeChip">回放</small>
           </span>
         </a>
 
-        <div class="daily-card" id="dailyCard" aria-live="polite">
-          <span class="eyebrow">今日轮换</span>
+        <div class="daily-card" id="dailyCard" aria-live="polite" title="今日轮换">
           <strong id="dailyScene">正在获取…</strong>
           <span id="dailyCountdown">—</span>
         </div>
@@ -46,14 +81,6 @@
             multiple
             accept=".json,.png,.f32,.raw,application/json,image/png,application/octet-stream"
           />
-          <label class="button button-secondary" for="traceFolderInput">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h7l2 2h9v11H3V6Z" /></svg>
-            足迹总目录
-          </label>
-          <label class="button button-primary" for="traceInput">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v3h16v-3" /></svg>
-            导入足迹日志
-          </label>
           <input id="traceFolderInput" class="visually-hidden" type="file" multiple webkitdirectory directory />
           <input
             id="traceInput"
@@ -62,6 +89,15 @@
             multiple
             accept=".json,.ndjson,.partial,application/json,application/x-ndjson"
           />
+          <details class="import-menu" id="importMenu">
+            <summary class="button button-secondary">导入 ▾</summary>
+            <div class="import-menu-pop">
+              <label for="traceFolderInput">足迹总目录</label>
+              <label for="traceInput">历史日志文件</label>
+              <label for="mapInput">手动导入地图包</label>
+            </div>
+          </details>
+          <button class="button button-ghost" id="backToGate" type="button" title="返回模式选择">返回</button>
         </div>
       </header>
 
@@ -81,6 +117,7 @@
             </div>
             <div class="camera-actions" aria-label="视角控制">
               <button class="camera-text-button" id="interiorViewButton" type="button" title="移到已记录玩家中心（非眼位）；没有记录时寻找真实模型内部地板">进入关内</button>
+              <button class="camera-text-button" id="cinematicButton" type="button" title="沿路径自动跟随当前玩家，每 60 秒轮换；点击玩家卡 ◎ 可锁定">自动跟随</button>
               <button class="camera-text-button" id="freeCameraButton" type="button" aria-pressed="false">自由相机 WASD</button>
               <button class="icon-button" id="topViewButton" type="button" title="俯视视角" aria-label="俯视视角">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 7l8 4 8-4-8-4Zm-8 9 8 4 8-4M4 17l8 4 8-4" /></svg>
@@ -96,7 +133,7 @@
             <small id="cameraPlacement">可穿墙的回放摄像机，不模拟玩家碰撞</small>
           </div>
 
-          <nav class="segment-navigator" id="segmentNavigator" aria-label="关卡分区导航" hidden>
+          <nav class="segment-navigator is-collapsed" id="segmentNavigator" aria-label="关卡分区导航" hidden>
             <p class="route-summary" id="routeSummary" role="status">关卡分支未确认</p>
             <div class="segment-navigation-main">
               <button class="segment-step-button" id="previousSegmentButton" type="button" aria-label="上一关">
@@ -155,6 +192,12 @@
             <span id="eventToastIcon">◆</span>
             <div><strong id="eventToastTitle"></strong><small id="eventToastMeta"></small></div>
           </div>
+
+          <div class="follow-hud" id="followHud" hidden>
+            <span class="follow-dot" aria-hidden="true"></span>
+            <span id="followHudText">跟随中</span>
+            <small>Esc 退出 · Tab 切换 · 拖动环绕 · 滚轮缩放</small>
+          </div>
         </section>
 
         <aside class="inspector" aria-label="回放信息与筛选">
@@ -170,20 +213,44 @@
               </span>
             </div>
 
-            <div class="source-list">
-              <button class="source-row" id="traceSourceButton" type="button">
-                <span class="source-icon trace-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24"><path d="M5 18c3-8 5-2 8-9s5 1 6-4M5 18h.01M19 5h.01" /></svg>
-                </span>
-                <span><strong id="traceSourceName">尚未导入足迹</strong><small id="traceSourceMeta">总目录或 PeakTrailHistory.ndjson</small></span>
-                <span class="row-state" id="traceSourceState">导入</span>
-              </button>
-              <div class="source-row map-status-row" id="mapSourceButton" title="普通回放会自动使用 Pages 内嵌地图">
-                <span class="source-icon map-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24"><path d="m4 7 5-3 6 3 5-3v13l-5 3-6-3-5 3V7Zm5-3v13m6-10v13" /></svg>
-                </span>
-                <span><strong id="mapSourceName">正在匹配内嵌地图</strong><small id="mapSourceMeta">普通回放自动从 Pages catalog 加载</small></span>
-                <span class="row-state" id="mapSourceState">开发</span>
+            <div class="source-tabs" role="tablist" aria-label="数据源类型">
+              <button id="modeReplay" class="source-tab is-active" type="button" role="tab" aria-selected="true">回放</button>
+              <button id="modeLive" class="source-tab" type="button" role="tab" aria-selected="false">直播</button>
+            </div>
+
+            <div id="replaySource">
+              <div class="source-list">
+                <button class="source-row" id="traceSourceButton" type="button">
+                  <span class="source-icon trace-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24"><path d="M5 18c3-8 5-2 8-9s5 1 6-4M5 18h.01M19 5h.01" /></svg>
+                  </span>
+                  <span><strong id="traceSourceName">尚未导入足迹</strong><small id="traceSourceMeta">总目录或 PeakTrailHistory.ndjson</small></span>
+                  <span class="row-state" id="traceSourceState">导入</span>
+                </button>
+                <div class="source-row map-status-row" id="mapSourceButton" title="普通回放会自动使用 Pages 内嵌地图">
+                  <span class="source-icon map-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24"><path d="m4 7 5-3 6 3 5-3v13l-5 3-6-3-5 3V7Zm5-3v13m6-10v13" /></svg>
+                  </span>
+                  <span><strong id="mapSourceName">正在匹配内嵌地图</strong><small id="mapSourceMeta">普通回放自动从 Pages catalog 加载</small></span>
+                  <span class="row-state" id="mapSourceState">开发</span>
+                </div>
+              </div>
+            </div>
+
+            <div id="liveSource" hidden>
+              <div class="source-list">
+                <div class="live-relay-row">
+                  <input id="liveUrl" type="text" aria-label="直播服务器地址" />
+                  <button id="liveRefresh" type="button" title="刷新活跃 run 列表">刷新</button>
+                </div>
+                <div id="liveRunList" class="live-run-list"></div>
+                <div class="live-state-row" id="liveStateRow" hidden>
+                  <span class="live-dot" aria-hidden="true"></span>
+                  <small id="liveStatus">未连接</small>
+                  <span id="wakeLockChip" class="wake-chip" hidden></span>
+                  <label class="live-follow"><input id="liveFollow" type="checkbox" checked />跟随</label>
+                  <button id="liveDisconnect" type="button">断开</button>
+                </div>
               </div>
             </div>
             <details class="developer-tools">
@@ -191,9 +258,6 @@
               <p>普通用户无需操作；仅在制作或排查地图包时使用。</p>
               <label class="button button-secondary" for="mapInput">手动导入地图包</label>
             </details>
-            <p class="fan-disclaimer">
-              非官方粉丝工具，与 Landfall Publishing 或 Aggro Crab Games 无关联、授权或背书。
-            </p>
           </section>
 
           <section class="inspector-section players-section">
@@ -209,7 +273,7 @@
             </div>
           </section>
 
-          <section class="inspector-section archive-section">
+          <section class="inspector-section archive-section is-collapsed">
             <div class="section-heading compact">
               <div>
                 <span class="eyebrow">足迹档案</span>
@@ -229,7 +293,7 @@
             <p class="archive-summary" id="archiveSummary">等待导入足迹目录</p>
           </section>
 
-          <section class="inspector-section controls-section">
+          <section class="inspector-section controls-section is-collapsed">
             <div class="section-heading compact">
               <div>
                 <span class="eyebrow">显示</span>
@@ -266,7 +330,7 @@
             </div>
           </section>
 
-          <section class="inspector-section events-section">
+          <section class="inspector-section events-section is-collapsed">
             <div class="section-heading compact">
               <div>
                 <span class="eyebrow">关键节点</span>
@@ -279,7 +343,7 @@
             </div>
           </section>
 
-          <section class="inspector-section world-section">
+          <section class="inspector-section world-section is-collapsed">
             <div class="section-heading compact"><div><span class="eyebrow">世界动态</span><h2>物体与危险</h2></div></div>
             <label class="switch-row"><span><strong>显示世界与雾层</strong><small>无世界实录时显示地图基础雾</small></span><input id="worldToggle" type="checkbox" checked /><span class="switch-ui"></span></label>
             <p class="control-note" id="worldTelemetryNote">等待导入世界记录</p>

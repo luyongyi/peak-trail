@@ -8,15 +8,16 @@ import { decodeGeometryBytes, GEOMETRY_FORMATS } from "../src/geometry-bytes.js"
 import { positiveInstanceTransform } from "../src/geometry-matrices.js";
 import { getSourceEffectMaterial } from "../src/source-materials.js";
 import { isExplosiveMineMaterial, recordedHiddenMineIndices } from "../src/mine-visibility.js";
+import { sha256Hex } from "../src/sha256.js";
 
 // Use the bundled Three implementation, replacing only network and GLTF parse
 // ports so the loader and batching contracts run without a WebGL canvas.
 const source = (await readFile(new URL("../src/geometry-loader.js", import.meta.url), "utf8"))
   .replace(/^import .*;\r?\n/gm, "").replace(/^export (?=(?:async )?function )/gm, "");
 const compile = (ports = {}) => new Function(
-  "THREE", "GLTFLoader", "MeshoptDecoder", "decodeGeometryBytes", "GEOMETRY_FORMATS", "positiveInstanceTransform", "getSourceEffectMaterial", "isExplosiveMineMaterial", "recordedHiddenMineIndices", "fetch", "crypto",
-  `${source}\nreturn { loadGameGeometry, batchStaticMeshes, updateRecordedMineVisibility, updateMapFogSurfaceVisibility };`,
-)(THREE, ports.GLTFLoader, {}, ports.decode || decodeGeometryBytes, GEOMETRY_FORMATS, positiveInstanceTransform, getSourceEffectMaterial, isExplosiveMineMaterial, recordedHiddenMineIndices, ports.fetch, ports.crypto || webcrypto);
+  "THREE", "GLTFLoader", "MeshoptDecoder", "decodeGeometryBytes", "GEOMETRY_FORMATS", "positiveInstanceTransform", "getSourceEffectMaterial", "isExplosiveMineMaterial", "recordedHiddenMineIndices", "sha256Hex", "fetch", "crypto",
+  `${source}\nreturn { loadGameGeometry, batchStaticMeshes, updateRecordedMineVisibility, updateMapFogSurfaceVisibility, verifiableTopBlend };`,
+)(THREE, ports.GLTFLoader, {}, ports.decode || decodeGeometryBytes, GEOMETRY_FORMATS, positiveInstanceTransform, getSourceEffectMaterial, isExplosiveMineMaterial, recordedHiddenMineIndices, sha256Hex, ports.fetch, ports.crypto || webcrypto);
 
 function glb() {
   const text = JSON.stringify({ asset: { version: "2.0" }, scenes: [{ nodes: [] }] });
@@ -89,6 +90,35 @@ test("terrain blending consumes the corrected inverse-transpose instance normal"
   const blendNormal = shader.vertexShader.indexOf("vPeakUp = max(");
   assert.ok(corrected >= 0 && blendNormal > corrected);
   assert.match(shader.fragmentShader, /smoothstep\(peakRamp.x, peakRamp.y, vPeakUp\)/);
+  geometry.dispose(); material.dispose(); batch.children.forEach((mesh) => mesh.dispose());
+});
+
+test("shared foliage top colours never paint props teal, authored terrain tops keep their blend", () => {
+  const { verifiableTopBlend, batchStaticMeshes } = compile();
+  // Every GD/FoliageGD and W/Peak_Mirage material stores the same default _TopColor;
+  // the build's survey capture keeps those props on their base colour (a tall cactus
+  // crown stays pink), so the world-up blend is disabled for them only.
+  assert.equal(verifiableTopBlend("GD/FoliageGD", 1), 0);
+  assert.equal(verifiableTopBlend("W/Peak_Mirage", 0.8), 0);
+  // A cyan top colour on desert stone contradicts the same capture that shows
+  // sand-coloured tops on W/Peak_Rock.
+  assert.equal(verifiableTopBlend("W/Peak_Petrified_Rock", 0.74), 0);
+  assert.equal(verifiableTopBlend("W/Peak_Rock", 1), 1);
+  assert.equal(verifiableTopBlend("W/Peak_Rock", 0.3), 0.3);
+  assert.equal(verifiableTopBlend("W/Peak_Standard", undefined), 1);
+
+  const material = new THREE.MeshStandardMaterial();
+  material.userData.peakTerrain = { baseColor: [0.82, 0.62, 0.62], topColor: [0.11, 0.19, 0.19],
+    tightness: [0.707, 0.765], amount: 1, topAlpha: 1, sourceMaterial: "M_Foliage_Cactus_tri",
+    sourceColors: { shader: "GD/FoliageGD" } };
+  const geometry = new THREE.BoxGeometry(); const scene = new THREE.Group();
+  scene.add(new THREE.Mesh(geometry, material));
+  const batch = batchStaticMeshes(scene);
+  const shader = { uniforms: {}, vertexShader: THREE.ShaderLib.standard.vertexShader,
+    fragmentShader: THREE.ShaderLib.standard.fragmentShader };
+  material.onBeforeCompile(shader, {});
+  assert.equal(shader.uniforms.peakAmount.value, 0, "the cactus crown keeps its own colour");
+  assert.deepEqual(shader.uniforms.peakBase.value.toArray(), [0.82, 0.62, 0.62]);
   geometry.dispose(); material.dispose(); batch.children.forEach((mesh) => mesh.dispose());
 });
 

@@ -24,6 +24,20 @@ Assert(TelemetryChangeDetector.HasMeaningfulStaminaChange(staminaA, staminaAtThr
 Assert(TelemetryChangeDetector.HasMeaningfulStaminaChange(staminaUnavailable, staminaA, 0.002f),
     "The remote-ready transition must emit a state record.");
 
+var capacityUnknown = NewStamina(ready: true, stamina: .8f);
+capacityUnknown.CapacityReady = false;
+capacityUnknown.MaxStamina = null;
+capacityUnknown.Stamina01 = null;
+var capacityKnown = NewStamina(ready: true, stamina: .8f);
+capacityKnown.CapacityReady = true;
+Assert(TelemetryChangeDetector.HasMeaningfulStaminaChange(capacityUnknown, capacityKnown, .002f),
+    "A separately received status-capacity packet must emit state even when current stamina did not change.");
+Assert(TelemetryChangeDetector.HasMeaningfulStaminaChange(capacityKnown, capacityUnknown, .002f),
+    "Losing status readiness must invalidate previous capacity.");
+string incompleteJson = Newtonsoft.Json.JsonConvert.SerializeObject(capacityUnknown);
+Assert(!incompleteJson.Contains("maxStamina") && !incompleteJson.Contains("stamina01"),
+    "Unknown capacity must be omitted, not serialized as a fabricated healthy maximum.");
+
 var oldInventory = NewInventory(ready: true);
 var movedInventory = NewInventory(ready: true);
 AddSlot(oldInventory, "slot/0", "hotbar", 0, NewItem("7", "rope", "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", 0, uses: 3));

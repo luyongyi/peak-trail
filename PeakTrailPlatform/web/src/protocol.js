@@ -1,5 +1,7 @@
 import { normalizeRoute } from "./map-route.js";
 import { normalizeWorldRecord, buildWorldTimeline } from "./world-timeline.js";
+import { normalizePlayerStatus } from "./player-conditions.js";
+import { sha256Hex } from "./sha256.js";
 
 export class ProtocolError extends Error {
   constructor(message, detail = "") {
@@ -102,8 +104,10 @@ export function canonicalMapPackIdentity(manifest) {
 
 async function verifyMapPackIdentityV3(manifest) {
   const canonical = canonicalMapPackIdentity(manifest);
-  const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(canonical));
-  const expected = `sha256-${[...new Uint8Array(bytes)].map((value) => value.toString(16).padStart(2, "0")).join("")}`;
+  // sha256Hex falls back to a pure-JS implementation on insecure origins, where
+  // SubtleCrypto does not exist but LAN map packs must still verify.
+  const digest = await sha256Hex(new TextEncoder().encode(canonical), globalThis.crypto?.subtle);
+  const expected = `sha256-${digest}`;
   if (manifest.mapPackId !== expected) throw new ProtocolError("地图包身份校验失败", `mapPackId 不匹配：${expected}`);
 }
 
@@ -262,7 +266,7 @@ async function readNdjson(file) {
   return { records, rejected };
 }
 
-function normalizeManifest(raw) {
+export function normalizeManifest(raw) {
   if (!raw || typeof raw !== "object") {
     throw new ProtocolError("manifest 必须是一个 JSON 对象");
   }
@@ -416,6 +420,13 @@ function normalizeAppearance(record) {
     outfitName: asId(raw.outfitName ?? raw.fitName),
     hatName: asId(raw.hatName),
     skinColor: appearanceColor(raw.skinColor ?? raw.color),
+    formReady: typeof raw.formReady === "boolean" ? raw.formReady : null,
+    form: raw.formReady === true && ["normal", "skeleton", "mushroom", "chicken"].includes(raw.form) ? raw.form : "unknown",
+    formAuthority: asId(raw.formAuthority),
+    formMeshName: asId(raw.formMeshName),
+    formMaterialNames: Array.isArray(raw.formMaterialNames)
+      ? raw.formMaterialNames.filter((value) => typeof value === "string").slice(0, 16) : [],
+    formRendererActive: typeof raw.formRendererActive === "boolean" ? raw.formRendererActive : null,
   };
   appearance.captured = Boolean(
     nested
@@ -423,6 +434,7 @@ function normalizeAppearance(record) {
     || appearance.authority
     || appearance.source
     || appearance.skinColor
+    || appearance.formReady !== null
     || [
       appearance.skinIndex,
       appearance.eyesIndex,
@@ -453,6 +465,9 @@ function readTelemetry(record) {
     record.extraStamina01 ?? record.extraStaminaNormalized ?? record.bonusStamina01,
   );
   const totalStamina = asFiniteNumber(record.totalStamina);
+  const baseMaxStamina = asFiniteNumber(record.baseMaxStamina);
+  const baseMaxExtraStamina = asFiniteNumber(record.baseMaxExtraStamina);
+  const capacityReady = typeof record.capacityReady === "boolean" ? record.capacityReady : null;
   const ready = typeof record.telemetryReady === "boolean" ? record.telemetryReady : null;
   const captured = ready !== null || item.captured || [
     stamina,
@@ -474,6 +489,9 @@ function readTelemetry(record) {
     maxExtraStamina,
     extraStamina01,
     totalStamina,
+    baseMaxStamina,
+    baseMaxExtraStamina,
+    capacityReady,
     ready,
     authority: record.authority ? String(record.authority) : null,
   };
@@ -545,6 +563,7 @@ async function loadSingleTrace(bundle, manifestMatch, streamFiles, parsedStreams
   const telemetryTracks = new Map();
   const inventoryTracks = new Map();
   const appearanceTracks = new Map();
+  const statusTracks = new Map();
   const routeTracks = [];
   const worldRecords = [];
   const events = [];
@@ -555,6 +574,7 @@ async function loadSingleTrace(bundle, manifestMatch, streamFiles, parsedStreams
   let staminaSamples = 0;
   let extraStaminaSamples = 0;
   let appearanceSamples = 0;
+  let statusSamples = 0;
   const hasPositionSegments = manifest.segmentResolution === "position-inferred-v1";
 
   if (manifest.segmentResolution === "legacy-global-current") {
@@ -607,6 +627,19 @@ async function loadSingleTrace(bundle, manifestMatch, streamFiles, parsedStreams
         const route = normalizeRoute(record.route);
         if (route) routeTracks.push({ t, rawT: rawTime, route });
         else warnings.push("一条关卡分支记录无效，未采用该记录。");
+        continue;
+      }
+
+      if (type === "status") {
+        const playerId = asId(record.playerId ?? record.stableId ?? record.platformUserId ?? record.id);
+        const status = normalizePlayerStatus(record);
+        if (!playerId || !status) continue;
+        if (!participants.has(playerId)) participants.set(playerId, { id: playerId,
+          nickname: String(record.nickname ?? record.displayName ?? playerId), actorNumber: asFiniteNumber(record.actorNumber),
+          platform: record.platform ? String(record.platform) : null });
+        if (!statusTracks.has(playerId)) statusTracks.set(playerId, []);
+        statusTracks.get(playerId).push({ t, rawT: rawTime, status });
+        statusSamples += 1;
         continue;
       }
 
@@ -742,6 +775,7 @@ async function loadSingleTrace(bundle, manifestMatch, streamFiles, parsedStreams
   for (const samples of telemetryTracks.values()) samples.sort((a, b) => a.t - b.t);
   for (const samples of inventoryTracks.values()) samples.sort((a, b) => a.t - b.t);
   for (const samples of appearanceTracks.values()) samples.sort((a, b) => a.t - b.t);
+  for (const samples of statusTracks.values()) samples.sort((a, b) => a.t - b.t);
   events.sort((a, b) => a.t - b.t);
   routeTracks.sort((a, b) => a.t - b.t);
   const duration = Math.max(
@@ -752,6 +786,7 @@ async function loadSingleTrace(bundle, manifestMatch, streamFiles, parsedStreams
     ...Array.from(telemetryTracks.values(), (samples) => samples.at(-1)?.t || 0),
     ...Array.from(inventoryTracks.values(), (samples) => samples.at(-1)?.t || 0),
     ...Array.from(appearanceTracks.values(), (samples) => samples.at(-1)?.t || 0),
+    ...Array.from(statusTracks.values(), (samples) => samples.at(-1)?.t || 0),
     ...worldRecords.map((record) => record.t),
   );
 
@@ -767,6 +802,7 @@ async function loadSingleTrace(bundle, manifestMatch, streamFiles, parsedStreams
     telemetryTracks,
     inventoryTracks,
     appearanceTracks,
+    statusTracks,
     routeTracks,
     worldTimeline: buildWorldTimeline(worldRecords),
     events,
@@ -781,6 +817,7 @@ async function loadSingleTrace(bundle, manifestMatch, streamFiles, parsedStreams
       hasStamina: staminaSamples > 0,
       hasExtraStamina: extraStaminaSamples > 0,
       hasAppearance: appearanceSamples > 0,
+      hasStatus: statusSamples > 0,
     },
   };
 }
@@ -1128,6 +1165,203 @@ export async function loadTraceCollection(fileList, options = {}) {
   };
 }
 
+// --- Live relay sources -------------------------------------------------------
+// The relay speaks the same record schema as stream.ndjson; these helpers grow a
+// trace object with the exact same shape loadSingleTrace produces, so the whole
+// viewer pipeline (map matching, cards, trails, markers) works unchanged.
+
+export function createLiveTrace(manifestRaw, meta = {}) {
+  const manifest = normalizeManifest(manifestRaw && typeof manifestRaw === "object" ? manifestRaw : {});
+  manifest.sessionId = meta.sessionId ?? `live-${meta.code ?? "run"}`;
+  if (manifest.status !== "complete") manifest.status = "recording";
+  if (!manifest.startedAtUtc) manifest.startedAtUtc = new Date().toISOString();
+  const trace = {
+    manifest,
+    manifestFileName: meta.source ?? `live:${meta.code ?? ""}`,
+    streamFileNames: [`live://${meta.code ?? ""}`],
+    participants: [],
+    tracks: new Map(),
+    telemetryTracks: new Map(),
+    inventoryTracks: new Map(),
+    appearanceTracks: new Map(),
+    statusTracks: new Map(),
+    routeTracks: [],
+    events: [],
+    worldTimeline: buildWorldTimeline([]),
+    duration: 0,
+    sampleCount: 0,
+    bounds: null,
+    warnings: [`实时直播源 ${meta.code ?? ""}：数据随对局增长，断线重连会从当前缓冲重建。`],
+    telemetry: {
+      captured: false, sampleCount: 0, hasItems: false, hasStamina: false,
+      hasExtraStamina: false, hasAppearance: false, hasStatus: false,
+    },
+    live: { code: meta.code ?? null, runId: meta.runId ?? null },
+  };
+  trace._participantIds = new Set();
+  for (const { record } of participantRecords(manifest.participants)) {
+    const participant = participantFromRecord(record);
+    if (participant) {
+      trace._participantIds.add(participant.id);
+      trace.participants.push(participant);
+    }
+  }
+  return trace;
+}
+
+function liveEnsureParticipant(trace, record) {
+  const participant = participantFromRecord(record);
+  if (!participant) return null;
+  if (!trace._participantIds.has(participant.id)) {
+    trace._participantIds.add(participant.id);
+    trace.participants.push(participant);
+  }
+  return participant.id;
+}
+
+function liveExtendBounds(trace, pos) {
+  if (!trace.bounds) {
+    trace.bounds = { min: [...pos], max: [...pos] };
+    return;
+  }
+  for (let axis = 0; axis < 3; axis += 1) {
+    if (pos[axis] < trace.bounds.min[axis]) trace.bounds.min[axis] = pos[axis];
+    if (pos[axis] > trace.bounds.max[axis]) trace.bounds.max[axis] = pos[axis];
+  }
+}
+
+export function appendLiveRecord(trace, record) {
+  if (!trace || !record || typeof record !== "object") return false;
+  const type = String(record.type ?? record.kind ?? "").toLowerCase();
+
+  if (type === "participant" || type === "player") {
+    liveEnsureParticipant(trace, record);
+    return true;
+  }
+
+  const rawTime = asFiniteNumber(record.t ?? record.time ?? record.timestamp);
+  if (rawTime === null || rawTime < 0) return false;
+  const t = rawTime * 0.001; // relay manifests are always milliseconds
+  if (t > trace.duration) trace.duration = t;
+
+  if (type === "world_snapshot" || type === "world_delta") {
+    const worldRecord = normalizeWorldRecord(record, t);
+    if (!worldRecord) return false;
+    trace.worldRecords ||= [];
+    trace.worldRecords.push(worldRecord);
+    return true;
+  }
+  if (type === "route") {
+    const route = normalizeRoute(record.route);
+    if (!route) return false;
+    trace.routeTracks.push({ t, rawT: rawTime, route });
+    return true;
+  }
+  if (type === "status") {
+    const playerId = asId(record.playerId ?? record.stableId ?? record.platformUserId ?? record.id);
+    const status = normalizePlayerStatus(record);
+    if (!playerId || !status) return false;
+    liveEnsureParticipant(trace, record);
+    if (!trace.statusTracks.has(playerId)) trace.statusTracks.set(playerId, []);
+    trace.statusTracks.get(playerId).push({ t, rawT: rawTime, status });
+    trace.telemetry.hasStatus = true;
+    trace.telemetry.captured = true;
+    return true;
+  }
+  if (type === "state") {
+    const playerId = asId(record.playerId ?? record.stableId ?? record.platformUserId ?? record.id);
+    if (!playerId) return false;
+    liveEnsureParticipant(trace, record);
+    const telemetry = readTelemetry(record);
+    if (!trace.telemetryTracks.has(playerId)) trace.telemetryTracks.set(playerId, []);
+    trace.telemetryTracks.get(playerId).push({ t, rawT: rawTime, telemetry });
+    trace.telemetry.captured ||= telemetry.captured;
+    trace.telemetry.hasStamina ||= telemetry.stamina !== null || telemetry.stamina01 !== null;
+    trace.telemetry.hasExtraStamina ||= telemetry.extraStamina !== null || telemetry.extraStamina01 !== null;
+    return true;
+  }
+  if (type === "inventory") {
+    const playerId = asId(record.playerId ?? record.stableId ?? record.platformUserId ?? record.id);
+    if (!playerId) return false;
+    liveEnsureParticipant(trace, record);
+    const inventory = normalizeInventory(record);
+    if (!trace.inventoryTracks.has(playerId)) trace.inventoryTracks.set(playerId, []);
+    trace.inventoryTracks.get(playerId).push({ t, rawT: rawTime, inventory });
+    trace.telemetry.hasItems ||= inventory.captured;
+    return true;
+  }
+  if (type === "appearance") {
+    const playerId = asId(record.playerId ?? record.stableId ?? record.platformUserId ?? record.id);
+    if (!playerId) return false;
+    liveEnsureParticipant(trace, record);
+    const appearance = normalizeAppearance(record);
+    if (!trace.appearanceTracks.has(playerId)) trace.appearanceTracks.set(playerId, []);
+    trace.appearanceTracks.get(playerId).push({ t, rawT: rawTime, appearance });
+    trace.telemetry.hasAppearance ||= appearance.captured;
+    return true;
+  }
+  if (type === "sample" || type === "position" || (!type && parsePosition(record))) {
+    const playerId = asId(record.playerId ?? record.stableId ?? record.platformUserId ?? record.id);
+    const pos = parsePosition(record);
+    if (!playerId || !pos) return false;
+    liveEnsureParticipant(trace, record);
+    if (!trace.tracks.has(playerId)) trace.tracks.set(playerId, []);
+    const telemetry = readTelemetry(record);
+    trace.tracks.get(playerId).push({
+      t, rawT: rawTime, playerId, pos,
+      yaw: asFiniteNumber(record.yaw ?? record.rotationY, 0),
+      segment: null, activeSegment: asActiveSegment(record.activeSegment, null),
+      telemetry,
+    });
+    trace.sampleCount += 1;
+    trace.telemetry.sampleCount += 1;
+    trace.telemetry.captured = true;
+    liveExtendBounds(trace, pos);
+    return true;
+  }
+  if (type === "event" || record.event) {
+    const recordedSegment = asLayerSegment(record.segment ?? record.layer);
+    trace.events.push({
+      type: normalizeEventName(record.event ?? record.name ?? record.eventType),
+      t, rawT: rawTime,
+      playerId: asId(record.playerId ?? record.stableId ?? record.platformUserId),
+      pos: parsePosition(record),
+      segment: null,
+      activeSegment: asActiveSegment(record.activeSegment, null),
+      label: record.label ? String(record.label) : null,
+      item: normalizeItem(record).value,
+      detail: record.detail && typeof record.detail === "object" ? record.detail : null,
+      source: record.source ? String(record.source) : null,
+      confidence: record.confidence ? String(record.confidence) : null,
+      fromLocation: record.fromLocation ? String(record.fromLocation) : null,
+      toLocation: record.toLocation ? String(record.toLocation) : null,
+      objectId: typeof record.objectId === "string" ? record.objectId : null,
+      kind: type === "world_event" ? record.kind : null,
+      radius: asFiniteNumber(record.radius),
+    });
+    return true;
+  }
+  return false;
+}
+
+/** Per-record appends arrive nearly ordered; before the viewer reads tracks with
+ * binary search, one flush sorts everything and rebuilds derived indexes. */
+export function finalizeLiveFlush(trace) {
+  if (!trace) return trace;
+  for (const samples of trace.tracks.values()) samples.sort((a, b) => a.t - b.t);
+  for (const samples of trace.telemetryTracks.values()) samples.sort((a, b) => a.t - b.t);
+  for (const samples of trace.inventoryTracks.values()) samples.sort((a, b) => a.t - b.t);
+  for (const samples of trace.appearanceTracks.values()) samples.sort((a, b) => a.t - b.t);
+  for (const samples of trace.statusTracks.values()) samples.sort((a, b) => a.t - b.t);
+  trace.events.sort((a, b) => a.t - b.t);
+  trace.routeTracks.sort((a, b) => a.t - b.t);
+  delete trace.lifeEventsByPlayer; // rebuilt lazily over the grown event list
+  if (trace.worldRecords?.length) {
+    trace.worldTimeline = buildWorldTimeline(trace.worldRecords);
+  }
+  return trace;
+}
+
 function latestAtTime(samples, seconds) {
   if (!samples.length || Number(seconds) < samples[0].t) return null;
   let low = 0;
@@ -1140,6 +1374,40 @@ function latestAtTime(samples, seconds) {
   return samples[Math.max(0, low - 1)] || null;
 }
 
+export const LIFE_EVENT_TYPES = new Set(["death", "revive", "join", "leave"]);
+export const MARKER_LIFE_EVENT_TYPES = new Set(["death", "revive", "join"]);
+
+// Life events are only a handful per player, but scanning the full event list
+// per player per animation frame is O(players × events). Cache the per-player
+// split lazily so both hand-written fixtures and loaded traces work unchanged.
+const NO_LIFE_EVENTS = new Map();
+
+function lifeEventsByPlayer(trace) {
+  if (!trace) return NO_LIFE_EVENTS;
+  if (!trace.lifeEventsByPlayer) {
+    const split = new Map();
+    for (const event of trace.events || []) {
+      if (LIFE_EVENT_TYPES.has(event.type) && event.playerId) {
+        if (!split.has(event.playerId)) split.set(event.playerId, []);
+        split.get(event.playerId).push(event);
+      }
+    }
+    for (const events of split.values()) events.sort((a, b) => a.t - b.t);
+    trace.lifeEventsByPlayer = split;
+  }
+  return trace.lifeEventsByPlayer;
+}
+
+export function latestLifeEventBefore(trace, playerId, seconds, types = LIFE_EVENT_TYPES) {
+  const events = playerId ? lifeEventsByPlayer(trace).get(playerId) : null;
+  if (!events) return null;
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event.t <= seconds && types.has(event.type)) return event;
+  }
+  return null;
+}
+
 export function traceSampleAtTime(trace, playerId, seconds) {
   return latestAtTime(trace?.tracks?.get(playerId) || [], seconds);
 }
@@ -1149,6 +1417,7 @@ export function tracePlayerStateAtTime(trace, playerId, seconds) {
   const state = latestAtTime(trace?.telemetryTracks?.get(playerId) || [], seconds);
   const inventoryEntry = latestAtTime(trace?.inventoryTracks?.get(playerId) || [], seconds);
   const appearanceEntry = latestAtTime(trace?.appearanceTracks?.get(playerId) || [], seconds);
+  const statusEntry = latestAtTime(trace?.statusTracks?.get(playerId) || [], seconds);
   const telemetry = { ...(sample?.telemetry || {}) };
   const vitalityKeys = [
     "stamina",
@@ -1158,6 +1427,8 @@ export function tracePlayerStateAtTime(trace, playerId, seconds) {
     "maxExtraStamina",
     "extraStamina01",
     "totalStamina",
+    "baseMaxStamina",
+    "baseMaxExtraStamina",
   ];
   const sampleHasVitality = sample?.telemetry
     && (sample.telemetry.ready !== null || vitalityKeys.some(
@@ -1170,10 +1441,25 @@ export function tracePlayerStateAtTime(trace, playerId, seconds) {
     if (state.telemetry.ready === false) {
       for (const key of vitalityKeys) telemetry[key] = null;
     }
+    if (state.telemetry.capacityReady === false) {
+      for (const key of ["maxStamina", "stamina01"]) telemetry[key] = null;
+    }
     for (const [key, value] of Object.entries(state.telemetry)) {
       if (key === "item" || key === "itemCaptured" || key === "captured") continue;
       if (value !== null && value !== undefined) telemetry[key] = value;
     }
+  }
+  const telemetryTime = stateWinsVitality ? state.t : sample?.t ?? null;
+  // A complete capacity observation can arrive independently of movement or
+  // stamina. Only the newest observation may replace cap values; not vice versa.
+  if (statusEntry?.status.ready === true && statusEntry.t >= (telemetryTime ?? -Infinity)) {
+    for (const key of ["baseMaxStamina", "baseMaxExtraStamina", "maxStamina", "maxExtraStamina"]) {
+      telemetry[key] = statusEntry.status[key];
+    }
+    telemetry.capacityReady = true;
+  } else if (statusEntry && statusEntry.status.ready !== true && statusEntry.t >= (telemetryTime ?? -Infinity)) {
+    telemetry.capacityReady = false;
+    for (const key of ["maxStamina", "stamina01"]) telemetry[key] = null;
   }
   const inventory = inventoryEntry?.inventory || null;
   const inventoryWinsItem = inventory?.heldCaptured
@@ -1182,12 +1468,20 @@ export function tracePlayerStateAtTime(trace, playerId, seconds) {
     telemetry.itemCaptured = true;
     telemetry.item = inventory.heldPresent ? inventory.held : null;
   }
+  const lifeEvent = latestLifeEventBefore(trace, playerId, seconds);
+  const life = lifeEvent?.type === "leave" ? "absent"
+    : typeof statusEntry?.status.dead === "boolean" && statusEntry.t >= (lifeEvent?.t ?? -Infinity)
+      ? statusEntry.status.dead ? "dead" : "alive"
+      : lifeEvent ? lifeEvent.type === "death" ? "dead" : "alive" : "unknown";
   return {
     sample,
     telemetry: Object.keys(telemetry).length ? telemetry : null,
     inventory,
     appearance: appearanceEntry?.appearance || null,
-    telemetryTime: stateWinsVitality ? state.t : sample?.t ?? null,
+    status: statusEntry?.status || null,
+    statusTime: statusEntry?.t ?? null,
+    life,
+    telemetryTime,
     inventoryTime: inventoryEntry?.t ?? null,
     appearanceTime: appearanceEntry?.t ?? null,
   };

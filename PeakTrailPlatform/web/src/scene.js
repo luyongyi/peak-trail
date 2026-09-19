@@ -4,12 +4,13 @@ import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { loadGameGeometry, updateRecordedMineVisibility, updateMapFogSurfaceVisibility } from "./geometry-loader.js";
-import { layoutPortraitLabels } from "./portrait-layout.js";
+import { layoutPortraitLabels, clusterPlayerEntries } from "./portrait-layout.js";
 import { ReplayCamera, REPLAY_CAMERA_HELP } from "./replay-camera.js";
 import { chooseRecordedInteriorPose, isInteriorLayer } from "./camera-placement.js";
 import { WorldRenderer } from "./world-renderer.js";
 import { pointInBounds, clipTrailSegment } from "./trail-spatial.js";
 import { FogDepthPass } from "./fog-depth-pass.js";
+import { latestLifeEventBefore, MARKER_LIFE_EVENT_TYPES } from "./protocol.js";
 
 const PLAYER_COLORS = [
   "#efb74e",
@@ -142,6 +143,7 @@ export class TrailScene {
     this.playerObjects = new Map();
     this.playerPortraits = new Map();
     this.playerLabels = new Map();
+    this.playerGroups = new Map();
     this.labelPosition = new THREE.Vector3();
     this.labelOverlay = document.createElement("div");
     this.labelOverlay.className = "trail-player-labels";
@@ -153,6 +155,37 @@ export class TrailScene {
     this.geometrySelectionToken = 0;
     this.geometryLoads = new Map();
     this.geometryAbort = null;
+
+    // ===== 跟随相机 =====
+    // 临界阻尼弹簧追认 + 速度前视 + 用户轨道偏移 + 地形遮挡拉近。
+    // 锚点 = 播放头插值后的玩家标记世界坐标（setTime 每帧刷新）。
+    this.followTargetId = null;
+    this.followSmoothed = new THREE.Vector3();
+    this.followAnchor = new THREE.Vector3();
+    this.followPrevAnchor = new THREE.Vector3();
+    this.followVelocity = new THREE.Vector3();
+    this.followLook = new THREE.Vector3();
+    this.followDesired = new THREE.Vector3();
+    this.followDir = new THREE.Vector3();
+    this.followTmp = new THREE.Vector3();
+    this.followHasPrev = false;
+    this.followAzimuth = 0.6;
+    this.followPitch = 0.05;
+    this.followPitchTarget = 0.05;
+    this.followDistance = 38;
+    this.followUserOrbit = false;
+    this.followAutoRotate = false;
+    this.followAutoSwitchAt = 0;
+    this.followPointer = null;
+    this.followDownAt = null;
+    this.raycaster = new THREE.Raycaster();
+    this.followListeners = [
+      [canvas, "pointerdown", (event) => this.onFollowPointerDown(event)],
+      [canvas, "pointermove", (event) => this.onFollowPointerMove(event)],
+      [canvas.ownerDocument, "pointerup", (event) => this.onFollowPointerUp(event)],
+      [canvas, "wheel", (event) => this.onFollowWheel(event)],
+    ];
+    for (const [target, name, handler] of this.followListeners) target.addEventListener(name, handler);
 
     this.renderer = new THREE.WebGLRenderer({
       canvas,
@@ -195,6 +228,11 @@ export class TrailScene {
     this.trailRoot = new THREE.Group();
     this.gridRoot = new THREE.Group();
     this.worldRoot.add(this.gridRoot, this.terrainRoot, this.trailRoot, this.worldRenderer.root);
+    // PEAK's world is Unity left-handed; three is right-handed. Rendering the raw
+    // coordinates unchanged mirrors every horizontal view (a game-right landmark
+    // appears game-left). Negating Z of the whole rendered world is the standard
+    // LH→RH conversion and keeps terrain, props, trails and markers consistent.
+    this.worldRoot.scale.z = -1;
     this.scene.add(this.worldRoot);
 
     const hemisphere = new THREE.HemisphereLight(0xbad9d2, 0x17201e, 1.7);
@@ -217,6 +255,10 @@ export class TrailScene {
     const container = this.canvas.parentElement;
     const width = Math.max(1, container.clientWidth);
     const height = Math.max(1, container.clientHeight);
+    // Cached for the per-frame label pass: reading clientWidth there forced a
+    // synchronous layout of the whole viewer DOM on every single frame.
+    this.viewportWidth = width;
+    this.viewportHeight = height;
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height, false);
@@ -226,13 +268,14 @@ export class TrailScene {
     const delta = this.lastFrameTime === null ? 0 : (timestamp - this.lastFrameTime) / 1000;
     this.lastFrameTime = timestamp;
     if (this.freeCamera.mode === "free") this.freeCamera.update(delta);
+    else if (this.followTargetId !== null) this.updateFollowCamera(delta);
     else this.controls.update();
     this.updateCameraMarkerVisibility();
     this.fogDepthPass.render({ renderer: this.renderer, scene: this.scene, camera: this.camera,
       fogEntries: this.worldRenderer.entries.values(), hiddenRoots: [this.trailRoot, this.gridRoot] });
     this.renderer.render(this.scene, this.camera);
     this.updatePlayerLabelPositions();
-    this.worldRenderer.projectLabels(this.camera);
+    this.worldRenderer.projectLabels(this.camera, this.viewportWidth, this.viewportHeight, true);
     this.animationFrame = requestAnimationFrame(this.animate);
   }
 
@@ -275,17 +318,21 @@ export class TrailScene {
     this.playerObjects.clear();
     this.labelOverlay.replaceChildren();
     this.playerLabels.clear();
+    this.playerGroups.clear();
     this.buildGrid(this.currentBounds);
     this.worldRenderer.setData(this.trace, this.gameAssetPack, this.origin);
     this.worldRenderer.setMapFog(this.useMap ? this.mapPack : null);
 
+    // The overview legitimately loads every chapter: without it the empty daily
+    // viewer would show a bare grid forever (its "loading" status never
+    // resolves). First paint stays fast because terrain streams in per chapter.
     if (this.useMap) await this.buildTerrain(token);
     if (token !== this.buildToken) return;
     if (this.trace) this.buildTracks();
     this.applyHeightScale();
     this.applyLayerVisibility();
     this.setTime(this.currentTime);
-    if (cameraRevision === this.cameraSelectionRevision) {
+    if (cameraRevision === this.cameraSelectionRevision && this.followTargetId === null) {
       this.fitView();
       if (isInteriorLayer(this.selectedLayer(), this.mapPack?.route)) this.enterInteriorView(false);
     }
@@ -449,7 +496,14 @@ export class TrailScene {
       for (const group of groups) {
         if (!isCurrent()) return;
         const layer = group.userData.mapLayer;
-        if (!group.userData.loaded) {
+        // A round can await a task that settles without mounting anything (a
+        // stale task from an aborted round disposes its model and removes
+        // itself). Retry with a fresh request instead of leaving the chapter
+        // silently unloaded; genuine failures still surface as errors.
+        let attempts = 0;
+        while (!group.userData.loaded && attempts < 3) {
+          attempts += 1;
+          if (!isCurrent()) return;
           if (!this.geometryLoads.has(layer.id)) {
             const origin = this.origin.clone();
             const task = loadGameGeometry(layer, this.geometryAbort.signal, this.mapPack.gameBuildId).then((model) => {
@@ -472,6 +526,7 @@ export class TrailScene {
           await this.geometryLoads.get(layer.id);
           if (!isCurrent()) return;
         }
+        if (!group.userData.loaded) throw new Error(`第 ${layer.segment} 关真实网格未能就绪`);
       }
       if (!isCurrent()) return;
       // A single-chapter view keeps only that chapter's GPU resources resident.
@@ -640,6 +695,7 @@ export class TrailScene {
   rebuildPlayerLabels() {
     this.labelOverlay.replaceChildren();
     this.playerLabels.clear();
+    this.playerGroups.clear();
     for (const participant of this.trace?.participants || []) {
       if (!this.playerObjects.has(participant.id)) continue;
       const label = document.createElement("div");
@@ -669,28 +725,62 @@ export class TrailScene {
   }
 
   updatePlayerLabelPositions() {
-    const width = this.canvas.clientWidth;
-    const height = this.canvas.clientHeight;
-    const anchors = [];
+    const width = this.viewportWidth || this.canvas.clientWidth;
+    const height = this.viewportHeight || this.canvas.clientHeight;
+    const entries = [];
     for (const [id, label] of this.playerLabels) {
       const object = this.playerObjects.get(id);
       let visible = Boolean(object?.group.visible && object?.marker.visible);
       if (visible) {
         object.marker.getWorldPosition(this.labelPosition);
+        const pos = [this.labelPosition.x, this.labelPosition.y, this.labelPosition.z];
         this.labelPosition.project(this.camera);
         const { x, y, z } = this.labelPosition;
         visible = Number.isFinite(x + y + z) && z >= -1 && z <= 1 && Math.abs(x) < 1 && Math.abs(y) < 1;
         if (visible) {
-          label.element.hidden = false;
-          anchors.push({ id, x: (x + 1) * width / 2, y: (1 - y) * height / 2,
-            width: label.element.offsetWidth || 80, height: label.element.offsetHeight || 62 });
+          entries.push({ id, x: (x + 1) * width / 2, y: (1 - y) * height / 2, pos, label });
+          continue;
         }
       }
-      label.element.hidden = !visible;
+      label.element.hidden = true;
       if (label.leader) label.leader.hidden = true;
     }
+
+    // Players within 10 recorded metres share one big circle containing every
+    // member's head portrait; only genuinely separate players keep their own label.
+    const anchors = [];
+    const activeGroups = new Set();
+    for (const cluster of clusterPlayerEntries(entries)) {
+      if (cluster.length === 1) {
+        const entry = cluster[0];
+        entry.label.element.hidden = false;
+        // Measured once per label. A forced layout read on every frame re-lays out
+        // the whole viewer DOM (its event list can hold thousands of rows) and was
+        // the single most expensive thing in the frame.
+        anchors.push({ id: entry.id, x: entry.x, y: entry.y, ...this.labelElementSize(entry.label, 80, 62) });
+        continue;
+      }
+      for (const entry of cluster) {
+        entry.label.element.hidden = true;
+        if (entry.label.leader) entry.label.leader.hidden = true;
+      }
+      const group = this.ensurePlayerGroup(cluster);
+      activeGroups.add(group.key);
+      group.element.hidden = false;
+      const anchorX = cluster.reduce((sum, entry) => sum + entry.x, 0) / cluster.length;
+      const anchorY = cluster.reduce((sum, entry) => sum + entry.y, 0) / cluster.length;
+      anchors.push({ id: group.key, x: anchorX, y: anchorY, ...this.labelElementSize(group, 96, 96) });
+    }
+    for (const [key, group] of this.playerGroups) {
+      if (!activeGroups.has(key)) {
+        group.element.hidden = true;
+        group.leader.hidden = true;
+      }
+    }
+
     for (const position of layoutPortraitLabels(anchors, { width, height })) {
-      const label = this.playerLabels.get(position.id);
+      const label = this.playerLabels.get(position.id) || this.playerGroups.get(position.id);
+      if (!label) continue;
       label.element.style.transform = `translate(${position.left}px, ${position.top}px)`;
       if (label.leader) {
         const endX = Math.max(position.left, Math.min(position.left + position.width, position.anchorX));
@@ -702,6 +792,314 @@ export class TrailScene {
         label.leader.style.transform = `translate(${position.anchorX}px, ${position.anchorY}px) rotate(${Math.atan2(dy, dx)}rad)`;
       }
     }
+  }
+
+  /** Element box cached after its first visible frame. Label content never changes
+   * size after creation (fixed portrait boxes, names set once), so re-measuring
+   * every frame would only force a synchronous layout of the entire viewer. */
+  labelElementSize(target, fallbackWidth, fallbackHeight) {
+    if (!target.size?.width) {
+      target.size = {
+        width: target.element.offsetWidth || fallbackWidth,
+        height: target.element.offsetHeight || fallbackHeight,
+      };
+    }
+    return target.size;
+  }
+
+  /** One badge per exact member set; the key rebuilds it whenever the party
+   * walking together changes. Portrait URLs refresh per frame behind a dataset
+   * fingerprint so rendered heads pop in as soon as they are available. */
+  ensurePlayerGroup(cluster) {
+    const key = cluster.map((entry) => entry.id).sort().join("+");
+    let group = this.playerGroups.get(key);
+    if (!group) {
+      const element = document.createElement("div");
+      element.className = "trail-player-group";
+      element.hidden = true;
+      const ring = document.createElement("div");
+      ring.className = "trail-player-group-ring";
+      const names = document.createElement("span");
+      names.className = "trail-player-group-names";
+      element.append(ring, names);
+      const leader = document.createElement("div");
+      leader.className = "trail-player-leader trail-player-group-leader";
+      leader.hidden = true;
+      this.labelOverlay.append(leader, element);
+
+      const members = new Map();
+      const nicknames = [];
+      for (const entry of cluster) {
+        const participant = this.trace?.participants?.find((item) => item.id === entry.id);
+        const nickname = participant?.nickname || entry.id;
+        nicknames.push(nickname);
+        const portrait = document.createElement("span");
+        portrait.className = "trail-player-group-portrait";
+        portrait.style.setProperty("--player-color", this.getPlayerColor(entry.id));
+        portrait.title = nickname;
+        const image = document.createElement("img");
+        image.alt = "";
+        image.hidden = true;
+        const fallback = document.createElement("span");
+        fallback.textContent = Array.from(nickname)[0] || "?";
+        portrait.append(image, fallback);
+        ring.append(portrait);
+        members.set(entry.id, { image, fallback });
+      }
+      // Pack the heads tightly — up to three per row — so the badge hugs its members
+      // instead of framing a big empty circle. CSS owns the pixel sizes and derives
+      // the width from the column count.
+      const columns = Math.min(3, cluster.length);
+      ring.style.setProperty("--group-columns", String(columns));
+      names.textContent = `${cluster.length} 人 · ${nicknames.join(" · ")}`;
+      element.title = nicknames.join(" · ");
+      group = { key, element, ring, names, leader, members, columns };
+      this.playerGroups.set(key, group);
+    }
+    for (const [id, member] of group.members) {
+      const url = this.playerPortraits.get(id) || null;
+      const token = url || "";
+      if (member.image.dataset.assetUrl === token) continue;
+      member.image.dataset.assetUrl = token;
+      if (url) {
+        member.image.src = url;
+        member.image.hidden = false;
+        member.fallback.hidden = true;
+      } else {
+        member.image.removeAttribute("src");
+        member.image.hidden = true;
+        member.fallback.hidden = false;
+      }
+    }
+    return group;
+  }
+
+  /** 自动巡游跟随：沿路径跟随玩家，每 60 秒自动轮换；◎ 锁定后停止轮换。 */
+  startAutoFollow() {
+    const id = [...this.playerObjects.keys()].find((key) => this.playerVisibility.get(key) ?? true)
+      ?? [...this.playerObjects.keys()][0];
+    if (id == null) return false;
+    this.followAutoRotate = true;
+    this.followAutoSwitchAt = performance.now() + 60_000;
+    this.setFollowTarget(id);
+    return true;
+  }
+
+  setFollowTarget(playerId) {
+    if (playerId !== null && playerId !== undefined && !this.playerObjects.has(playerId)) return;
+    const next = playerId ?? null;
+    // `== null` covers scenes whose constructor never ran (fixtures) where the
+    // field is undefined rather than null: already-not-following is a no-op.
+    if (next === null ? this.followTargetId == null : next === this.followTargetId) return;
+    this.followTargetId = next;
+    if (next !== null) {
+      // 进入跟随：退出 WASD 模式、接管轨道控制；从当前相机位置平滑接管
+      // （初始弹簧状态 = 相机现在所在处，轨道偏移取当前相对方位）。
+      this.freeCamera.setMode("orbit", { focus: false });
+      this.controls.enabled = false;
+      this.updateFollowAnchor();
+      this.followSmoothed.copy(this.camera.position);
+      const offset = this.followTmp.copy(this.camera.position).sub(this.followAnchor);
+      // 已在玩家附近就保留当前距离；从远处进入则用默认近距，而不是把几十米外的
+      // 视距钳位进跟随（那样玩家只有米粒大）。
+      this.followDistance = offset.length() > 60
+        ? 38
+        : THREE.MathUtils.clamp(offset.length(), 6, 60);
+      this.followAzimuth = Math.atan2(offset.x, offset.z);
+      this.followPitch = THREE.MathUtils.clamp(
+        Math.atan2(offset.y, Math.max(0.5, Math.hypot(offset.x, offset.z))), -0.5, 1.3);
+      this.followVelocity.set(0, 0, 0);
+      this.followHasPrev = false;
+      this.followUserOrbit = false;
+    } else {
+      // 退出：以当前注视点为轨道中心，无缝交还用户。
+      this.camera.getWorldDirection(this.followTmp);
+      this.controls.target.copy(this.camera.position).addScaledVector(this.followTmp, 8);
+      this.controls.enabled = true;
+    }
+    this.emitFollowStatus();
+  }
+
+  cycleFollowTarget() {
+    const ids = [...this.playerObjects.keys()]
+      .filter((id) => this.playerVisibility.get(id) ?? true);
+    if (!ids.length) return;
+    const index = ids.indexOf(this.followTargetId);
+    this.setFollowTarget(ids[(index + 1) % ids.length]);
+  }
+
+  /** 用户通过 ◎ / 标记点击锁定某位玩家：关闭自动轮换。 */
+  lockFollowTarget(playerId) {
+    this.followAutoRotate = false;
+    this.setFollowTarget(playerId);
+  }
+
+  emitFollowStatus() {
+    const playerId = this.followTargetId;
+    const participant = playerId !== null ? this.trace?.participants?.find((entry) => entry.id === playerId) : null;
+    this.canvas.dispatchEvent(new CustomEvent("peaktrail-follow-status", {
+      detail: {
+        active: playerId !== null, playerId,
+        name: participant?.nickname ?? playerId ?? null,
+        autoRotate: playerId !== null && this.followAutoRotate,
+      },
+    }));
+  }
+
+  updateFollowAnchor() {
+    const marker = this.playerObjects.get(this.followTargetId)?.marker;
+    if (!marker) return false;
+    marker.updateWorldMatrix(true, false);
+    marker.getWorldPosition(this.followAnchor);
+    return true;
+  }
+
+  updateFollowCamera(deltaSeconds) {
+    const object = this.playerObjects.get(this.followTargetId);
+    if (!object?.marker || !this.updateFollowAnchor()) {
+      this.setFollowTarget(null);
+      return;
+    }
+    const dt = Math.min(0.05, Math.max(0.0001, deltaSeconds || 0.016));
+    // 速度：锚点差分 + 指数平滑（帧率无关）。
+    if (this.followHasPrev) {
+      this.followTmp.copy(this.followAnchor).sub(this.followPrevAnchor).divideScalar(dt);
+      this.followVelocity.lerp(this.followTmp, 1 - Math.exp(-dt * 5));
+    } else {
+      this.followHasPrev = true;
+      this.followVelocity.set(0, 0, 0);
+    }
+    this.followPrevAnchor.copy(this.followAnchor);
+
+    // 爬山只有一面有效：机位始终在"山外"——从地图中心指向玩家的水平外向方向。
+    // 方向随玩家位置缓慢变化（不因路径往复震荡），永远正对山体立面。
+    if (!this.followUserOrbit) {
+      const bounds = this.mapPack?.bounds;
+      if (bounds) {
+        const centerX = (bounds.min[0] + bounds.max[0]) / 2 - this.origin.x;
+        const centerZ = -((bounds.min[2] + bounds.max[2]) / 2 - this.origin.z);
+        const targetAzimuth = Math.atan2(this.followAnchor.x - centerX, this.followAnchor.z - centerZ);
+        let delta = targetAzimuth - this.followAzimuth;
+        delta = Math.atan2(Math.sin(delta), Math.cos(delta));
+        this.followAzimuth += delta * (1 - Math.exp(-dt * 1.2));
+        this.followPitch += (this.followPitchTarget - this.followPitch) * (1 - Math.exp(-dt * 1.5));
+      }
+    }
+
+    // 自动巡游：每 60 秒轮换到下一位玩家（◎ 锁定后关闭）。
+    if (this.followAutoRotate && performance.now() >= this.followAutoSwitchAt) {
+      this.followAutoSwitchAt = performance.now() + 60_000;
+      this.cycleFollowTarget();
+      return;
+    }
+
+    // 平视：相机在人物头部高度，水平看向玩家（视线前探 0.3s 的速度）。
+    // 距离恒定——地形/模型遮挡不缩短距离（与自由相机一样可穿墙）。
+    this.followTmp.copy(this.followVelocity).multiplyScalar(0.3);
+    if (this.followTmp.length() > 6) this.followTmp.setLength(6);
+    this.followLook.copy(this.followAnchor).add(this.followTmp);
+    this.followLook.y += 1.2; // 看向头部而非脚底
+    this.followSmoothed.lerp(this.followLook, 1 - Math.exp(-dt * 7));
+
+    const cosPitch = Math.cos(this.followPitch);
+    this.followDir.set(
+      Math.sin(this.followAzimuth) * cosPitch,
+      Math.sin(this.followPitch),
+      Math.cos(this.followAzimuth) * cosPitch,
+    );
+    this.followDesired.copy(this.followSmoothed).addScaledVector(this.followDir, this.followDistance);
+    // 相机不低于人物脚部：保持平视机位，也不钻地。
+    this.followDesired.y = Math.max(this.followDesired.y, this.followAnchor.y + 1.0);
+
+    this.camera.position.copy(this.followDesired);
+    this.camera.lookAt(this.followLook);
+    // OrbitControls 目标同步：退出跟随时无缝交还。
+    this.controls.target.copy(this.followLook);
+    this.applyFollowMarkerOverlay();
+  }
+
+  /** 跟随中的玩家标记穿透地形渲染（renderOrder + 关深度测试）——机位被山体
+   * 挡住时人物依然可见，与轨迹的"淡色透视"是同一套视觉语言。机位距离本身
+   * 不因遮挡改变。 */
+  applyFollowMarkerOverlay() {
+    for (const [id, entry] of this.playerObjects.entries()) {
+      const followed = id === this.followTargetId;
+      entry.marker.traverse((node) => {
+        if (!node.isMesh) return;
+        const materials = Array.isArray(node.material) ? node.material : [node.material];
+        for (const material of materials) {
+          material.depthTest = !followed;
+          material.transparent = followed || material.transparent;
+        }
+        node.renderOrder = followed ? 100 : 0;
+      });
+    }
+  }
+
+  onFollowPointerDown(event) {
+    if (event.isPrimary === false || event.button !== 0) return;
+    this.followDownAt = { x: event.clientX, y: event.clientY, time: performance.now() };
+    if (this.followTargetId === null) return;
+    event.preventDefault();
+    this.followPointer = { id: event.pointerId, x: event.clientX, y: event.clientY };
+    try { this.canvas.setPointerCapture?.(event.pointerId); } catch { /* optional */ }
+  }
+
+  onFollowPointerMove(event) {
+    if (this.followTargetId === null || this.followPointer?.id !== event.pointerId) return;
+    const dx = event.clientX - this.followPointer.x;
+    const dy = event.clientY - this.followPointer.y;
+    this.followPointer.x = event.clientX;
+    this.followPointer.y = event.clientY;
+    if (!Number.isFinite(dx + dy)) return;
+    event.preventDefault();
+    this.followUserOrbit = true;
+    this.followAzimuth -= dx * 0.006;
+    this.followPitch = THREE.MathUtils.clamp(this.followPitch + dy * 0.005, -0.45, 1.3);
+    this.followPitchTarget = this.followPitch;
+  }
+
+  onFollowPointerUp(event) {
+    if (this.followPointer?.id === event.pointerId) {
+      this.followPointer = null;
+      try { this.canvas.releasePointerCapture?.(event.pointerId); } catch { /* optional */ }
+      return;
+    }
+    // 跟随未开启时，把对玩家标记的"点击"（非拖拽）作为跟随入口。
+    if (!this.followDownAt || event.button !== 0) return;
+    const moved = Math.hypot(event.clientX - this.followDownAt.x, event.clientY - this.followDownAt.y);
+    const elapsed = performance.now() - this.followDownAt.time;
+    this.followDownAt = null;
+    if (moved > 6 || elapsed > 500) return;
+    const hit = this.pickPlayerMarker(event);
+    if (hit) this.setFollowTarget(hit);
+  }
+
+  pickPlayerMarker(event) {
+    const rect = this.canvas.getBoundingClientRect();
+    const pointer = new THREE.Vector2(
+      ((event.clientX - rect.left) / rect.width) * 2 - 1,
+      -((event.clientY - rect.top) / rect.height) * 2 + 1,
+    );
+    this.raycaster.setFromCamera(pointer, this.camera);
+    const markers = [...this.playerObjects.values()].map((entry) => entry.marker);
+    if (!markers.length) return null;
+    const hits = this.raycaster.intersectObjects(markers, true);
+    for (const hit of hits) {
+      let owner = hit.object;
+      while (owner && !owner.userData?.playerId) owner = owner.parent;
+      if (owner?.userData?.playerId && (this.playerVisibility.get(owner.userData.playerId) ?? true)) {
+        return owner.userData.playerId;
+      }
+    }
+    return null;
+  }
+
+  onFollowWheel(event) {
+    if (this.followTargetId === null) return;
+    event.preventDefault();
+    this.followDistance = THREE.MathUtils.clamp(
+      this.followDistance * Math.exp(event.deltaY * 0.001), 6, 90);
   }
 
   updateCameraMarkerVisibility() {
@@ -739,7 +1137,7 @@ export class TrailScene {
       const sample = sampleAtTime(samples, this.currentTime, maxGap, blockingEvents);
       const latestLifecycle = lifecycleEvents.findLast((event) => event.t <= this.currentTime);
       const isPresent = latestLifecycle?.type !== "leave";
-      const life = this.trace.events.findLast((event) => event.playerId === group.userData.playerId && event.t <= this.currentTime && ["death", "revive", "join"].includes(event.type));
+      const life = latestLifeEventBefore(this.trace, group.userData.playerId, this.currentTime, MARKER_LIFE_EVENT_TYPES);
       if (sample && this.currentTime - sample.t <= maxGap && isPresent && life?.type !== "death" && (this.playerVisibility.get(group.userData.playerId) ?? true)) worldPlayers.push(sample);
       const segmentMatches =
         sample && (this.activeSegment === null || !Number.isInteger(sample.segment) || sample.segment === this.activeSegment);
@@ -771,6 +1169,14 @@ export class TrailScene {
   setGameAssetPack(pack) {
     this.gameAssetPack = pack;
     this.worldRenderer.setData(this.trace, pack, this.origin);
+    this.setTime(this.currentTime);
+  }
+
+  /** Live sources grow their tracks in place; rebuild only the trail geometry,
+   * labels and time-driven state (terrain, camera and bounds stay untouched). */
+  refreshTracks() {
+    if (!this.trace) return;
+    this.buildTracks();
     this.setTime(this.currentTime);
   }
 
@@ -857,7 +1263,9 @@ export class TrailScene {
       const yaw = THREE.MathUtils.degToRad(pose.yaw || 0);
       // Recorder pos is Character.Center (torso), NOT feet. No head pose was
       // recorded, so adding a standing eye height could put us above a ceiling.
-      this.freeCamera.enterAt([pose.pos[0] - this.origin.x, (pose.pos[1] - this.origin.y) * this.heightScale, pose.pos[2] - this.origin.z], [Math.sin(yaw), 0, Math.cos(yaw)], { focus });
+      // The camera lives OUTSIDE the Z-mirrored world root, so every coordinate
+      // and direction handed to it must be in rendered space (Z negated).
+      this.freeCamera.enterAt([pose.pos[0] - this.origin.x, (pose.pos[1] - this.origin.y) * this.heightScale, -(pose.pos[2] - this.origin.z)], [Math.sin(yaw), 0, -Math.cos(yaw)], { focus });
       this.cameraPlacementNote = "已记录的玩家中心 · 关内参考视点，非眼位";
     } else {
       // A bounding box centre can be air or solid rock. Require a floor AND a
@@ -869,9 +1277,10 @@ export class TrailScene {
       const ray = new THREE.Raycaster(), probe = new THREE.Vector3();
       for (const h of [0.25, 0.4, 0.55, 0.7]) {
         for (const [x, z] of [[0.5, 0.5], [0.35, 0.5], [0.65, 0.5], [0.5, 0.3], [0.5, 0.7]]) {
+          const worldZ = THREE.MathUtils.lerp(bounds.min[2], bounds.max[2], z);
           probe.set(THREE.MathUtils.lerp(bounds.min[0], bounds.max[0], x) - this.origin.x,
             (THREE.MathUtils.lerp(bounds.min[1], bounds.max[1], h) - this.origin.y) * this.heightScale,
-            THREE.MathUtils.lerp(bounds.min[2], bounds.max[2], z) - this.origin.z);
+            -(worldZ - this.origin.z));
           ray.set(probe, new THREE.Vector3(0, -1, 0));
           const floor = ray.intersectObjects(meshes, true)[0];
           ray.set(probe, new THREE.Vector3(0, 1, 0));
@@ -894,7 +1303,8 @@ export class TrailScene {
   focusWorldEvent(event) {
     if (!event.objectId || !event.pos) return;
     ++this.cameraSelectionRevision;
-    const target = new THREE.Vector3(event.pos[0] - this.origin.x, (event.pos[1] - this.origin.y) * this.heightScale, event.pos[2] - this.origin.z);
+    // Rendered space: the world root is Z-mirrored (Unity LH → three RH).
+    const target = new THREE.Vector3(event.pos[0] - this.origin.x, (event.pos[1] - this.origin.y) * this.heightScale, -(event.pos[2] - this.origin.z));
     const position = target.clone().add(new THREE.Vector3(9, 10, -12));
     this.freeCamera.enterAt(position, target.clone().sub(position), { focus: false });
     this.canvas.dispatchEvent(new CustomEvent("cameraplacement", { detail: { note: "事件近景 · 特效为回放示意" } }));
@@ -914,11 +1324,12 @@ export class TrailScene {
     const target = new THREE.Vector3(
       (bounds.min[0] + bounds.max[0]) / 2 - this.origin.x,
       ((bounds.min[1] + bounds.max[1]) / 2 - this.origin.y) * this.heightScale,
-      (bounds.min[2] + bounds.max[2]) / 2 - this.origin.z,
+      -((bounds.min[2] + bounds.max[2]) / 2 - this.origin.z),
     );
-    // Daily scenes climb toward +Z. Looking from the sea (-Z) keeps later,
-    // taller biomes behind the recorded route instead of in the foreground.
-    this.camera.position.copy(target).add(new THREE.Vector3(distance * 0.52, distance * 0.7, -distance * 0.62));
+    // Daily scenes climb toward +Z. Looking from the sea keeps later, taller
+    // biomes behind the recorded route; the Z-mirrored world renders the sea
+    // (game -Z) on the +Z side.
+    this.camera.position.copy(target).add(new THREE.Vector3(distance * 0.52, distance * 0.7, distance * 0.62));
     this.controls.target.copy(target);
     this.camera.near = Math.max(0.1, distance / 5000);
     this.camera.far = Math.max(2000, distance * 8);
@@ -939,7 +1350,7 @@ export class TrailScene {
     const target = new THREE.Vector3(
       (bounds.min[0] + bounds.max[0]) / 2 - this.origin.x,
       ((bounds.min[1] + bounds.max[1]) / 2 - this.origin.y) * this.heightScale,
-      (bounds.min[2] + bounds.max[2]) / 2 - this.origin.z,
+      -((bounds.min[2] + bounds.max[2]) / 2 - this.origin.z),
     );
     this.camera.position.copy(target).add(new THREE.Vector3(0, distance, 0.001));
     this.controls.target.copy(target);
@@ -955,6 +1366,9 @@ export class TrailScene {
     ++this.geometrySelectionToken;
     cancelAnimationFrame(this.animationFrame);
     this.resizeObserver.disconnect();
+    this.setFollowTarget(null);
+    for (const [target, name, handler] of this.followListeners || []) target.removeEventListener(name, handler);
+    this.followListeners = [];
     this.freeCamera.dispose();
     this.worldRenderer.dispose();
     this.fogDepthPass.dispose();
@@ -966,6 +1380,7 @@ export class TrailScene {
     disposeObject(this.gridRoot);
     this.labelOverlay?.remove();
     this.playerLabels?.clear();
+    this.playerGroups?.clear();
     this.playerPortraits?.clear();
     this.renderer.dispose();
   }

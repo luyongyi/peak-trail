@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { layoutPortraitLabels } from "../src/portrait-layout.js";
+import { layoutPortraitLabels, clusterPlayerEntries, GROUP_RADIUS_METERS } from "../src/portrait-layout.js";
 
 const viewport = { width: 640, height: 480 };
 function assertInside(placements, bounds = viewport) {
@@ -66,4 +66,57 @@ test("mixed label sizes and small viewports never produce offscreen or nonfinite
   const tiny = layoutPortraitLabels(anchors, { width: 20, height: 20 });
   assertInside(tiny, { width: 20, height: 20 });
   assert.deepEqual(layoutPortraitLabels([], viewport), []);
+});
+
+test("players within the group radius merge into one cluster, farther ones stay apart", () => {
+  assert.equal(GROUP_RADIUS_METERS, 10);
+  const clusters = clusterPlayerEntries([
+    { id: "near-a", pos: [0, 10, 0] },
+    { id: "near-b", pos: [9, 10, 3] },
+    { id: "far", pos: [0, 10, 40] },
+  ]);
+  assert.equal(clusters.length, 2);
+  const near = clusters.find((cluster) => cluster.length === 2);
+  assert.deepEqual(near.map((entry) => entry.id).sort(), ["near-a", "near-b"]);
+  assert.deepEqual(clusters.find((cluster) => cluster.length === 1).map((entry) => entry.id), ["far"]);
+});
+
+test("grouping is transitive: a 10 m chain shares one circle even with a 16 m span", () => {
+  const clusters = clusterPlayerEntries([
+    { id: "a", pos: [0, 0, 0] },
+    { id: "b", pos: [9, 0, 0] },
+    { id: "c", pos: [17.5, 0, 0] },
+  ]);
+  assert.equal(clusters.length, 1);
+  assert.equal(clusters[0].length, 3);
+});
+
+test("players just beyond the radius and boundary coordinates stay ungrouped", () => {
+  const clusters = clusterPlayerEntries([
+    { id: "a", pos: [0, 0, 0] },
+    { id: "b", pos: [10.1, 0, 0] },
+    { id: "c", pos: [25.5, 0, 0] },
+    { id: "d", pos: [40, 0, 0] },
+  ], 10);
+  assert.ok(clusters.every((cluster) => cluster.length === 1));
+  const exact = clusterPlayerEntries([
+    { id: "a", pos: [0, 0, 0] },
+    { id: "b", pos: [0, 0, 10] },
+  ], 10);
+  assert.equal(exact.length, 1);
+  assert.equal(exact[0].length, 2);
+});
+
+test("entries without a finite world position keep their own cluster", () => {
+  const clusters = clusterPlayerEntries([
+    { id: "ok", pos: [0, 0, 0] },
+    { id: "broken", pos: [0, 0, 5] },
+    { id: "nan", pos: [Number.NaN, 0, 0] },
+    { id: "short", pos: [1, 2] },
+    { id: "none" },
+  ]);
+  const sizes = clusters.map((cluster) => cluster.length).sort((a, b) => b - a);
+  assert.deepEqual(sizes, [2, 1, 1, 1]);
+  assert.equal(clusters.flat().length, 5);
+  assert.deepEqual(clusterPlayerEntries([]), []);
 });

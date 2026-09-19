@@ -15,7 +15,7 @@ namespace PeakTrailRecorder;
 [BepInAutoPlugin]
 public partial class Plugin : BaseUnityPlugin
 {
-    internal const string RecorderVersion = "0.6.0";
+    internal const string RecorderVersion = "0.7.0";
 
     internal static ManualLogSource Log { get; private set; } = null!;
 
@@ -25,6 +25,8 @@ public partial class Plugin : BaseUnityPlugin
     private ConfigEntry<float> _minimumYawDegrees = null!;
     private ConfigEntry<float> _maximumSilenceSeconds = null!;
     private ConfigEntry<string> _outputDirectory = null!;
+    private ConfigEntry<bool> _liveEnabled = null!;
+    private ConfigEntry<string> _liveServerUrl = null!;
     private ConfigEntry<KeyboardShortcut> _mapExportKey = null!;
     private ConfigEntry<string> _mapOutputDirectory = null!;
     private ConfigEntry<int> _mapTextureResolution = null!;
@@ -36,7 +38,13 @@ public partial class Plugin : BaseUnityPlugin
     private RecordingSession? _session;
     private bool _isExportingMap;
     private float _nextSampleAt;
+    private float _nextLiveSampleAt;
     private float _nextSubscriptionRefreshAt;
+
+    /// <summary>Relay-only position sampling rate; offline files keep the
+    /// SampleHz config. 20 Hz keeps viewer-side interpolation smooth while the
+    /// live gate (0.05 m / 2° / 1 s) suppresses stationary spam.</summary>
+    private const float LiveSampleHz = 20f;
     private int _lastFinalizedRunManagerInstanceId;
     private bool _applicationQuitting;
 
@@ -53,6 +61,16 @@ public partial class Plugin : BaseUnityPlugin
             "OutputDirectory",
             "PeakTrailRecordings",
             "Absolute path, or a path relative to BepInEx. Files contain raw stable player IDs and nicknames; do not share without consent.");
+        _liveEnabled = Config.Bind(
+            "Live",
+            "Enabled",
+            false,
+            "Publish this run's records to a live relay while playing. OFF by default: the relay receives real-time positions and stable player IDs; every recorded participant must consent.");
+        _liveServerUrl = Config.Bind(
+            "Live",
+            "ServerUrl",
+            "http://127.0.0.1:8787",
+            "Base URL of the PeakTrail live relay. The relay confirms a 4-character code derived from the room-shared RunId and merges every teammate's upload into one run.");
 
         _mapExportKey = Config.Bind(
             "MapCapture",
@@ -91,21 +109,27 @@ public partial class Plugin : BaseUnityPlugin
             "Unity layer mask for the temporary top-down camera. The default excludes UI.");
 
         SceneManager.sceneLoaded += OnSceneLoaded;
-        PlayerAppearanceReader.Subscribe();
+        // Live publishing stalls when the game loses focus (Unity pauses Update and
+        // with it every recorder callback). Spectators watch from another device,
+        // so the game must keep ticking while unfocused.
+        Application.runInBackground = true;
+        PlayerAppearanceReader.Install(Log);
         WorldTelemetryHooks.Install(Log);
+        PlayerStatusReader.Install(Log);
         SubscribeGlobalEvents();
         Log.LogWarning(
-            "PeakTrailRecorder records every synchronized human player's location trail, stamina, held items and inventory, "
+            "PeakTrailRecorder records every synchronized human player's location trail, stamina, statuses, appearance, held items and inventory, "
             + "together with raw stable IDs/nicknames. These local files are sensitive multiplayer telemetry; obtain "
             + "every participant's consent before recording or sharing them.");
         Log.LogInfo(
-            $"Plugin {Name} {RecorderVersion} loaded (read-only telemetry; observation-only mine-effect/network-spawn postfixes). "
+            $"Plugin {Name} {RecorderVersion} loaded (read-only telemetry; observation-only world/status RPC postfixes). "
             + $"Press {_mapExportKey.Value} in a loaded island to create its 2.5D map pack; no separate exporter DLL is needed.");
     }
 
     private void Update()
     {
         PlayerAppearanceReader.ClearOutsideRoom();
+        PlayerStatusReader.ClearOutsideRoom();
         TryStartMapExport();
 
         if (Time.realtimeSinceStartup >= _nextSubscriptionRefreshAt)
@@ -114,6 +138,9 @@ public partial class Plugin : BaseUnityPlugin
             // PEAK clears GlobalEvents during scene transitions. Remove/add is idempotent and
             // restores our listeners without patching the game.
             SubscribeGlobalEvents();
+            // The game can re-disable background running on scene changes; keep live
+            // publishing (and the whole recorder) alive while the window is unfocused.
+            Application.runInBackground = true;
         }
 
         if (!_enabled.Value)
@@ -155,6 +182,15 @@ public partial class Plugin : BaseUnityPlugin
             Mathf.Max(0f, _minimumDistance.Value),
             Mathf.Max(0f, _minimumYawDegrees.Value),
             Mathf.Max(0.1f, _maximumSilenceSeconds.Value));
+
+        // The relay stream runs at its own higher rate (files stay at SampleHz):
+        // tight position updates cut viewer latency, and the relay-only records
+        // never touch the offline files.
+        if (_session.LiveEnabled && Time.realtimeSinceStartup >= _nextLiveSampleAt)
+        {
+            _nextLiveSampleAt = Time.realtimeSinceStartup + 1f / LiveSampleHz;
+            _session.SampleLivePositions(0.05f, 2f, 1f);
+        }
     }
 
     private void TryStartMapExport()
@@ -221,9 +257,22 @@ public partial class Plugin : BaseUnityPlugin
             string root = Path.IsPathRooted(configured)
                 ? configured
                 : Path.Combine(Paths.BepInExRootPath, configured);
-            _session = new RecordingSession(root, Mathf.Clamp(_sampleHz.Value, 1f, 30f), Log);
+            LivePublisher? live = null;
+            if (_liveEnabled.Value && !string.IsNullOrWhiteSpace(_liveServerUrl.Value))
+            {
+                try
+                {
+                    live = new LivePublisher(_liveServerUrl.Value.Trim(), Log);
+                }
+                catch (Exception liveException)
+                {
+                    Log.LogWarning($"Live publishing disabled for this session: {liveException.Message}");
+                }
+            }
+            _session = new RecordingSession(root, Mathf.Clamp(_sampleHz.Value, 1f, 30f), Log, live);
             _session.ReconcilePlayers(characters);
             _nextSampleAt = 0f;
+            _nextLiveSampleAt = 0f;
             return true;
         }
         catch (Exception exception)
@@ -349,8 +398,9 @@ public partial class Plugin : BaseUnityPlugin
 
     private void OnDestroy()
     {
-        PlayerAppearanceReader.Unsubscribe();
+        PlayerAppearanceReader.Uninstall();
         WorldTelemetryHooks.Uninstall();
+        PlayerStatusReader.Uninstall();
         SceneManager.sceneLoaded -= OnSceneLoaded;
         UnsubscribeGlobalEvents();
         if (!_applicationQuitting)

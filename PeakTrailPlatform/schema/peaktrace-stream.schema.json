@@ -4,6 +4,7 @@
   "title": "PEAK trail NDJSON record",
   "oneOf": [
     { "$ref": "./peaktrace-world.schema.json" },
+    { "$ref": "./peaktrace-status.schema.json" },
     {
       "type": "object",
       "required": ["type", "t", "route"],
@@ -36,6 +37,9 @@
         "playerId": { "type": "string", "minLength": 1 },
         "telemetryReady": { "type": "boolean" },
         "authority": { "type": "string", "minLength": 1 },
+        "capacityReady": { "type": "boolean", "description": "The independent status RPC has arrived; false means maxStamina/stamina01 are unknown even when current stamina is synchronized" },
+        "baseMaxStamina": { "const": 1 },
+        "baseMaxExtraStamina": { "const": 1 },
         "stamina": { "type": "number" },
         "maxStamina": { "type": "number", "minimum": 0 },
         "stamina01": { "type": "number", "minimum": 0, "maximum": 1 },
@@ -93,27 +97,45 @@
           "properties": {
             "ready": { "type": "boolean" },
             "authority": { "type": "string", "minLength": 1 },
+            "formReady": {
+              "type": "boolean",
+              "description": "Runtime form readiness is independent of cosmetic ready. Missing or false is unknown, not a normal human."
+            },
+            "form": {
+              "enum": ["unknown", "normal", "skeleton", "mushroom", "chicken"],
+              "description": "Read-only CharacterData/active replacement mesh observation; never inferred from a held item or inventory."
+            },
+            "formAuthority": { "type": "string", "minLength": 1 },
+            "formMeshName": {
+              "type": ["string", "null"],
+              "description": "Observed shared mesh name as evidence only, not a URL. A local skeleton can use a headless first-person mesh; portraits use the verified third-person form asset."
+            },
+            "formMaterialNames": { "type": "array", "items": { "type": "string" } },
+            "formRendererActive": {
+              "type": ["boolean", "null"],
+              "description": "Observed renderer.enabled and activeInHierarchy; null means its render state was unavailable."
+            },
             "source": {
               "type": "string",
               "description": "recorded is historical; local-current must be labelled non-historical by viewers"
             },
-            "skinIndex": { "type": "integer", "minimum": 0 },
-            "eyesIndex": { "type": "integer", "minimum": 0 },
-            "mouthIndex": { "type": "integer", "minimum": 0 },
-            "accessoryIndex": { "type": "integer", "minimum": 0 },
-            "outfitIndex": { "type": "integer", "minimum": 0 },
-            "hatIndex": { "type": "integer", "minimum": 0 },
+            "skinIndex": { "type": ["integer", "null"], "minimum": 0 },
+            "eyesIndex": { "type": ["integer", "null"], "minimum": 0 },
+            "mouthIndex": { "type": ["integer", "null"], "minimum": 0 },
+            "accessoryIndex": { "type": ["integer", "null"], "minimum": 0 },
+            "outfitIndex": { "type": ["integer", "null"], "minimum": 0 },
+            "hatIndex": { "type": ["integer", "null"], "minimum": 0 },
             "effectiveHatIndex": {
-              "type": "integer",
+              "type": ["integer", "null"],
               "minimum": 0,
               "description": "Hat after the selected fit's overrideHat rule; viewers prefer this over hatIndex"
             },
-            "sashIndex": { "type": "integer", "minimum": 0 },
-            "medalIndex": { "type": "integer", "minimum": 0 },
+            "sashIndex": { "type": ["integer", "null"], "minimum": 0 },
+            "medalIndex": { "type": ["integer", "null"], "minimum": 0 },
             "outfitName": { "type": "string" },
             "hatName": { "type": "string" },
             "skinColor": {
-              "type": "array",
+              "type": ["array", "null"],
               "minItems": 3,
               "maxItems": 4,
               "items": { "type": "number", "minimum": 0, "maximum": 1 }

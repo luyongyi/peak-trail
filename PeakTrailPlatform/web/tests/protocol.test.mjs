@@ -6,9 +6,11 @@ import {
   formatTime,
   groupTraceSessions,
   isDailyMapFresh,
+  latestLifeEventBefore,
   loadMapPackBundle,
   loadTraceBundle,
   loadTraceCollection,
+  MARKER_LIFE_EVENT_TYPES,
   selectDailyMapPack,
   selectTraceMapPack,
   tracePlayerStateAtTime,
@@ -349,6 +351,57 @@ test("timestamped appearance snapshots follow playback without inventing pre-rec
   assert.equal(second.outfitIndex, 21);
   assert.deepEqual(second.skinColor, [128 / 255, 64 / 255, 32 / 255, 1]);
   assert.equal(trace.telemetry.hasAppearance, true);
+});
+
+test("life-event lookup is per player, time-ordered and type-filtered", () => {
+  // Unsorted input proves the lazy per-player cache sorts before searching; the
+  // unrelated event proves non-life records never enter the split.
+  const trace = {
+    events: [
+      { type: "death", t: 9000, playerId: "steam:a" },
+      { type: "join", t: 1000, playerId: "steam:a" },
+      { type: "revive", t: 12000, playerId: "steam:a" },
+      { type: "leave", t: 15000, playerId: "steam:a" },
+      { type: "item_acquired", t: 4000, playerId: "steam:a" },
+      { type: "death", t: 3000, playerId: "steam:b" },
+      { type: "join", t: 2000, playerId: null },
+    ],
+  };
+  assert.equal(latestLifeEventBefore(trace, "steam:a", 500), null);
+  assert.equal(latestLifeEventBefore(trace, "steam:a", 9000).type, "death");
+  assert.equal(latestLifeEventBefore(trace, "steam:a", 11000).type, "death");
+  assert.equal(latestLifeEventBefore(trace, "steam:a", 20000).type, "leave");
+  assert.equal(latestLifeEventBefore(trace, "steam:a", 20000, MARKER_LIFE_EVENT_TYPES).type, "revive");
+  assert.equal(latestLifeEventBefore(trace, "steam:a", 15000).type, "leave");
+  assert.equal(latestLifeEventBefore(trace, "steam:b", 2500), null);
+  assert.equal(latestLifeEventBefore(trace, "steam:b", 3000).type, "death");
+  assert.equal(latestLifeEventBefore(trace, "steam:missing", 20000), null);
+  assert.equal(latestLifeEventBefore(trace, null, 20000), null);
+  assert.equal(latestLifeEventBefore(null, "steam:a", 20000), null);
+  assert.equal(latestLifeEventBefore(undefined, "steam:a", 20000), null);
+  assert.deepEqual([...trace.lifeEventsByPlayer.keys()].sort(), ["steam:a", "steam:b"]);
+});
+
+test("tracePlayerStateAtTime resolves life states from the cached per-player life events", async () => {
+  const trace = await loadTraceBundle([
+    textFile("manifest.json", JSON.stringify(traceManifest("life-events", "2026-09-15T00:00:00Z"))),
+    textFile("stream.ndjson", [
+      { type: "sample", t: 0, playerId: "steam:p", pos: [0, 0, 0], yaw: 0 },
+      { type: "event", event: "join", t: 1000, playerId: "steam:p" },
+      { type: "event", event: "death", t: 4000, playerId: "steam:p" },
+      { type: "event", event: "revive", t: 8000, playerId: "steam:p" },
+      { type: "sample", t: 12000, playerId: "steam:p", pos: [4, 0, 0], yaw: 0 },
+      { type: "event", event: "leave", t: 15000, playerId: "steam:p" },
+    ].map((line) => JSON.stringify(line)).join("\n")),
+  ]);
+  assert.equal(tracePlayerStateAtTime(trace, "steam:p", 0.5).life, "unknown");
+  assert.equal(tracePlayerStateAtTime(trace, "steam:p", 2).life, "alive");
+  assert.equal(tracePlayerStateAtTime(trace, "steam:p", 5).life, "dead");
+  assert.equal(tracePlayerStateAtTime(trace, "steam:p", 10).life, "alive");
+  assert.equal(tracePlayerStateAtTime(trace, "steam:p", 20).life, "absent");
+  assert.ok(trace.lifeEventsByPlayer instanceof Map, "the per-player split is cached on the trace");
+  assert.deepEqual(trace.lifeEventsByPlayer.get("steam:p").map((event) => event.type),
+    ["join", "death", "revive", "leave"]);
 });
 
 test("historical trace map selection prefers exact pack identity", () => {
