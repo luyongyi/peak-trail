@@ -16,7 +16,8 @@ PeakTrail/
     ├── assets/
     │   ├── maps/packs/      21 套按 SHA-256 定址的正式地图资源
     │   ├── maps/working/    可重新生成的离线地图工作文件
-    │   └── game-assets/     游戏图标、角色模型与贴图
+    │   ├── game-assets/     游戏图标、角色模型与贴图
+    │   └── home-art/        9 幅 AI 主题插画（非地图实景）
     ├── recordings/          迁移时复制的私人足迹快照
     ├── archives/            私人外观预览、旧 DLL 和资源审计报告
     └── python/.venv/        本项目的离线资源工具环境
@@ -49,6 +50,14 @@ dotnet build PeakTrailRecorder/PeakTrailRecorder.slnx -c Release -p:DeployModFil
 
 ## 本局分支与玩家头像
 
+首页以统一手绘风格呈现当前四关，Roots 中文名称为「森蕈」。终章插画可展开查看，
+随真实路线选择熔炉或城塞，分别表现火山与高塔的内部攀登空间。插画只负责氛围，
+不作为地图或足迹定位依据；点击四关仍进入对应的真实地图。轮换数据过期会明确显示
+「上次确认的四关」，不会按日期猜测关卡；导入历史足迹也不会改变首页当前路线。
+
+9 幅 PNG 存于 `local/assets/home-art`，继续由 Git 忽略。生成模式与完整提示词见
+`PeakTrailPlatform/docs/home-art-prompts.json`；恢复资源备份时需包含这些插画。
+
 登山路线最后两关按实际分支配对：**火山 → 熔炉** 或 **雾岛 → 城塞**，不会将两条
 线路串在一起。游戏的每对关卡共用同一个 biome 枚举，因此不能按枚举名称直接命名。
 当前 21 套资源的分支证据在 `PeakTrailPlatform/data/maps/routes.25306743.json`，绑定
@@ -69,7 +78,7 @@ Recorder 0.5.0 在日志中记录运行时真正选择的路线，网页优先�
 位置后再运行 `validate-data.mjs` 和 `stage-site.mjs`。也可设置 `PEAK_TRAIL_ASSET_ROOT`
 指向另一份资源目录；默认始终使用本项目的 `local/assets`。
 
-构建出的网页仍包含 `data/maps/packs` 和 `data/game-assets`，浏览器使用方式不变；构建
+构建出的网页包含 `data/maps/packs`、`data/game-assets` 和 `data/home-art`；构建
 只复制已登记、已验证的资源，不会带上 `local/recordings` 或 `local/archives`。
 
 当前没有配置 Git 远端，也没有上传 GitHub。GitHub 代码检查不需要大型资源；自动每日更新

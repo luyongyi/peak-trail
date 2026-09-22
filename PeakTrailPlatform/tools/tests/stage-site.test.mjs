@@ -7,6 +7,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { promisify } from "node:util";
+import { HOME_ART_FILES } from "../../web/src/home-art.js";
 
 const execFileAsync = promisify(execFile);
 const testDirectory = dirname(fileURLToPath(import.meta.url));
@@ -43,6 +44,7 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
     mkdir(secondPack, { recursive: true }),
     mkdir(resolve(enclosures, "private"), { recursive: true }),
     mkdir(resolve(gameAssets, "123", "icons"), { recursive: true }),
+    mkdir(resolve(assets, "home-art"), { recursive: true }),
     mkdir(resolve(repository, "local", "recordings"), { recursive: true }),
   ]);
   await Promise.all([
@@ -52,13 +54,17 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
     copyFile(resolve(platformSource, "web", "src", "map-fog.js"), resolve(platform, "web", "src", "map-fog.js")),
     copyFile(resolve(platformSource, "web", "src", "map-water.js"), resolve(platform, "web", "src", "map-water.js")),
     copyFile(resolve(platformSource, "web", "src", "map-enclosures.js"), resolve(platform, "web", "src", "map-enclosures.js")),
+    copyFile(resolve(platformSource, "web", "src", "home-art.js"), resolve(platform, "web", "src", "home-art.js")),
     writeFile(resolve(platform, "web", "index.html"), "<!doctype html>"),
     writeFile(resolve(platform, "web", "styles.css"), "body{}"),
+    writeFile(resolve(platform, "web", "home.css"), ".home-page{}"),
     writeFile(resolve(platform, "web", "src", "app.js"), "export {};"),
     writeFile(resolve(platform, "vendor", "notice.txt"), "fixture"),
     writeFile(resolve(platform, "data", "daily", "current.json"), "{}"),
     writeFile(resolve(repository, "local", "recordings", "private-session.ndjson"), "private trail"),
   ]);
+  await Promise.all(HOME_ART_FILES.map(file => writeFile(resolve(assets, 'home-art', file), 'illustration fixture')));
+  await writeFile(resolve(assets, 'home-art', 'private-session.ndjson'), 'not public');
   await Promise.all(schemas.map((name) => writeFile(resolve(platform, "schema", name), "{}")));
 
   const texture = Buffer.from("texture");
@@ -175,6 +181,7 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
   const options = { env: { ...process.env, PEAK_TRAIL_ASSET_ROOT: assets } };
   await execFileAsync(process.execPath, [resolve(tools, "stage-site.mjs")], options);
   const staged = resolve(platform, "site-dist");
+  assert.deepEqual((await readdir(resolve(staged, 'data', 'home-art'))).sort(), [...HOME_ART_FILES].sort(), 'publish every illustration, and no neighboring private files');
   const stagedManifestPath = resolve(staged, "data", "maps", "packs", packId, "map-pack.json");
   const stagedManifestBytes = await readFile(stagedManifestPath, "utf8");
   const stagedManifest = JSON.parse(stagedManifestBytes);

@@ -19,6 +19,7 @@ export function resolveLocalAssetPaths(environment = process.env) {
     mapPacksDirectory: resolve(assetRootDirectory, "maps", "packs"),
     mapEnclosuresDirectory: resolve(assetRootDirectory, "maps", "enclosures"),
     gameAssetsDirectory: resolve(assetRootDirectory, "game-assets"),
+    homeArtDirectory: resolve(assetRootDirectory, "home-art"),
   });
 }
 

@@ -160,7 +160,10 @@ registration process is running, then remove that exact lock file and retry;
 completed-but-uncatalogued pack directories are verified and recovered.
 
 Source assets are stored in the repository's ignored `local/assets` directory:
-`maps/packs/<mapPackId>` and `game-assets/<build>`. The code catalog remains in
+`maps/packs/<mapPackId>`, `game-assets/<build>`, and `home-art/*-v1.png` (nine AI
+atmosphere illustrations; not map evidence). Restore all three for a Pages build.
+The illustration allowlist is `web/src/home-art.js`; prompts are archived in
+`docs/home-art-prompts.json`. The code catalog remains in
 `PeakTrailPlatform/data/maps/catalog.json`. Staging emits the original public
 URL layout without tracking those binary assets in Git.
 

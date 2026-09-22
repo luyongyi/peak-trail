@@ -15,11 +15,12 @@
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b1010'/%3E%3Cpath d='M9 48 25 18l8 15 6-10 16 25H9Z' fill='%23efb74e'/%3E%3Cpath d='M20 48c8-8 17-8 25 0' fill='none' stroke='%23d9f0e8' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E"
     />
     <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./home.css" />
   </head>
   <body>
-    <!-- 极简入口：回放 / 直播 两张卡片，其余一切在进入后再出现 -->
-    <div class="mode-gate" id="modeGate">
-      <div class="mode-gate-inner">
+    <div class="mode-gate" id="modeGate" aria-label="每日登山路线首页">
+      <div class="home-page">
+        <header class="home-header">
         <div class="gate-brand">
           <span class="brand-mark" aria-hidden="true">
             <svg viewBox="0 0 32 32" role="img">
@@ -27,29 +28,90 @@
               <path class="brand-path" d="M9 25c5-5 10-5 15 0" />
             </svg>
           </span>
-          <strong>PEAK TRAIL</strong>
+          <span><strong>PEAK TRAIL</strong><small>每一程，都有迹可循。</small></span>
         </div>
-        <div class="gate-cards">
-          <button class="gate-card gate-replay" id="gateReplay" type="button">
-            <span class="gate-icon" aria-hidden="true">
-              <svg viewBox="0 0 48 48"><path d="m8 38 12-24 7 13 5-8 8 19H8Z" /><path class="gate-icon-path" d="M17 38c6-6 12-6 18 0" /></svg>
-            </span>
-            <strong>回放</strong>
-            <small>浏览本地录制的攀登足迹</small>
+        <nav class="home-actions" aria-label="足迹工具">
+          <button class="home-live is-empty" id="gateLive" type="button" aria-controls="gateLiveList" aria-expanded="false">
+            <i aria-hidden="true"></i><span>现场观测</span><span class="home-live-count" id="homeLiveCount">—</span>
           </button>
-          <button class="gate-card gate-live is-empty" id="gateLive" type="button" aria-disabled="true">
-            <span class="gate-icon" aria-hidden="true">
-              <svg viewBox="0 0 48 48"><circle class="live-core" cx="24" cy="26" r="6" /><path d="M13 15a16 16 0 0 1 22 0M17.5 20a9 9 0 0 1 13 0" /><path class="live-core" d="M24 22v8" /></svg>
-            </span>
-            <strong>直播</strong>
-            <small id="gateLiveHint">正在寻找直播中的对局…</small>
-            <span class="gate-live-list" id="gateLiveList" hidden></span>
+          <button class="home-replay" id="gateReplay" type="button">
+            我的足迹<span aria-hidden="true">↗</span>
           </button>
+        </nav>
+        <div class="home-live-popover" id="homeLivePopover" hidden>
+          <p id="gateLiveHint">正在寻找直播中的对局…</p>
+          <div class="gate-live-list" id="gateLiveList" hidden></div>
         </div>
-        <p class="gate-footnote">
-          <button class="gate-debug" id="gateDebug" type="button">调试模式 · 进入直播界面（演示数据，无需游戏）</button>
-          <br />非官方粉丝工具，与 Landfall Publishing 或 Aggro Crab Games 无关联
-        </p>
+        </header>
+
+        <section class="home-intro" aria-labelledby="homeTitle">
+          <div>
+            <p class="home-eyebrow"><span></span> DAILY EXPEDITION <b id="homeStatus">正在同步轮换</b></p>
+            <h1 id="homeTitle">四段山野，<em>一次同行。</em></h1>
+            <p class="home-description" id="homeDescription">从海岸出发，把沿途的每一次攀登留在地图上。</p>
+          </div>
+          <div class="home-date-block">
+            <time id="homeDate">—</time>
+            <span id="homeDateMeta">当前日期 · 北京时间</span>
+          </div>
+        </section>
+
+        <section class="home-route" id="homeRoute" aria-label="每日四关主题插画">
+          <div class="home-route-heading">
+            <span id="homeRouteLabel">等待确认本轮路线</span>
+            <span class="home-countdown"><i aria-hidden="true"></i><span id="homeCountdown">正在获取更新时间</span><button type="button" id="homeRefresh" title="重新同步每日轮换" aria-label="重新同步每日轮换">↻</button></span>
+          </div>
+          <div class="home-landscape" id="homeLandscape">
+            <ol class="home-chapters" id="homeChapters">
+              <li class="home-chapter" data-segment="0" data-theme="shore">
+                <button type="button" class="home-chapter-button" disabled>
+                  <img class="home-survey" alt="" hidden /><span class="home-chapter-number">01 <i></i></span>
+                  <span class="home-model-status">等待轮换确认</span>
+                  <span class="home-chapter-copy"><small class="home-biome-en">THE BEGINNING</small><strong class="home-biome-title">第一关</strong><span class="home-biome-detail">从海岸开始</span><span class="home-chapter-link">进入地图 <b aria-hidden="true">↗</b></span></span>
+                </button>
+              </li>
+              <li class="home-chapter" data-segment="1" data-theme="roots">
+                <button type="button" class="home-chapter-button" disabled>
+                  <img class="home-survey" alt="" hidden /><span class="home-chapter-number">02 <i></i></span>
+                  <span class="home-model-status">等待轮换确认</span>
+                  <span class="home-chapter-copy"><small class="home-biome-en">INTO THE WILD</small><strong class="home-biome-title">第二关</strong><span class="home-biome-detail">等待真实关卡数据</span><span class="home-chapter-link">进入地图 <b aria-hidden="true">↗</b></span></span>
+                </button>
+              </li>
+              <li class="home-chapter" data-segment="2" data-theme="alpine">
+                <button type="button" class="home-chapter-button" disabled>
+                  <img class="home-survey" alt="" hidden /><span class="home-chapter-number">03 <i></i></span>
+                  <span class="home-model-status">等待轮换确认</span>
+                  <span class="home-chapter-copy"><small class="home-biome-en">HIGHER GROUND</small><strong class="home-biome-title">第三关</strong><span class="home-biome-detail">等待真实关卡数据</span><span class="home-chapter-link">进入地图 <b aria-hidden="true">↗</b></span></span>
+                </button>
+              </li>
+              <li class="home-chapter" data-segment="3" data-theme="volcano">
+                <button type="button" class="home-chapter-button" disabled>
+                  <img class="home-survey" alt="" hidden /><span class="home-chapter-number">04 <i></i></span>
+                  <span class="home-model-status">等待轮换确认</span>
+                  <span class="home-chapter-copy"><small class="home-biome-en">THE FINAL ASCENT</small><strong class="home-biome-title">第四关</strong><span class="home-biome-detail">终章随真实路线确认</span><span class="home-chapter-link">进入地图 <b aria-hidden="true">↗</b></span></span>
+                </button>
+              </li>
+            </ol>
+          </div>
+          <div class="home-route-footer"><p id="homeEvidence">正在确认本轮关卡组合，插画不代表地图实景。</p></div>
+          <details class="home-finale" id="homeFinale" hidden>
+            <summary>
+              <img id="homeEndingThumb" alt="" />
+              <span class="home-finale-label"><small>旅程的最后一章</small><strong id="homeEnding">终章待确认</strong></span>
+              <span class="home-finale-expand">看看终章 <b aria-hidden="true">＋</b></span>
+            </summary>
+            <figure>
+              <img id="homeEndingArt" alt="" loading="lazy" />
+              <figcaption><small id="homeEndingRoute"></small><p id="homeEndingDescription"></p><span>AI 主题插画 · 非地图实景</span></figcaption>
+            </figure>
+          </details>
+        </section>
+
+        <section class="home-bottom" aria-label="回放说明">
+          <div><span class="home-coordinate" aria-hidden="true">↟</span><p><strong>山会变，足迹会留下。</strong><span>本地导入 · 多人同看 · 沿时间重走每一段路</span></p></div>
+          <button type="button" class="home-open-replay" id="homeReplayLink">打开足迹回放 <span aria-hidden="true">→</span></button>
+        </section>
+        <footer class="home-footer"><span>非官方粉丝工具 · 与 Landfall / Aggro Crab 无关联</span><details><summary>开发工具</summary><button class="gate-debug" id="gateDebug" type="button">演示直播（非真实对局）</button></details><span>日志只在本机解析，不上传</span></footer>
       </div>
     </div>
 

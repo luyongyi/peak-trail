@@ -7,6 +7,7 @@ import { normalizeMapFog } from "../web/src/map-fog.js";
 import { normalizeMapWater } from "../web/src/map-water.js";
 import { normalizeMapEnclosures } from "../web/src/map-enclosures.js";
 import { createHash } from "node:crypto";
+import { HOME_ART_FILES } from "../web/src/home-art.js";
 
 const toolDirectory = dirname(fileURLToPath(import.meta.url));
 const platformDirectory = resolve(toolDirectory, "..");
@@ -15,7 +16,13 @@ const dataDirectory = resolve(platformDirectory, "data");
 const mapsDirectory = resolve(dataDirectory, "maps");
 const schemaDirectory = resolve(platformDirectory, "schema");
 const outputDirectory = resolve(platformDirectory, "site-dist");
-const { gameAssetsDirectory, mapPacksDirectory, mapEnclosuresDirectory } = localAssetPaths;
+const { gameAssetsDirectory, mapPacksDirectory, mapEnclosuresDirectory, homeArtDirectory } = localAssetPaths;
+// Only allowlisted illustrations are public; never copy a local folder wholesale.
+for (const file of HOME_ART_FILES) {
+  const entry = await lstat(resolve(homeArtDirectory, file));
+  if (!entry.isFile() || entry.isSymbolicLink() || entry.size > 8 * 1024 * 1024)
+    throw new Error(`Invalid homepage illustration: ${file}`);
+}
 // Fail before replacing the running preview if an extraction is incomplete.
 let gameAssets;
 try {
@@ -73,6 +80,7 @@ await mkdir(resolve(outputDirectory, "schema"), { recursive: true });
 await Promise.all([
   cp(resolve(webDirectory, "index.html"), resolve(outputDirectory, "index.html")),
   cp(resolve(webDirectory, "styles.css"), resolve(outputDirectory, "styles.css")),
+  cp(resolve(webDirectory, "home.css"), resolve(outputDirectory, "home.css")),
   cp(resolve(webDirectory, "src"), resolve(outputDirectory, "src"), { recursive: true }),
   cp(resolve(platformDirectory, "vendor"), resolve(outputDirectory, "vendor"), { recursive: true }),
   cp(resolve(dataDirectory, "daily"), resolve(outputDirectory, "data", "daily"), { recursive: true }),
@@ -82,6 +90,8 @@ await Promise.all([
     resolve(outputDirectory, "schema", name),
   )),
 ]);
+await mkdir(resolve(outputDirectory, "data", "home-art"), { recursive: true });
+for (const file of HOME_ART_FILES) await cp(resolve(homeArtDirectory, file), resolve(outputDirectory, "data", "home-art", file));
 
 for (const pack of mapPacks) {
   for (const reference of pack.files) {

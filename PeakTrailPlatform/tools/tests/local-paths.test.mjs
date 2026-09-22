@@ -11,6 +11,7 @@ test("local assets default to the ignored repository-local asset root", () => {
   assert.equal(paths.assetRootDirectory, resolve(repositoryDirectory, "local", "assets"));
   assert.equal(paths.mapPacksDirectory, resolve(repositoryDirectory, "local", "assets", "maps", "packs"));
   assert.equal(paths.gameAssetsDirectory, resolve(repositoryDirectory, "local", "assets", "game-assets"));
+  assert.equal(paths.homeArtDirectory, resolve(repositoryDirectory, "local", "assets", "home-art"));
 });
 
 test("PEAK_TRAIL_ASSET_ROOT relocates every large-asset reader together", () => {
@@ -19,4 +20,5 @@ test("PEAK_TRAIL_ASSET_ROOT relocates every large-asset reader together", () => 
   assert.equal(paths.assetRootDirectory, override);
   assert.equal(paths.mapPacksDirectory, resolve(override, "maps", "packs"));
   assert.equal(paths.gameAssetsDirectory, resolve(override, "game-assets"));
+  assert.equal(paths.homeArtDirectory, resolve(override, "home-art"));
 });

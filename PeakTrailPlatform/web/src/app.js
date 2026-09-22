@@ -22,6 +22,8 @@ import { resolveReplayRoute, routeSegmentName } from "./map-route.js";
 import { worldTelemetryNote } from "./world-timeline.js";
 import { createTrailEstimator, liveChaseTarget, LIVE_TRAIL_S } from "./live-follow.js";
 import { createWakeLock } from "./wake-lock.js";
+import { HomePage } from "./home-page.js";
+import { buildHomeDailyView } from "./home-daily.js";
 
 const $ = (id) => document.getElementById(id);
 const elements = {
@@ -123,6 +125,8 @@ const state = {
   mapPack: null,
   trace: null,
   traceCollection: null,
+  replayCollection: null,
+  lastReplaySessionId: null,
   traceSelectionRevision: 0,
   lastRenderSignature: null,
   compatibility: null,
@@ -181,10 +185,17 @@ const state = {
 };
 
 const gameAssetLoads = new Map();
+const homePage = new HomePage({ root: elements.modeGate, loadCatalog: () => ensureMapCatalog(),
+  loadMapPack: loadMapPackUrl, onExplore: (map, segment, view) => {
+    void openHomeChapter(map, segment, view).catch(error => {
+      const detail = describeError(error); showError(detail.title, detail.message);
+    });
+  },
+  onRefresh: () => loadDailyStatus() });
 
 const SEGMENT_NAMES_ZH = new Map([
   ["shore", "海岸"],
-  ["roots", "根系"],
+  ["roots", "森蕈"],
   ["tropics", "热带雨林"],
   ["alpine", "雪山"],
   ["mesa", "台地"],
@@ -614,7 +625,11 @@ async function importTrace(files) {
   setSourceLoading("trace", true);
   try {
     const collection = await loadTraceCollection(files);
+    disconnectLive(true);
+    elements.liveStateRow.hidden = true;
+    setSourceMode("replay");
     state.traceCollection = collection;
+    state.replayCollection = collection;
     populateTraceArchive();
     const firstSession = collection.days[0]?.sessions[0] || collection.sessions[0];
     await selectTraceSession(firstSession?.manifest.sessionId, false);
@@ -662,7 +677,7 @@ function setSourceMode(mode) {
   }
 }
 
-// ============ 极简入口门：回放 / 直播 ============
+// ============ 每日路线首页与足迹入口 ============
 function gateOpen() {
   return !elements.modeGate.hidden;
 }
@@ -670,12 +685,16 @@ function gateOpen() {
 function showGate() {
   elements.modeGate.hidden = false;
   document.body.classList.add("gate-open");
+  document.querySelector('.app-shell').inert = true;
+  homePage.setVisible(true);
   void refreshGateRuns();
 }
 
 function dismissGate() {
   elements.modeGate.hidden = true;
   document.body.classList.remove("gate-open");
+  document.querySelector('.app-shell').inert = false;
+  homePage.setVisible(false);
 }
 
 let gateRuns = [];
@@ -725,6 +744,7 @@ function renderGateRuns() {
   const card = elements.gateLive;
   card.classList.toggle("has-runs", gateRuns.length > 0);
   card.classList.toggle("is-empty", gateRuns.length === 0);
+  $("homeLiveCount").textContent = gateRuns.length ? `${gateRuns.length} 场` : "";
   if (live.code) {
     const connected = gateRuns.find((run) => run.code === live.code);
     elements.gateLiveHint.textContent = `正在观看 ${live.code}${connected?.sceneName ? " · " + connected.sceneName : ""} — 点击返回`;
@@ -742,6 +762,9 @@ function renderGateRuns() {
   }
   const showDiag = gateRuns.length === 0 && card.classList.contains("gate-diag-open");
   const showList = gateRuns.length > 1 || Boolean(live.code);
+  const open = card.classList.contains("gate-diag-open");
+  $("homeLivePopover").hidden = !open;
+  card.setAttribute("aria-expanded", String(open));
   elements.gateLiveList.hidden = !(showDiag || showList);
   elements.gateLiveList.replaceChildren();
   if (showDiag) {
@@ -804,9 +827,68 @@ function enterLive(code) {
   void connectLiveRun(base, code);
 }
 
-function enterModeFromGate(mode) {
+async function enterModeFromGate(mode) {
   dismissGate();
+  if (mode === "replay" && (state.live.code || state.live.es || state.live.demoTimer)) {
+    disconnectLive(true);
+    elements.liveStateRow.hidden = true;
+    state.trace = null;
+    state.traceCollection = state.replayCollection;
+  }
   setSourceMode(mode);
+  if (mode !== "replay" || state.trace) return;
+  try {
+    if (state.replayCollection?.sessions.length) {
+      state.traceCollection = state.replayCollection;
+      populateTraceArchive();
+      const id = state.lastReplaySessionId || state.traceCollection.sessions[0].manifest.sessionId;
+      await selectTraceSession(id, false);
+    } else if (isDailyMapFresh(state.daily)) await syncDailyMap(state.daily);
+  } catch (error) { const detail = describeError(error); showError(detail.title, detail.message); }
+}
+
+async function openHomeChapter(map, segment, presentedView) {
+  // File import owns navigation until parsing completes. Do not race a directory import.
+  if (state.sourceLoadingCounts.trace || state.manualMapLoads) {
+    $("homeEvidence").textContent = "正在读取文件，请完成后再打开首页关卡。";
+    return;
+  }
+  const current = buildHomeDailyView({ daily: state.daily, catalog: state.mapCatalog, mapPack: map });
+  if (!current.cards[segment]?.available || current.mapEntry?.mapPackId !== presentedView.mapEntry?.mapPackId) return;
+  const revision = ++state.traceSelectionRevision;
+  ++state.mapRequestRevision;
+  if (state.trace && state.traceCollection === state.replayCollection) state.lastReplaySessionId = state.trace.manifest.sessionId;
+  disconnectLive(true);
+  elements.liveStateRow.hidden = true;
+  setSourceMode("replay");
+  setPlaying(false);
+  clearTimeout(state.toastTimer);
+  elements.eventToast.classList.remove("is-visible");
+  state.trace = null;
+  state.traceCollection = state.replayCollection;
+  state.currentTime = 0;
+  state.lastEventTime = -1;
+  const previous = state.mapPack;
+  state.mapPack = map;
+  // Historical observations may be explored, but must never become today's map.
+  state.mapSourceKind = current.isCurrent ? "daily" : "archive";
+  state.dailyMapStatus = null;
+  resetSegmentNavigation(null);
+  state.selectedSegment = segment;
+  state.segmentSelectionMode = "manual";
+  state.compatibility = assessCompatibility(null, map);
+  syncGameAssetsForTrace(null, revision);
+  // Clear old-session labels before async geometry loading reveals the viewer.
+  updateTraceUI();
+  updateMapUI();
+  updateCompatibilityUI(false);
+  dismissGate();
+  await renderData();
+  if (revision !== state.traceSelectionRevision) return;
+  if (previous !== map) previous?.disposeAssets?.();
+  updateTraceUI();
+  updateMapUI();
+  updateCompatibilityUI(false);
 }
 
 // ============ 调试模式：客户端自产演示数据，进入完整直播界面 ============
@@ -1014,13 +1096,16 @@ function openLiveStream(base, code) {
   // Reconnections resume from Last-Event-ID (the relay replays only the missed
   // records), so the growing trace is kept as-is and appends simply continue.
   es.onopen = () => {
+    if (state.live.es !== es) return;
     state.live.lastSseAt = Date.now();
     if (state.live.trace) setLiveStatus(`直播中 · ${code}（已续传）`);
   };
   es.addEventListener("ping", () => {
+    if (state.live.es !== es) return;
     state.live.lastSseAt = Date.now();
   });
   es.addEventListener("hello", (event) => {
+    if (state.live.es !== es) return;
     state.live.lastSseAt = Date.now();
     const hello = JSON.parse(event.data);
     // A hello on an established trace means the relay lost its buffer (restart):
@@ -1042,6 +1127,7 @@ function openLiveStream(base, code) {
     void attachLiveTrace(trace);
   });
   es.addEventListener("record", (event) => {
+    if (state.live.es !== es) return;
     state.live.lastSseAt = Date.now();
     const entry = JSON.parse(event.data);
     const trace = state.live.trace;
@@ -1248,6 +1334,7 @@ async function selectTraceSession(sessionId, showMismatch = true) {
     (candidate) => candidate.manifest.sessionId === sessionId,
   );
   if (!trace) return;
+  if (state.traceCollection === state.replayCollection) state.lastReplaySessionId = trace.manifest.sessionId;
   const selectionRevision = ++state.traceSelectionRevision;
   state.trace = trace;
   resetSegmentNavigation(trace);
@@ -1750,30 +1837,32 @@ function updateRangeFill(input) {
  * relay outages. A down relay is skipped for a while instead of timing out. */
 function dailySources() {
   const list = [];
-  if (state.dailySource) list.push(state.dailySource);
   const backend = defaultRelayUrl();
   if (backend && !list.includes(`${backend}/api/daily`)) list.push(`${backend}/api/daily`);
+  if (state.dailySource) list.push(state.dailySource);
   list.push("./data/daily/current.json");
   return [...new Set(list)];
 }
 
 async function fetchDailyData() {
   const now = Date.now();
+  let stale = null;
   for (const url of dailySources()) {
     if (url.endsWith("/api/daily") && now < state.dailyBackendDownUntil) continue;
     try {
-      const response = await fetch(url, { cache: "no-store" });
+      const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(5000) });
       if (!response.ok) continue;
       const data = await response.json();
-      if (!data?.sceneName || !data?.nextChangeAtUtc) continue;
-      state.dailySource = url;
-      return data;
+      const freshness = buildHomeDailyView({ daily: data, now: Date.now() }).freshness;
+      if (freshness === "unavailable") continue;
+      if (freshness === "current") { state.dailySource = url; return data; }
+      stale ||= data;
     } catch { /* try the next source */ }
   }
   if (dailySources().some((url) => url.endsWith("/api/daily"))) {
     state.dailyBackendDownUntil = now + 10 * 60_000;
   }
-  return null;
+  return stale;
 }
 
 async function loadDailyStatus() {
@@ -1789,6 +1878,7 @@ async function loadDailyStatus() {
       return;
     }
     state.daily = daily;
+    void homePage.update(daily);
     clearTimeout(state.dailyExpiryTimer);
     state.dailyExpiryTimer = null;
     elements.dailyScene.textContent = daily.sceneName || `Level ${daily.mapSlot ?? daily.levelIndex ?? "?"}`;
@@ -1802,6 +1892,7 @@ async function loadDailyStatus() {
     state.expiredDailyKey = null;
     scheduleDailyExpiry(daily);
     updateDailyCountdown();
+    if (gateOpen()) return; // The home owns its lightweight manifest and four previews.
     try {
       if (state.trace) {
         const trace = state.trace;
@@ -1841,6 +1932,7 @@ async function loadDailyStatus() {
     }
   } finally {
     state.dailyRequestInFlight = false;
+    if (!state.daily) void homePage.update(null);
   }
 }
 
@@ -2061,6 +2153,7 @@ function scheduleDailyExpiry(daily) {
 elements.eventList.addEventListener("scroll", scheduleEventWindow, { passive: true });
 elements.modeReplay.addEventListener("click", () => setSourceMode("replay"));
 elements.gateReplay.addEventListener("click", () => enterModeFromGate("replay"));
+$("homeReplayLink").addEventListener("click", () => enterModeFromGate("replay"));
 elements.gateLive.addEventListener("click", () => {
   if (!gateRuns.length) {
     // 空卡不是死路：点开诊断（中继可达性/错误/检测时间），并立即重测。
@@ -2073,7 +2166,10 @@ elements.gateLive.addEventListener("click", () => {
     return;
   }
   if (gateRuns.length === 1) enterLive(gateRuns[0].code);
-  else elements.gateLiveList.hidden = !elements.gateLiveList.hidden;
+  else {
+    elements.gateLive.classList.toggle("gate-diag-open");
+    renderGateRuns();
+  }
 });
 elements.backToGate.addEventListener("click", () => {
   elements.importMenu.open = false;
@@ -2141,6 +2237,7 @@ document.addEventListener("click", (event) => {
   elements.segmentNavigator.classList.add("is-collapsed");
 });
 window.addEventListener("keydown", (event) => {
+  if (gateOpen()) return;
   if (!viewer) return;
   if (event.key === "Escape" && viewer.cinematic) {
     event.preventDefault();
@@ -2254,6 +2351,7 @@ elements.speedSelect.addEventListener("change", () => {
 });
 
 document.addEventListener("keydown", (event) => {
+  if (gateOpen()) return;
   if (event.code !== "Space" || event.repeat) return;
   const target = event.target;
   if (target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLButtonElement) return;
@@ -2294,6 +2392,7 @@ window.addEventListener("drop", async (event) => {
 });
 
 window.addEventListener("beforeunload", () => {
+  homePage.dispose();
   clearTimeout(state.dailyExpiryTimer);
   state.mapPack?.disposeAssets?.();
   viewer?.dispose();
