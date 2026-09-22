@@ -209,4 +209,27 @@ only recorded fog is eligible—even a complete empty snapshot or a time before
 the first sample must not be filled with inferred baseline fog. The translucent
 bounded shader is an illustrative fog volume, not Unity's original screen shader.
 
+## Citadel and Furnace outer enclosures
+
+```powershell
+& local/python/.venv/Scripts/python.exe PeakTrailPlatform/tools/offline-maps/export_enclosure.py
+node PeakTrailPlatform/tools/stage-site.mjs
+```
+
+For audited build `25306743`, this exports the active, serialized sibling roots
+`Gloom Temple` / `VolcanoModel` that the chapter-only traversal omitted. The
+disabled unsplit mother renderer is not enabled. Original split meshes, UVs,
+materials and world transforms are retained; no cylindrical wall is synthesized.
+
+Small source-bound metadata is stored in `data/maps/enclosures.25306743.json`.
+Large, content-addressed GLBs stay in ignored `local/assets/maps/enclosures/`;
+staging verifies their hashes and copies only referenced files into one shared
+site directory. The original canonical pack IDs, GLBs and playable bounds are
+unchanged. All 21 packs produce 11 unique files, totaling 26,002,419 bytes.
+Partial `--slots` or `--audit-only` runs require an explicit `--output` so they
+cannot accidentally replace the complete site metadata.
+
+See [source and camera evidence](../../docs/interior-source-audit.md) for the
+authored model-axis reference, per-scene renderer counts and verification limits.
+
 Upstream parser documentation: [UnityPy](https://github.com/K0lb3/UnityPy).

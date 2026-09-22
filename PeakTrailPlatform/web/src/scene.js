@@ -11,7 +11,8 @@ import { WorldRenderer } from "./world-renderer.js";
 import { pointInBounds, clipTrailSegment } from "./trail-spatial.js";
 import { FogDepthPass } from "./fog-depth-pass.js";
 import { latestLifeEventBefore, MARKER_LIFE_EVENT_TYPES } from "./protocol.js";
-import { SpectatorCamera, FOLLOW_DISTANCE, FOLLOW_MIN_DISTANCE, FOLLOW_MAX_DISTANCE } from "./spectator-camera.js";
+import { SpectatorCamera, FOLLOW_DISTANCE, FOLLOW_MIN_DISTANCE, FOLLOW_MAX_DISTANCE, FOLLOW_INTERIOR_DISTANCE, FOLLOW_INTERIOR_MIN_DISTANCE, FOLLOW_INTERIOR_MAX_DISTANCE } from "./spectator-camera.js";
+import { followLayerAtPosition } from "./map-enclosures.js";
 import { FollowTerrainQuery } from "./follow-terrain.js";
 import { SourceWaterRenderer } from "./source-water-renderer.js";
 
@@ -488,6 +489,22 @@ export class TrailScene {
       : layer.segment === this.activeSegment);
   }
 
+  async loadChapterGeometry(layer, signal, gameBuildId) {
+    const enclosures = (this.mapPack.mapEnclosures?.enclosures || []).filter(entry => entry.segment === layer.segment);
+    const model = await loadGameGeometry(layer, signal, gameBuildId);
+    try {
+      // The exact-source siblings were missed by the original root traversal.
+      // Load them into the same chapter, including its terrain collision query.
+      for (const enclosure of enclosures) {
+        signal?.throwIfAborted?.();
+        const shell = await loadGameGeometry({ ...enclosure, id: enclosure.objectId }, signal, gameBuildId);
+        shell.userData.sourceEnclosure = enclosure.objectId;
+        model.add(shell);
+      }
+      return model;
+    } catch (error) { disposeObject(model); throw error; }
+  }
+
   async ensureGeometryLayers(token = this.buildToken, selectionToken = this.geometrySelectionToken) {
     if (!this.useMap || this.mapPack?.identityVersion !== 3) return;
     const selected = this.activeSegment;
@@ -509,7 +526,7 @@ export class TrailScene {
           if (!isCurrent()) return;
           if (!this.geometryLoads.has(layer.id)) {
             const origin = this.origin.clone();
-            const task = loadGameGeometry(layer, this.geometryAbort.signal, this.mapPack.gameBuildId).then((model) => {
+            const task = this.loadChapterGeometry(layer, this.geometryAbort.signal, this.mapPack.gameBuildId).then((model) => {
               // A shared request can still serve A -> B -> A. Its ownership is
               // the current build/layer, not the selection that first started it.
               if (token !== this.buildToken || !this.isGeometryLayerRequested(layer)) {
@@ -907,7 +924,9 @@ export class TrailScene {
       this.controls.enabled = false;
       this.updateFollowAnchor();
       const offset = this.followTmp.copy(this.camera.position).sub(this.followAnchor);
-      this.followDistance = FOLLOW_DISTANCE;
+      const context = this.followViewContext();
+      this.followViewMode = context.interior ? "interior" : "exterior";
+      this.followDistance = context.interior ? FOLLOW_INTERIOR_DISTANCE : FOLLOW_DISTANCE;
       this.followAzimuth = Math.atan2(offset.x, offset.z);
       this.followPitch = 0.22;
       this.camera.up.set(0, 1, 0);
@@ -954,6 +973,7 @@ export class TrailScene {
         active: playerId !== null, playerId,
         name: participant?.nickname ?? playerId ?? null,
         autoRotate: playerId !== null && this.followAutoRotate,
+        viewMode: this.followViewMode || "exterior",
       },
     }));
   }
@@ -971,6 +991,17 @@ export class TrailScene {
     return Boolean(object?.marker && object.group?.visible !== false
       && (this.playerVisibility.get(id) ?? true)
       && (object.marker.userData.followable ?? object.marker.userData.replayVisible));
+  }
+
+  followViewContext() {
+    const point = [this.followAnchor.x + this.origin.x,
+      this.followAnchor.y / this.heightScale + this.origin.y, -this.followAnchor.z + this.origin.z];
+    const layer = followLayerAtPosition(this.mapPack, this.activeSegment, point);
+    const interior = isInteriorLayer(layer, this.mapPack?.route);
+    const enclosure = interior ? this.mapPack?.mapEnclosures?.enclosures?.find(entry => entry.segment === layer.segment) : null;
+    const center = enclosure?.interiorReference;
+    return { layer, interior, interiorReference: center ? { center: [center[0] - this.origin.x,
+      (center[1] - this.origin.y) * this.heightScale, -(center[2] - this.origin.z)] } : null };
   }
 
   updateFollowCamera(deltaSeconds) {
@@ -997,6 +1028,15 @@ export class TrailScene {
       this.followTerrainDirty = false;
       this.followRig.invalidate();
     }
+    const context = this.followViewContext();
+    const viewMode = context.interior ? "interior" : "exterior";
+    if (viewMode !== this.followViewMode) {
+      this.followViewMode = viewMode;
+      this.followDistance = context.interior ? FOLLOW_INTERIOR_DISTANCE : FOLLOW_DISTANCE;
+      this.followUserOrbit = false;
+      this.followRig.reset();
+      this.emitFollowStatus();
+    }
     // Current chapter bounds are only a weak prior. Nearby true surface normals
     // and candidate visibility win; the whole-map centre is not a climbing face.
     const bounds = this.viewBounds();
@@ -1006,7 +1046,7 @@ export class TrailScene {
     const result = this.followRig.update(this.followAnchor, deltaSeconds, {
       cameraPosition: this.camera.position, distance: this.followDistance,
       azimuth: this.followAzimuth, pitch: this.followPitch, manual: this.followUserOrbit,
-      preferredAzimuth, interior: isInteriorLayer(this.selectedLayer(), this.mapPack?.route),
+      preferredAzimuth, interior: context.interior, interiorReference: context.interiorReference,
       discontinuity: this.followDiscontinuity,
     });
     this.followDiscontinuity = false;
@@ -1094,8 +1134,10 @@ export class TrailScene {
   onFollowWheel(event) {
     if (this.followTargetId === null || this.freeCamera.mode === "free") return;
     event.preventDefault();
-    this.followDistance = THREE.MathUtils.clamp(
-      this.followDistance * Math.exp(event.deltaY * 0.001), FOLLOW_MIN_DISTANCE, FOLLOW_MAX_DISTANCE);
+    const interior = this.followViewMode === "interior";
+    this.followDistance = THREE.MathUtils.clamp(this.followDistance * Math.exp(event.deltaY * 0.001),
+      interior ? FOLLOW_INTERIOR_MIN_DISTANCE : FOLLOW_MIN_DISTANCE,
+      interior ? FOLLOW_INTERIOR_MAX_DISTANCE : FOLLOW_MAX_DISTANCE);
   }
 
   updateCameraMarkerVisibility() {

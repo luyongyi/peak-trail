@@ -1,0 +1,1582 @@
+{
+  "schemaVersion": 1,
+  "gameBuildId": "25306743",
+  "authority": "serialized-map-enclosure",
+  "note": "Original active pre-split outer mesh roots and exact source model axes; custom shader effects remain approximated. Existing canonical map packs are unchanged.",
+  "maps": [
+    {
+      "mapPackId": "sha256-3bfe40abb1bff46ea7ed0e34d4d566ae76bc1cf8526d4b6e71790fc2620c0175",
+      "gameBuildId": "25306743",
+      "sceneName": "Level_0",
+      "mapSlot": 0,
+      "sourceSceneSha256": "34386c210e36448d1361479ee2c37dcb9a9a2016589e18bc4500f91a9a3d0986",
+      "enclosures": [
+        {
+          "segment": 4,
+          "objectId": "map-enclosure:level5:44065",
+          "sourceRootPathId": 44065,
+          "sourceRootName": "VolcanoModel",
+          "sourceHierarchy": [
+            "Map",
+            "Biome_4",
+            "Caldera",
+            "VolcanoModel"
+          ],
+          "sourceModelPathId": 78895,
+          "sourceModelName": "Pipe",
+          "sourceModelHierarchy": [
+            "Map",
+            "Biome_4",
+            "Caldera",
+            "VolcanoModel",
+            "VolcanoModel"
+          ],
+          "sourceModelMeshPathId": 373,
+          "sourceModelAsset": "sharedassets4.assets",
+          "interiorReference": [
+            0.0,
+            884.6900024414062,
+            2047.0
+          ],
+          "interiorReferenceSource": "source-model-axis",
+          "interiorAxis": [
+            3.1548136117842646e-07,
+            0.9999999999998342,
+            -4.817901560386008e-07
+          ],
+          "sourceOriginalRendererEnabled": false,
+          "sourceActiveSplitRenderers": 110,
+          "sourceRendererCount": 110,
+          "geometry": "3f371f252a943479f171ba14937f51603d809269409cb8579eb7e01eef742d21.glb.gz",
+          "geometrySha256": "3f371f252a943479f171ba14937f51603d809269409cb8579eb7e01eef742d21",
+          "geometryFormat": "glb-instanced-v1+gzip",
+          "meshBounds": {
+            "min": [
+              -325.6309940612172,
+              560.4186895299562,
+              1717.4397178688328
+            ],
+            "max": [
+              322.72524183164285,
+              1195.3629217428804,
+              2372.938607239159
+            ]
+          },
+          "meshStatistics": {
+            "bytes": 5627800,
+            "uniqueMeshes": 110,
+            "uniqueVertices": 134339,
+            "uniqueTriangles": 200202,
+            "instances": 110,
+            "renderedTriangles": 200202,
+            "affineNodes": 110,
+            "materials": 1,
+            "embeddedTextures": 0,
+            "drawGroups": 110
+          },
+          "geometryBytes": 2894254
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-e9827dfc50f17903b8e7af9b702db0f6b9e4755cbdc4fc7c79e535bc7ef4faad",
+      "gameBuildId": "25306743",
+      "sceneName": "Level_1",
+      "mapSlot": 1,
+      "sourceSceneSha256": "3b567b731239b5038736f204581ad61b2acf9ddea7ef56e659d39f95f8e3e5cc",
+      "enclosures": [
+        {
+          "segment": 4,
+          "objectId": "map-enclosure:level6:20193",
+          "sourceRootPathId": 20193,
+          "sourceRootName": "Gloom Temple",
+          "sourceHierarchy": [
+            "Map",
+            "Biome_4",
+            "Gloom",
+            "Gloom Temple"
+          ],
+          "sourceModelPathId": 12507,
+          "sourceModelName": "Temple Structure Outer",
+          "sourceModelHierarchy": [
+            "Map",
+            "Biome_4",
+            "Gloom",
+            "Gloom Temple",
+            "Temple_Model"
+          ],
+          "sourceModelMeshPathId": 829,
+          "sourceModelAsset": "sharedassets4.assets",
+          "interiorReference": [
+            7.0,
+            805.0999755859375,
+            2092.5
+          ],
+          "interiorReferenceSource": "source-model-axis",
+          "interiorAxis": [
+            0.0,
+            0.9999999999999911,
+            -1.3435883843274954e-07
+          ],
+          "sourceOriginalRendererEnabled": false,
+          "sourceActiveSplitRenderers": 94,
+          "sourceRendererCount": 130,
+          "geometry": "6b01b91590aae3c452840ef688447b1a85d8788ca103a73ab6206de1f87549f4.glb.gz",
+          "geometrySha256": "6b01b91590aae3c452840ef688447b1a85d8788ca103a73ab6206de1f87549f4",
+          "geometryFormat": "glb-instanced-v1+gzip",
+          "meshBounds": {
+            "min": [
+              -174.32257080078125,
+              650.8760537072935,
+              1880.694889375627
+            ],
+            "max": [
+              188.32257080078125,
+              1226.0110134215347,
+              2273.822061550978
+            ]
+          },
+          "meshStatistics": {
+            "bytes": 4181552,
+            "uniqueMeshes": 110,
+            "uniqueVertices": 88229,
+            "uniqueTriangles": 72633,
+            "instances": 130,
+            "renderedTriangles": 106201,
+            "affineNodes": 8,
+            "instancedGroups": 6,
+            "gpuInstances": 18,
+            "materials": 13,
+            "embeddedTextures": 7,
+            "drawGroups": 110
+          },
+          "geometryBytes": 2261278
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-695061be5840770d667c15252a973e77210a409530bda7880c1806573dd4db58",
+      "gameBuildId": "25306743",
+      "sceneName": "Level_2",
+      "mapSlot": 2,
+      "sourceSceneSha256": "a5834fe91965c86b7ea226c6a70273017e127cafd57508c88b209eb563f43539",
+      "enclosures": [
+        {
+          "segment": 4,
+          "objectId": "map-enclosure:level7:44113",
+          "sourceRootPathId": 44113,
+          "sourceRootName": "VolcanoModel",
+          "sourceHierarchy": [
+            "Map",
+            "Biome_4",
+            "Caldera",
+            "VolcanoModel"
+          ],
+          "sourceModelPathId": 79356,
+          "sourceModelName": "Pipe",
+          "sourceModelHierarchy": [
+            "Map",
+            "Biome_4",
+            "Caldera",
+            "VolcanoModel",
+            "VolcanoModel"
+          ],
+          "sourceModelMeshPathId": 373,
+          "sourceModelAsset": "sharedassets4.assets",
+          "interiorReference": [
+            0.0,
+            884.6900024414062,
+            2047.0
+          ],
+          "interiorReferenceSource": "source-model-axis",
+          "interiorAxis": [
+            3.1548136117842646e-07,
+            0.9999999999998342,
+            -4.817901560386008e-07
+          ],
+          "sourceOriginalRendererEnabled": false,
+          "sourceActiveSplitRenderers": 110,
+          "sourceRendererCount": 110,
+          "geometry": "3f371f252a943479f171ba14937f51603d809269409cb8579eb7e01eef742d21.glb.gz",
+          "geometrySha256": "3f371f252a943479f171ba14937f51603d809269409cb8579eb7e01eef742d21",
+          "geometryFormat": "glb-instanced-v1+gzip",
+          "meshBounds": {
+            "min": [
+              -325.6309940612172,
+              560.4186895299562,
+              1717.4397178688328
+            ],
+            "max": [
+              322.72524183164285,
+              1195.3629217428804,
+              2372.938607239159
+            ]
+          },
+          "meshStatistics": {
+            "bytes": 5627800,
+            "uniqueMeshes": 110,
+            "uniqueVertices": 134339,
+            "uniqueTriangles": 200202,
+            "instances": 110,
+            "renderedTriangles": 200202,
+            "affineNodes": 110,
+            "materials": 1,
+            "embeddedTextures": 0,
+            "drawGroups": 110
+          },
+          "geometryBytes": 2894254
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-b6bfd311a2f18a42eafd734ee333ab991f96fbf76c2f2c972dfc34e747a78b35",
+      "gameBuildId": "25306743",
+      "sceneName": "Level_3",
+      "mapSlot": 3,
+      "sourceSceneSha256": "43c5f9044445cc905b519d9e430f55aa0fab07f59b5c767f0d7d886a57b765e4",
+      "enclosures": [
+        {
+          "segment": 4,
+          "objectId": "map-enclosure:level8:17673",
+          "sourceRootPathId": 17673,
+          "sourceRootName": "Gloom Temple",
+          "sourceHierarchy": [
+            "Map",
+            "Biome_4",
+            "Gloom",
+            "Gloom Temple"
+          ],
+          "sourceModelPathId": 10970,
+          "sourceModelName": "Temple Structure Outer",
+          "sourceModelHierarchy": [
+            "Map",
+            "Biome_4",
+            "Gloom",
+            "Gloom Temple",
+            "Temple_Model"
+          ],
+          "sourceModelMeshPathId": 829,
+          "sourceModelAsset": "sharedassets4.assets",
+          "interiorReference": [
+            7.0,
+            805.0999755859375,
+            2092.5
+          ],
+          "interiorReferenceSource": "source-model-axis",
+          "interiorAxis": [
+            0.0,
+            0.9999999999999911,
+            -1.3435883843274954e-07
+          ],
+          "sourceOriginalRendererEnabled": false,
+          "sourceActiveSplitRenderers": 94,
+          "sourceRendererCount": 132,
+          "geometry": "6f8bd19c79218efca3ceb769d97b806aeaf65b15c4750afb491915219ced3acc.glb.gz",
+          "geometrySha256": "6f8bd19c79218efca3ceb769d97b806aeaf65b15c4750afb491915219ced3acc",
+          "geometryFormat": "glb-instanced-v1+gzip",
+          "meshBounds": {
+            "min": [
+              -174.32257080078125,
+              650.8760537072935,
+              1880.694889375627
+            ],
+            "max": [
+              188.32257080078125,
+              1226.0110134215347,
+              2273.822061550978
+            ]
+          },
+          "meshStatistics": {
+            "bytes": 4217480,
+            "uniqueMeshes": 116,
+            "uniqueVertices": 88128,
+            "uniqueTriangles": 72611,
+            "instances": 132,
+            "renderedTriangles": 103539,
+            "affineNodes": 18,
+            "instancedGroups": 2,
+            "gpuInstances": 10,
+            "materials": 15,
+            "embeddedTextures": 8,
+            "drawGroups": 116
+          },
+          "geometryBytes": 2332225
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-2e74f69a2828a0966e80c1bd349bdddc1b2c604f5492e212416e83f64bf83890",
+      "gameBuildId": "25306743",
+      "sceneName": "Level_4",
+      "mapSlot": 4,
+      "sourceSceneSha256": "ce32b18df46d47a20f685309132e33b0d0a12e5211d5f707dffca8472a3e4c36",
+      "enclosures": [
+        {
+          "segment": 4,
+          "objectId": "map-enclosure:level9:40671",
+          "sourceRootPathId": 40671,
+          "sourceRootName": "VolcanoModel",
+          "sourceHierarchy": [
+            "Map",
+            "Biome_4",
+            "Caldera",
+            "VolcanoModel"
+          ],
+          "sourceModelPathId": 70104,
+          "sourceModelName": "Pipe",
+          "sourceModelHierarchy": [
+            "Map",
+            "Biome_4",
+            "Caldera",
+            "VolcanoModel",
+            "VolcanoModel"
+          ],
+          "sourceModelMeshPathId": 373,
+          "sourceModelAsset": "sharedassets4.assets",
+          "interiorReference": [
+            0.0,
+            884.6900024414062,
+            2047.0
+          ],
+          "interiorReferenceSource": "source-model-axis",
+          "interiorAxis": [
+            3.1548136117842646e-07,
+            0.9999999999998342,
+            -4.817901560386008e-07
+          ],
+          "sourceOriginalRendererEnabled": false,
+          "sourceActiveSplitRenderers": 110,
+          "sourceRendererCount": 110,
+          "geometry": "3f371f252a943479f171ba14937f51603d809269409cb8579eb7e01eef742d21.glb.gz",
+          "geometrySha256": "3f371f252a943479f171ba14937f51603d809269409cb8579eb7e01eef742d21",
+          "geometryFormat": "glb-instanced-v1+gzip",
+          "meshBounds": {
+            "min": [
+              -325.6309940612172,
+              560.4186895299562,
+              1717.4397178688328
+            ],
+            "max": [
+              322.72524183164285,
+              1195.3629217428804,
+              2372.938607239159
+            ]
+          },
+          "meshStatistics": {
+            "bytes": 5627800,
+            "uniqueMeshes": 110,
+            "uniqueVertices": 134339,
+            "uniqueTriangles": 200202,
+            "instances": 110,
+            "renderedTriangles": 200202,
+            "affineNodes": 110,
+            "materials": 1,
+            "embeddedTextures": 0,
+            "drawGroups": 110
+          },
+          "geometryBytes": 2894254
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-6b816514996091b536438fe38aeeff7776be6382be99bedcc6134d4503f919d7",
+      "gameBuildId": "25306743",
+      "sceneName": "Level_5",
+      "mapSlot": 5,
+      "sourceSceneSha256": "c0873c086eba7f9aee20c4e683f5ade8a5b3e0e81634cae59aaee23804f9c3bf",
+      "enclosures": [
+        {
+          "segment": 4,
+          "objectId": "map-enclosure:level10:18294",
+          "sourceRootPathId": 18294,
+          "sourceRootName": "Gloom Temple",
+          "sourceHierarchy": [
+            "Map",
+            "Biome_4",
+            "Gloom",
+            "Gloom Temple"
+          ],
+          "sourceModelPathId": 11571,
+          "sourceModelName": "Temple Structure Outer",
+          "sourceModelHierarchy": [
+            "Map",
+            "Biome_4",
+            "Gloom",
+            "Gloom Temple",
+            "Temple_Model"
+          ],
+          "sourceModelMeshPathId": 829,
+          "sourceModelAsset": "sharedassets4.assets",
+          "interiorReference": [
+            7.0,
+            805.0999755859375,
+            2092.5
+          ],
+          "interiorReferenceSource": "source-model-axis",
+          "interiorAxis": [
+            0.0,
+            0.9999999999999911,
+            -1.3435883843274954e-07
+          ],
+          "sourceOriginalRendererEnabled": false,
+          "sourceActiveSplitRenderers": 94,
+          "sourceRendererCount": 130,
+          "geometry": "bb2b99d841c970be067f23ce0437a8eacccaa54ff84df01d04cd59a2f1e59b2d.glb.gz",
+          "geometrySha256": "bb2b99d841c970be067f23ce0437a8eacccaa54ff84df01d04cd59a2f1e59b2d",
+          "geometryFormat": "glb-instanced-v1+gzip",
+          "meshBounds": {
+            "min": [
+              -174.32257080078125,
+              650.8760537072935,
+              1880.694889375627
+            ],
+            "max": [
+              188.32257080078125,
+              1226.0110134215347,
+              2273.822061550978
+            ]
+          },
+          "meshStatistics": {
+            "bytes": 4217172,
+            "uniqueMeshes": 116,
+            "uniqueVertices": 88128,
+            "uniqueTriangles": 72611,
+            "instances": 130,
+            "renderedTriangles": 103885,
+            "affineNodes": 20,
+            "instancedGroups": 2,
+            "gpuInstances": 10,
+            "materials": 15,
+            "embeddedTextures": 8,
+            "drawGroups": 116
+          },
+          "geometryBytes": 2331907
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-c5e3153763361ca8c67faa81ab092910a6c683fe1b51752df3c865f883e35ec8",
+      "gameBuildId": "25306743",
+      "sceneName": "Level_6",
+      "mapSlot": 6,
+      "sourceSceneSha256": "9a94100adf0f821744c0c0613db7cb882188a945a967f5671fd91050d85c53c3",
+      "enclosures": [
+        {
+          "segment": 4,
+          "objectId": "map-enclosure:level11:44160",
+          "sourceRootPathId": 44160,
+          "sourceRootName": "VolcanoModel",
+          "sourceHierarchy": [
+            "Map",
+            "Biome_4",
+            "Caldera",
+            "VolcanoModel"
+          ],
+          "sourceModelPathId": 78928,
+          "sourceModelName": "Pipe",
+          "sourceModelHierarchy": [
+            "Map",
+            "Biome_4",
+            "Caldera",
+            "VolcanoModel",
+            "VolcanoModel"
+          ],
+          "sourceModelMeshPathId": 373,
+          "sourceModelAsset": "sharedassets4.assets",
+          "interiorReference": [
+            0.0,
+            884.6900024414062,
+            2047.0
+          ],
+          "interiorReferenceSource": "source-model-axis",
+          "interiorAxis": [
+            3.1548136117842646e-07,
+            0.9999999999998342,
+            -4.817901560386008e-07
+          ],
+          "sourceOriginalRendererEnabled": false,
+          "sourceActiveSplitRenderers": 110,
+          "sourceRendererCount": 110,
+          "geometry": "3f371f252a943479f171ba14937f51603d809269409cb8579eb7e01eef742d21.glb.gz",
+          "geometrySha256": "3f371f252a943479f171ba14937f51603d809269409cb8579eb7e01eef742d21",
+          "geometryFormat": "glb-instanced-v1+gzip",
+          "meshBounds": {
+            "min": [
+              -325.6309940612172,
+              560.4186895299562,
+              1717.4397178688328
+            ],
+            "max": [
+              322.72524183164285,
+              1195.3629217428804,
+              2372.938607239159
+            ]
+          },
+          "meshStatistics": {
+            "bytes": 5627800,
+            "uniqueMeshes": 110,
+            "uniqueVertices": 134339,
+            "uniqueTriangles": 200202,
+            "instances": 110,
+            "renderedTriangles": 200202,
+            "affineNodes": 110,
+            "materials": 1,
+            "embeddedTextures": 0,
+            "drawGroups": 110
+          },
+          "geometryBytes": 2894254
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-7ff0a922deb8564b4882ae66a7563266f72382d8b30ae33e374d2e80089edddf",
+      "gameBuildId": "25306743",
+      "sceneName": "Level_7",
+      "mapSlot": 7,
+      "sourceSceneSha256": "a4f763d3b9a2bb028ee0d4fe447d5daad04583b82180c989aca7fdfa5e37b0e5",
+      "enclosures": [
+        {
+          "segment": 4,
+          "objectId": "map-enclosure:level12:19246",
+          "sourceRootPathId": 19246,
+          "sourceRootName": "Gloom Temple",
+          "sourceHierarchy": [
+            "Map",
+            "Biome_4",
+            "Gloom",
+            "Gloom Temple"
+          ],
+          "sourceModelPathId": 12228,
+          "sourceModelName": "Temple Structure Outer",
+          "sourceModelHierarchy": [
+            "Map",
+            "Biome_4",
+            "Gloom",
+            "Gloom Temple",
+            "Temple_Model"
+          ],
+          "sourceModelMeshPathId": 829,
+          "sourceModelAsset": "sharedassets4.assets",
+          "interiorReference": [
+            7.0,
+            805.0999755859375,
+            2092.5
+          ],
+          "interiorReferenceSource": "source-model-axis",
+          "interiorAxis": [
+            0.0,
+            0.9999999999999911,
+            -1.3435883843274954e-07
+          ],
+          "sourceOriginalRendererEnabled": false,
+          "sourceActiveSplitRenderers": 94,
+          "sourceRendererCount": 130,
+          "geometry": "9d247f394c9768103123a57909b2c0fe34ad8e4d26c89cc623bd4a88f62becc3.glb.gz",
+          "geometrySha256": "9d247f394c9768103123a57909b2c0fe34ad8e4d26c89cc623bd4a88f62becc3",
+          "geometryFormat": "glb-instanced-v1+gzip",
+          "meshBounds": {
+            "min": [
+              -174.32257080078125,
+              650.8760537072935,
+              1880.694889375627
+            ],
+            "max": [
+              188.32257080078125,
+              1226.0110134215347,
+              2273.822061550978
+            ]
+          },
+          "meshStatistics": {
+            "bytes": 4312572,
+            "uniqueMeshes": 116,
+            "uniqueVertices": 91307,
+            "uniqueTriangles": 75515,
+            "instances": 130,
+            "renderedTriangles": 106789,
+            "affineNodes": 8,
+            "instancedGroups": 2,
+            "gpuInstances": 10,
+            "materials": 14,
+            "embeddedTextures": 8,
+            "drawGroups": 116
+          },
+          "geometryBytes": 2319992
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-4670b2c86b6d7327b91a91b70a65b1b17e80799f42d0615d86edd71599fb91e2",
+      "gameBuildId": "25306743",
+      "sceneName": "Level_8",
+      "mapSlot": 8,
+      "sourceSceneSha256": "8ee8ca14bdedbc92755caeb11cb7821e54232489be479cb7f92b45a4d7219793",
+      "enclosures": [
+        {
+          "segment": 4,
+          "objectId": "map-enclosure:level13:39897",
+          "sourceRootPathId": 39897,
+          "sourceRootName": "VolcanoModel",
+          "sourceHierarchy": [
+            "Map",
+            "Biome_4",
+            "Caldera",
+            "VolcanoModel"
+          ],
+          "sourceModelPathId": 69634,
+          "sourceModelName": "Pipe",
+          "sourceModelHierarchy": [
+            "Map",
+            "Biome_4",
+            "Caldera",
+            "VolcanoModel",
+            "VolcanoModel"
+          ],
+          "sourceModelMeshPathId": 373,
+          "sourceModelAsset": "sharedassets4.assets",
+          "interiorReference": [
+            0.0,
+            884.6900024414062,
+            2047.0
+          ],
+          "interiorReferenceSource": "source-model-axis",
+          "interiorAxis": [
+            3.1548136117842646e-07,
+            0.9999999999998342,
+            -4.817901560386008e-07
+          ],
+          "sourceOriginalRendererEnabled": false,
+          "sourceActiveSplitRenderers": 110,
+          "sourceRendererCount": 110,
+          "geometry": "3f371f252a943479f171ba14937f51603d809269409cb8579eb7e01eef742d21.glb.gz",
+          "geometrySha256": "3f371f252a943479f171ba14937f51603d809269409cb8579eb7e01eef742d21",
+          "geometryFormat": "glb-instanced-v1+gzip",
+          "meshBounds": {
+            "min": [
+              -325.6309940612172,
+              560.4186895299562,
+              1717.4397178688328
+            ],
+            "max": [
+              322.72524183164285,
+              1195.3629217428804,
+              2372.938607239159
+            ]
+          },
+          "meshStatistics": {
+            "bytes": 5627800,
+            "uniqueMeshes": 110,
+            "uniqueVertices": 134339,
+            "uniqueTriangles": 200202,
+            "instances": 110,
+            "renderedTriangles": 200202,
+            "affineNodes": 110,
+            "materials": 1,
+            "embeddedTextures": 0,
+            "drawGroups": 110
+          },
+          "geometryBytes": 2894254
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-c262b4919f04de612f91bae02ef35de5f061a59422b38c390294f15ff33f297f",
+      "gameBuildId": "25306743",
+      "sceneName": "Level_9",
+      "mapSlot": 9,
+      "sourceSceneSha256": "7e170a94955ff9a42a9fac292c9e6a6786fefbc2fc4f5018bf616529b988a00b",
+      "enclosures": [
+        {
+          "segment": 4,
+          "objectId": "map-enclosure:level14:17294",
+          "sourceRootPathId": 17294,
+          "sourceRootName": "Gloom Temple",
+          "sourceHierarchy": [
+            "Map",
+            "Biome_4",
+            "Gloom",
+            "Gloom Temple"
+          ],
+          "sourceModelPathId": 10773,
+          "sourceModelName": "Temple Structure Outer",
+          "sourceModelHierarchy": [
+            "Map",
+            "Biome_4",
+            "Gloom",
+            "Gloom Temple",
+            "Temple_Model"
+          ],
+          "sourceModelMeshPathId": 829,
+          "sourceModelAsset": "sharedassets4.assets",
+          "interiorReference": [
+            7.0,
+            805.0999755859375,
+            2092.5
+          ],
+          "interiorReferenceSource": "source-model-axis",
+          "interiorAxis": [
+            0.0,
+            0.9999999999999911,
+            -1.3435883843274954e-07
+          ],
+          "sourceOriginalRendererEnabled": false,
+          "sourceActiveSplitRenderers": 94,
+          "sourceRendererCount": 130,
+          "geometry": "7b3cf7880b2fd929ca14e345cf28f3ab918ebf775b73dd20e62676d259411dc7.glb.gz",
+          "geometrySha256": "7b3cf7880b2fd929ca14e345cf28f3ab918ebf775b73dd20e62676d259411dc7",
+          "geometryFormat": "glb-instanced-v1+gzip",
+          "meshBounds": {
+            "min": [
+              -174.32257080078125,
+              650.8760537072935,
+              1880.694889375627
+            ],
+            "max": [
+              188.32257080078125,
+              1226.0110134215347,
+              2273.822061550978
+            ]
+          },
+          "meshStatistics": {
+            "bytes": 4347572,
+            "uniqueMeshes": 122,
+            "uniqueVertices": 91206,
+            "uniqueTriangles": 75493,
+            "instances": 130,
+            "renderedTriangles": 104473,
+            "affineNodes": 12,
+            "instancedGroups": 2,
+            "gpuInstances": 10,
+            "materials": 16,
+            "embeddedTextures": 9,
+            "drawGroups": 122
+          },
+          "geometryBytes": 2391431
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-8eaa8e664df5251276018fc72b1c4bb4e48ae1e882f95cff392f139eb06d366d",
+      "gameBuildId": "25306743",
+      "sceneName": "Level_10",
+      "mapSlot": 10,
+      "sourceSceneSha256": "01c16189deb03ed37f938bea1c086913d2ae41bd05e00e35128d8891ef498547",
+      "enclosures": [
+        {
+          "segment": 4,
+          "objectId": "map-enclosure:level15:40824",
+          "sourceRootPathId": 40824,
+          "sourceRootName": "VolcanoModel",
+          "sourceHierarchy": [
+            "Map",
+            "Biome_4",
+            "Caldera",
+            "VolcanoModel"
+          ],
+          "sourceModelPathId": 72681,
+          "sourceModelName": "Pipe",
+          "sourceModelHierarchy": [
+            "Map",
+            "Biome_4",
+            "Caldera",
+            "VolcanoModel",
+            "VolcanoModel"
+          ],
+          "sourceModelMeshPathId": 373,
+          "sourceModelAsset": "sharedassets4.assets",
+          "interiorReference": [
+            0.0,
+            884.6900024414062,
+            2047.0
+          ],
+          "interiorReferenceSource": "source-model-axis",
+          "interiorAxis": [
+            3.1548136117842646e-07,
+            0.9999999999998342,
+            -4.817901560386008e-07
+          ],
+          "sourceOriginalRendererEnabled": false,
+          "sourceActiveSplitRenderers": 110,
+          "sourceRendererCount": 110,
+          "geometry": "3f371f252a943479f171ba14937f51603d809269409cb8579eb7e01eef742d21.glb.gz",
+          "geometrySha256": "3f371f252a943479f171ba14937f51603d809269409cb8579eb7e01eef742d21",
+          "geometryFormat": "glb-instanced-v1+gzip",
+          "meshBounds": {
+            "min": [
+              -325.6309940612172,
+              560.4186895299562,
+              1717.4397178688328
+            ],
+            "max": [
+              322.72524183164285,
+              1195.3629217428804,
+              2372.938607239159
+            ]
+          },
+          "meshStatistics": {
+            "bytes": 5627800,
+            "uniqueMeshes": 110,
+            "uniqueVertices": 134339,
+            "uniqueTriangles": 200202,
+            "instances": 110,
+            "renderedTriangles": 200202,
+            "affineNodes": 110,
+            "materials": 1,
+            "embeddedTextures": 0,
+            "drawGroups": 110
+          },
+          "geometryBytes": 2894254
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-f17aae9a4d774c82af1a9a5a0df07387ec7c8962da0fb3de6cc001991310bd96",
+      "gameBuildId": "25306743",
+      "sceneName": "Level_11",
+      "mapSlot": 11,
+      "sourceSceneSha256": "73d0155bf386ab6e12f7fced90f86291cd7f750d691fe8cd5c978b3435aced9c",
+      "enclosures": [
+        {
+          "segment": 4,
+          "objectId": "map-enclosure:level16:18879",
+          "sourceRootPathId": 18879,
+          "sourceRootName": "Gloom Temple",
+          "sourceHierarchy": [
+            "Map",
+            "Biome_4",
+            "Gloom",
+            "Gloom Temple"
+          ],
+          "sourceModelPathId": 11858,
+          "sourceModelName": "Temple Structure Outer",
+          "sourceModelHierarchy": [
+            "Map",
+            "Biome_4",
+            "Gloom",
+            "Gloom Temple",
+            "Temple_Model"
+          ],
+          "sourceModelMeshPathId": 829,
+          "sourceModelAsset": "sharedassets4.assets",
+          "interiorReference": [
+            7.0,
+            805.0999755859375,
+            2092.5
+          ],
+          "interiorReferenceSource": "source-model-axis",
+          "interiorAxis": [
+            0.0,
+            0.9999999999999911,
+            -1.3435883843274954e-07
+          ],
+          "sourceOriginalRendererEnabled": false,
+          "sourceActiveSplitRenderers": 94,
+          "sourceRendererCount": 130,
+          "geometry": "80ea898e01f7342e74ca5a63b9dce1e5ec1fd90bd2455d24098ff916ce53995c.glb.gz",
+          "geometrySha256": "80ea898e01f7342e74ca5a63b9dce1e5ec1fd90bd2455d24098ff916ce53995c",
+          "geometryFormat": "glb-instanced-v1+gzip",
+          "meshBounds": {
+            "min": [
+              -174.32257080078125,
+              650.8760537072935,
+              1880.694889375627
+            ],
+            "max": [
+              188.32257080078125,
+              1226.0110134215347,
+              2273.822061550978
+            ]
+          },
+          "meshStatistics": {
+            "bytes": 4347600,
+            "uniqueMeshes": 122,
+            "uniqueVertices": 91206,
+            "uniqueTriangles": 75493,
+            "instances": 130,
+            "renderedTriangles": 104473,
+            "affineNodes": 12,
+            "instancedGroups": 2,
+            "gpuInstances": 10,
+            "materials": 16,
+            "embeddedTextures": 9,
+            "drawGroups": 122
+          },
+          "geometryBytes": 2391450
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-9c64f3771cdcf67565276e4a1590ca37bbb5e43e4f8218282611a84a5833f977",
+      "gameBuildId": "25306743",
+      "sceneName": "Level_12",
+      "mapSlot": 12,
+      "sourceSceneSha256": "9c5f18037b9f34a8c77b7948aac478fa9b0171377b0c2240f35b55cbebbe0035",
+      "enclosures": [
+        {
+          "segment": 4,
+          "objectId": "map-enclosure:level17:39551",
+          "sourceRootPathId": 39551,
+          "sourceRootName": "VolcanoModel",
+          "sourceHierarchy": [
+            "Map",
+            "Biome_4",
+            "Caldera",
+            "VolcanoModel"
+          ],
+          "sourceModelPathId": 69425,
+          "sourceModelName": "Pipe",
+          "sourceModelHierarchy": [
+            "Map",
+            "Biome_4",
+            "Caldera",
+            "VolcanoModel",
+            "VolcanoModel"
+          ],
+          "sourceModelMeshPathId": 373,
+          "sourceModelAsset": "sharedassets4.assets",
+          "interiorReference": [
+            0.0,
+            884.6900024414062,
+            2047.0
+          ],
+          "interiorReferenceSource": "source-model-axis",
+          "interiorAxis": [
+            3.1548136117842646e-07,
+            0.9999999999998342,
+            -4.817901560386008e-07
+          ],
+          "sourceOriginalRendererEnabled": false,
+          "sourceActiveSplitRenderers": 110,
+          "sourceRendererCount": 110,
+          "geometry": "3f371f252a943479f171ba14937f51603d809269409cb8579eb7e01eef742d21.glb.gz",
+          "geometrySha256": "3f371f252a943479f171ba14937f51603d809269409cb8579eb7e01eef742d21",
+          "geometryFormat": "glb-instanced-v1+gzip",
+          "meshBounds": {
+            "min": [
+              -325.6309940612172,
+              560.4186895299562,
+              1717.4397178688328
+            ],
+            "max": [
+              322.72524183164285,
+              1195.3629217428804,
+              2372.938607239159
+            ]
+          },
+          "meshStatistics": {
+            "bytes": 5627800,
+            "uniqueMeshes": 110,
+            "uniqueVertices": 134339,
+            "uniqueTriangles": 200202,
+            "instances": 110,
+            "renderedTriangles": 200202,
+            "affineNodes": 110,
+            "materials": 1,
+            "embeddedTextures": 0,
+            "drawGroups": 110
+          },
+          "geometryBytes": 2894254
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-3fd6afc96b5eb0c26c0ca0cee44161a54c3fb3cecd458a602e70694abaeb33be",
+      "gameBuildId": "25306743",
+      "sceneName": "Level_13",
+      "mapSlot": 13,
+      "sourceSceneSha256": "9c313cf76dfe8fe02714978ce4fba9c05ba0ab2ebafd042cccf0f861283cf1a1",
+      "enclosures": [
+        {
+          "segment": 4,
+          "objectId": "map-enclosure:level18:17695",
+          "sourceRootPathId": 17695,
+          "sourceRootName": "Gloom Temple",
+          "sourceHierarchy": [
+            "Map",
+            "Biome_4",
+            "Gloom",
+            "Gloom Temple"
+          ],
+          "sourceModelPathId": 11004,
+          "sourceModelName": "Temple Structure Outer",
+          "sourceModelHierarchy": [
+            "Map",
+            "Biome_4",
+            "Gloom",
+            "Gloom Temple",
+            "Temple_Model"
+          ],
+          "sourceModelMeshPathId": 829,
+          "sourceModelAsset": "sharedassets4.assets",
+          "interiorReference": [
+            7.0,
+            805.0999755859375,
+            2092.5
+          ],
+          "interiorReferenceSource": "source-model-axis",
+          "interiorAxis": [
+            0.0,
+            0.9999999999999911,
+            -1.3435883843274954e-07
+          ],
+          "sourceOriginalRendererEnabled": false,
+          "sourceActiveSplitRenderers": 94,
+          "sourceRendererCount": 132,
+          "geometry": "287b329d761fb7de683b0b4624c560f98fd4ca9d4e43546969572fe7d0ed2cc6.glb.gz",
+          "geometrySha256": "287b329d761fb7de683b0b4624c560f98fd4ca9d4e43546969572fe7d0ed2cc6",
+          "geometryFormat": "glb-instanced-v1+gzip",
+          "meshBounds": {
+            "min": [
+              -174.32257080078125,
+              650.8760537072935,
+              1880.694889375627
+            ],
+            "max": [
+              188.32257080078125,
+              1226.0110134215347,
+              2273.822061550978
+            ]
+          },
+          "meshStatistics": {
+            "bytes": 4217492,
+            "uniqueMeshes": 116,
+            "uniqueVertices": 88128,
+            "uniqueTriangles": 72611,
+            "instances": 132,
+            "renderedTriangles": 103539,
+            "affineNodes": 18,
+            "instancedGroups": 2,
+            "gpuInstances": 10,
+            "materials": 15,
+            "embeddedTextures": 8,
+            "drawGroups": 116
+          },
+          "geometryBytes": 2332020
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-57d291da1c4950bd48a6b9f547c67fc1132bc2d9b714e439fa9ca3db04db8ee5",
+      "gameBuildId": "25306743",
+      "sceneName": "Level_14",
+      "mapSlot": 14,
+      "sourceSceneSha256": "f56a57072bf72306385793bcf8358d6e4f255eee3c40694626a4de24778c05aa",
+      "enclosures": [
+        {
+          "segment": 4,
+          "objectId": "map-enclosure:level19:39423",
+          "sourceRootPathId": 39423,
+          "sourceRootName": "VolcanoModel",
+          "sourceHierarchy": [
+            "Map",
+            "Biome_4",
+            "Caldera",
+            "VolcanoModel"
+          ],
+          "sourceModelPathId": 69500,
+          "sourceModelName": "Pipe",
+          "sourceModelHierarchy": [
+            "Map",
+            "Biome_4",
+            "Caldera",
+            "VolcanoModel",
+            "VolcanoModel"
+          ],
+          "sourceModelMeshPathId": 373,
+          "sourceModelAsset": "sharedassets4.assets",
+          "interiorReference": [
+            0.0,
+            884.6900024414062,
+            2047.0
+          ],
+          "interiorReferenceSource": "source-model-axis",
+          "interiorAxis": [
+            3.1548136117842646e-07,
+            0.9999999999998342,
+            -4.817901560386008e-07
+          ],
+          "sourceOriginalRendererEnabled": false,
+          "sourceActiveSplitRenderers": 110,
+          "sourceRendererCount": 110,
+          "geometry": "3f371f252a943479f171ba14937f51603d809269409cb8579eb7e01eef742d21.glb.gz",
+          "geometrySha256": "3f371f252a943479f171ba14937f51603d809269409cb8579eb7e01eef742d21",
+          "geometryFormat": "glb-instanced-v1+gzip",
+          "meshBounds": {
+            "min": [
+              -325.6309940612172,
+              560.4186895299562,
+              1717.4397178688328
+            ],
+            "max": [
+              322.72524183164285,
+              1195.3629217428804,
+              2372.938607239159
+            ]
+          },
+          "meshStatistics": {
+            "bytes": 5627800,
+            "uniqueMeshes": 110,
+            "uniqueVertices": 134339,
+            "uniqueTriangles": 200202,
+            "instances": 110,
+            "renderedTriangles": 200202,
+            "affineNodes": 110,
+            "materials": 1,
+            "embeddedTextures": 0,
+            "drawGroups": 110
+          },
+          "geometryBytes": 2894254
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-56a243e8deb0cf19bf01c15e5e31df48932ae4d9c0d8bed71b296c3782d7138f",
+      "gameBuildId": "25306743",
+      "sceneName": "Level_15",
+      "mapSlot": 15,
+      "sourceSceneSha256": "1e6f62552105a58919ab6fe698588abd43ba03fbdfc7e3bac28dde449553db99",
+      "enclosures": [
+        {
+          "segment": 4,
+          "objectId": "map-enclosure:level20:18412",
+          "sourceRootPathId": 18412,
+          "sourceRootName": "Gloom Temple",
+          "sourceHierarchy": [
+            "Map",
+            "Biome_4",
+            "Gloom",
+            "Gloom Temple"
+          ],
+          "sourceModelPathId": 11545,
+          "sourceModelName": "Temple Structure Outer",
+          "sourceModelHierarchy": [
+            "Map",
+            "Biome_4",
+            "Gloom",
+            "Gloom Temple",
+            "Temple_Model"
+          ],
+          "sourceModelMeshPathId": 829,
+          "sourceModelAsset": "sharedassets4.assets",
+          "interiorReference": [
+            7.0,
+            805.0999755859375,
+            2092.5
+          ],
+          "interiorReferenceSource": "source-model-axis",
+          "interiorAxis": [
+            0.0,
+            0.9999999999999911,
+            -1.3435883843274954e-07
+          ],
+          "sourceOriginalRendererEnabled": false,
+          "sourceActiveSplitRenderers": 94,
+          "sourceRendererCount": 128,
+          "geometry": "c654822c648313fb1208db2086046e705d3756ec7c549c78bc4a41dd468932b9.glb.gz",
+          "geometrySha256": "c654822c648313fb1208db2086046e705d3756ec7c549c78bc4a41dd468932b9",
+          "geometryFormat": "glb-instanced-v1+gzip",
+          "meshBounds": {
+            "min": [
+              -174.32257080078125,
+              650.8760537072935,
+              1880.694889375627
+            ],
+            "max": [
+              188.32257080078125,
+              1226.0110134215347,
+              2273.822061550978
+            ]
+          },
+          "meshStatistics": {
+            "bytes": 4215488,
+            "uniqueMeshes": 114,
+            "uniqueVertices": 88709,
+            "uniqueTriangles": 73545,
+            "instances": 128,
+            "renderedTriangles": 105407,
+            "affineNodes": 6,
+            "instancedGroups": 2,
+            "gpuInstances": 10,
+            "materials": 14,
+            "embeddedTextures": 8,
+            "drawGroups": 114
+          },
+          "geometryBytes": 2308205
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-eb6172a2e8cfd5ba2c0dde889462d8b42c9aec66da499048b3ad2dd20eb8e3ca",
+      "gameBuildId": "25306743",
+      "sceneName": "Level_16",
+      "mapSlot": 16,
+      "sourceSceneSha256": "c1436492973c170d26d6d161f87ac1d02999b4733ced9ed4576d3a2397a07e28",
+      "enclosures": [
+        {
+          "segment": 4,
+          "objectId": "map-enclosure:level21:44191",
+          "sourceRootPathId": 44191,
+          "sourceRootName": "VolcanoModel",
+          "sourceHierarchy": [
+            "Map",
+            "Biome_4",
+            "Caldera",
+            "VolcanoModel"
+          ],
+          "sourceModelPathId": 78802,
+          "sourceModelName": "Pipe",
+          "sourceModelHierarchy": [
+            "Map",
+            "Biome_4",
+            "Caldera",
+            "VolcanoModel",
+            "VolcanoModel"
+          ],
+          "sourceModelMeshPathId": 373,
+          "sourceModelAsset": "sharedassets4.assets",
+          "interiorReference": [
+            0.0,
+            884.6900024414062,
+            2047.0
+          ],
+          "interiorReferenceSource": "source-model-axis",
+          "interiorAxis": [
+            3.1548136117842646e-07,
+            0.9999999999998342,
+            -4.817901560386008e-07
+          ],
+          "sourceOriginalRendererEnabled": false,
+          "sourceActiveSplitRenderers": 110,
+          "sourceRendererCount": 110,
+          "geometry": "3f371f252a943479f171ba14937f51603d809269409cb8579eb7e01eef742d21.glb.gz",
+          "geometrySha256": "3f371f252a943479f171ba14937f51603d809269409cb8579eb7e01eef742d21",
+          "geometryFormat": "glb-instanced-v1+gzip",
+          "meshBounds": {
+            "min": [
+              -325.6309940612172,
+              560.4186895299562,
+              1717.4397178688328
+            ],
+            "max": [
+              322.72524183164285,
+              1195.3629217428804,
+              2372.938607239159
+            ]
+          },
+          "meshStatistics": {
+            "bytes": 5627800,
+            "uniqueMeshes": 110,
+            "uniqueVertices": 134339,
+            "uniqueTriangles": 200202,
+            "instances": 110,
+            "renderedTriangles": 200202,
+            "affineNodes": 110,
+            "materials": 1,
+            "embeddedTextures": 0,
+            "drawGroups": 110
+          },
+          "geometryBytes": 2894254
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-37eb6e7d089da03e1eb2e717ff2439dbf2ee8bd0b4a889e725b07b53530a3921",
+      "gameBuildId": "25306743",
+      "sceneName": "Level_17",
+      "mapSlot": 17,
+      "sourceSceneSha256": "2339f2aebeac9646323fe800c4ab11f363f9db58bafbc6edea3e14b7b54c81c1",
+      "enclosures": [
+        {
+          "segment": 4,
+          "objectId": "map-enclosure:level22:18936",
+          "sourceRootPathId": 18936,
+          "sourceRootName": "Gloom Temple",
+          "sourceHierarchy": [
+            "Map",
+            "Biome_4",
+            "Gloom",
+            "Gloom Temple"
+          ],
+          "sourceModelPathId": 11917,
+          "sourceModelName": "Temple Structure Outer",
+          "sourceModelHierarchy": [
+            "Map",
+            "Biome_4",
+            "Gloom",
+            "Gloom Temple",
+            "Temple_Model"
+          ],
+          "sourceModelMeshPathId": 829,
+          "sourceModelAsset": "sharedassets4.assets",
+          "interiorReference": [
+            7.0,
+            805.0999755859375,
+            2092.5
+          ],
+          "interiorReferenceSource": "source-model-axis",
+          "interiorAxis": [
+            0.0,
+            0.9999999999999911,
+            -1.3435883843274954e-07
+          ],
+          "sourceOriginalRendererEnabled": false,
+          "sourceActiveSplitRenderers": 94,
+          "sourceRendererCount": 130,
+          "geometry": "b1509267249cb4d8d53375bc35cd2c174037c9cb0ff828ab661578e80c202f85.glb.gz",
+          "geometrySha256": "b1509267249cb4d8d53375bc35cd2c174037c9cb0ff828ab661578e80c202f85",
+          "geometryFormat": "glb-instanced-v1+gzip",
+          "meshBounds": {
+            "min": [
+              -174.32257080078125,
+              650.8760537072935,
+              1880.694889375627
+            ],
+            "max": [
+              188.32257080078125,
+              1226.0110134215347,
+              2273.822061550978
+            ]
+          },
+          "meshStatistics": {
+            "bytes": 4107912,
+            "uniqueMeshes": 110,
+            "uniqueVertices": 88678,
+            "uniqueTriangles": 73221,
+            "instances": 130,
+            "renderedTriangles": 107965,
+            "affineNodes": 12,
+            "instancedGroups": 2,
+            "gpuInstances": 10,
+            "materials": 11,
+            "embeddedTextures": 6,
+            "drawGroups": 110
+          },
+          "geometryBytes": 2178362
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-e1e270e778bfed9c8ff55aa60ac8d5130eee7b817ab1495c580614c4eae9e5a8",
+      "gameBuildId": "25306743",
+      "sceneName": "Level_18",
+      "mapSlot": 18,
+      "sourceSceneSha256": "02a25e5118dd4d687223d69a857967ab2b1f0e2a4703eab1e4b13f62196fe2db",
+      "enclosures": [
+        {
+          "segment": 4,
+          "objectId": "map-enclosure:level23:40779",
+          "sourceRootPathId": 40779,
+          "sourceRootName": "VolcanoModel",
+          "sourceHierarchy": [
+            "Map",
+            "Biome_4",
+            "Caldera",
+            "VolcanoModel"
+          ],
+          "sourceModelPathId": 72542,
+          "sourceModelName": "Pipe",
+          "sourceModelHierarchy": [
+            "Map",
+            "Biome_4",
+            "Caldera",
+            "VolcanoModel",
+            "VolcanoModel"
+          ],
+          "sourceModelMeshPathId": 373,
+          "sourceModelAsset": "sharedassets4.assets",
+          "interiorReference": [
+            0.0,
+            884.6900024414062,
+            2047.0
+          ],
+          "interiorReferenceSource": "source-model-axis",
+          "interiorAxis": [
+            3.1548136117842646e-07,
+            0.9999999999998342,
+            -4.817901560386008e-07
+          ],
+          "sourceOriginalRendererEnabled": false,
+          "sourceActiveSplitRenderers": 110,
+          "sourceRendererCount": 110,
+          "geometry": "3f371f252a943479f171ba14937f51603d809269409cb8579eb7e01eef742d21.glb.gz",
+          "geometrySha256": "3f371f252a943479f171ba14937f51603d809269409cb8579eb7e01eef742d21",
+          "geometryFormat": "glb-instanced-v1+gzip",
+          "meshBounds": {
+            "min": [
+              -325.6309940612172,
+              560.4186895299562,
+              1717.4397178688328
+            ],
+            "max": [
+              322.72524183164285,
+              1195.3629217428804,
+              2372.938607239159
+            ]
+          },
+          "meshStatistics": {
+            "bytes": 5627800,
+            "uniqueMeshes": 110,
+            "uniqueVertices": 134339,
+            "uniqueTriangles": 200202,
+            "instances": 110,
+            "renderedTriangles": 200202,
+            "affineNodes": 110,
+            "materials": 1,
+            "embeddedTextures": 0,
+            "drawGroups": 110
+          },
+          "geometryBytes": 2894254
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-25a5bdf427bac0e1aa9e385b744d886c6186a8778bc0582c6b78cdf8fa322050",
+      "gameBuildId": "25306743",
+      "sceneName": "Level_19",
+      "mapSlot": 19,
+      "sourceSceneSha256": "6dd483f4883c13b2faaaf7a197126e8610c8a64c748a4ada4464c781f41b9a39",
+      "enclosures": [
+        {
+          "segment": 4,
+          "objectId": "map-enclosure:level24:19288",
+          "sourceRootPathId": 19288,
+          "sourceRootName": "Gloom Temple",
+          "sourceHierarchy": [
+            "Map",
+            "Biome_4",
+            "Gloom",
+            "Gloom Temple"
+          ],
+          "sourceModelPathId": 12322,
+          "sourceModelName": "Temple Structure Outer",
+          "sourceModelHierarchy": [
+            "Map",
+            "Biome_4",
+            "Gloom",
+            "Gloom Temple",
+            "Temple_Model"
+          ],
+          "sourceModelMeshPathId": 829,
+          "sourceModelAsset": "sharedassets4.assets",
+          "interiorReference": [
+            7.0,
+            805.0999755859375,
+            2092.5
+          ],
+          "interiorReferenceSource": "source-model-axis",
+          "interiorAxis": [
+            0.0,
+            0.9999999999999911,
+            -1.3435883843274954e-07
+          ],
+          "sourceOriginalRendererEnabled": false,
+          "sourceActiveSplitRenderers": 94,
+          "sourceRendererCount": 130,
+          "geometry": "434c2a71f6035e6f39c82e8dca9cd1e6ed5a6022d20edf6499db67f659ef8035.glb.gz",
+          "geometrySha256": "434c2a71f6035e6f39c82e8dca9cd1e6ed5a6022d20edf6499db67f659ef8035",
+          "geometryFormat": "glb-instanced-v1+gzip",
+          "meshBounds": {
+            "min": [
+              -174.32257080078125,
+              650.8760537072935,
+              1880.694889375627
+            ],
+            "max": [
+              188.32257080078125,
+              1226.0110134215347,
+              2273.822061550978
+            ]
+          },
+          "meshStatistics": {
+            "bytes": 4181544,
+            "uniqueMeshes": 110,
+            "uniqueVertices": 88229,
+            "uniqueTriangles": 72633,
+            "instances": 130,
+            "renderedTriangles": 106201,
+            "affineNodes": 8,
+            "instancedGroups": 6,
+            "gpuInstances": 18,
+            "materials": 13,
+            "embeddedTextures": 7,
+            "drawGroups": 110
+          },
+          "geometryBytes": 2261295
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-5828be29072b7daedd736c3b27fd13ad4d27c737e8187063cafb8887db012c9b",
+      "gameBuildId": "25306743",
+      "sceneName": "Level_20",
+      "mapSlot": 20,
+      "sourceSceneSha256": "f91fe50ad49132569a88910f15276e197e589248d749c59ddbe2c2e2f822f006",
+      "enclosures": [
+        {
+          "segment": 4,
+          "objectId": "map-enclosure:level25:44289",
+          "sourceRootPathId": 44289,
+          "sourceRootName": "VolcanoModel",
+          "sourceHierarchy": [
+            "Map",
+            "Biome_4",
+            "Caldera",
+            "VolcanoModel"
+          ],
+          "sourceModelPathId": 77356,
+          "sourceModelName": "Pipe",
+          "sourceModelHierarchy": [
+            "Map",
+            "Biome_4",
+            "Caldera",
+            "VolcanoModel",
+            "VolcanoModel"
+          ],
+          "sourceModelMeshPathId": 373,
+          "sourceModelAsset": "sharedassets4.assets",
+          "interiorReference": [
+            0.0,
+            884.6900024414062,
+            2047.0
+          ],
+          "interiorReferenceSource": "source-model-axis",
+          "interiorAxis": [
+            3.1548136117842646e-07,
+            0.9999999999998342,
+            -4.817901560386008e-07
+          ],
+          "sourceOriginalRendererEnabled": false,
+          "sourceActiveSplitRenderers": 110,
+          "sourceRendererCount": 110,
+          "geometry": "3f371f252a943479f171ba14937f51603d809269409cb8579eb7e01eef742d21.glb.gz",
+          "geometrySha256": "3f371f252a943479f171ba14937f51603d809269409cb8579eb7e01eef742d21",
+          "geometryFormat": "glb-instanced-v1+gzip",
+          "meshBounds": {
+            "min": [
+              -325.6309940612172,
+              560.4186895299562,
+              1717.4397178688328
+            ],
+            "max": [
+              322.72524183164285,
+              1195.3629217428804,
+              2372.938607239159
+            ]
+          },
+          "meshStatistics": {
+            "bytes": 5627800,
+            "uniqueMeshes": 110,
+            "uniqueVertices": 134339,
+            "uniqueTriangles": 200202,
+            "instances": 110,
+            "renderedTriangles": 200202,
+            "affineNodes": 110,
+            "materials": 1,
+            "embeddedTextures": 0,
+            "drawGroups": 110
+          },
+          "geometryBytes": 2894254
+        }
+      ]
+    }
+  ]
+}

@@ -3,6 +3,7 @@ import { normalizeWorldRecord, buildWorldTimeline } from "./world-timeline.js";
 import { normalizePlayerStatus } from "./player-conditions.js";
 import { sha256Hex } from "./sha256.js";
 import { normalizeMapWater } from "./map-water.js";
+import { normalizeMapEnclosures, enclosureGeometryReference } from "./map-enclosures.js";
 
 export class ProtocolError extends Error {
   constructor(message, detail = "") {
@@ -1551,6 +1552,10 @@ function validateMapPack(raw) {
 async function hydrateMapPack(raw, resolver) {
   validateMapPack(raw);
   if (raw.identityVersion === 3) await verifyMapPackIdentityV3(raw);
+  const mapEnclosures = normalizeMapEnclosures(raw.mapEnclosures, raw);
+  if (raw.mapEnclosures && !mapEnclosures) throw new ProtocolError("地图外围结构与原场景身份不匹配");
+  if (mapEnclosures) for (const enclosure of mapEnclosures.enclosures)
+    enclosure.geometryUrl = await resolver.url(enclosureGeometryReference(enclosure), "geometry");
   const hydratedLayers = [];
 
   for (const sourceLayer of raw.layers) {
@@ -1645,6 +1650,7 @@ async function hydrateMapPack(raw, resolver) {
     projectionVersion: asFiniteNumber(raw.projectionVersion),
     coordinateSpace: raw.coordinateSpace,
     mapWater: normalizeMapWater(raw.mapWater, raw),
+    mapEnclosures,
     layers: hydratedLayers,
     bounds: {
       min: [
@@ -1718,7 +1724,10 @@ export async function loadMapPackBundle(fileList) {
 }
 
 export async function loadMapPackUrl(url) {
-  const response = await fetch(url);
+  // Geometry identity is immutable, but verified source corrections (water,
+  // fog and enclosures) enrich this small manifest between site releases.
+  // Bypass older immutable manifest responses without refetching large GLBs.
+  const response = await fetch(url, { cache: "no-store" });
   if (!response.ok) throw new ProtocolError(`无法加载地图包`, `${response.status} ${response.statusText}`);
   const raw = await response.json();
   const pack = await hydrateMapPack(raw, remoteResolver(response.url || url));

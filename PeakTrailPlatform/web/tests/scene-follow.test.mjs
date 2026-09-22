@@ -6,7 +6,8 @@ import { ReplayCamera } from "../src/replay-camera.js";
 import { chooseRecordedInteriorPose, isInteriorLayer } from "../src/camera-placement.js";
 import { latestLifeEventBefore, MARKER_LIFE_EVENT_TYPES } from "../src/protocol.js";
 import { pointInBounds } from "../src/trail-spatial.js";
-import { FOLLOW_DISTANCE, FOLLOW_MIN_DISTANCE, FOLLOW_MAX_DISTANCE } from "../src/spectator-camera.js";
+import { FOLLOW_DISTANCE, FOLLOW_MIN_DISTANCE, FOLLOW_MAX_DISTANCE, FOLLOW_INTERIOR_DISTANCE, FOLLOW_INTERIOR_MIN_DISTANCE, FOLLOW_INTERIOR_MAX_DISTANCE } from "../src/spectator-camera.js";
+import { followLayerAtPosition } from "../src/map-enclosures.js";
 
 // The real TrailScene methods and ReplayCamera own state transitions. Only
 // WebGL, terrain-query and world-rendering ports are replaced with small spies.
@@ -15,6 +16,7 @@ const source = (await readFile(new URL("../src/scene.js", import.meta.url), "utf
   .replace("export class TrailScene", "class TrailScene");
 const ports = { THREE, chooseRecordedInteriorPose, isInteriorLayer, latestLifeEventBefore,
   MARKER_LIFE_EVENT_TYPES, pointInBounds, FOLLOW_DISTANCE, FOLLOW_MIN_DISTANCE, FOLLOW_MAX_DISTANCE,
+  FOLLOW_INTERIOR_DISTANCE, FOLLOW_INTERIOR_MIN_DISTANCE, FOLLOW_INTERIOR_MAX_DISTANCE, followLayerAtPosition,
   updateRecordedMineVisibility() {}, updateMapFogSurfaceVisibility() {} };
 const TrailScene = new Function(...Object.keys(ports), `${source}\nreturn TrailScene;`)(...Object.values(ports));
 
@@ -207,5 +209,38 @@ test("rewinds and seeks pass one discontinuity to the rig while normal playback 
     assert.equal(f.rigCalls.at(-1).options.discontinuity, true);
     scene.setTime(2.1); scene.updateFollowCamera(1 / 60);
     assert.equal(f.rigCalls.at(-1).options.discontinuity, false);
+  } finally { f.cleanup(); }
+});
+
+test("interior follow supplies the verified model axis using exactly the player's world transform", () => {
+  const f = fixture(), { scene } = f;
+  try {
+    scene.activeSegment = 4; scene.origin.set(10, 100, 200); scene.heightScale = 2;
+    scene.trailRoot.scale.set(1, 2, -1);
+    scene.mapPack.mapEnclosures = { enclosures: [{ segment: 4, interiorReference: [7, 805, 2092.5] }] };
+    const p = f.player('inside', { segment: 4 }); p.marker.position.set(20, 700, 1900);
+    scene.setFollowTarget('inside'); scene.updateFollowCamera(1 / 60);
+    assert.equal(scene.followDistance, FOLLOW_INTERIOR_DISTANCE);
+    assert.equal(f.rigCalls.at(-1).options.interior, true);
+    assert.deepEqual(f.rigCalls.at(-1).options.interiorReference.center, [-3, 1410, -1892.5]);
+    assert.equal(f.statuses.at(-1).viewMode, 'interior');
+    scene.onFollowWheel({ deltaY: 100000, preventDefault() {} });
+    assert.equal(scene.followDistance, FOLLOW_INTERIOR_MAX_DISTANCE);
+  } finally { f.cleanup(); }
+});
+
+test("overview follows a spatially unique interior player without inventing a centre when metadata is missing", () => {
+  const f = fixture(), { scene } = f;
+  try {
+    scene.activeSegment = null;
+    scene.mapPack.layers[0].maxY = 5;
+    f.player('inside', { segment: 4 }); scene.setTime(1);
+    scene.setFollowTarget('inside'); scene.updateFollowCamera(1 / 60);
+    assert.equal(f.rigCalls.at(-1).options.interior, true);
+    assert.equal(f.rigCalls.at(-1).options.interiorReference, null);
+    assert.equal(scene.followDistance, FOLLOW_INTERIOR_DISTANCE);
+    scene.mapPack.layers[0].maxY = 300;
+    scene.updateFollowCamera(1 / 60);
+    assert.equal(f.rigCalls.at(-1).options.interior, false, 'ambiguous overlapping rooms are not asserted to be the interior');
   } finally { f.cleanup(); }
 });

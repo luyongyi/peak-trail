@@ -2110,7 +2110,8 @@ function syncFollowHud(detail) {
   elements.followHud.hidden = !active;
   if (active) {
     const auto = detail?.autoRotate ?? viewer?.followAutoRotate ?? false;
-    elements.followHudText.textContent = `外侧观测 · ${detail?.name ?? viewer?.followTargetId ?? ""} · ${auto ? "自动轮换 60s" : "已锁定"}`;
+    const viewMode = detail?.viewMode ?? viewer?.followViewMode;
+    elements.followHudText.textContent = `${viewMode === "interior" ? "关内向外观测" : "外侧观测"} · ${detail?.name ?? viewer?.followTargetId ?? ""} · ${auto ? "自动轮换 60s" : "已锁定"}`;
   }
   for (const row of elements.playerList.querySelectorAll(".player-row")) {
     row.querySelector(".player-follow-button")?.classList.toggle(

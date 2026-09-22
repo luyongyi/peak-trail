@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import * as THREE from "../../vendor/three/0.180.0/build/three.module.js";
-import { SpectatorCamera, FOLLOW_DISTANCE } from "../src/spectator-camera.js";
+import { SpectatorCamera, FOLLOW_DISTANCE, FOLLOW_INTERIOR_DISTANCE, FOLLOW_INTERIOR_MAX_DISTANCE } from "../src/spectator-camera.js";
+import { FollowTerrainQuery } from "../src/follow-terrain.js";
 
 const v = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 // Analytic planes stand in for the query port, not the production triangle query.
@@ -169,4 +170,142 @@ test("a genuinely narrow interior keeps throttled scans instead of rescanning ev
   const before = query.calls;
   rig.update(v(), 1 / 60, { interior: true });
   assert.ok(query.calls - before <= 10);
+});
+
+function roomWithOpenDoor() {
+  // Synthetic test room, not an assertion about any PEAK chapter's dimensions.
+  // Open ceiling and a real gap in the +X wall allow an unconstrained long boom
+  // to escape; source triangles alone cannot express the desired inward view.
+  const group = new THREE.Group(), material = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide });
+  const wall = (size, position) => {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(...size), material); mesh.position.set(...position); group.add(mesh);
+  };
+  wall([.5, 30, 50], [-25, 10, 0]);
+  wall([50, 30, .5], [0, 10, -25]); wall([50, 30, .5], [0, 10, 25]);
+  wall([.5, 30, 18], [25, 10, -16]); wall([.5, 30, 18], [25, 10, 16]);
+  wall([50, .5, 50], [0, -5, 0]);
+  return new FollowTerrainQuery(THREE).setRoots([group]);
+}
+
+test("interior follows from the source-centre side despite an open door, open roof and initially external camera", () => {
+  const query = roomWithOpenDoor(), rig = new SpectatorCamera({ THREE, query });
+  const anchor = v(21, 5, 0), reference = { center: [0, 0, 0] };
+  assert.equal(query.cast(anchor, v(1, 0, 0), 100), null, "the door genuinely opens outward");
+  assert.equal(query.cast(anchor, v(0, 1, 0), 100), null, "there is no invented roof");
+  for (let frame = 0; frame < 240; frame++) {
+    const pose = rig.update(anchor, 1 / 60, { interior: true, interiorReference: reference,
+      preferredAzimuth: Math.PI / 2, azimuth: Math.PI / 2, cameraPosition: v(80, 20, 0) });
+    assert.equal(pose.mode, "interior"); assert.equal(pose.interiorReferenceReady, true);
+    assert.ok(pose.position.x < anchor.x && pose.position.x >= 0, `must remain on inner, subject-side half: ${pose.position.x}`);
+    assert.ok(pose.distance <= FOLLOW_INTERIOR_DISTANCE + 1e-7);
+    assert.deepEqual(pose.target.toArray(), anchor.toArray(), "watch the player, never the centre pivot");
+  }
+});
+
+test("interior default and wheel distances are presentation limits independent of the room size", () => {
+  const anchor = v(100, 10, 0), reference = { center: [0, 10000, 0] };
+  for (const [request, expected] of [[undefined, 18], [9, 9], [22, 22], [140, 28], [Infinity, 18]]) {
+    const rig = new SpectatorCamera({ THREE, query: null });
+    const pose = settle(rig, anchor, { interior: true, interiorReference: reference, distance: request });
+    assert.equal(pose.desiredDistance, expected); assert.ok(Math.abs(pose.distance - expected) < 1e-7);
+    assert.ok(Math.abs(pose.position.y - anchor.y) < 10, "source centre height must not lift the camera toward an invented eye/pivot");
+  }
+  assert.equal(FOLLOW_INTERIOR_MAX_DISTANCE, 28);
+});
+
+test("reference-constrained interior remains inward even before any map triangles load", () => {
+  const rig = new SpectatorCamera({ THREE, query: null }), anchor = v(8, 150, -3);
+  const result = rig.update(anchor, 1 / 60, { interior: true, interiorReference: { center: [0, 0, -3] },
+    cameraPosition: v(500, 500, 500), azimuth: Math.PI / 2 });
+  assert.ok(result.position.x < 8 && result.position.x > 0, "shortens before the centre plane, even without geometry");
+  assert.ok(Math.hypot(result.position.x, result.position.z + 3) <= 8 + 1e-7,
+    "a diagonal boom may exceed the direct centre distance but cannot drift outside the player's radius");
+  assert.ok(result.distance <= 18 + 1e-7); assert.equal(result.constrained, true);
+  assert.equal(result.geometryDerived, false, "source-centre framing is not a recorded/queried climbing normal");
+});
+
+test("near the source centre, diagonal candidates cannot drift farther out or cross to its other side", () => {
+  const rig = new SpectatorCamera({ THREE, query: null }), anchor = v(1.2, 10, 0);
+  for (const initial of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
+    rig.reset();
+    const pose = settle(rig, anchor, { interior: true, interiorReference: { center: [0, 100, 0] }, distance: 28, azimuth: initial });
+    assert.ok(pose.position.x >= 0 && pose.position.x < 1.2);
+    assert.ok(Math.hypot(pose.position.x, pose.position.z) <= 1.2 + 1e-7);
+  }
+});
+
+test("missing or malformed reference never uses an outward map-centre prior or invents a cylinder", () => {
+  for (const reference of [undefined, { center: [NaN, 0, 0] }, { center: [0, 0] }, { center: "0,0,0" }]) {
+    const a = new SpectatorCamera({ THREE, query: null }), b = new SpectatorCamera({ THREE, query: null });
+    const options = { interior: true, interiorReference: reference, azimuth: 1.1 };
+    const first = settle(a, v(), { ...options, preferredAzimuth: 0 });
+    const second = settle(b, v(), { ...options, preferredAzimuth: Math.PI });
+    assert.equal(first.interiorReferenceReady, false); assert.equal(first.interiorSideKnown, false);
+    assert.ok(first.position.distanceTo(second.position) < 1e-8);
+    assert.ok(first.distance <= 18 + 1e-8);
+  }
+});
+
+test("reference-less interior uses actual nearby wall free-side normals, without treating them as room boundaries", () => {
+  const rig = new SpectatorCamera({ THREE, query: planes([["x", 3]]) });
+  const pose = settle(rig, v(2, 10, 0), { interior: true, azimuth: Math.PI / 2, preferredAzimuth: Math.PI / 2 });
+  assert.equal(pose.geometryDerived, true); assert.equal(pose.interiorReferenceReady, false);
+  assert.ok(pose.position.x < 2); assert.ok(pose.distance <= 18 + 1e-8);
+});
+
+test("verified centre arriving late and exterior-to-interior transitions cannot show one external frame", () => {
+  const rig = new SpectatorCamera({ THREE, query: null }), anchor = v(20, 10, 0);
+  settle(rig, anchor, { azimuth: Math.PI / 2, preferredAzimuth: Math.PI / 2 });
+  assert.ok(rig.position.x > 60);
+  const inside = rig.update(anchor, 1 / 60, { interior: true, interiorReference: { center: [0, 0, 0] }, azimuth: Math.PI / 2 });
+  assert.ok(inside.position.x < 20 && inside.position.x > 0);
+  assert.equal(inside.desiredDistance, 18); assert.deepEqual(inside.target.toArray(), anchor.toArray());
+  const outside = rig.update(anchor, 1 / 60, { azimuth: Math.PI / 2, preferredAzimuth: Math.PI / 2 });
+  assert.equal(outside.mode, "exterior"); assert.equal(outside.desiredDistance, 56);
+  rig.update(anchor, 1 / 60, { interior: true, azimuth: Math.PI / 2 });
+  assert.ok(rig.position.x > 20, "unknown interior has no evidence to invent its inward side");
+  const late = rig.update(anchor, 1 / 60, { interior: true, interiorReference: { center: [0, 0, 0] }, azimuth: Math.PI / 2 });
+  assert.ok(late.position.x < 20 && late.position.x >= 0); assert.equal(late.relocated, true);
+});
+
+test("manual interior orbit retains user direction but still respects actual walls and the distance limit", () => {
+  const anchor = v(20, 10, 0), options = { interior: true, interiorReference: { center: [0, 0, 0] },
+    manual: true, azimuth: Math.PI / 2, pitch: 0, distance: 100 };
+  const free = settle(new SpectatorCamera({ THREE, query: null }), anchor, options);
+  assert.ok(free.position.x > anchor.x); assert.ok(Math.abs(free.distance - 28) < 1e-8);
+  const wall = settle(new SpectatorCamera({ THREE, query: planes([["x", 24]]) }), anchor, options);
+  assert.ok(wall.position.x > anchor.x && wall.position.x < 24);
+  assert.equal(wall.relocated, false);
+});
+
+test("moving around the reference axis never lerps through the forbidden outer half-space", () => {
+  const rig = new SpectatorCamera({ THREE, query: null }), reference = { center: [0, 0, 0] };
+  for (let i = 0; i <= 360; i++) {
+    const angle = i * Math.PI / 180, anchor = v(Math.sin(angle) * 9, 20, Math.cos(angle) * 9);
+    const pose = rig.update(anchor, 1 / 60, { interior: true, interiorReference: reference });
+    const towardCentre = v(-anchor.x, 0, -anchor.z), offset = pose.position.clone().sub(anchor); offset.y = 0;
+    assert.ok(offset.dot(towardCentre) >= -1e-7);
+    assert.ok(Math.hypot(pose.position.x, pose.position.z) <= 9 + 1e-7);
+    assert.ok(offset.dot(towardCentre.clone().normalize()) <= 9 + 1e-7, "do not cross the centre plane");
+  }
+});
+
+test("standing exactly at the source axis has no invented inward direction", () => {
+  const rig = new SpectatorCamera({ THREE, query: null });
+  const result = settle(rig, v(10, 20, 30), { interior: true, interiorReference: { center: [10, 0, 30] } });
+  assert.equal(result.interiorReferenceReady, true); assert.equal(result.interiorSideKnown, false);
+  assert.ok(result.distance <= 4 + 1e-8);
+  assert.ok(result.position.toArray().every(Number.isFinite));
+});
+
+test("a cached candidate leaving the rotating inward cone is refreshed before the next scheduled scan", () => {
+  const rig = new SpectatorCamera({ THREE, query: null });
+  const options = { interior: true, interiorReference: { center: [0, 0, 0] } };
+  settle(rig, v(20, 10, 0), options);
+  rig.solution.azimuth = Math.PI / 2; // cached candidate invalidated by an axis/subject turn
+  rig.probeIn = .25;
+  const result = rig.update(v(20, 10, 0), 1 / 60, options);
+  assert.ok(rig.interiorAngleAllowed(rig.solution.azimuth));
+  assert.ok(result.position.x < 20 && result.position.x > 0);
+  assert.ok(result.distance > 10, "does not collapse to the subject while waiting for a stale candidate");
 });

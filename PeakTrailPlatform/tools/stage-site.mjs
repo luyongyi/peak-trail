@@ -5,6 +5,8 @@ import { readGameAssets } from "./lib/game-assets.mjs";
 import { localAssetHint, localAssetPaths } from "./lib/local-paths.mjs";
 import { normalizeMapFog } from "../web/src/map-fog.js";
 import { normalizeMapWater } from "../web/src/map-water.js";
+import { normalizeMapEnclosures } from "../web/src/map-enclosures.js";
+import { createHash } from "node:crypto";
 
 const toolDirectory = dirname(fileURLToPath(import.meta.url));
 const platformDirectory = resolve(toolDirectory, "..");
@@ -13,7 +15,7 @@ const dataDirectory = resolve(platformDirectory, "data");
 const mapsDirectory = resolve(dataDirectory, "maps");
 const schemaDirectory = resolve(platformDirectory, "schema");
 const outputDirectory = resolve(platformDirectory, "site-dist");
-const { gameAssetsDirectory, mapPacksDirectory } = localAssetPaths;
+const { gameAssetsDirectory, mapPacksDirectory, mapEnclosuresDirectory } = localAssetPaths;
 // Fail before replacing the running preview if an extraction is incomplete.
 let gameAssets;
 try {
@@ -38,6 +40,7 @@ if (catalog.schemaVersion !== 1 || !Array.isArray(catalog.mapPacks)) {
   throw new Error("Cannot stage an invalid map catalog");
 }
 const mapPacks = [];
+const enclosureFiles = new Set();
 for (const entry of catalog.mapPacks) {
   const mapPackId = String(entry?.mapPackId || "").toLowerCase();
   const expectedPath = `./packs/${mapPackId}/map-pack.json`;
@@ -49,7 +52,17 @@ for (const entry of catalog.mapPacks) {
   const route = await verifiedRouteMetadata(manifest);
   const mapFog = await verifiedFogMetadata(manifest);
   const mapWater = await verifiedWaterMetadata(manifest);
-  mapPacks.push({ mapPackId, sourceDirectory, files, manifest, route, mapFog, mapWater });
+  const mapEnclosures = await verifiedEnclosureMetadata(manifest);
+  for (const enclosure of mapEnclosures?.enclosures || []) {
+    if (enclosureFiles.has(enclosure.geometry)) continue;
+    const path = resolve(mapEnclosuresDirectory, enclosure.geometry);
+    const entry = await lstat(path);
+    if (!entry.isFile() || entry.isSymbolicLink()) throw new Error("Map enclosure geometry must be a regular file");
+    const digest = createHash("sha256").update(await readFile(path)).digest("hex");
+    if (digest !== enclosure.geometrySha256) throw new Error("Map enclosure geometry SHA-256 mismatch");
+    enclosureFiles.add(enclosure.geometry);
+  }
+  mapPacks.push({ mapPackId, sourceDirectory, files, manifest, route, mapFog, mapWater, mapEnclosures });
 }
 
 // site-dist is generated exclusively by this script and is safe to recreate.
@@ -78,12 +91,18 @@ for (const pack of mapPacks) {
   }
   // Route evidence is additive metadata and is not part of geometry identity.
   // Original canonical packs remain untouched; only the generated site is enriched.
-  if (pack.route || pack.mapFog || pack.mapWater) await writeFile(
+  if (pack.route || pack.mapFog || pack.mapWater || pack.mapEnclosures) await writeFile(
     resolve(outputDirectory, "data", "maps", "packs", pack.mapPackId, "map-pack.json"),
     JSON.stringify({ ...pack.manifest, ...(pack.route ? { route: pack.route } : {}),
       ...(pack.mapFog ? { mapFog: pack.mapFog } : {}),
-      ...(pack.mapWater ? { mapWater: pack.mapWater } : {}) }, null, 2) + "\n",
+      ...(pack.mapWater ? { mapWater: pack.mapWater } : {}),
+      ...(pack.mapEnclosures ? { mapEnclosures: pack.mapEnclosures } : {}) }, null, 2) + "\n",
   );
+}
+if (enclosureFiles.size) {
+  const destination = resolve(outputDirectory, "data", "maps", "enclosures");
+  await mkdir(destination, { recursive: true });
+  for (const file of enclosureFiles) await cp(resolve(mapEnclosuresDirectory, file), resolve(destination, file));
 }
 for (const reference of gameAssets.files) {
   const destination = resolve(outputDirectory, "data", "game-assets", reference);
@@ -223,5 +242,22 @@ async function verifiedWaterMetadata(manifest) {
   const value = normalizeMapWater({ ...matches[0], schemaVersion: 1, gameBuildId: build,
     authority: evidence.authority, note: evidence.note }, manifest);
   if (!value || value.mapSlot !== manifest.mapSlot) throw new Error("Map water evidence identity or plane mismatch");
+  return value;
+}
+
+async function verifiedEnclosureMetadata(manifest) {
+  const build = String(manifest.gameBuildId || "");
+  if (!/^\d+$/.test(build)) return null;
+  let evidence;
+  try { evidence = JSON.parse(await readFile(resolve(mapsDirectory, `enclosures.${build}.json`), "utf8")); }
+  catch (error) { if (error.code === "ENOENT") return null; throw error; }
+  if (evidence.schemaVersion !== 1 || evidence.authority !== "serialized-map-enclosure"
+    || String(evidence.gameBuildId) !== build || !Array.isArray(evidence.maps)) throw new Error("Invalid map enclosure evidence");
+  const matches = evidence.maps.filter(entry => entry.mapPackId === manifest.mapPackId);
+  if (!matches.length) return null;
+  if (matches.length !== 1) throw new Error("Duplicate map enclosure evidence");
+  const value = normalizeMapEnclosures({ ...matches[0], schemaVersion: 1, gameBuildId: build,
+    authority: evidence.authority }, manifest);
+  if (!value) throw new Error("Map enclosure evidence identity or geometry mismatch");
   return value;
 }

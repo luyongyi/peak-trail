@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { access, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,7 +12,7 @@ const execFileAsync = promisify(execFile);
 const testDirectory = dirname(fileURLToPath(import.meta.url));
 const platformSource = resolve(testDirectory, "..", "..");
 
-test("stage enriches exact-pack route and water metadata, allowlists assets and preserves output on failed preflight", async (t) => {
+test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists assets and preserves output on failed preflight", async (t) => {
   const repository = await mkdtemp(resolve(tmpdir(), "peaktrail-stage-"));
   t.after(() => rm(repository, { recursive: true, force: true }));
   const platform = resolve(repository, "PeakTrailPlatform");
@@ -20,6 +20,9 @@ test("stage enriches exact-pack route and water metadata, allowlists assets and 
   const assets = resolve(repository, "separate-assets");
   const packId = `sha256-${"a".repeat(64)}`;
   const pack = resolve(assets, "maps", "packs", packId);
+  const secondPackId = `sha256-${"d".repeat(64)}`;
+  const secondPack = resolve(assets, "maps", "packs", secondPackId);
+  const enclosures = resolve(assets, "maps", "enclosures");
   const gameAssets = resolve(assets, "game-assets");
   const schemas = [
     "daily-map.schema.json", "map-catalog.schema.json", "map-pack.schema.json",
@@ -37,6 +40,8 @@ test("stage enriches exact-pack route and water metadata, allowlists assets and 
     mkdir(resolve(platform, "data", "maps"), { recursive: true }),
     mkdir(resolve(platform, "schema"), { recursive: true }),
     mkdir(pack, { recursive: true }),
+    mkdir(secondPack, { recursive: true }),
+    mkdir(resolve(enclosures, "private"), { recursive: true }),
     mkdir(resolve(gameAssets, "123", "icons"), { recursive: true }),
     mkdir(resolve(repository, "local", "recordings"), { recursive: true }),
   ]);
@@ -46,6 +51,7 @@ test("stage enriches exact-pack route and water metadata, allowlists assets and 
     copyFile(resolve(platformSource, "tools", "lib", "local-paths.mjs"), resolve(tools, "lib", "local-paths.mjs")),
     copyFile(resolve(platformSource, "web", "src", "map-fog.js"), resolve(platform, "web", "src", "map-fog.js")),
     copyFile(resolve(platformSource, "web", "src", "map-water.js"), resolve(platform, "web", "src", "map-water.js")),
+    copyFile(resolve(platformSource, "web", "src", "map-enclosures.js"), resolve(platform, "web", "src", "map-enclosures.js")),
     writeFile(resolve(platform, "web", "index.html"), "<!doctype html>"),
     writeFile(resolve(platform, "web", "styles.css"), "body{}"),
     writeFile(resolve(platform, "web", "src", "app.js"), "export {};"),
@@ -75,6 +81,9 @@ test("stage enriches exact-pack route and water metadata, allowlists assets and 
     })),
   };
   const manifestBytes = JSON.stringify(manifest);
+  const secondManifest = { ...manifest, mapPackId: secondPackId, sceneName: 'Level_1', mapSlot: 1,
+    source: { sceneSha256: 'c'.repeat(64) } };
+  const secondManifestBytes = JSON.stringify(secondManifest);
   const route = {
     authority: "serialized-map-handler",
     branch: "volcano-kiln",
@@ -113,6 +122,20 @@ test("stage enriches exact-pack route and water metadata, allowlists assets and 
     sourceSceneSha256: manifest.source.sceneSha256, surfaces: [waterSurface],
   }] };
   const waterPath = resolve(platform, 'data', 'maps', 'water.123.json');
+  const enclosureBytes = Buffer.from('content-addressed enclosure staging fixture');
+  const enclosureHash = sha256(enclosureBytes);
+  const enclosureFilename = `${enclosureHash}.glb.gz`;
+  const enclosureFile = resolve(enclosures, enclosureFilename);
+  const enclosure = {
+    objectId: 'map-enclosure:fixture:1', segment: 4, sourceRootPathId: 1, sourceRootName: 'Fixture enclosure',
+    geometry: enclosureFilename, geometrySha256: enclosureHash, geometryFormat: 'glb-instanced-v1+gzip',
+    meshBounds: { min: [-10, 20, -10], max: [10, 50, 10] },
+    interiorReference: [0, 30, 0], interiorReferenceSource: 'source-model-axis',
+  };
+  const enclosureEvidence = { schemaVersion: 1, gameBuildId: '123', authority: 'serialized-map-enclosure',
+    maps: [manifest, secondManifest].map(value => ({ mapPackId: value.mapPackId, sceneName: value.sceneName,
+      mapSlot: value.mapSlot, sourceSceneSha256: value.source.sceneSha256, enclosures: [enclosure] })) };
+  const enclosureEvidencePath = resolve(platform, 'data', 'maps', 'enclosures.123.json');
   const buildCatalog = {
     schemaVersion: 1,
     gameBuildId: "123",
@@ -122,15 +145,24 @@ test("stage enriches exact-pack route and water metadata, allowlists assets and 
   await Promise.all([
     writeFile(resolve(platform, "data", "maps", "catalog.json"), JSON.stringify({
       schemaVersion: 1,
-      mapPacks: [{ mapPackId: packId, path: `./packs/${packId}/map-pack.json` }],
+      mapPacks: [packId, secondPackId].map(value => ({ mapPackId: value, path: `./packs/${value}/map-pack.json` })),
     })),
     writeFile(resolve(pack, "map-pack.json"), manifestBytes),
+    writeFile(resolve(secondPack, "map-pack.json"), secondManifestBytes),
     writeFile(evidencePath, JSON.stringify(evidence)),
     writeFile(fogPath, JSON.stringify(fogEvidence)),
     writeFile(waterPath, JSON.stringify(waterEvidence)),
+    writeFile(enclosureEvidencePath, JSON.stringify(enclosureEvidence)),
+    writeFile(enclosureFile, enclosureBytes),
+    writeFile(resolve(enclosures, 'unused.glb.gz'), 'unreferenced geometry must not publish'),
+    writeFile(resolve(enclosures, 'private-session.ndjson'), 'private trail must not publish'),
+    writeFile(resolve(enclosures, 'private', 'secret.txt'), 'private nested file must not publish'),
     writeFile(resolve(pack, "shore.png"), texture),
     writeFile(resolve(pack, "shore.height.f32"), height),
     writeFile(resolve(pack, "shore.glb.gz"), geometry),
+    writeFile(resolve(secondPack, "shore.png"), texture),
+    writeFile(resolve(secondPack, "shore.height.f32"), height),
+    writeFile(resolve(secondPack, "shore.glb.gz"), geometry),
     writeFile(resolve(pack, "private-session.ndjson"), "must not publish"),
     writeFile(resolve(gameAssets, "catalog.json"), JSON.stringify({
       schemaVersion: 1,
@@ -153,6 +185,10 @@ test("stage enriches exact-pack route and water metadata, allowlists assets and 
   assert.equal(stagedManifest.mapWater.authority, 'serialized-map-baseline');
   assert.equal(stagedManifest.mapWater.sourceSceneSha256, manifest.source.sceneSha256);
   assert.equal(stagedManifest.mapWater.mapPackId, packId);
+  assert.deepEqual(stagedManifest.mapEnclosures.enclosures, [enclosure]);
+  assert.equal(stagedManifest.mapEnclosures.authority, 'serialized-map-enclosure');
+  assert.equal(stagedManifest.mapEnclosures.mapPackId, packId);
+  assert.equal(stagedManifest.mapEnclosures.sourceSceneSha256, manifest.source.sceneSha256);
   assert.equal(stagedManifest.mapPackId, packId);
   assert.deepEqual(stagedManifest.layers, manifest.layers);
   assert.equal(await readFile(resolve(pack, "map-pack.json"), "utf8"), manifestBytes);
@@ -160,6 +196,19 @@ test("stage enriches exact-pack route and water metadata, allowlists assets and 
   assert.deepEqual(await readFile(resolve(staged, "data", "game-assets", "123", "icons", "item.png")), item);
   await assert.rejects(access(resolve(staged, "data", "maps", "packs", packId, "private-session.ndjson")));
   await assert.rejects(access(resolve(staged, "local", "recordings", "private-session.ndjson")));
+  const stagedEnclosures = resolve(staged, 'data', 'maps', 'enclosures');
+  assert.deepEqual(await readdir(stagedEnclosures), [enclosureFilename], 'only the referenced shared geometry is published, not neighboring private data');
+  assert.deepEqual(await readFile(resolve(stagedEnclosures, enclosureFilename)), enclosureBytes);
+  const stagedSecond = JSON.parse(await readFile(resolve(staged, 'data', 'maps', 'packs', secondPackId, 'map-pack.json'), 'utf8'));
+  assert.deepEqual(stagedSecond.mapEnclosures.enclosures, [enclosure]);
+  assert.equal(stagedSecond.mapEnclosures.mapPackId, secondPackId);
+  assert.equal(stagedSecond.mapEnclosures.sourceSceneSha256, secondManifest.source.sceneSha256);
+  assert.equal(stagedSecond.mapPackId, secondPackId);
+  assert.deepEqual(stagedSecond.layers, secondManifest.layers);
+  for (const id of [packId, secondPackId]) {
+    await assert.rejects(access(resolve(staged, 'data', 'maps', 'packs', id, enclosureFilename)), 'shared geometry must not be duplicated inside each pack');
+  }
+  assert.equal(await readFile(resolve(secondPack, 'map-pack.json'), 'utf8'), secondManifestBytes);
 
   await writeFile(resolve(staged, "preflight-marker.txt"), "keep on failure");
   const invalidFog = structuredClone(fogEvidence);
@@ -182,6 +231,34 @@ test("stage enriches exact-pack route and water metadata, allowlists assets and 
     assert.equal(await readFile(resolve(pack, 'map-pack.json'), 'utf8'), manifestBytes);
   }
   await writeFile(waterPath, JSON.stringify(waterEvidence));
+  async function assertEnclosureFailurePreservesSite(pattern) {
+    await assert.rejects(execFileAsync(process.execPath, [resolve(tools, 'stage-site.mjs')], options), pattern);
+    assert.equal(await readFile(resolve(staged, 'preflight-marker.txt'), 'utf8'), 'keep on failure');
+    assert.equal(await readFile(stagedManifestPath, 'utf8'), stagedManifestBytes);
+    assert.deepEqual(await readFile(resolve(stagedEnclosures, enclosureFilename)), enclosureBytes);
+    assert.equal(await readFile(resolve(pack, 'map-pack.json'), 'utf8'), manifestBytes);
+    assert.equal(await readFile(resolve(secondPack, 'map-pack.json'), 'utf8'), secondManifestBytes);
+  }
+  for (const invalidate of [
+    value => { value.maps[0].sourceSceneSha256 = '0'.repeat(64); },
+    value => { value.maps[0].sceneName = 'Level_2'; },
+    value => { value.maps[0].mapSlot = 2; },
+    value => { value.maps[0].enclosures[0].geometry = `../${enclosureFilename}`; },
+    value => { value.maps[0].enclosures[0].geometry = `..\\${enclosureFilename}`; },
+    value => { value.maps[0].enclosures[0].geometry = '../private-session.ndjson'; },
+    value => { value.maps[0].enclosures[0].geometry = `https://example.invalid/${enclosureFilename}`; },
+  ]) {
+    const invalid = structuredClone(enclosureEvidence);
+    invalidate(invalid);
+    await writeFile(enclosureEvidencePath, JSON.stringify(invalid));
+    await assertEnclosureFailurePreservesSite(/Map enclosure evidence identity or geometry mismatch/);
+  }
+  await writeFile(enclosureEvidencePath, JSON.stringify(enclosureEvidence));
+  await writeFile(enclosureFile, 'corrupted source bytes');
+  await assertEnclosureFailurePreservesSite(/Map enclosure geometry SHA-256 mismatch/);
+  await rm(enclosureFile);
+  await assertEnclosureFailurePreservesSite(/ENOENT/);
+  await writeFile(enclosureFile, enclosureBytes);
   for (const [field, invalidValue] of [
     ["sceneName", "Level_1"],
     ["mapSlot", 1],

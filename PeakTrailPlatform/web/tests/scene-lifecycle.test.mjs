@@ -363,6 +363,48 @@ test("a stale settled task is retried with a fresh request instead of leaving th
   assert.deepEqual(scene.statuses.filter(([status]) => status === "ready").map(([, , segment]) => segment), [0]);
 });
 
+test("a chapter is ready only after its exact-source enclosure is loaded into the same model", async () => {
+  const { scene, requests } = fixture();
+  scene.mapPack.mapEnclosures = { enclosures: [{ segment: 0, objectId: 'source-shell-A' }, { segment: 1, objectId: 'source-shell-B' }] };
+  const pending = scene.ensureGeometryLayers();
+  const terrain = model(), shell = model(); requests[0].resolve(terrain); await flush();
+  assert.equal(requests[1].layer, 'source-shell-A');
+  assert.equal(scene.terrainRoot.children[0].userData.loaded, false);
+  requests[1].resolve(shell); await pending;
+  assert.equal(scene.terrainRoot.children[0].children[0], terrain);
+  assert.equal(terrain.children[0], shell);
+  assert.equal(shell.userData.sourceEnclosure, 'source-shell-A');
+  assert.equal(scene.terrainRoot.children[0].userData.loaded, true);
+  scene.setActiveSegment(1); requests[2].resolve(model()); await flush();
+  requests[3].resolve(model()); await flush();
+  assert.equal(terrain.disposed, 1); assert.equal(shell.disposed, 1);
+});
+
+test("failed enclosure loads dispose their base model and do not show a deceptively wall-less ready chapter", async () => {
+  const { scene, requests } = fixture();
+  scene.mapPack.mapEnclosures = { enclosures: [{ segment: 0, objectId: 'source-shell-A' }] };
+  const pending = scene.ensureGeometryLayers(), terrain = model();
+  requests[0].resolve(terrain); await flush(); requests[1].reject(new Error('shell hash mismatch')); await pending;
+  assert.equal(terrain.disposed, 1);
+  assert.equal(scene.terrainRoot.children[0].userData.loaded, false);
+  assert.equal(scene.terrainRoot.children[0].children.length, 0);
+  assert.equal(scene.statuses.at(-1)[0], 'error');
+  assert.equal(scene.geometryLoads.size, 0);
+});
+
+test("an old map load cannot borrow a new map's enclosure metadata", async () => {
+  const { scene, requests } = fixture();
+  scene.mapPack.mapEnclosures = { enclosures: [{ segment: 0, objectId: 'old-shell' }] };
+  const pending = scene.ensureGeometryLayers(), terrain = model(), shell = model();
+  scene.mapPack = { ...scene.mapPack, mapEnclosures: { enclosures: [{ segment: 0, objectId: 'new-shell' }] } };
+  scene.buildToken++;
+  requests[0].resolve(terrain); await flush();
+  assert.equal(requests[1].layer, 'old-shell');
+  requests[1].resolve(shell); await pending;
+  assert.equal(terrain.disposed, 1); assert.equal(shell.disposed, 1);
+  assert.equal(scene.terrainRoot.children[0].children.length, 0);
+});
+
 test("a task that repeatedly settles without mounting surfaces an error instead of spinning forever", async () => {
   const { scene, requests } = fixture();
   // Pathological entry: never mounts and never removes itself.

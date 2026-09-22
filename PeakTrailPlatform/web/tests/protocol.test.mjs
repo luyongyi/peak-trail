@@ -8,6 +8,7 @@ import {
   isDailyMapFresh,
   latestLifeEventBefore,
   loadMapPackBundle,
+  loadMapPackUrl,
   loadTraceBundle,
   loadTraceCollection,
   MARKER_LIFE_EVENT_TYPES,
@@ -29,6 +30,16 @@ const manifest = {
 };
 
 const mapPack = { ...manifest };
+
+test("small map manifests bypass old immutable responses so verified enclosure corrections can arrive", async (t) => {
+  let options;
+  t.mock.method(globalThis, 'fetch', async (_url, requested) => {
+    options = requested;
+    return { ok: false, status: 404, statusText: 'fixture stop before hydration' };
+  });
+  await assert.rejects(loadMapPackUrl('https://example.invalid/data/maps/packs/id/map-pack.json'));
+  assert.equal(options.cache, 'no-store');
+});
 
 test("exact map pack identity allows an overlay", () => {
   assert.equal(assessCompatibility(manifest, mapPack).compatible, true);

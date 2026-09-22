@@ -6,8 +6,10 @@ change the network clock, transmit recordings or publish the website.
 
 ## Camera contract
 
-- Default observer distance is 56 rendered metres (previously 38); wheel range
-  is 12–140. Solid enclosed spaces may require a shorter distance.
+- Outdoor default observer distance is 56 rendered metres (previously 38);
+  wheel range is 12–140. The subsequent enclosure correction uses a separate
+  18 m interior framing policy (wheel 4–28 m), source-model-axis orientation and
+  actual restored outer triangles. See [the interior audit](interior-source-audit.md).
 - The anchor is the recorded, interpolated torso position after the exact same
   origin, Unity-Z reflection and height scaling used by the player marker.
   No invented eye offset or recorded climbing normal is assumed.

@@ -17,6 +17,7 @@ export function resolveLocalAssetPaths(environment = process.env) {
   return Object.freeze({
     assetRootDirectory,
     mapPacksDirectory: resolve(assetRootDirectory, "maps", "packs"),
+    mapEnclosuresDirectory: resolve(assetRootDirectory, "maps", "enclosures"),
     gameAssetsDirectory: resolve(assetRootDirectory, "game-assets"),
   });
 }
