@@ -11,6 +11,9 @@ import { WorldRenderer } from "./world-renderer.js";
 import { pointInBounds, clipTrailSegment } from "./trail-spatial.js";
 import { FogDepthPass } from "./fog-depth-pass.js";
 import { latestLifeEventBefore, MARKER_LIFE_EVENT_TYPES } from "./protocol.js";
+import { SpectatorCamera, FOLLOW_DISTANCE, FOLLOW_MIN_DISTANCE, FOLLOW_MAX_DISTANCE } from "./spectator-camera.js";
+import { FollowTerrainQuery } from "./follow-terrain.js";
+import { SourceWaterRenderer } from "./source-water-renderer.js";
 
 const PLAYER_COLORS = [
   "#efb74e",
@@ -157,28 +160,23 @@ export class TrailScene {
     this.geometryAbort = null;
 
     // ===== 跟随相机 =====
-    // 临界阻尼弹簧追认 + 速度前视 + 用户轨道偏移 + 地形遮挡拉近。
+    // 真实网格外侧观测 + 平滑跟随 + 手动环绕；网络播放头独立运行。
     // 锚点 = 播放头插值后的玩家标记世界坐标（setTime 每帧刷新）。
     this.followTargetId = null;
-    this.followSmoothed = new THREE.Vector3();
     this.followAnchor = new THREE.Vector3();
-    this.followPrevAnchor = new THREE.Vector3();
-    this.followVelocity = new THREE.Vector3();
-    this.followLook = new THREE.Vector3();
-    this.followDesired = new THREE.Vector3();
-    this.followDir = new THREE.Vector3();
     this.followTmp = new THREE.Vector3();
-    this.followHasPrev = false;
     this.followAzimuth = 0.6;
-    this.followPitch = 0.05;
-    this.followPitchTarget = 0.05;
-    this.followDistance = 38;
+    this.followPitch = 0.22;
+    this.followDistance = FOLLOW_DISTANCE;
     this.followUserOrbit = false;
     this.followAutoRotate = false;
     this.followAutoSwitchAt = 0;
     this.followPointer = null;
     this.followDownAt = null;
     this.raycaster = new THREE.Raycaster();
+    this.followTerrain = new FollowTerrainQuery(THREE);
+    this.followRig = new SpectatorCamera({ THREE, query: this.followTerrain });
+    this.followTerrainDirty = true;
     this.followListeners = [
       [canvas, "pointerdown", (event) => this.onFollowPointerDown(event)],
       [canvas, "pointermove", (event) => this.onFollowPointerMove(event)],
@@ -217,6 +215,7 @@ export class TrailScene {
     this.freeCamera = new ReplayCamera({ THREE, camera: this.camera, controls: this.controls, canvas,
       onModeChange: (mode) => this.canvas.dispatchEvent(new CustomEvent("cameramodechange", { detail: { mode, help: REPLAY_CAMERA_HELP } })) });
     this.worldRenderer = new WorldRenderer(canvas);
+    this.sourceWater = new SourceWaterRenderer();
     this.fogDepthPass = new FogDepthPass(THREE);
     this.gameAssetPack = null;
     this.lastFrameTime = null;
@@ -227,7 +226,7 @@ export class TrailScene {
     this.terrainRoot = new THREE.Group();
     this.trailRoot = new THREE.Group();
     this.gridRoot = new THREE.Group();
-    this.worldRoot.add(this.gridRoot, this.terrainRoot, this.trailRoot, this.worldRenderer.root);
+    this.worldRoot.add(this.gridRoot, this.sourceWater.root, this.terrainRoot, this.trailRoot, this.worldRenderer.root);
     // PEAK's world is Unity left-handed; three is right-handed. Rendering the raw
     // coordinates unchanged mirrors every horizontal view (a game-right landmark
     // appears game-left). Negating Z of the whole rendered world is the standard
@@ -280,6 +279,7 @@ export class TrailScene {
   }
 
   async setData({ mapPack, trace, useMap, activeSegment }) {
+    if (this.trace !== trace) this.setFollowTarget(null);
     const cameraRevision = this.cameraSelectionRevision;
     if (this.trace !== trace) this.playerPortraits.clear();
     this.mapPack = mapPack || null;
@@ -313,6 +313,8 @@ export class TrailScene {
     this.geometryAbort?.abort();
     this.geometryAbort = new AbortController();
     this.geometryLoads.clear();
+    this.followTerrain?.setRoots([]);
+    this.followTerrainDirty = true;
     disposeObject(this.terrainRoot);
     disposeObject(this.trailRoot);
     this.playerObjects.clear();
@@ -322,6 +324,7 @@ export class TrailScene {
     this.buildGrid(this.currentBounds);
     this.worldRenderer.setData(this.trace, this.gameAssetPack, this.origin);
     this.worldRenderer.setMapFog(this.useMap ? this.mapPack : null);
+    this.sourceWater?.setMap(this.useMap ? this.mapPack : null, this.origin);
 
     // The overview legitimately loads every chapter: without it the empty daily
     // viewer would show a bare grid forever (its "loading" status never
@@ -876,12 +879,13 @@ export class TrailScene {
 
   /** 自动巡游跟随：沿路径跟随玩家，每 60 秒自动轮换；◎ 锁定后停止轮换。 */
   startAutoFollow() {
-    const id = [...this.playerObjects.keys()].find((key) => this.playerVisibility.get(key) ?? true)
-      ?? [...this.playerObjects.keys()][0];
+    const id = [...this.playerObjects.keys()].find((key) => this.canFollowPlayer(key));
     if (id == null) return false;
     this.followAutoRotate = true;
+    this.followUserOrbit = false;
     this.followAutoSwitchAt = performance.now() + 60_000;
     this.setFollowTarget(id);
+    this.emitFollowStatus();
     return true;
   }
 
@@ -892,37 +896,44 @@ export class TrailScene {
     // field is undefined rather than null: already-not-following is a no-op.
     if (next === null ? this.followTargetId == null : next === this.followTargetId) return;
     this.followTargetId = next;
+    ++this.cameraSelectionRevision;
     if (next !== null) {
-      // 进入跟随：退出 WASD 模式、接管轨道控制；从当前相机位置平滑接管
-      // （初始弹簧状态 = 相机现在所在处，轨道偏移取当前相对方位）。
       this.freeCamera.setMode("orbit", { focus: false });
+      // Clear accumulated OrbitControls damping before taking ownership.
+      const damping = this.controls.enableDamping;
+      this.controls.enableDamping = false;
+      this.controls.update();
+      this.controls.enableDamping = damping;
       this.controls.enabled = false;
       this.updateFollowAnchor();
-      this.followSmoothed.copy(this.camera.position);
       const offset = this.followTmp.copy(this.camera.position).sub(this.followAnchor);
-      // 已在玩家附近就保留当前距离；从远处进入则用默认近距，而不是把几十米外的
-      // 视距钳位进跟随（那样玩家只有米粒大）。
-      this.followDistance = offset.length() > 60
-        ? 38
-        : THREE.MathUtils.clamp(offset.length(), 6, 60);
+      this.followDistance = FOLLOW_DISTANCE;
       this.followAzimuth = Math.atan2(offset.x, offset.z);
-      this.followPitch = THREE.MathUtils.clamp(
-        Math.atan2(offset.y, Math.max(0.5, Math.hypot(offset.x, offset.z))), -0.5, 1.3);
-      this.followVelocity.set(0, 0, 0);
-      this.followHasPrev = false;
+      this.followPitch = 0.22;
+      this.camera.up.set(0, 1, 0);
+      this.camera.near = 0.08;
+      this.camera.updateProjectionMatrix();
+      this.followRig?.reset();
       this.followUserOrbit = false;
     } else {
       // 退出：以当前注视点为轨道中心，无缝交还用户。
       this.camera.getWorldDirection(this.followTmp);
       this.controls.target.copy(this.camera.position).addScaledVector(this.followTmp, 8);
       this.controls.enabled = true;
+      this.followAutoRotate = false;
+      this.followRig?.reset();
+      if (this.followPointer) {
+        try { this.canvas.releasePointerCapture?.(this.followPointer.id); } catch { /* optional */ }
+        this.followPointer = null;
+      }
     }
+    this.applyFollowMarkerOverlay();
     this.emitFollowStatus();
   }
 
   cycleFollowTarget() {
     const ids = [...this.playerObjects.keys()]
-      .filter((id) => this.playerVisibility.get(id) ?? true);
+      .filter((id) => this.canFollowPlayer(id));
     if (!ids.length) return;
     const index = ids.indexOf(this.followTargetId);
     this.setFollowTarget(ids[(index + 1) % ids.length]);
@@ -932,6 +943,7 @@ export class TrailScene {
   lockFollowTarget(playerId) {
     this.followAutoRotate = false;
     this.setFollowTarget(playerId);
+    this.emitFollowStatus();
   }
 
   emitFollowStatus() {
@@ -954,36 +966,22 @@ export class TrailScene {
     return true;
   }
 
+  canFollowPlayer(id) {
+    const object = this.playerObjects.get(id);
+    return Boolean(object?.marker && object.group?.visible !== false
+      && (this.playerVisibility.get(id) ?? true)
+      && (object.marker.userData.followable ?? object.marker.userData.replayVisible));
+  }
+
   updateFollowCamera(deltaSeconds) {
     const object = this.playerObjects.get(this.followTargetId);
-    if (!object?.marker || !this.updateFollowAnchor()) {
+    if (!object?.marker || !this.canFollowPlayer(this.followTargetId) || !this.updateFollowAnchor()) {
+      if (this.followAutoRotate) {
+        const next = [...this.playerObjects.keys()].find((id) => this.canFollowPlayer(id));
+        if (next) { this.setFollowTarget(next); return; }
+      }
       this.setFollowTarget(null);
       return;
-    }
-    const dt = Math.min(0.05, Math.max(0.0001, deltaSeconds || 0.016));
-    // 速度：锚点差分 + 指数平滑（帧率无关）。
-    if (this.followHasPrev) {
-      this.followTmp.copy(this.followAnchor).sub(this.followPrevAnchor).divideScalar(dt);
-      this.followVelocity.lerp(this.followTmp, 1 - Math.exp(-dt * 5));
-    } else {
-      this.followHasPrev = true;
-      this.followVelocity.set(0, 0, 0);
-    }
-    this.followPrevAnchor.copy(this.followAnchor);
-
-    // 爬山只有一面有效：机位始终在"山外"——从地图中心指向玩家的水平外向方向。
-    // 方向随玩家位置缓慢变化（不因路径往复震荡），永远正对山体立面。
-    if (!this.followUserOrbit) {
-      const bounds = this.mapPack?.bounds;
-      if (bounds) {
-        const centerX = (bounds.min[0] + bounds.max[0]) / 2 - this.origin.x;
-        const centerZ = -((bounds.min[2] + bounds.max[2]) / 2 - this.origin.z);
-        const targetAzimuth = Math.atan2(this.followAnchor.x - centerX, this.followAnchor.z - centerZ);
-        let delta = targetAzimuth - this.followAzimuth;
-        delta = Math.atan2(Math.sin(delta), Math.cos(delta));
-        this.followAzimuth += delta * (1 - Math.exp(-dt * 1.2));
-        this.followPitch += (this.followPitchTarget - this.followPitch) * (1 - Math.exp(-dt * 1.5));
-      }
     }
 
     // 自动巡游：每 60 秒轮换到下一位玩家（◎ 锁定后关闭）。
@@ -993,45 +991,44 @@ export class TrailScene {
       return;
     }
 
-    // 平视：相机在人物头部高度，水平看向玩家（视线前探 0.3s 的速度）。
-    // 距离恒定——地形/模型遮挡不缩短距离（与自由相机一样可穿墙）。
-    this.followTmp.copy(this.followVelocity).multiplyScalar(0.3);
-    if (this.followTmp.length() > 6) this.followTmp.setLength(6);
-    this.followLook.copy(this.followAnchor).add(this.followTmp);
-    this.followLook.y += 1.2; // 看向头部而非脚底
-    this.followSmoothed.lerp(this.followLook, 1 - Math.exp(-dt * 7));
-
-    const cosPitch = Math.cos(this.followPitch);
-    this.followDir.set(
-      Math.sin(this.followAzimuth) * cosPitch,
-      Math.sin(this.followPitch),
-      Math.cos(this.followAzimuth) * cosPitch,
-    );
-    this.followDesired.copy(this.followSmoothed).addScaledVector(this.followDir, this.followDistance);
-    // 相机不低于人物脚部：保持平视机位，也不钻地。
-    this.followDesired.y = Math.max(this.followDesired.y, this.followAnchor.y + 1.0);
-
-    this.camera.position.copy(this.followDesired);
-    this.camera.lookAt(this.followLook);
+    if (this.followTerrainDirty) {
+      this.terrainRoot.updateWorldMatrix(true, true);
+      this.followTerrain.setRoots(this.terrainRoot.children);
+      this.followTerrainDirty = false;
+      this.followRig.invalidate();
+    }
+    // Current chapter bounds are only a weak prior. Nearby true surface normals
+    // and candidate visibility win; the whole-map centre is not a climbing face.
+    const bounds = this.viewBounds();
+    const preferredAzimuth = bounds ? Math.atan2(
+      this.followAnchor.x - ((bounds.min[0] + bounds.max[0]) / 2 - this.origin.x),
+      this.followAnchor.z + ((bounds.min[2] + bounds.max[2]) / 2 - this.origin.z)) : this.followAzimuth;
+    const result = this.followRig.update(this.followAnchor, deltaSeconds, {
+      cameraPosition: this.camera.position, distance: this.followDistance,
+      azimuth: this.followAzimuth, pitch: this.followPitch, manual: this.followUserOrbit,
+      preferredAzimuth, interior: isInteriorLayer(this.selectedLayer(), this.mapPack?.route),
+      discontinuity: this.followDiscontinuity,
+    });
+    this.followDiscontinuity = false;
+    if (!result) return;
+    if (!this.followUserOrbit) { this.followAzimuth = result.azimuth; this.followPitch = result.pitch; }
+    this.camera.position.copy(result.position);
+    this.camera.lookAt(result.target);
     // OrbitControls 目标同步：退出跟随时无缝交还。
-    this.controls.target.copy(this.followLook);
-    this.applyFollowMarkerOverlay();
+    this.controls.target.copy(result.target);
   }
 
-  /** 跟随中的玩家标记穿透地形渲染（renderOrder + 关深度测试）——机位被山体
-   * 挡住时人物依然可见，与轨迹的"淡色透视"是同一套视觉语言。机位距离本身
-   * 不因遮挡改变。 */
+  /** Respect terrain depth; camera placement, not an opaque x-ray marker,
+   * establishes the relationship between the climber and the mountain. */
   applyFollowMarkerOverlay() {
-    for (const [id, entry] of this.playerObjects.entries()) {
-      const followed = id === this.followTargetId;
+    for (const entry of this.playerObjects.values()) {
       entry.marker.traverse((node) => {
         if (!node.isMesh) return;
         const materials = Array.isArray(node.material) ? node.material : [node.material];
         for (const material of materials) {
-          material.depthTest = !followed;
-          material.transparent = followed || material.transparent;
+          material.depthTest = true;
         }
-        node.renderOrder = followed ? 100 : 0;
+        node.renderOrder = 0;
       });
     }
   }
@@ -1039,14 +1036,14 @@ export class TrailScene {
   onFollowPointerDown(event) {
     if (event.isPrimary === false || event.button !== 0) return;
     this.followDownAt = { x: event.clientX, y: event.clientY, time: performance.now() };
-    if (this.followTargetId === null) return;
+    if (this.followTargetId === null || this.freeCamera.mode === "free") return;
     event.preventDefault();
     this.followPointer = { id: event.pointerId, x: event.clientX, y: event.clientY };
     try { this.canvas.setPointerCapture?.(event.pointerId); } catch { /* optional */ }
   }
 
   onFollowPointerMove(event) {
-    if (this.followTargetId === null || this.followPointer?.id !== event.pointerId) return;
+    if (this.followTargetId === null || this.freeCamera.mode === "free" || this.followPointer?.id !== event.pointerId) return;
     const dx = event.clientX - this.followPointer.x;
     const dy = event.clientY - this.followPointer.y;
     this.followPointer.x = event.clientX;
@@ -1056,7 +1053,6 @@ export class TrailScene {
     this.followUserOrbit = true;
     this.followAzimuth -= dx * 0.006;
     this.followPitch = THREE.MathUtils.clamp(this.followPitch + dy * 0.005, -0.45, 1.3);
-    this.followPitchTarget = this.followPitch;
   }
 
   onFollowPointerUp(event) {
@@ -1072,7 +1068,7 @@ export class TrailScene {
     this.followDownAt = null;
     if (moved > 6 || elapsed > 500) return;
     const hit = this.pickPlayerMarker(event);
-    if (hit) this.setFollowTarget(hit);
+    if (hit) this.lockFollowTarget(hit);
   }
 
   pickPlayerMarker(event) {
@@ -1096,10 +1092,10 @@ export class TrailScene {
   }
 
   onFollowWheel(event) {
-    if (this.followTargetId === null) return;
+    if (this.followTargetId === null || this.freeCamera.mode === "free") return;
     event.preventDefault();
     this.followDistance = THREE.MathUtils.clamp(
-      this.followDistance * Math.exp(event.deltaY * 0.001), 6, 90);
+      this.followDistance * Math.exp(event.deltaY * 0.001), FOLLOW_MIN_DISTANCE, FOLLOW_MAX_DISTANCE);
   }
 
   updateCameraMarkerVisibility() {
@@ -1117,7 +1113,9 @@ export class TrailScene {
   }
 
   setTime(seconds) {
-    this.currentTime = Math.max(0, Number(seconds) || 0);
+    const nextTime = Math.max(0, Number(seconds) || 0);
+    if (nextTime < this.currentTime - 0.01 || nextTime > this.currentTime + 1) this.followDiscontinuity = true;
+    this.currentTime = nextTime;
     const worldPlayers = [];
     for (const {
       group,
@@ -1144,6 +1142,8 @@ export class TrailScene {
       const displayBounds = this.useMap && this.activeSegment !== null ? this.viewBounds() : null;
       marker.visible = Boolean(this.showMarkers && sample && segmentMatches && isPresent && pointInBounds(sample.pos, displayBounds));
       marker.userData.replayVisible = marker.visible;
+      marker.userData.followable = Boolean(sample && segmentMatches && isPresent && life?.type !== "death"
+        && this.currentTime - sample.t <= maxGap && pointInBounds(sample.pos, displayBounds));
       if (sample) {
         marker.position.set(
           sample.pos[0] - this.origin.x,
@@ -1192,9 +1192,12 @@ export class TrailScene {
   }
 
   applyHeightScale() {
+    this.followTerrainDirty = true;
+    this.followRig?.reset();
     this.terrainRoot.scale.y = this.heightScale;
     this.trailRoot.scale.y = this.heightScale;
     this.worldRenderer.root.scale.y = this.heightScale;
+    if (this.sourceWater) this.sourceWater.root.scale.y = this.heightScale;
   }
 
   setTrackVisibility(visible) {
@@ -1222,16 +1225,18 @@ export class TrailScene {
     this.applyLayerVisibility();
     if (this.trace) this.buildTracks();
     this.setTime(this.currentTime);
-    this.fitView();
+    if (this.followTargetId == null) this.fitView();
     const selected = this.activeSegment;
     const cameraRevision = this.cameraSelectionRevision;
     const buildRevision = this.buildToken;
     void this.ensureGeometryLayers().then(() => {
-      if (selected === this.activeSegment && buildRevision === this.buildToken && cameraRevision === this.cameraSelectionRevision && isInteriorLayer(this.selectedLayer(), this.mapPack?.route)) this.enterInteriorView(false);
+      if (this.followTargetId == null && selected === this.activeSegment && buildRevision === this.buildToken && cameraRevision === this.cameraSelectionRevision && isInteriorLayer(this.selectedLayer(), this.mapPack?.route)) this.enterInteriorView(false);
     });
   }
 
   applyLayerVisibility() {
+    this.followTerrainDirty = true;
+    this.sourceWater?.setSegment(this.activeSegment);
     for (const mesh of this.terrainRoot.children) {
       const isVoid = String(mesh.userData.mapLayer?.biome).toLowerCase() === "void";
       mesh.visible = this.activeSegment === null
@@ -1257,6 +1262,7 @@ export class TrailScene {
   selectedLayer() { return this.mapPack?.layers.find((entry) => entry.segment === this.activeSegment) || null; }
 
   enterInteriorView(focus = true) {
+    this.setFollowTarget(null);
     ++this.cameraSelectionRevision;
     const pose = chooseRecordedInteriorPose(this.trace, this.currentTime, this.viewBounds(), { playerVisibility: this.playerVisibility });
     if (pose) {
@@ -1298,10 +1304,11 @@ export class TrailScene {
     if (focus) this.freeCamera.focus();
   }
 
-  toggleFreeCamera() { ++this.cameraSelectionRevision; this.freeCamera.setMode(this.freeCamera.mode === "free" ? "orbit" : "free"); this.freeCamera.focus(); }
+  toggleFreeCamera() { this.setFollowTarget(null); ++this.cameraSelectionRevision; this.freeCamera.setMode(this.freeCamera.mode === "free" ? "orbit" : "free"); this.freeCamera.focus(); }
 
   focusWorldEvent(event) {
     if (!event.objectId || !event.pos) return;
+    this.setFollowTarget(null);
     ++this.cameraSelectionRevision;
     // Rendered space: the world root is Z-mirrored (Unity LH → three RH).
     const target = new THREE.Vector3(event.pos[0] - this.origin.x, (event.pos[1] - this.origin.y) * this.heightScale, -(event.pos[2] - this.origin.z));
@@ -1311,6 +1318,7 @@ export class TrailScene {
   }
 
   fitView() {
+    this.setFollowTarget(null);
     ++this.cameraSelectionRevision;
     this.freeCamera.setMode("orbit");
     const bounds = this.viewBounds();
@@ -1338,6 +1346,7 @@ export class TrailScene {
   }
 
   topView() {
+    this.setFollowTarget(null);
     ++this.cameraSelectionRevision;
     this.freeCamera.setMode("orbit");
     const bounds = this.viewBounds();
@@ -1367,10 +1376,12 @@ export class TrailScene {
     cancelAnimationFrame(this.animationFrame);
     this.resizeObserver.disconnect();
     this.setFollowTarget(null);
+    this.followTerrain?.dispose();
     for (const [target, name, handler] of this.followListeners || []) target.removeEventListener(name, handler);
     this.followListeners = [];
     this.freeCamera.dispose();
     this.worldRenderer.dispose();
+    this.sourceWater?.dispose();
     this.fogDepthPass.dispose();
     this.controls.dispose();
     this.geometryAbort?.abort();

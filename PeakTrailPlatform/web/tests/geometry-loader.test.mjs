@@ -9,15 +9,52 @@ import { positiveInstanceTransform } from "../src/geometry-matrices.js";
 import { getSourceEffectMaterial } from "../src/source-materials.js";
 import { isExplosiveMineMaterial, recordedHiddenMineIndices } from "../src/mine-visibility.js";
 import { sha256Hex } from "../src/sha256.js";
+import { isProjectionProxyMaterial } from "../src/source-render-policy.js";
 
 // Use the bundled Three implementation, replacing only network and GLTF parse
 // ports so the loader and batching contracts run without a WebGL canvas.
 const source = (await readFile(new URL("../src/geometry-loader.js", import.meta.url), "utf8"))
   .replace(/^import .*;\r?\n/gm, "").replace(/^export (?=(?:async )?function )/gm, "");
 const compile = (ports = {}) => new Function(
-  "THREE", "GLTFLoader", "MeshoptDecoder", "decodeGeometryBytes", "GEOMETRY_FORMATS", "positiveInstanceTransform", "getSourceEffectMaterial", "isExplosiveMineMaterial", "recordedHiddenMineIndices", "sha256Hex", "fetch", "crypto",
+  "THREE", "GLTFLoader", "MeshoptDecoder", "decodeGeometryBytes", "GEOMETRY_FORMATS", "positiveInstanceTransform", "getSourceEffectMaterial", "isExplosiveMineMaterial", "recordedHiddenMineIndices", "sha256Hex", "fetch", "crypto", "isProjectionProxyMaterial",
   `${source}\nreturn { loadGameGeometry, batchStaticMeshes, updateRecordedMineVisibility, updateMapFogSurfaceVisibility, verifiableTopBlend };`,
-)(THREE, ports.GLTFLoader, {}, ports.decode || decodeGeometryBytes, GEOMETRY_FORMATS, positiveInstanceTransform, getSourceEffectMaterial, isExplosiveMineMaterial, recordedHiddenMineIndices, sha256Hex, ports.fetch, ports.crypto || webcrypto);
+)(THREE, ports.GLTFLoader, {}, ports.decode || decodeGeometryBytes, GEOMETRY_FORMATS, positiveInstanceTransform, getSourceEffectMaterial, isExplosiveMineMaterial, recordedHiddenMineIndices, sha256Hex, ports.fetch, ports.crypto || webcrypto, isProjectionProxyMaterial);
+
+test("depth-projection balls are omitted while their real crystal and spherical props survive", () => {
+  const { batchStaticMeshes } = compile();
+  const material = new THREE.MeshStandardMaterial();
+  material.name = "M_VFX_PetrifyDecal";
+  material.userData.peakTerrain = { sourceMaterial: material.name, sourceColors: { shader: "Decal" } };
+  const geometry = new THREE.SphereGeometry();
+  const scene = new THREE.Group();
+  const proxies = new THREE.InstancedMesh(geometry, material, 100);
+  for (let i = 0; i < 100; i++) proxies.setMatrixAt(i, new THREE.Matrix4().makeTranslation(i, 2, 0));
+  scene.add(proxies);
+  const realMaterial = new THREE.MeshStandardMaterial(); realMaterial.name = "M_Petrified_Stone_Evil";
+  scene.add(new THREE.Mesh(geometry, realMaterial));
+  const batched = batchStaticMeshes(scene, "25306743");
+  assert.equal(batched.userData.omittedProjectionInstances, 100);
+  assert.equal(batched.children.length, 1);
+  assert.equal(batched.children[0].material, realMaterial);
+  geometry.dispose(); material.dispose(); realMaterial.dispose(); proxies.dispose();
+  batched.children.forEach((mesh) => mesh.dispose());
+});
+
+test("mixed meshes retain ordinary groups but never raycast against decal volume groups", () => {
+  const { batchStaticMeshes } = compile();
+  const proxy = new THREE.MeshStandardMaterial();
+  proxy.name = "M_VFX_FireballDecal";
+  proxy.userData.peakTerrain = { sourceColors: { shader: "Decal" } };
+  const solid = new THREE.MeshStandardMaterial();
+  const geometry = new THREE.BoxGeometry(); geometry.clearGroups();
+  geometry.addGroup(0, 18, 0); geometry.addGroup(18, 18, 1);
+  const scene = new THREE.Group(); scene.add(new THREE.Mesh(geometry, [proxy, solid]));
+  const batched = batchStaticMeshes(scene, 25306743);
+  assert.deepEqual(batched.children[0].geometry.groups, [{ start: 18, count: 18, materialIndex: 1 }]);
+  assert.equal(geometry.groups.length, 2, "shared source geometry is untouched");
+  geometry.dispose(); proxy.dispose(); solid.dispose();
+  batched.children.forEach((mesh) => { mesh.geometry.dispose(); mesh.dispose(); });
+});
 
 function glb() {
   const text = JSON.stringify({ asset: { version: "2.0" }, scenes: [{ nodes: [] }] });

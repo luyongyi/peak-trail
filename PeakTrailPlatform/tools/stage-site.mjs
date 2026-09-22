@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { readGameAssets } from "./lib/game-assets.mjs";
 import { localAssetHint, localAssetPaths } from "./lib/local-paths.mjs";
 import { normalizeMapFog } from "../web/src/map-fog.js";
+import { normalizeMapWater } from "../web/src/map-water.js";
 
 const toolDirectory = dirname(fileURLToPath(import.meta.url));
 const platformDirectory = resolve(toolDirectory, "..");
@@ -47,7 +48,8 @@ for (const entry of catalog.mapPacks) {
   const { files, manifest } = await readMapPackAllowlist(sourceDirectory, mapPackId);
   const route = await verifiedRouteMetadata(manifest);
   const mapFog = await verifiedFogMetadata(manifest);
-  mapPacks.push({ mapPackId, sourceDirectory, files, manifest, route, mapFog });
+  const mapWater = await verifiedWaterMetadata(manifest);
+  mapPacks.push({ mapPackId, sourceDirectory, files, manifest, route, mapFog, mapWater });
 }
 
 // site-dist is generated exclusively by this script and is safe to recreate.
@@ -76,10 +78,11 @@ for (const pack of mapPacks) {
   }
   // Route evidence is additive metadata and is not part of geometry identity.
   // Original canonical packs remain untouched; only the generated site is enriched.
-  if (pack.route || pack.mapFog) await writeFile(
+  if (pack.route || pack.mapFog || pack.mapWater) await writeFile(
     resolve(outputDirectory, "data", "maps", "packs", pack.mapPackId, "map-pack.json"),
     JSON.stringify({ ...pack.manifest, ...(pack.route ? { route: pack.route } : {}),
-      ...(pack.mapFog ? { mapFog: pack.mapFog } : {}) }, null, 2) + "\n",
+      ...(pack.mapFog ? { mapFog: pack.mapFog } : {}),
+      ...(pack.mapWater ? { mapWater: pack.mapWater } : {}) }, null, 2) + "\n",
   );
 }
 for (const reference of gameAssets.files) {
@@ -200,4 +203,25 @@ function assertSafeRelativePath(value, label) {
       || /(^|[\\/])\.\.([\\/]|$)/.test(value) || /^[a-z]+:/i.test(value)) {
     throw new Error(`${label} is not a safe relative path`);
   }
+}
+
+async function verifiedWaterMetadata(manifest) {
+  const build = String(manifest.gameBuildId || "");
+  if (!/^\d+$/.test(build)) return null;
+  let evidence;
+  try {
+    evidence = JSON.parse(await readFile(resolve(mapsDirectory, `water.${build}.json`), "utf8"));
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
+  if (evidence.schemaVersion !== 1 || evidence.authority !== "serialized-map-baseline"
+    || String(evidence.gameBuildId) !== build || !Array.isArray(evidence.maps)) throw new Error("Invalid map water evidence");
+  const matches = evidence.maps.filter(entry => entry.mapPackId === manifest.mapPackId);
+  if (!matches.length) return null;
+  if (matches.length !== 1) throw new Error("Duplicate map water evidence");
+  const value = normalizeMapWater({ ...matches[0], schemaVersion: 1, gameBuildId: build,
+    authority: evidence.authority, note: evidence.note }, manifest);
+  if (!value || value.mapSlot !== manifest.mapSlot) throw new Error("Map water evidence identity or plane mismatch");
+  return value;
 }

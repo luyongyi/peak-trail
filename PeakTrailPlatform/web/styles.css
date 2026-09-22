@@ -2775,6 +2775,10 @@ body.gate-open .app-shell { visibility: hidden; }
   gap: 9px;
   padding: 7px 14px;
   border: 2px solid var(--accent);
+  width: max-content;
+  max-width: calc(100% - 32px);
+  flex-wrap: wrap;
+  justify-content: center;
   border-radius: 999px;
   background: rgba(10, 15, 14, 0.86);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);

@@ -2,6 +2,7 @@ import { normalizeRoute } from "./map-route.js";
 import { normalizeWorldRecord, buildWorldTimeline } from "./world-timeline.js";
 import { normalizePlayerStatus } from "./player-conditions.js";
 import { sha256Hex } from "./sha256.js";
+import { normalizeMapWater } from "./map-water.js";
 
 export class ProtocolError extends Error {
   constructor(message, detail = "") {
@@ -1643,6 +1644,7 @@ async function hydrateMapPack(raw, resolver) {
     mapSlot: asFiniteNumber(raw.mapSlot),
     projectionVersion: asFiniteNumber(raw.projectionVersion),
     coordinateSpace: raw.coordinateSpace,
+    mapWater: normalizeMapWater(raw.mapWater, raw),
     layers: hydratedLayers,
     bounds: {
       min: [

@@ -12,7 +12,7 @@ const execFileAsync = promisify(execFile);
 const testDirectory = dirname(fileURLToPath(import.meta.url));
 const platformSource = resolve(testDirectory, "..", "..");
 
-test("stage enriches exact-pack route metadata, allowlists assets and preserves output on failed preflight", async (t) => {
+test("stage enriches exact-pack route and water metadata, allowlists assets and preserves output on failed preflight", async (t) => {
   const repository = await mkdtemp(resolve(tmpdir(), "peaktrail-stage-"));
   t.after(() => rm(repository, { recursive: true, force: true }));
   const platform = resolve(repository, "PeakTrailPlatform");
@@ -45,6 +45,7 @@ test("stage enriches exact-pack route metadata, allowlists assets and preserves 
     copyFile(resolve(platformSource, "tools", "lib", "game-assets.mjs"), resolve(tools, "lib", "game-assets.mjs")),
     copyFile(resolve(platformSource, "tools", "lib", "local-paths.mjs"), resolve(tools, "lib", "local-paths.mjs")),
     copyFile(resolve(platformSource, "web", "src", "map-fog.js"), resolve(platform, "web", "src", "map-fog.js")),
+    copyFile(resolve(platformSource, "web", "src", "map-water.js"), resolve(platform, "web", "src", "map-water.js")),
     writeFile(resolve(platform, "web", "index.html"), "<!doctype html>"),
     writeFile(resolve(platform, "web", "styles.css"), "body{}"),
     writeFile(resolve(platform, "web", "src", "app.js"), "export {};"),
@@ -100,6 +101,18 @@ test("stage enriches exact-pack route metadata, allowlists assets and preserves 
     sourceSceneSha256: manifest.source.sceneSha256, volumes: [],
   }] };
   const fogPath = resolve(platform, 'data', 'maps', 'fog.123.json');
+  const waterSurface = {
+    objectId: 'map-water:fixture:1', kind: 'ocean', segment: 0,
+    source: 'serialized-global-water-renderer', sourceRendererPathId: 1,
+    corners: [[-2500, -1, -2500], [2500, -1, -2500], [2500, -1, 2500], [-2500, -1, 2500]],
+    material: { name: 'FixtureWater', shader: 'GD/Water-GD', asset: 'fixture.assets', pathId: 1,
+      colorProperty: '_WaterColorPrimary', storedColor: [0.2, 0.5, 0.6, 0], linearColor: [0.03, 0.21, 0.32] },
+  };
+  const waterEvidence = { schemaVersion: 1, gameBuildId: '123', authority: 'serialized-map-baseline', maps: [{
+    mapPackId: packId, sceneName: manifest.sceneName, mapSlot: manifest.mapSlot,
+    sourceSceneSha256: manifest.source.sceneSha256, surfaces: [waterSurface],
+  }] };
+  const waterPath = resolve(platform, 'data', 'maps', 'water.123.json');
   const buildCatalog = {
     schemaVersion: 1,
     gameBuildId: "123",
@@ -114,6 +127,7 @@ test("stage enriches exact-pack route metadata, allowlists assets and preserves 
     writeFile(resolve(pack, "map-pack.json"), manifestBytes),
     writeFile(evidencePath, JSON.stringify(evidence)),
     writeFile(fogPath, JSON.stringify(fogEvidence)),
+    writeFile(waterPath, JSON.stringify(waterEvidence)),
     writeFile(resolve(pack, "shore.png"), texture),
     writeFile(resolve(pack, "shore.height.f32"), height),
     writeFile(resolve(pack, "shore.glb.gz"), geometry),
@@ -135,6 +149,10 @@ test("stage enriches exact-pack route metadata, allowlists assets and preserves 
   assert.deepEqual(stagedManifest.route, route);
   assert.deepEqual(stagedManifest.mapFog.volumes, []);
   assert.equal(stagedManifest.mapFog.authority, 'serialized-map-baseline');
+  assert.deepEqual(stagedManifest.mapWater.surfaces, [waterSurface]);
+  assert.equal(stagedManifest.mapWater.authority, 'serialized-map-baseline');
+  assert.equal(stagedManifest.mapWater.sourceSceneSha256, manifest.source.sceneSha256);
+  assert.equal(stagedManifest.mapWater.mapPackId, packId);
   assert.equal(stagedManifest.mapPackId, packId);
   assert.deepEqual(stagedManifest.layers, manifest.layers);
   assert.equal(await readFile(resolve(pack, "map-pack.json"), "utf8"), manifestBytes);
@@ -150,6 +168,20 @@ test("stage enriches exact-pack route metadata, allowlists assets and preserves 
   await assert.rejects(execFileAsync(process.execPath, [resolve(tools, 'stage-site.mjs')], options), /Map fog evidence identity or field mismatch/);
   assert.equal(await readFile(resolve(staged, 'preflight-marker.txt'), 'utf8'), 'keep on failure');
   await writeFile(fogPath, JSON.stringify(fogEvidence));
+  for (const invalidate of [
+    value => { value.maps[0].sourceSceneSha256 = '0'.repeat(64); },
+    value => { value.maps[0].surfaces[0].corners[0][1] = 2; },
+    value => { value.maps[0].surfaces[0].segment = 4; },
+  ]) {
+    const invalidWater = structuredClone(waterEvidence);
+    invalidate(invalidWater);
+    await writeFile(waterPath, JSON.stringify(invalidWater));
+    await assert.rejects(execFileAsync(process.execPath, [resolve(tools, 'stage-site.mjs')], options), /Map water evidence identity or plane mismatch/);
+    assert.equal(await readFile(resolve(staged, 'preflight-marker.txt'), 'utf8'), 'keep on failure');
+    assert.equal(await readFile(stagedManifestPath, 'utf8'), stagedManifestBytes);
+    assert.equal(await readFile(resolve(pack, 'map-pack.json'), 'utf8'), manifestBytes);
+  }
+  await writeFile(waterPath, JSON.stringify(waterEvidence));
   for (const [field, invalidValue] of [
     ["sceneName", "Level_1"],
     ["mapSlot", 1],

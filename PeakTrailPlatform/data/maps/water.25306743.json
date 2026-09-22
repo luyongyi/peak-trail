@@ -1,0 +1,1352 @@
+{
+  "schemaVersion": 1,
+  "gameBuildId": "25306743",
+  "authority": "serialized-map-baseline",
+  "note": "Exact global source plane and primary material color; shore/overview presentation only. Animated waves, depth tint, refraction and foam are not reproduced.",
+  "maps": [
+    {
+      "mapPackId": "sha256-3bfe40abb1bff46ea7ed0e34d4d566ae76bc1cf8526d4b6e71790fc2620c0175",
+      "sceneName": "Level_0",
+      "mapSlot": 0,
+      "sourceSceneSha256": "34386c210e36448d1361479ee2c37dcb9a9a2016589e18bc4500f91a9a3d0986",
+      "surfaces": [
+        {
+          "objectId": "map-water:level5:417850",
+          "kind": "ocean",
+          "segment": 0,
+          "source": "serialized-global-water-renderer",
+          "sourceRendererPathId": 417850,
+          "sourceHierarchy": [
+            "Misc",
+            "Water",
+            "Collision"
+          ],
+          "sourceMesh": "Plane",
+          "sourceVertices": 121,
+          "sourceTriangles": 200,
+          "corners": [
+            [
+              -2500.0,
+              -1.0000000000000555,
+              -2500.0
+            ],
+            [
+              2500.0,
+              -1.0000000000000555,
+              -2500.0
+            ],
+            [
+              2500.0,
+              -1.0000000000000555,
+              2500.0
+            ],
+            [
+              -2500.0,
+              -1.0000000000000555,
+              2500.0
+            ]
+          ],
+          "material": {
+            "name": "M_WaterTest",
+            "shader": "GD/Water-GD",
+            "asset": "sharedassets1.assets",
+            "pathId": 4,
+            "colorProperty": "_WaterColorPrimary",
+            "colorFlags": 0,
+            "storedColor": [
+              0.14222130179405212,
+              0.5393459796905518,
+              0.6415094137191772,
+              0.0
+            ],
+            "linearColor": [
+              0.017868301320528437,
+              0.2522832908279599,
+              0.3691636014341466
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-e9827dfc50f17903b8e7af9b702db0f6b9e4755cbdc4fc7c79e535bc7ef4faad",
+      "sceneName": "Level_1",
+      "mapSlot": 1,
+      "sourceSceneSha256": "3b567b731239b5038736f204581ad61b2acf9ddea7ef56e659d39f95f8e3e5cc",
+      "surfaces": [
+        {
+          "objectId": "map-water:level6:457293",
+          "kind": "ocean",
+          "segment": 0,
+          "source": "serialized-global-water-renderer",
+          "sourceRendererPathId": 457293,
+          "sourceHierarchy": [
+            "Misc",
+            "Water",
+            "Collision"
+          ],
+          "sourceMesh": "Plane",
+          "sourceVertices": 121,
+          "sourceTriangles": 200,
+          "corners": [
+            [
+              -2500.0,
+              -1.0000000000000555,
+              -2500.0
+            ],
+            [
+              2500.0,
+              -1.0000000000000555,
+              -2500.0
+            ],
+            [
+              2500.0,
+              -1.0000000000000555,
+              2500.0
+            ],
+            [
+              -2500.0,
+              -1.0000000000000555,
+              2500.0
+            ]
+          ],
+          "material": {
+            "name": "M_WaterTest",
+            "shader": "GD/Water-GD",
+            "asset": "sharedassets1.assets",
+            "pathId": 4,
+            "colorProperty": "_WaterColorPrimary",
+            "colorFlags": 0,
+            "storedColor": [
+              0.14222130179405212,
+              0.5393459796905518,
+              0.6415094137191772,
+              0.0
+            ],
+            "linearColor": [
+              0.017868301320528437,
+              0.2522832908279599,
+              0.3691636014341466
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-695061be5840770d667c15252a973e77210a409530bda7880c1806573dd4db58",
+      "sceneName": "Level_2",
+      "mapSlot": 2,
+      "sourceSceneSha256": "a5834fe91965c86b7ea226c6a70273017e127cafd57508c88b209eb563f43539",
+      "surfaces": [
+        {
+          "objectId": "map-water:level7:381580",
+          "kind": "ocean",
+          "segment": 0,
+          "source": "serialized-global-water-renderer",
+          "sourceRendererPathId": 381580,
+          "sourceHierarchy": [
+            "Misc",
+            "Water",
+            "Collision"
+          ],
+          "sourceMesh": "Plane",
+          "sourceVertices": 121,
+          "sourceTriangles": 200,
+          "corners": [
+            [
+              -2500.0,
+              -1.0000000000000555,
+              -2500.0
+            ],
+            [
+              2500.0,
+              -1.0000000000000555,
+              -2500.0
+            ],
+            [
+              2500.0,
+              -1.0000000000000555,
+              2500.0
+            ],
+            [
+              -2500.0,
+              -1.0000000000000555,
+              2500.0
+            ]
+          ],
+          "material": {
+            "name": "M_WaterTest",
+            "shader": "GD/Water-GD",
+            "asset": "sharedassets1.assets",
+            "pathId": 4,
+            "colorProperty": "_WaterColorPrimary",
+            "colorFlags": 0,
+            "storedColor": [
+              0.14222130179405212,
+              0.5393459796905518,
+              0.6415094137191772,
+              0.0
+            ],
+            "linearColor": [
+              0.017868301320528437,
+              0.2522832908279599,
+              0.3691636014341466
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-b6bfd311a2f18a42eafd734ee333ab991f96fbf76c2f2c972dfc34e747a78b35",
+      "sceneName": "Level_3",
+      "mapSlot": 3,
+      "sourceSceneSha256": "43c5f9044445cc905b519d9e430f55aa0fab07f59b5c767f0d7d886a57b765e4",
+      "surfaces": [
+        {
+          "objectId": "map-water:level8:490992",
+          "kind": "ocean",
+          "segment": 0,
+          "source": "serialized-global-water-renderer",
+          "sourceRendererPathId": 490992,
+          "sourceHierarchy": [
+            "Misc",
+            "Water",
+            "Collision"
+          ],
+          "sourceMesh": "Plane",
+          "sourceVertices": 121,
+          "sourceTriangles": 200,
+          "corners": [
+            [
+              -2500.0,
+              -1.0000000000000555,
+              -2500.0
+            ],
+            [
+              2500.0,
+              -1.0000000000000555,
+              -2500.0
+            ],
+            [
+              2500.0,
+              -1.0000000000000555,
+              2500.0
+            ],
+            [
+              -2500.0,
+              -1.0000000000000555,
+              2500.0
+            ]
+          ],
+          "material": {
+            "name": "M_WaterTest",
+            "shader": "GD/Water-GD",
+            "asset": "sharedassets1.assets",
+            "pathId": 4,
+            "colorProperty": "_WaterColorPrimary",
+            "colorFlags": 0,
+            "storedColor": [
+              0.14222130179405212,
+              0.5393459796905518,
+              0.6415094137191772,
+              0.0
+            ],
+            "linearColor": [
+              0.017868301320528437,
+              0.2522832908279599,
+              0.3691636014341466
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-2e74f69a2828a0966e80c1bd349bdddc1b2c604f5492e212416e83f64bf83890",
+      "sceneName": "Level_4",
+      "mapSlot": 4,
+      "sourceSceneSha256": "ce32b18df46d47a20f685309132e33b0d0a12e5211d5f707dffca8472a3e4c36",
+      "surfaces": [
+        {
+          "objectId": "map-water:level9:320999",
+          "kind": "ocean",
+          "segment": 0,
+          "source": "serialized-global-water-renderer",
+          "sourceRendererPathId": 320999,
+          "sourceHierarchy": [
+            "Misc",
+            "Water",
+            "Collision"
+          ],
+          "sourceMesh": "Plane",
+          "sourceVertices": 121,
+          "sourceTriangles": 200,
+          "corners": [
+            [
+              -2500.0,
+              -1.0000000000000555,
+              -2500.0
+            ],
+            [
+              2500.0,
+              -1.0000000000000555,
+              -2500.0
+            ],
+            [
+              2500.0,
+              -1.0000000000000555,
+              2500.0
+            ],
+            [
+              -2500.0,
+              -1.0000000000000555,
+              2500.0
+            ]
+          ],
+          "material": {
+            "name": "M_WaterTest",
+            "shader": "GD/Water-GD",
+            "asset": "sharedassets1.assets",
+            "pathId": 4,
+            "colorProperty": "_WaterColorPrimary",
+            "colorFlags": 0,
+            "storedColor": [
+              0.14222130179405212,
+              0.5393459796905518,
+              0.6415094137191772,
+              0.0
+            ],
+            "linearColor": [
+              0.017868301320528437,
+              0.2522832908279599,
+              0.3691636014341466
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-6b816514996091b536438fe38aeeff7776be6382be99bedcc6134d4503f919d7",
+      "sceneName": "Level_5",
+      "mapSlot": 5,
+      "sourceSceneSha256": "c0873c086eba7f9aee20c4e683f5ade8a5b3e0e81634cae59aaee23804f9c3bf",
+      "surfaces": [
+        {
+          "objectId": "map-water:level10:463613",
+          "kind": "ocean",
+          "segment": 0,
+          "source": "serialized-global-water-renderer",
+          "sourceRendererPathId": 463613,
+          "sourceHierarchy": [
+            "Misc",
+            "Water",
+            "Collision"
+          ],
+          "sourceMesh": "Plane",
+          "sourceVertices": 121,
+          "sourceTriangles": 200,
+          "corners": [
+            [
+              -2500.0,
+              -1.0000000000000555,
+              -2500.0
+            ],
+            [
+              2500.0,
+              -1.0000000000000555,
+              -2500.0
+            ],
+            [
+              2500.0,
+              -1.0000000000000555,
+              2500.0
+            ],
+            [
+              -2500.0,
+              -1.0000000000000555,
+              2500.0
+            ]
+          ],
+          "material": {
+            "name": "M_WaterTest",
+            "shader": "GD/Water-GD",
+            "asset": "sharedassets1.assets",
+            "pathId": 4,
+            "colorProperty": "_WaterColorPrimary",
+            "colorFlags": 0,
+            "storedColor": [
+              0.14222130179405212,
+              0.5393459796905518,
+              0.6415094137191772,
+              0.0
+            ],
+            "linearColor": [
+              0.017868301320528437,
+              0.2522832908279599,
+              0.3691636014341466
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-c5e3153763361ca8c67faa81ab092910a6c683fe1b51752df3c865f883e35ec8",
+      "sceneName": "Level_6",
+      "mapSlot": 6,
+      "sourceSceneSha256": "9a94100adf0f821744c0c0613db7cb882188a945a967f5671fd91050d85c53c3",
+      "surfaces": [
+        {
+          "objectId": "map-water:level11:417539",
+          "kind": "ocean",
+          "segment": 0,
+          "source": "serialized-global-water-renderer",
+          "sourceRendererPathId": 417539,
+          "sourceHierarchy": [
+            "Misc",
+            "Water",
+            "Collision"
+          ],
+          "sourceMesh": "Plane",
+          "sourceVertices": 121,
+          "sourceTriangles": 200,
+          "corners": [
+            [
+              -2500.0,
+              -1.0000000000000555,
+              -2500.0
+            ],
+            [
+              2500.0,
+              -1.0000000000000555,
+              -2500.0
+            ],
+            [
+              2500.0,
+              -1.0000000000000555,
+              2500.0
+            ],
+            [
+              -2500.0,
+              -1.0000000000000555,
+              2500.0
+            ]
+          ],
+          "material": {
+            "name": "M_WaterTest",
+            "shader": "GD/Water-GD",
+            "asset": "sharedassets1.assets",
+            "pathId": 4,
+            "colorProperty": "_WaterColorPrimary",
+            "colorFlags": 0,
+            "storedColor": [
+              0.14222130179405212,
+              0.5393459796905518,
+              0.6415094137191772,
+              0.0
+            ],
+            "linearColor": [
+              0.017868301320528437,
+              0.2522832908279599,
+              0.3691636014341466
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-7ff0a922deb8564b4882ae66a7563266f72382d8b30ae33e374d2e80089edddf",
+      "sceneName": "Level_7",
+      "mapSlot": 7,
+      "sourceSceneSha256": "a4f763d3b9a2bb028ee0d4fe447d5daad04583b82180c989aca7fdfa5e37b0e5",
+      "surfaces": [
+        {
+          "objectId": "map-water:level12:428544",
+          "kind": "ocean",
+          "segment": 0,
+          "source": "serialized-global-water-renderer",
+          "sourceRendererPathId": 428544,
+          "sourceHierarchy": [
+            "Misc",
+            "Water",
+            "Collision"
+          ],
+          "sourceMesh": "Plane",
+          "sourceVertices": 121,
+          "sourceTriangles": 200,
+          "corners": [
+            [
+              -2500.0,
+              -1.0000000000000555,
+              -2500.0
+            ],
+            [
+              2500.0,
+              -1.0000000000000555,
+              -2500.0
+            ],
+            [
+              2500.0,
+              -1.0000000000000555,
+              2500.0
+            ],
+            [
+              -2500.0,
+              -1.0000000000000555,
+              2500.0
+            ]
+          ],
+          "material": {
+            "name": "M_WaterTest",
+            "shader": "GD/Water-GD",
+            "asset": "sharedassets1.assets",
+            "pathId": 4,
+            "colorProperty": "_WaterColorPrimary",
+            "colorFlags": 0,
+            "storedColor": [
+              0.14222130179405212,
+              0.5393459796905518,
+              0.6415094137191772,
+              0.0
+            ],
+            "linearColor": [
+              0.017868301320528437,
+              0.2522832908279599,
+              0.3691636014341466
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-4670b2c86b6d7327b91a91b70a65b1b17e80799f42d0615d86edd71599fb91e2",
+      "sceneName": "Level_8",
+      "mapSlot": 8,
+      "sourceSceneSha256": "8ee8ca14bdedbc92755caeb11cb7821e54232489be479cb7f92b45a4d7219793",
+      "surfaces": [
+        {
+          "objectId": "map-water:level13:320541",
+          "kind": "ocean",
+          "segment": 0,
+          "source": "serialized-global-water-renderer",
+          "sourceRendererPathId": 320541,
+          "sourceHierarchy": [
+            "Misc",
+            "Water",
+            "Collision"
+          ],
+          "sourceMesh": "Plane",
+          "sourceVertices": 121,
+          "sourceTriangles": 200,
+          "corners": [
+            [
+              -2500.0,
+              -1.0000000000000555,
+              -2500.0
+            ],
+            [
+              2500.0,
+              -1.0000000000000555,
+              -2500.0
+            ],
+            [
+              2500.0,
+              -1.0000000000000555,
+              2500.0
+            ],
+            [
+              -2500.0,
+              -1.0000000000000555,
+              2500.0
+            ]
+          ],
+          "material": {
+            "name": "M_WaterTest",
+            "shader": "GD/Water-GD",
+            "asset": "sharedassets1.assets",
+            "pathId": 4,
+            "colorProperty": "_WaterColorPrimary",
+            "colorFlags": 0,
+            "storedColor": [
+              0.14222130179405212,
+              0.5393459796905518,
+              0.6415094137191772,
+              0.0
+            ],
+            "linearColor": [
+              0.017868301320528437,
+              0.2522832908279599,
+              0.3691636014341466
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-c262b4919f04de612f91bae02ef35de5f061a59422b38c390294f15ff33f297f",
+      "sceneName": "Level_9",
+      "mapSlot": 9,
+      "sourceSceneSha256": "7e170a94955ff9a42a9fac292c9e6a6786fefbc2fc4f5018bf616529b988a00b",
+      "surfaces": [
+        {
+          "objectId": "map-water:level14:504954",
+          "kind": "ocean",
+          "segment": 0,
+          "source": "serialized-global-water-renderer",
+          "sourceRendererPathId": 504954,
+          "sourceHierarchy": [
+            "Misc",
+            "Water",
+            "Collision"
+          ],
+          "sourceMesh": "Plane",
+          "sourceVertices": 121,
+          "sourceTriangles": 200,
+          "corners": [
+            [
+              -2500.0,
+              -1.0000000000000555,
+              -2500.0
+            ],
+            [
+              2500.0,
+              -1.0000000000000555,
+              -2500.0
+            ],
+            [
+              2500.0,
+              -1.0000000000000555,
+              2500.0
+            ],
+            [
+              -2500.0,
+              -1.0000000000000555,
+              2500.0
+            ]
+          ],
+          "material": {
+            "name": "M_WaterTest",
+            "shader": "GD/Water-GD",
+            "asset": "sharedassets1.assets",
+            "pathId": 4,
+            "colorProperty": "_WaterColorPrimary",
+            "colorFlags": 0,
+            "storedColor": [
+              0.14222130179405212,
+              0.5393459796905518,
+              0.6415094137191772,
+              0.0
+            ],
+            "linearColor": [
+              0.017868301320528437,
+              0.2522832908279599,
+              0.3691636014341466
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-8eaa8e664df5251276018fc72b1c4bb4e48ae1e882f95cff392f139eb06d366d",
+      "sceneName": "Level_10",
+      "mapSlot": 10,
+      "sourceSceneSha256": "01c16189deb03ed37f938bea1c086913d2ae41bd05e00e35128d8891ef498547",
+      "surfaces": [
+        {
+          "objectId": "map-water:level15:367920",
+          "kind": "ocean",
+          "segment": 0,
+          "source": "serialized-global-water-renderer",
+          "sourceRendererPathId": 367920,
+          "sourceHierarchy": [
+            "Misc",
+            "Water",
+            "Collision"
+          ],
+          "sourceMesh": "Plane",
+          "sourceVertices": 121,
+          "sourceTriangles": 200,
+          "corners": [
+            [
+              -2500.0,
+              -1.0000000000000555,
+              -2500.0
+            ],
+            [
+              2500.0,
+              -1.0000000000000555,
+              -2500.0
+            ],
+            [
+              2500.0,
+              -1.0000000000000555,
+              2500.0
+            ],
+            [
+              -2500.0,
+              -1.0000000000000555,
+              2500.0
+            ]
+          ],
+          "material": {
+            "name": "M_WaterTest",
+            "shader": "GD/Water-GD",
+            "asset": "sharedassets1.assets",
+            "pathId": 4,
+            "colorProperty": "_WaterColorPrimary",
+            "colorFlags": 0,
+            "storedColor": [
+              0.14222130179405212,
+              0.5393459796905518,
+              0.6415094137191772,
+              0.0
+            ],
+            "linearColor": [
+              0.017868301320528437,
+              0.2522832908279599,
+              0.3691636014341466
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-f17aae9a4d774c82af1a9a5a0df07387ec7c8962da0fb3de6cc001991310bd96",
+      "sceneName": "Level_11",
+      "mapSlot": 11,
+      "sourceSceneSha256": "73d0155bf386ab6e12f7fced90f86291cd7f750d691fe8cd5c978b3435aced9c",
+      "surfaces": [
+        {
+          "objectId": "map-water:level16:505708",
+          "kind": "ocean",
+          "segment": 0,
+          "source": "serialized-global-water-renderer",
+          "sourceRendererPathId": 505708,
+          "sourceHierarchy": [
+            "Misc",
+            "Water",
+            "Collision"
+          ],
+          "sourceMesh": "Plane",
+          "sourceVertices": 121,
+          "sourceTriangles": 200,
+          "corners": [
+            [
+              -2500.0,
+              -1.0000000000000555,
+              -2500.0
+            ],
+            [
+              2500.0,
+              -1.0000000000000555,
+              -2500.0
+            ],
+            [
+              2500.0,
+              -1.0000000000000555,
+              2500.0
+            ],
+            [
+              -2500.0,
+              -1.0000000000000555,
+              2500.0
+            ]
+          ],
+          "material": {
+            "name": "M_WaterTest",
+            "shader": "GD/Water-GD",
+            "asset": "sharedassets1.assets",
+            "pathId": 4,
+            "colorProperty": "_WaterColorPrimary",
+            "colorFlags": 0,
+            "storedColor": [
+              0.14222130179405212,
+              0.5393459796905518,
+              0.6415094137191772,
+              0.0
+            ],
+            "linearColor": [
+              0.017868301320528437,
+              0.2522832908279599,
+              0.3691636014341466
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-9c64f3771cdcf67565276e4a1590ca37bbb5e43e4f8218282611a84a5833f977",
+      "sceneName": "Level_12",
+      "mapSlot": 12,
+      "sourceSceneSha256": "9c5f18037b9f34a8c77b7948aac478fa9b0171377b0c2240f35b55cbebbe0035",
+      "surfaces": [
+        {
+          "objectId": "map-water:level17:321029",
+          "kind": "ocean",
+          "segment": 0,
+          "source": "serialized-global-water-renderer",
+          "sourceRendererPathId": 321029,
+          "sourceHierarchy": [
+            "Misc",
+            "Water",
+            "Collision"
+          ],
+          "sourceMesh": "Plane",
+          "sourceVertices": 121,
+          "sourceTriangles": 200,
+          "corners": [
+            [
+              -2500.0,
+              -1.0000000000000555,
+              -2500.0
+            ],
+            [
+              2500.0,
+              -1.0000000000000555,
+              -2500.0
+            ],
+            [
+              2500.0,
+              -1.0000000000000555,
+              2500.0
+            ],
+            [
+              -2500.0,
+              -1.0000000000000555,
+              2500.0
+            ]
+          ],
+          "material": {
+            "name": "M_WaterTest",
+            "shader": "GD/Water-GD",
+            "asset": "sharedassets1.assets",
+            "pathId": 4,
+            "colorProperty": "_WaterColorPrimary",
+            "colorFlags": 0,
+            "storedColor": [
+              0.14222130179405212,
+              0.5393459796905518,
+              0.6415094137191772,
+              0.0
+            ],
+            "linearColor": [
+              0.017868301320528437,
+              0.2522832908279599,
+              0.3691636014341466
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-3fd6afc96b5eb0c26c0ca0cee44161a54c3fb3cecd458a602e70694abaeb33be",
+      "sceneName": "Level_13",
+      "mapSlot": 13,
+      "sourceSceneSha256": "9c313cf76dfe8fe02714978ce4fba9c05ba0ab2ebafd042cccf0f861283cf1a1",
+      "surfaces": [
+        {
+          "objectId": "map-water:level18:514403",
+          "kind": "ocean",
+          "segment": 0,
+          "source": "serialized-global-water-renderer",
+          "sourceRendererPathId": 514403,
+          "sourceHierarchy": [
+            "Misc",
+            "Water",
+            "Collision"
+          ],
+          "sourceMesh": "Plane",
+          "sourceVertices": 121,
+          "sourceTriangles": 200,
+          "corners": [
+            [
+              -2500.0,
+              -1.0000000000000555,
+              -2500.0
+            ],
+            [
+              2500.0,
+              -1.0000000000000555,
+              -2500.0
+            ],
+            [
+              2500.0,
+              -1.0000000000000555,
+              2500.0
+            ],
+            [
+              -2500.0,
+              -1.0000000000000555,
+              2500.0
+            ]
+          ],
+          "material": {
+            "name": "M_WaterTest",
+            "shader": "GD/Water-GD",
+            "asset": "sharedassets1.assets",
+            "pathId": 4,
+            "colorProperty": "_WaterColorPrimary",
+            "colorFlags": 0,
+            "storedColor": [
+              0.14222130179405212,
+              0.5393459796905518,
+              0.6415094137191772,
+              0.0
+            ],
+            "linearColor": [
+              0.017868301320528437,
+              0.2522832908279599,
+              0.3691636014341466
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-57d291da1c4950bd48a6b9f547c67fc1132bc2d9b714e439fa9ca3db04db8ee5",
+      "sceneName": "Level_14",
+      "mapSlot": 14,
+      "sourceSceneSha256": "f56a57072bf72306385793bcf8358d6e4f255eee3c40694626a4de24778c05aa",
+      "surfaces": [
+        {
+          "objectId": "map-water:level19:327341",
+          "kind": "ocean",
+          "segment": 0,
+          "source": "serialized-global-water-renderer",
+          "sourceRendererPathId": 327341,
+          "sourceHierarchy": [
+            "Misc",
+            "Water",
+            "Collision"
+          ],
+          "sourceMesh": "Plane",
+          "sourceVertices": 121,
+          "sourceTriangles": 200,
+          "corners": [
+            [
+              -2500.0,
+              -1.0000000000000555,
+              -2500.0
+            ],
+            [
+              2500.0,
+              -1.0000000000000555,
+              -2500.0
+            ],
+            [
+              2500.0,
+              -1.0000000000000555,
+              2500.0
+            ],
+            [
+              -2500.0,
+              -1.0000000000000555,
+              2500.0
+            ]
+          ],
+          "material": {
+            "name": "M_WaterTest",
+            "shader": "GD/Water-GD",
+            "asset": "sharedassets1.assets",
+            "pathId": 4,
+            "colorProperty": "_WaterColorPrimary",
+            "colorFlags": 0,
+            "storedColor": [
+              0.14222130179405212,
+              0.5393459796905518,
+              0.6415094137191772,
+              0.0
+            ],
+            "linearColor": [
+              0.017868301320528437,
+              0.2522832908279599,
+              0.3691636014341466
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-56a243e8deb0cf19bf01c15e5e31df48932ae4d9c0d8bed71b296c3782d7138f",
+      "sceneName": "Level_15",
+      "mapSlot": 15,
+      "sourceSceneSha256": "1e6f62552105a58919ab6fe698588abd43ba03fbdfc7e3bac28dde449553db99",
+      "surfaces": [
+        {
+          "objectId": "map-water:level20:453686",
+          "kind": "ocean",
+          "segment": 0,
+          "source": "serialized-global-water-renderer",
+          "sourceRendererPathId": 453686,
+          "sourceHierarchy": [
+            "Misc",
+            "Water",
+            "Collision"
+          ],
+          "sourceMesh": "Plane",
+          "sourceVertices": 121,
+          "sourceTriangles": 200,
+          "corners": [
+            [
+              -2500.0,
+              -1.0000000000000555,
+              -2500.0
+            ],
+            [
+              2500.0,
+              -1.0000000000000555,
+              -2500.0
+            ],
+            [
+              2500.0,
+              -1.0000000000000555,
+              2500.0
+            ],
+            [
+              -2500.0,
+              -1.0000000000000555,
+              2500.0
+            ]
+          ],
+          "material": {
+            "name": "M_WaterTest",
+            "shader": "GD/Water-GD",
+            "asset": "sharedassets1.assets",
+            "pathId": 4,
+            "colorProperty": "_WaterColorPrimary",
+            "colorFlags": 0,
+            "storedColor": [
+              0.14222130179405212,
+              0.5393459796905518,
+              0.6415094137191772,
+              0.0
+            ],
+            "linearColor": [
+              0.017868301320528437,
+              0.2522832908279599,
+              0.3691636014341466
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-eb6172a2e8cfd5ba2c0dde889462d8b42c9aec66da499048b3ad2dd20eb8e3ca",
+      "sceneName": "Level_16",
+      "mapSlot": 16,
+      "sourceSceneSha256": "c1436492973c170d26d6d161f87ac1d02999b4733ced9ed4576d3a2397a07e28",
+      "surfaces": [
+        {
+          "objectId": "map-water:level21:409852",
+          "kind": "ocean",
+          "segment": 0,
+          "source": "serialized-global-water-renderer",
+          "sourceRendererPathId": 409852,
+          "sourceHierarchy": [
+            "Misc",
+            "Water",
+            "Collision"
+          ],
+          "sourceMesh": "Plane",
+          "sourceVertices": 121,
+          "sourceTriangles": 200,
+          "corners": [
+            [
+              -2500.0,
+              -1.0000000000000555,
+              -2500.0
+            ],
+            [
+              2500.0,
+              -1.0000000000000555,
+              -2500.0
+            ],
+            [
+              2500.0,
+              -1.0000000000000555,
+              2500.0
+            ],
+            [
+              -2500.0,
+              -1.0000000000000555,
+              2500.0
+            ]
+          ],
+          "material": {
+            "name": "M_WaterTest",
+            "shader": "GD/Water-GD",
+            "asset": "sharedassets1.assets",
+            "pathId": 4,
+            "colorProperty": "_WaterColorPrimary",
+            "colorFlags": 0,
+            "storedColor": [
+              0.14222130179405212,
+              0.5393459796905518,
+              0.6415094137191772,
+              0.0
+            ],
+            "linearColor": [
+              0.017868301320528437,
+              0.2522832908279599,
+              0.3691636014341466
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-37eb6e7d089da03e1eb2e717ff2439dbf2ee8bd0b4a889e725b07b53530a3921",
+      "sceneName": "Level_17",
+      "mapSlot": 17,
+      "sourceSceneSha256": "2339f2aebeac9646323fe800c4ab11f363f9db58bafbc6edea3e14b7b54c81c1",
+      "surfaces": [
+        {
+          "objectId": "map-water:level22:456792",
+          "kind": "ocean",
+          "segment": 0,
+          "source": "serialized-global-water-renderer",
+          "sourceRendererPathId": 456792,
+          "sourceHierarchy": [
+            "Misc",
+            "Water",
+            "Collision"
+          ],
+          "sourceMesh": "Plane",
+          "sourceVertices": 121,
+          "sourceTriangles": 200,
+          "corners": [
+            [
+              -2500.0,
+              -1.0000000000000555,
+              -2500.0
+            ],
+            [
+              2500.0,
+              -1.0000000000000555,
+              -2500.0
+            ],
+            [
+              2500.0,
+              -1.0000000000000555,
+              2500.0
+            ],
+            [
+              -2500.0,
+              -1.0000000000000555,
+              2500.0
+            ]
+          ],
+          "material": {
+            "name": "M_WaterTest",
+            "shader": "GD/Water-GD",
+            "asset": "sharedassets1.assets",
+            "pathId": 4,
+            "colorProperty": "_WaterColorPrimary",
+            "colorFlags": 0,
+            "storedColor": [
+              0.14222130179405212,
+              0.5393459796905518,
+              0.6415094137191772,
+              0.0
+            ],
+            "linearColor": [
+              0.017868301320528437,
+              0.2522832908279599,
+              0.3691636014341466
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-e1e270e778bfed9c8ff55aa60ac8d5130eee7b817ab1495c580614c4eae9e5a8",
+      "sceneName": "Level_18",
+      "mapSlot": 18,
+      "sourceSceneSha256": "02a25e5118dd4d687223d69a857967ab2b1f0e2a4703eab1e4b13f62196fe2db",
+      "surfaces": [
+        {
+          "objectId": "map-water:level23:368208",
+          "kind": "ocean",
+          "segment": 0,
+          "source": "serialized-global-water-renderer",
+          "sourceRendererPathId": 368208,
+          "sourceHierarchy": [
+            "Misc",
+            "Water",
+            "Collision"
+          ],
+          "sourceMesh": "Plane",
+          "sourceVertices": 121,
+          "sourceTriangles": 200,
+          "corners": [
+            [
+              -2500.0,
+              -1.0000000000000555,
+              -2500.0
+            ],
+            [
+              2500.0,
+              -1.0000000000000555,
+              -2500.0
+            ],
+            [
+              2500.0,
+              -1.0000000000000555,
+              2500.0
+            ],
+            [
+              -2500.0,
+              -1.0000000000000555,
+              2500.0
+            ]
+          ],
+          "material": {
+            "name": "M_WaterTest",
+            "shader": "GD/Water-GD",
+            "asset": "sharedassets1.assets",
+            "pathId": 4,
+            "colorProperty": "_WaterColorPrimary",
+            "colorFlags": 0,
+            "storedColor": [
+              0.14222130179405212,
+              0.5393459796905518,
+              0.6415094137191772,
+              0.0
+            ],
+            "linearColor": [
+              0.017868301320528437,
+              0.2522832908279599,
+              0.3691636014341466
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-25a5bdf427bac0e1aa9e385b744d886c6186a8778bc0582c6b78cdf8fa322050",
+      "sceneName": "Level_19",
+      "mapSlot": 19,
+      "sourceSceneSha256": "6dd483f4883c13b2faaaf7a197126e8610c8a64c748a4ada4464c781f41b9a39",
+      "surfaces": [
+        {
+          "objectId": "map-water:level24:402971",
+          "kind": "ocean",
+          "segment": 0,
+          "source": "serialized-global-water-renderer",
+          "sourceRendererPathId": 402971,
+          "sourceHierarchy": [
+            "Misc",
+            "Water",
+            "Collision"
+          ],
+          "sourceMesh": "Plane",
+          "sourceVertices": 121,
+          "sourceTriangles": 200,
+          "corners": [
+            [
+              -2500.0,
+              -1.0000000000000555,
+              -2500.0
+            ],
+            [
+              2500.0,
+              -1.0000000000000555,
+              -2500.0
+            ],
+            [
+              2500.0,
+              -1.0000000000000555,
+              2500.0
+            ],
+            [
+              -2500.0,
+              -1.0000000000000555,
+              2500.0
+            ]
+          ],
+          "material": {
+            "name": "M_WaterTest",
+            "shader": "GD/Water-GD",
+            "asset": "sharedassets1.assets",
+            "pathId": 4,
+            "colorProperty": "_WaterColorPrimary",
+            "colorFlags": 0,
+            "storedColor": [
+              0.14222130179405212,
+              0.5393459796905518,
+              0.6415094137191772,
+              0.0
+            ],
+            "linearColor": [
+              0.017868301320528437,
+              0.2522832908279599,
+              0.3691636014341466
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-5828be29072b7daedd736c3b27fd13ad4d27c737e8187063cafb8887db012c9b",
+      "sceneName": "Level_20",
+      "mapSlot": 20,
+      "sourceSceneSha256": "f91fe50ad49132569a88910f15276e197e589248d749c59ddbe2c2e2f822f006",
+      "surfaces": [
+        {
+          "objectId": "map-water:level25:373899",
+          "kind": "ocean",
+          "segment": 0,
+          "source": "serialized-global-water-renderer",
+          "sourceRendererPathId": 373899,
+          "sourceHierarchy": [
+            "Misc",
+            "Water",
+            "Collision"
+          ],
+          "sourceMesh": "Plane",
+          "sourceVertices": 121,
+          "sourceTriangles": 200,
+          "corners": [
+            [
+              -2500.0,
+              -1.0000000000000555,
+              -2500.0
+            ],
+            [
+              2500.0,
+              -1.0000000000000555,
+              -2500.0
+            ],
+            [
+              2500.0,
+              -1.0000000000000555,
+              2500.0
+            ],
+            [
+              -2500.0,
+              -1.0000000000000555,
+              2500.0
+            ]
+          ],
+          "material": {
+            "name": "M_WaterTest",
+            "shader": "GD/Water-GD",
+            "asset": "sharedassets1.assets",
+            "pathId": 4,
+            "colorProperty": "_WaterColorPrimary",
+            "colorFlags": 0,
+            "storedColor": [
+              0.14222130179405212,
+              0.5393459796905518,
+              0.6415094137191772,
+              0.0
+            ],
+            "linearColor": [
+              0.017868301320528437,
+              0.2522832908279599,
+              0.3691636014341466
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

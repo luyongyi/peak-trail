@@ -234,11 +234,12 @@ test("concurrent daily requests coalesce into one upstream fetch and the warm ca
 
 test("SSE streams carry observable ping events so viewers can detect silently-dead sockets", async () => {
   const { base, close } = await start({ pingIntervalMs: 50 });
+  let reader;
   try {
     const code = deriveRunCode(RUN_ID);
     await register(base, { code, runId: RUN_ID, manifest: { sceneName: "Level_18" } });
     const response = await fetch(`${base}/api/runs/${code}/stream`);
-    const reader = response.body.getReader();
+    reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
     let sawKeepaliveComment = false;
@@ -251,21 +252,30 @@ test("SSE streams carry observable ping events so viewers can detect silently-de
         if (frame.includes(": keepalive")) sawKeepaliveComment = true;
         if (frame.match(/event: ping\ndata: \{\}/)) {
           assert.ok(sawKeepaliveComment, "the comment line accompanies the ping");
-          reader.cancel();
-          await close();
           return;
         }
         continue;
       }
-      const { value, done } = await Promise.race([
-        reader.read(),
-        new Promise((resolveTimeout) => setTimeout(() => resolveTimeout({ done: true }), 100)),
-      ]);
+      // The server clamps heartbeat intervals to >=100ms. A separate 100ms
+      // read timeout races that first ping and falsely reports a 2s failure.
+      // Wait for the actual remaining deadline, retaining just one pending read.
+      let timer;
+      let packet;
+      try {
+        packet = await Promise.race([
+          reader.read(),
+          new Promise((resolveTimeout) => {
+            timer = setTimeout(() => resolveTimeout({ done: true }), Math.max(1, deadline - Date.now()));
+          }),
+        ]);
+      } finally { clearTimeout(timer); }
+      const { value, done } = packet;
       if (done && !value) break;
       if (value) buffer += decoder.decode(value, { stream: true });
     }
     assert.fail("no ping event within 2s");
   } finally {
+    await reader?.cancel().catch(() => {});
     await close();
   }
 });

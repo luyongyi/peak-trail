@@ -4,6 +4,31 @@ The current preferred 3D path is [original triangle GLB export](MESH-CONTRACT.md
 The height-field pipeline below remains a planar-reference/legacy export; it
 does not represent vertical cliffs, overhangs or trees as accurately as the GLBs.
 
+### Global shore ocean
+
+`export_water.py` independently reads every selected source scene and emits
+`data/maps/water.<build>.json`. In build 25306743 all 21 maps use the enabled
+`Misc/Water/Collision` renderer (`M_WaterTest`, `GD/Water-GD`), outside every
+MapHandler chapter root. The nearby `Misc/WaterMesh` is disabled and is **not**
+the source. Segment-only GLBs therefore missed the ocean completely.
+
+The sidecar contains scene/pack identity, renderer/material provenance, original
+plane corners and the shader-declared primary color. The exporter verifies the
+source mesh is a complete horizontal rectangle before reducing its coplanar
+121 vertices / 200 triangles to a mathematically equivalent two-triangle plane.
+Its actual world level is -1 m and its source width/depth is 5000 m; neither is
+guessed from terrain or player positions. This is deliberately separate from
+terrain bounds, following-camera collision geometry, and dynamic fog. It is
+visible only in Shore and the overview. Depth tint, foam, waves and refraction
+remain explicitly unreproduced; primary-color alpha is not used as opacity.
+
+```powershell
+local/python/.venv/Scripts/python.exe PeakTrailPlatform/tools/offline-maps/export_water.py
+node PeakTrailPlatform/tools/stage-site.mjs
+```
+
+No terrain GLB rebuild or map-identity change is needed for this additive sidecar.
+
 This pipeline reads the installed game's serialized Unity scene, mesh, material,
 texture and collider assets. It never launches PEAK, executes game scripts,
 changes game files, or loads scenes into a multiplayer session. Blender is not

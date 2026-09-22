@@ -6,6 +6,7 @@ import { positiveInstanceTransform } from "./geometry-matrices.js";
 import { getSourceEffectMaterial } from "./source-materials.js";
 import { isExplosiveMineMaterial, recordedHiddenMineIndices } from "./mine-visibility.js";
 import { sha256Hex } from "./sha256.js";
+import { isProjectionProxyMaterial } from "./source-render-policy.js";
 
 function assertEmbeddedGlb(bytes) {
   const view = new DataView(bytes);
@@ -125,9 +126,26 @@ function batchStaticMeshes(scene, gameBuildId) {
   const batches = new Map();
   const instance = new THREE.Matrix4();
   const prepared = new Set();
+  let omittedProjectionInstances = 0;
   scene.traverse((object) => {
     if (!object.isMesh || object.isSkinnedMesh) return;
     const materials = Array.isArray(object.material) ? object.material : [object.material];
+    const proxyMaterials = materials.map((material) => isProjectionProxyMaterial(gameBuildId, material));
+    let geometry = object.geometry;
+    if (proxyMaterials.every(Boolean)) {
+      // A Unity depth-projection volume rendered as an opaque glTF surface
+      // becomes a huge false ball. Keep the separate original crystal/prop.
+      omittedProjectionInstances += object.isInstancedMesh ? object.count : 1;
+      return;
+    }
+    if (proxyMaterials.some(Boolean)) {
+      // GLTFLoader normally splits primitives. Preserve unrelated material
+      // groups if a caller supplies a combined mesh, including for raycasts.
+      const groups = geometry.groups.filter((group) => !proxyMaterials[group.materialIndex]);
+      if (!groups.length) return;
+      geometry = geometry.clone(); geometry.clearGroups();
+      for (const group of groups) geometry.addGroup(group.start, group.count, group.materialIndex);
+    }
     const mine = materials.length > 0 && materials.every((material) => {
       const source = material.userData?.peakTerrain;
       return isExplosiveMineMaterial(gameBuildId, source?.sourceMaterial || material.name, source?.sourceColors?.shader);
@@ -142,8 +160,8 @@ function batchStaticMeshes(scene, gameBuildId) {
     }
     const addMatrix = (worldMatrix) => {
       const transform = positiveInstanceTransform(worldMatrix.elements);
-      const key = `${object.geometry.uuid}:${materials.map((material) => material.uuid).join(":")}:${transform.reflected}`;
-      if (!batches.has(key)) batches.set(key, { geometry: object.geometry, material: object.material, reflected: transform.reflected, matrices: [], mines: [] });
+      const key = `${geometry.uuid}:${materials.map((material) => material.uuid).join(":")}:${transform.reflected}`;
+      if (!batches.has(key)) batches.set(key, { geometry, material: object.material, reflected: transform.reflected, matrices: [], mines: [] });
       const batch = batches.get(key);
       batch.matrices.push(new THREE.Matrix4().fromArray(transform.matrix));
       if (mineBounds) {
@@ -175,6 +193,7 @@ function batchStaticMeshes(scene, gameBuildId) {
     root.add(mesh);
   }
   root.userData.drawBatches = batches.size;
+  root.userData.omittedProjectionInstances = omittedProjectionInstances;
   scene.clear();
   return root;
 }
