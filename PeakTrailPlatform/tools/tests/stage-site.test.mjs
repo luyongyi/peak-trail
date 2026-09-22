@@ -64,7 +64,8 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
     writeFile(resolve(repository, "local", "recordings", "private-session.ndjson"), "private trail"),
   ]);
   await Promise.all(HOME_ART_FILES.map(file => writeFile(resolve(assets, 'home-art', file), 'illustration fixture')));
-  const retiredHomeArt = ['volcano-v1.png', 'swamp-v1.png'];
+  const retiredHomeArt = ['shore', 'roots', 'tropics', 'alpine', 'mesa', 'volcano', 'swamp', 'kiln', 'temple']
+    .flatMap(name => [1, 2].map(version => `${name}-v${version}.png`));
   await Promise.all(retiredHomeArt.map(file => writeFile(resolve(assets, 'home-art', file), 'retired illustration')));
   await writeFile(resolve(assets, 'home-art', 'private-session.ndjson'), 'not public');
   await Promise.all(schemas.map((name) => writeFile(resolve(platform, "schema", name), "{}")));

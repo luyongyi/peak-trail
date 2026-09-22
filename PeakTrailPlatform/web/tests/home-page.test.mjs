@@ -7,8 +7,8 @@ import { buildHomeDailyView } from "../src/home-daily.js";
 test("home illustration registry permits exactly nine named assets, including two distinct interiors", () => {
   const expected = ["shore", "roots", "tropics", "alpine", "mesa", "volcano", "swamp", "kiln", "temple"];
   const files = [
-    "shore-v1.png", "roots-v1.png", "tropics-v1.png", "alpine-v1.png", "mesa-v1.png",
-    "volcano-v2.png", "swamp-v2.png", "kiln-v1.png", "temple-v1.png",
+    "shore-v3.png", "roots-v3.png", "tropics-v3.png", "alpine-v3.png", "mesa-v3.png",
+    "volcano-v3.png", "swamp-v3.png", "kiln-v3.png", "temple-v3.png",
   ];
   assert.deepEqual(HOME_ART_FILES, files);
   assert.deepEqual(Object.keys(HOME_ART), expected);
@@ -16,10 +16,24 @@ test("home illustration registry permits exactly nine named assets, including tw
   assert.equal(Object.isFrozen(HOME_ART_FILES), true);
   assert.equal(Object.isFrozen(HOME_ART), true);
   for (const [index, name] of expected.entries()) assert.equal(HOME_ART[name], `./data/home-art/${files[index]}`);
-  for (const oldFile of ["volcano-v1.png", "swamp-v1.png"]) {
+  for (const oldFile of expected.flatMap((name) => [1, 2].map((version) => `${name}-v${version}.png`))) {
     assert.equal(HOME_ART_FILES.includes(oldFile), false, `${oldFile} must not be published`);
     assert.equal(Object.values(HOME_ART).includes(`./data/home-art/${oldFile}`), false);
   }
+});
+
+test("published illustrations have current prompt provenance and retain superseded history", async () => {
+  const provenance = JSON.parse(await readFile(new URL("../../docs/home-art-prompts.json", import.meta.url), "utf8"));
+  assert.equal(provenance.tool, "built-in image_gen");
+  assert.equal(provenance.styleReference, "shore-v3.png");
+  assert.deepEqual(provenance.assets.map(asset => asset.file), HOME_ART_FILES);
+  for (const asset of provenance.assets) {
+    assert.equal(asset.mode, "edit");
+    assert.ok(asset.prompt.length > 100);
+    assert.ok(asset.references.length > 0 && asset.references.length <= 5);
+    assert.ok(provenance.supersededAssets.some(old => old.file === asset.editTarget));
+  }
+  assert.ok(provenance.supersededAssets.every(old => !HOME_ART_FILES.includes(old.file)));
 });
 
 test("confirmed ending branches use interior art, never their preceding biome exterior", () => {

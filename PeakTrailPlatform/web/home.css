@@ -49,7 +49,7 @@
 .home-chapter[data-theme="swamp"] { --chapter-tint: #a5b59a; }
 .home-chapter[data-theme="volcano"] { --chapter-tint: #cb977a; }
 .home-chapter::before { content: ""; pointer-events: none; position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 45%, color-mix(in srgb, var(--chapter-tint) 11%, transparent), transparent 74%); }
-.home-chapter::after { content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 3; background: linear-gradient(180deg, #0c141360 0%, transparent 23%, #0c141305 40%, #0c1413aa 76%, #0c1413f2 100%); }
+.home-chapter::after { content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 3; background: linear-gradient(180deg, #0c141330 0%, transparent 18%, transparent 55%, #0c1413aa 82%, #0c1413f2 100%); }
 .home-chapter-button { appearance: none; width: 100%; height: 100%; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; font: inherit; padding: 0; }
 .home-chapter-button:disabled { cursor: default; }
 .home-chapter-button:focus-visible { outline: 1px solid #d4d4a1; outline-offset: -3px; }
@@ -64,7 +64,8 @@
 .home-chapter-link b { font-size: 16px; font-weight: 400; margin-left: auto; color: var(--chapter-tint); }
 .home-chapter:has(button:not(:disabled):hover) .home-chapter-link { color: #e6e5ca; }
 .home-chapter:has(button:not(:disabled):hover) { background-color: #d4dfb605; }
-.home-survey { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 42%; opacity: .93; transform: scale(1.015); transition: transform .7s ease, opacity .4s; }
+/* Lift the illustrated creatures above the copy without a hard image-card edge. */
+.home-survey { position: absolute; inset: 0; width: 100%; height: calc(100% - 110px); object-fit: cover; object-position: center 60%; mask-image: linear-gradient(#000 80%, transparent); opacity: 1; transform: scale(1.015); transition: transform .7s ease, opacity .4s; }
 .home-chapter:has(button:not(:disabled):hover) .home-survey { transform: scale(1.055); opacity: 1; }
 .home-route-footer { display: flex; justify-content: space-between; align-items: center; gap: 16px; border-top: 1px solid #a7b89c22; min-height: 50px; color: #697e70; font-size: 10px; line-height: 1.7; }
 .home-route-footer p { margin: 0; }

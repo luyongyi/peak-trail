@@ -2,13 +2,13 @@ import { buildHomeDailyView } from "./home-daily.js";
 import { HOME_ART, HOME_ENDINGS } from "./home-art.js";
 
 const COPY = {
-  shore: ["SHORE", "海风、礁石与出发的地方"],
-  roots: ["ROOTS", "沿着盘根错节的山壁向上"],
-  tropics: ["TROPICS", "穿过树冠，走进山野深处"],
-  alpine: ["ALPINE", "越过雪线，继续向高处走"],
-  mesa: ["MESA", "台地与峡谷之间的攀登"],
-  volcano: ["CALDERA", "穿过熔岩平原与低矮岩丘"],
-  swamp: ["GLOOM", "贴地浓雾中，穿过低平湿地"],
+  shore: ["SHORE", "海蜇与海胆，藏在潮水之间"],
+  roots: ["ROOTS", "巨蕈林间，遇见蘑菇小僵尸"],
+  tropics: ["TROPICS", "藤叶深处，小心真菌的毒雾"],
+  alpine: ["ALPINE", "冰松与间歇泉，守着风雪山脊"],
+  mesa: ["MESA", "仙人掌旁，攀过赤色台地"],
+  volcano: ["CALDERA", "神鹫掠过低平的熔岩荒原"],
+  swamp: ["GLOOM", "昏睡雾里，小幽灵若隐若现"],
 };
 
 /** A separate daily presentation: importing a replay must never replace its map. */

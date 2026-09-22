@@ -1,4 +1,4 @@
-# 每日插画首页 · 2026-09-22
+# 每日插画首页 · 2026-09-23
 
 首页保留四个主关卡，以统一手绘风格的 AI 插画呈现主题；不再在首页加载模型预览。
 点击关卡才进入真实地图。Roots 的中文显示统一为「森蕈」。
@@ -30,6 +30,40 @@
 - 旧 v1 与原提示词保留供回溯，但不在发布白名单；提示词文档记录当前版本及
   supersededAssets。`segment 4` 的熔炉/城塞插画及所有真实模型、DLL 均未修改。
 
+## 关卡特色与可爱化修订（v3）
+
+九张图统一替换为 `*-v3.png`。保留手绘色块、笔触与纵深，增加圆润比例、明亮配色、
+实际关卡生物和机关。内置 image_gen 以原插画为编辑目标；海岸 v3 作为全套风格参考，
+原始游戏网格/贴图只作为形状参考。不是游戏实时截图，也不声称复现某局的生成位置。
+
+| 插画 | 核实后采用的特色 | 本地 build 25306743 依据 |
+| --- | --- | --- |
+| 海岸 | 淡紫扁伞海蜇、紫红长刺海胆 | Level_0 Beach_Segment 的 SlipperyJellyfish / Urch；Jelly、M_Urchin |
+| 森蕈 | 巨型斑点蘑菇林、可爱化的橙色蘑菇僵尸、绿色孢子菌及橙色爆炸菌 | Level_0 Roots Segment 的 Mushroom tree / MushroomZombieSpawner / Forest_SporeFungus / Jungle_SporeMushroomExplo |
+| 热带雨林 | 深青绿色团块毒菌、毒雾、尖叶植物；不放僵尸 | Level_1 Jungle_Segment 的 Jungle_SporeMushroom / Jungle_SharpPlant |
+| 雪山 | 冰松与岩石间歇泉 | Level_17 Snow_Segment 的 Ice_Pine / Geysers/Geyser |
+| 台地 | 高枝仙人掌、圆形刺球 | Level_16 Desert_Segment 的 Tall Cactus / Cactus Ball Big |
+| 火山 | 低平熔岩荒原、神鹫与鸟巢 | Level_16 Caldera_Segment 的 Condor / BirdNest；不是白头鹰 |
+| 雾沼（界面雾岛） | 低平湿地、贴地昏睡雾、圆润笑脸小幽灵 | Level_17 Swamp_Segment 的 GhostBallSpawner，以及独立 SleepyFog/StatusFieldGloom；ghost 原贴图 |
+| 城塞 | 围合高塔内部、壁板箭孔、横穿通路的箭道 | Level_17 Temple_Segment 的 ArrowShooter；Gloom Temple/Temple_Model 围墙 |
+| 熔炉 | 围合火山内壁、岩桥、上涨岩浆 | Level_16 Volcano_Segment 的 LavaBridges / RisingLava；外部神鹫不移入熔炉 |
+
+区别不能混淆：森蕈绿菌施加 `Spores`，雨林青绿菌施加 `Poison`；橙菌是击飞爆炸，
+不能全部画成「毒雾地雷」。这些都是有机真菌，不是机械地雷。僵尸存在难度与随机
+生成限制；原场景物件数量不是每局出现数量。静态插画只表达关卡特色。
+
+只读核查和参考文件保存在忽略目录：
+
+- `local/archives/20260923-hazard-audit/`：源模型参考、父链、GO 编号和孢子/毒素 AOE。
+- `local/archives/feature-reference/`：Condor、Ghost、Arrow Shooter 形状和场景归属。
+- 原模型预览保留形状与基础材质，不复现全部自定义着色、透明、动画或游戏光照。
+
+首页图片下方预留文案空间、图片边缘渐隐，并推迟强暗色遮罩；避免新增生物被文字
+遮住。关卡短句同步突出特色。仍只按已确认路线显示四个主关与对应终章，不因插画
+更换改变每日识别、回放、地图几何或 DLL。
+
+旧图及旧提示词保留；发布仅白名单九张 v3，不复制历史版本、原资源参考或私人日志。
+
 ## 路线和交互
 
 每日观察需要合法序号、场景、槽位、时间及精确 build/mapPack 身份。时间过期会明确
@@ -39,7 +73,16 @@
 分支变化时自动收起。首页的地图包独立于历史日志；进入首页地图暂时离开回放，
 再次点「我的足迹」恢复之前选择的本地会话。
 
-## 验证记录
+## v3 验证记录
+
+- 前端 353 项、工具 21 项测试通过，静态入口与语法检查通过。
+- 九幅 1024×1536 插画均完成原图目视验收；当前白名单与提示词记录逐项一致。
+- 浏览器检查 1440×900 桌面四列、390×844 手机两列：本轮四图完整加载，无横向
+  溢出；海蜇/海胆、僵尸、神鹫未被文案挡住。熔炉终章展开加载正确。
+- 替代路线图片按原图验收与路由单元测试验证；未伪造当日路线来显示它们。
+- staging：1307 文件、967.4 MB、21 地图包，只发布九张 v3，无私人日志或旧插画。
+
+## 既有交互验证记录
 
 - 前端 352 项测试、工具 21 项测试通过；静态入口和语法检查通过。
 - 首页数据覆盖全部 21 个真实地图包、过期/缺失/身份冲突及两种互斥路线。
