@@ -64,6 +64,8 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
     writeFile(resolve(repository, "local", "recordings", "private-session.ndjson"), "private trail"),
   ]);
   await Promise.all(HOME_ART_FILES.map(file => writeFile(resolve(assets, 'home-art', file), 'illustration fixture')));
+  const retiredHomeArt = ['volcano-v1.png', 'swamp-v1.png'];
+  await Promise.all(retiredHomeArt.map(file => writeFile(resolve(assets, 'home-art', file), 'retired illustration')));
   await writeFile(resolve(assets, 'home-art', 'private-session.ndjson'), 'not public');
   await Promise.all(schemas.map((name) => writeFile(resolve(platform, "schema", name), "{}")));
 
@@ -182,6 +184,7 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
   await execFileAsync(process.execPath, [resolve(tools, "stage-site.mjs")], options);
   const staged = resolve(platform, "site-dist");
   assert.deepEqual((await readdir(resolve(staged, 'data', 'home-art'))).sort(), [...HOME_ART_FILES].sort(), 'publish every illustration, and no neighboring private files');
+  for (const file of retiredHomeArt) await assert.rejects(access(resolve(staged, 'data', 'home-art', file)), { code: 'ENOENT' }, 'do not publish retired illustration versions');
   const stagedManifestPath = resolve(staged, "data", "maps", "packs", packId, "map-pack.json");
   const stagedManifestBytes = await readFile(stagedManifestPath, "utf8");
   const stagedManifest = JSON.parse(stagedManifestBytes);

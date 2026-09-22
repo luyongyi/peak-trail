@@ -1,11 +1,11 @@
 // Illustrative atmosphere only. Never use these as replay geometry or map evidence.
 export const HOME_ART_FILES = Object.freeze([
   'shore-v1.png', 'roots-v1.png', 'tropics-v1.png', 'alpine-v1.png',
-  'mesa-v1.png', 'volcano-v1.png', 'swamp-v1.png',
+  'mesa-v1.png', 'volcano-v2.png', 'swamp-v2.png',
   'kiln-v1.png', 'temple-v1.png',
 ]);
 export const HOME_ART = Object.freeze(Object.fromEntries(HOME_ART_FILES.map(file => [
-  file.replace('-v1.png', ''), `./data/home-art/${file}`,
+  file.replace(/-v\d+\.png$/, ''), `./data/home-art/${file}`,
 ])));
 
 // Endings reuse the preceding biome enum in game data; use the confirmed route,

@@ -6,12 +6,20 @@ import { buildHomeDailyView } from "../src/home-daily.js";
 
 test("home illustration registry permits exactly nine named assets, including two distinct interiors", () => {
   const expected = ["shore", "roots", "tropics", "alpine", "mesa", "volcano", "swamp", "kiln", "temple"];
-  assert.deepEqual(HOME_ART_FILES, expected.map((name) => `${name}-v1.png`));
+  const files = [
+    "shore-v1.png", "roots-v1.png", "tropics-v1.png", "alpine-v1.png", "mesa-v1.png",
+    "volcano-v2.png", "swamp-v2.png", "kiln-v1.png", "temple-v1.png",
+  ];
+  assert.deepEqual(HOME_ART_FILES, files);
   assert.deepEqual(Object.keys(HOME_ART), expected);
   assert.equal(new Set(HOME_ART_FILES).size, 9);
   assert.equal(Object.isFrozen(HOME_ART_FILES), true);
   assert.equal(Object.isFrozen(HOME_ART), true);
-  for (const name of expected) assert.equal(HOME_ART[name], `./data/home-art/${name}-v1.png`);
+  for (const [index, name] of expected.entries()) assert.equal(HOME_ART[name], `./data/home-art/${files[index]}`);
+  for (const oldFile of ["volcano-v1.png", "swamp-v1.png"]) {
+    assert.equal(HOME_ART_FILES.includes(oldFile), false, `${oldFile} must not be published`);
+    assert.equal(Object.values(HOME_ART).includes(`./data/home-art/${oldFile}`), false);
+  }
 });
 
 test("confirmed ending branches use interior art, never their preceding biome exterior", () => {

@@ -7,8 +7,8 @@ const COPY = {
   tropics: ["TROPICS", "穿过树冠，走进山野深处"],
   alpine: ["ALPINE", "越过雪线，继续向高处走"],
   mesa: ["MESA", "台地与峡谷之间的攀登"],
-  volcano: ["CALDERA", "越过火山，抵达最后一程"],
-  swamp: ["GLOOM", "穿行雾岛，寻找向上的路"],
+  volcano: ["CALDERA", "穿过熔岩平原与低矮岩丘"],
+  swamp: ["GLOOM", "贴地浓雾中，穿过低平湿地"],
 };
 
 /** A separate daily presentation: importing a replay must never replace its map. */
