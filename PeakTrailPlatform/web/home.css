@@ -100,56 +100,24 @@
 .home-footer details button { background: transparent; border: 0; font-size: 10px; padding: 10px 0; color: #849785; cursor: pointer; }
 .home-page button:focus-visible, .home-page summary:focus-visible { outline: 2px solid #d6c98c; outline-offset: 4px; }
 @media (min-width: 1700px) { .home-landscape { height: 53vh; } }
-@media (max-width: 850px) {
-  .home-header { min-height: 86px; }
-  .home-intro { padding-top: 30px; }
-  .home-date-block time { font-size: 32px; }
-  .home-landscape { height: 740px; }
+/* iPad portrait (including the larger Pro); landscape keeps the desktop four columns.
+   Phones and narrow Split View windows have no dedicated layout. */
+@media (min-width: 744px) and (max-width: 1100px) and (orientation: portrait) {
+  .home-header { min-height: 96px; }
+  .home-intro { padding-top: 36px; }
+  .home-date-block time { font-size: 36px; }
+  .home-landscape { height: clamp(900px, 84vh, 1150px); }
   .home-chapters { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, 1fr); }
   .home-chapter { border-bottom: 1px solid #d8e2c614; }
   .home-chapter:nth-child(2) { border-right: 1px solid #d8e2c614; }
-  .home-chapter-copy { bottom: 17px; gap: 7px; }
-  .home-model-status { font-size: 8px; }
-  .home-biome-title { font-size: 26px; }
-  .home-chapter-link { padding-top: 8px; margin-top: 3px; }
+  .home-biome-title { font-size: 30px; }
+  .home-biome-detail { font-size: 12px; }
+  .home-chapter-link { font-size: 12px; }
 }
-@media (max-width: 520px) {
-  .home-page { padding: 0 20px; }
-  .home-header { min-height: 78px; gap: 10px; }
-  .home-header .gate-brand { gap: 8px; }
-  .home-header .gate-brand strong { font-size: 11px; }
-  .home-header .gate-brand small { font-size: 8px; letter-spacing: .04em; }
-  .home-header .brand-mark { width: 30px; height: 30px; }
-  .home-header .gate-brand .brand-mark svg { width: 20px; height: 20px; }
-  .home-actions { gap: 12px; }
-  .home-actions button { font-size: 10px; }
-  .home-replay { padding: 9px; gap: 10px; }
-  .home-live-count { display: none; }
-  .home-live { gap: 5px; }
-  .home-intro { position: relative; padding-bottom: 22px; align-items: flex-start; }
-  .home-intro h1 { font-size: 27px; letter-spacing: .01em; }
-  .home-eyebrow { font-size: 8px; gap: 6px; letter-spacing: .12em; margin-bottom: 15px; }
-  .home-eyebrow b { padding-left: 8px; font-size: 8px; }
-  .home-description { font-size: 10px; margin-top: 12px; padding-right: 10px; }
-  .home-date-block { display: none; }
-  .home-route-heading { font-size: 9px; align-items: flex-start; padding: 12px 0; }
-  .home-countdown { gap: 4px; }
-  .home-countdown button { padding-top: 0; padding-bottom: 0; }
-  .home-landscape { height: 680px; }
-  .home-chapter-number { left: 13px; top: 15px; font-size: 9px; gap: 6px; }
-  .home-model-status { top: 17px; right: 10px; font-size: 7px; }
-  .home-chapter-copy { left: 13px; right: 13px; }
-  .home-biome-title { font-size: 23px; }
-  .home-biome-en { font-size: 8px; letter-spacing: .14em; }
-  .home-biome-detail { font-size: 9px; }
-  .home-route-footer { align-items: flex-start; flex-direction: column; gap: 4px; padding: 12px 0; font-size: 9px; }
-  .home-bottom { margin: 22px 0; align-items: flex-start; }
-  .home-bottom > div { gap: 10px; }
-  .home-bottom strong { font-size: 11px; }
-  .home-bottom p span { font-size: 8px; max-width: 180px; line-height: 1.7; }
-  .home-open-replay { font-size: 10px; white-space: nowrap; }
-  .home-open-replay span { margin-left: 8px; }
-  .home-footer { font-size: 8px; gap: 12px; }
-  .home-live-popover { right: 0; top: 68px; }
+@media (pointer: coarse) and (min-width: 744px) {
+  .home-actions button, .home-open-replay, .home-countdown button { min-height: 44px; }
+  .home-countdown button { min-width: 44px; }
+  .home-chapter:has(button:not(:disabled):hover) .home-survey { transform: scale(1.015); }
 }
+
 @media (prefers-reduced-motion: reduce) { .home-page * { transition: none !important; } }

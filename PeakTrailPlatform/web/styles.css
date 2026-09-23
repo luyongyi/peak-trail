@@ -2380,217 +2380,9 @@ button:disabled {
   }
 }
 
-@media (max-width: 760px) {
-  html,
-  body {
-    overflow: auto;
-  }
 
-  .app-shell {
-    position: relative;
-    inset: auto;
-    grid-template-rows: 64px auto 76px;
-    width: 100%;
-    height: auto;
-    min-height: 100dvh;
-  }
 
-  .topbar {
-    position: sticky;
-    top: 0;
-    grid-template-columns: auto 1fr;
-    gap: 10px;
-    padding: 0 12px;
-  }
 
-  .brand strong {
-    font-size: 0.8rem;
-  }
-
-  .brand-mark {
-    width: 36px;
-    height: 36px;
-  }
-
-  .daily-card {
-    display: none;
-  }
-
-  .top-actions {
-    gap: 7px;
-  }
-
-  .top-actions .button {
-    min-height: 38px;
-    padding: 0 10px;
-    font-size: 0.73rem;
-  }
-
-  .top-actions .button-secondary {
-    width: 38px;
-    padding: 0;
-    font-size: 0;
-  }
-
-  .workspace {
-    display: block;
-  }
-
-  .viewport-panel {
-    height: min(65vh, 570px);
-    min-height: 430px;
-  }
-
-  .segment-navigator {
-    top: 76px;
-    width: calc(100% - 24px);
-  }
-
-  .segment-navigation-main {
-    grid-template-columns: 48px minmax(120px, 1fr) 48px;
-  }
-
-  .segment-step-button span {
-    display: none;
-  }
-
-  .segment-step-button {
-    min-width: 0;
-    padding: 0;
-  }
-
-  .inspector {
-    overflow: visible;
-    border-top: 1px solid var(--line);
-    border-left: 0;
-  }
-
-  .inspector-section {
-    padding: 18px 16px;
-  }
-
-  .controls-section,
-  .players-section,
-  .events-section {
-    display: inline-block;
-    width: 100%;
-    vertical-align: top;
-  }
-
-  .player-list {
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 310px), 1fr));
-    gap: 9px;
-  }
-
-  .empty-state {
-    padding: 18px;
-  }
-
-  .empty-glyph {
-    width: 78px;
-    height: 58px;
-    margin-bottom: 14px;
-  }
-
-  .empty-state p {
-    font-size: 0.82rem;
-  }
-
-  .scene-meta {
-    right: 12px;
-    bottom: 12px;
-    left: 12px;
-  }
-
-  .scene-meta > div {
-    min-width: 0;
-    flex: 1;
-    padding: 8px 10px;
-  }
-
-  .scene-meta strong {
-    max-width: 110px;
-  }
-
-  .event-toast {
-    right: 12px;
-    bottom: 74px;
-    left: 12px;
-  }
-
-  .timeline-panel {
-    position: sticky;
-    bottom: 0;
-    grid-template-columns: 42px 46px minmax(80px, 1fr) 46px;
-    gap: 8px;
-    padding: 12px;
-  }
-
-  .speed-control {
-    display: none;
-  }
-
-  .error-banner {
-    right: 12px;
-    bottom: 88px;
-    width: calc(100vw - 24px);
-  }
-}
-
-@media (max-width: 440px) {
-  .brand span:last-child {
-    display: none;
-  }
-
-  .empty-actions {
-    display: grid;
-  }
-
-  .viewport-toolbar {
-    top: 10px;
-    right: 10px;
-    left: 10px;
-  }
-
-  .segment-navigation-meta {
-    grid-template-columns: auto minmax(70px, 1fr) auto;
-  }
-
-  .segment-mode-button {
-    padding: 0 6px;
-  }
-
-  .segment-load-status {
-    font-size: 0.53rem;
-  }
-
-  .compatibility-pill {
-    max-width: calc(100% - 92px);
-  }
-
-  .compatibility-pill span:last-child {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .scrub-hint {
-    display: none;
-  }
-
-  .player-overview {
-    grid-template-columns: 90px minmax(0, 1fr);
-    gap: 8px;
-  }
-
-  .appearance-media {
-    min-height: 118px;
-  }
-
-  .appearance-avatar {
-    height: 116px;
-  }
-}
 
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -2616,7 +2408,7 @@ button:disabled {
 #sceneCanvas:focus-visible { outline: 1px solid #efb74e80; outline-offset: -2px; }
 .world-summary { color: #adc2ba; font-size: 11px; line-height: 1.6; }
 .world-alert { border-left: 2px solid #e3ae63; padding: 5px 9px; color: #edd5a1; background: #30271d66; font-size: 11px; }
-@media (max-width: 700px) { .camera-actions { flex-wrap: wrap; justify-content: flex-end; } .camera-text-button { padding: 6px; font-size: 10px; } .camera-help { left: 12px; bottom: 75px; max-width: calc(100% - 24px); } }
+
 
 /* ============ 极简入口门：回放 / 直播 ============ */
 .mode-gate {
@@ -2687,7 +2479,7 @@ body.gate-open .app-shell { visibility: hidden; }
 .gate-live-row.is-connected { border-color: #ff8a5e; color: #ffd9a1; }
 .gate-live-row small { color: #93a89f; }
 .gate-footnote { margin-top: 30px; color: #5d716a; font-size: 0.72rem; }
-@media (max-width: 640px) { .gate-cards { grid-template-columns: 1fr; } }
+
 
 /* ============ 顶栏瘦身 ============ */
 .topbar { padding: 8px 14px; gap: 10px; }
@@ -2842,3 +2634,27 @@ body.gate-open .app-shell { visibility: hidden; }
   font-size: 0.8em;
 }
 .segment-navigator:not(.is-collapsed) .segment-current { cursor: pointer; }
+
+/* iPad portrait: keep the full replay controls and stack the inspector below
+   a usable map canvas. iPad landscape and desktop retain the side-by-side view. */
+@media (min-width: 744px) and (max-width: 1100px) and (orientation: portrait) {
+  html, body { overflow: auto; }
+  .app-shell {
+    position: relative;
+    inset: auto;
+    grid-template-rows: 72px auto 84px;
+    width: 100%;
+    height: auto;
+    min-height: 100dvh;
+  }
+  .topbar { position: sticky; top: 0; }
+  .workspace { display: block; }
+  .viewport-panel { height: clamp(460px, 56dvh, 720px); min-height: 460px; }
+  .inspector { overflow: visible; border-top: 1px solid var(--line); border-left: 0; }
+  .player-list { grid-template-columns: repeat(auto-fit, minmax(310px, 1fr)); }
+  .timeline-panel { position: sticky; bottom: 0; }
+}
+@media (pointer: coarse) and (min-width: 744px) {
+  .top-actions .button, .camera-text-button, .camera-button,
+  .segment-mode-button, .play-button, .speed-control select { min-height: 44px; }
+}
