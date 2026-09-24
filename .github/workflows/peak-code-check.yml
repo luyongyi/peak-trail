@@ -12,8 +12,10 @@ jobs:
   web:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
           package-manager-cache: false
@@ -22,3 +24,10 @@ jobs:
           npm --prefix PeakTrailPlatform/web run check
           npm --prefix PeakTrailPlatform/web test
           node --test PeakTrailPlatform/tools/tests/*.test.mjs
+
+  deploy-server:
+    needs: web
+    if: vars.PEAK_SERVER_ENABLED == 'true' && github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    uses: ./.github/workflows/peak-server-deploy.yml
+    with:
+      revision: ${{ github.sha }}

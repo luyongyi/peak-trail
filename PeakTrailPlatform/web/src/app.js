@@ -893,7 +893,7 @@ async function openHomeChapter(map, segment, presentedView) {
 
 // ============ 调试模式：客户端自产演示数据，进入完整直播界面 ============
 const DEMO_PLAYERS = [
-  { id: "demo-mylu", nickname: "Mylu", platform: "Windows" },
+  { id: "demo-climber", nickname: "登山者", platform: "Windows" },
   { id: "demo-peak", nickname: "小峰", platform: "Windows" },
   { id: "demo-scout", nickname: "侦察兵", platform: "Windows" },
 ];

@@ -1,0 +1,54 @@
+name: Deploy PEAK Trail server
+
+on:
+  workflow_call:
+    inputs:
+      revision:
+        description: Exact tested commit on the default branch
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: peak-server-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: vars.PEAK_SERVER_ENABLED == 'true' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    steps:
+      # No checkout or third-party SSH action: the restricted receiver fetches
+      # exactly this tested public commit, and rejects commands other than deploy.
+      - name: Publish through the restricted deployment key
+        shell: bash
+        env:
+          REVISION: ${{ inputs.revision }}
+          DEPLOY_HOST: ${{ vars.PEAK_SERVER_HOST }}
+          DEPLOY_PORT: ${{ vars.PEAK_SERVER_PORT || '22' }}
+          DEPLOY_USER: ${{ vars.PEAK_SERVER_USER || 'peakdeploy' }}
+          DEPLOY_KEY: ${{ secrets.PEAK_DEPLOY_KEY }}
+          KNOWN_HOSTS: ${{ secrets.PEAK_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          [[ "$REVISION" =~ ^[a-f0-9]{40}$ ]] || { echo 'Invalid revision'; exit 1; }
+          [[ "$DEPLOY_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]] || { echo 'Invalid server host'; exit 1; }
+          [[ "$DEPLOY_USER" =~ ^[a-z_][a-z0-9_-]*$ ]] || { echo 'Invalid deployment user'; exit 1; }
+          [[ "$DEPLOY_PORT" =~ ^[1-9][0-9]{0,4}$ ]] && (( DEPLOY_PORT <= 65535 )) || { echo 'Invalid SSH port'; exit 1; }
+          [[ -n "$DEPLOY_KEY" && -n "$KNOWN_HOSTS" ]] || { echo 'Configure production SSH secrets before enabling deployment'; exit 1; }
+          umask 077
+          ssh_dir="$(mktemp -d "$RUNNER_TEMP/peak-ssh.XXXXXX")"
+          trap 'rm -f -- "$ssh_dir/key" "$ssh_dir/known_hosts"; rmdir -- "$ssh_dir"' EXIT
+          printf '%s\n' "$DEPLOY_KEY" > "$ssh_dir/key"
+          printf '%s\n' "$KNOWN_HOSTS" > "$ssh_dir/known_hosts"
+          unset DEPLOY_KEY KNOWN_HOSTS
+          ssh -F /dev/null -T -i "$ssh_dir/key" -p "$DEPLOY_PORT" \
+            -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            -o IPQoS=none \
+            -o "UserKnownHostsFile=$ssh_dir/known_hosts" -o GlobalKnownHostsFile=/dev/null \
+            -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 \
+            "$DEPLOY_USER@$DEPLOY_HOST" "deploy $REVISION"

@@ -11,7 +11,7 @@ PeakTrail/
 ├── PeakTrailRecorder/       唯一需要安装的 Mod 源码
 ├── PeakMapExporter/         编入 Recorder 的地图导出实现与测试
 ├── PeakTrailPlatform/       网页、协议、构建工具和地图索引
-├── .github/workflows/       代码检查；每日更新和 Pages 部署需显式启用
+├── .github/workflows/       代码检查；每日更新与服务器部署带独立开关
 └── local/                  同一个总目录内，但整个目录被 .gitignore 忽略
     ├── assets/
     │   ├── maps/packs/      21 套按 SHA-256 定址的正式地图资源
@@ -85,8 +85,11 @@ Recorder 0.5.0 在日志中记录运行时真正选择的路线，网页优先�
 构建出的网页包含 `data/maps/packs`、`data/game-assets` 和 `data/home-art`；构建
 只复制已登记、已验证的资源，不会带上 `local/recordings` 或 `local/archives`。
 
-当前没有配置 Git 远端，也没有上传 GitHub。GitHub 代码检查不需要大型资源；自动每日更新
-和 Pages 发布默认关闭。资源存储/取回方案与公开分发范围确认后，再配置并启用对应流程。
+代码仓库为 [luyongyi/peak-trail](https://github.com/luyongyi/peak-trail)，GitHub 代码检查不需要大型资源。
+服务器发布采用独立部署密钥、严格主机指纹验证和原子版本切换；仅发布静态站，不开放实时
+足迹服务。服务器资源与部署权限验证完成后才启用 `PEAK_SERVER_ENABLED`，Pages 保持关闭。
+准备脚本不等于服务器已经上线；实际启用状态以 Actions 配置与运行结果为准。
+首次配置、资源边界与剩余操作见 [服务器部署说明](PeakTrailPlatform/deploy/README.md)。
 
 ## 日志与旧目录
 
