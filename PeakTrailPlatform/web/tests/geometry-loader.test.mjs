@@ -9,16 +9,38 @@ import { positiveInstanceTransform } from "../src/geometry-matrices.js";
 import { getSourceEffectMaterial } from "../src/source-materials.js";
 import { isExplosiveMineMaterial, recordedHiddenMineIndices } from "../src/mine-visibility.js";
 import { sha256Hex } from "../src/sha256.js";
-import { isProjectionProxyMaterial } from "../src/source-render-policy.js";
+import { isProjectionProxyMaterial, shadowOnlyNodeIndices } from "../src/source-render-policy.js";
 
 // Use the bundled Three implementation, replacing only network and GLTF parse
 // ports so the loader and batching contracts run without a WebGL canvas.
 const source = (await readFile(new URL("../src/geometry-loader.js", import.meta.url), "utf8"))
   .replace(/^import .*;\r?\n/gm, "").replace(/^export (?=(?:async )?function )/gm, "");
 const compile = (ports = {}) => new Function(
-  "THREE", "GLTFLoader", "MeshoptDecoder", "decodeGeometryBytes", "GEOMETRY_FORMATS", "positiveInstanceTransform", "getSourceEffectMaterial", "isExplosiveMineMaterial", "recordedHiddenMineIndices", "sha256Hex", "fetch", "crypto", "isProjectionProxyMaterial",
+  "THREE", "GLTFLoader", "MeshoptDecoder", "decodeGeometryBytes", "GEOMETRY_FORMATS", "positiveInstanceTransform", "getSourceEffectMaterial", "isExplosiveMineMaterial", "recordedHiddenMineIndices", "sha256Hex", "fetch", "crypto", "isProjectionProxyMaterial", "shadowOnlyNodeIndices",
   `${source}\nreturn { loadGameGeometry, batchStaticMeshes, updateRecordedMineVisibility, updateMapFogSurfaceVisibility, verifiableTopBlend };`,
-)(THREE, ports.GLTFLoader, {}, ports.decode || decodeGeometryBytes, GEOMETRY_FORMATS, positiveInstanceTransform, getSourceEffectMaterial, isExplosiveMineMaterial, recordedHiddenMineIndices, sha256Hex, ports.fetch, ports.crypto || webcrypto, isProjectionProxyMaterial);
+)(THREE, ports.GLTFLoader, {}, ports.decode || decodeGeometryBytes, GEOMETRY_FORMATS, positiveInstanceTransform, getSourceEffectMaterial, isExplosiveMineMaterial, recordedHiddenMineIndices, sha256Hex, ports.fetch, ports.crypto || webcrypto, isProjectionProxyMaterial, ports.shadowOnlyNodeIndices || shadowOnlyNodeIndices);
+
+test("audited shadow-only affine/GPU panels are omitted, same-name solid props remain", () => {
+  const { batchStaticMeshes } = compile();
+  const geometry = new THREE.PlaneGeometry();
+  const material = new THREE.MeshStandardMaterial(); material.name = "Lit";
+  const scene = new THREE.Group(); const associations = new Map();
+  // A parent group also covers GLTFLoader's multi-primitive representation.
+  const floor = new THREE.Group(); floor.add(new THREE.Mesh(geometry, material));
+  associations.set(floor, { nodes: 83 }); scene.add(floor);
+  const walls = new THREE.InstancedMesh(geometry, material, 3);
+  for (let i = 0; i < 3; i++) walls.setMatrixAt(i, new THREE.Matrix4().makeTranslation(i * 100, 0, 0));
+  associations.set(walls, { nodes: 1609 }); scene.add(walls);
+  const prop = new THREE.Mesh(geometry, material); prop.name = "Quad";
+  associations.set(prop, { nodes: 84 }); scene.add(prop);
+  const unknown = new THREE.Mesh(geometry, material); scene.add(unknown);
+  const digest = "db142d322fc18bc65e85fff216e237d9ea32691fa31be651ba4233c40c0ae78c";
+  const root = batchStaticMeshes(scene, "25306743", shadowOnlyNodeIndices(25306743, digest), associations);
+  assert.equal(root.userData.omittedShadowOnlyInstances, 4);
+  assert.equal(root.children.length, 1);
+  assert.equal(root.children[0].count, 2, "ordinary and unknown-identity surfaces survive even with shared geometry/material");
+  geometry.dispose(); material.dispose(); walls.dispose(); root.children[0].dispose();
+});
 
 test("depth-projection balls are omitted while their real crystal and spherical props survive", () => {
   const { batchStaticMeshes } = compile();
@@ -81,13 +103,19 @@ test("loader validates the gzip delivery SHA before decompression and passes unc
     fetch: async () => ({ ok: true, arrayBuffer: async () => compressed.buffer.slice(compressed.byteOffset, compressed.byteOffset + compressed.byteLength) }),
     crypto: { subtle: { digest: async (...args) => { events.push("hash"); return webcrypto.subtle.digest(...args); } } },
     decode: async (...args) => { events.push("decode"); return decodeGeometryBytes(...args); },
+    shadowOnlyNodeIndices: (build, digest) => {
+      events.push("policy");
+      assert.equal(build, "25306743");
+      assert.equal(digest, sha(compressed), "policy receives the computed delivery digest");
+      return new Set();
+    },
   });
   const layer = { geometryUrl: "model.glb.gz", geometryFormat: "glb-instanced-v1+gzip", geometrySha256: sha(compressed) };
-  await loadGameGeometry(layer);
-  assert.deepEqual(events, ["hash", "decode", "parse"]);
+  await loadGameGeometry(layer, undefined, "25306743");
+  assert.deepEqual(events, ["hash", "decode", "parse", "policy"]);
   assert.deepEqual(parsed, original);
   events.length = 0;
-  await assert.rejects(loadGameGeometry({ ...layer, geometrySha256: sha(original) }), /哈希不匹配/);
+  await assert.rejects(loadGameGeometry({ ...layer, geometrySha256: sha(original) }, undefined, "25306743"), /哈希不匹配/);
   assert.deepEqual(events, ["hash"]);
 });
 

@@ -6,7 +6,7 @@ import { positiveInstanceTransform } from "./geometry-matrices.js";
 import { getSourceEffectMaterial } from "./source-materials.js";
 import { isExplosiveMineMaterial, recordedHiddenMineIndices } from "./mine-visibility.js";
 import { sha256Hex } from "./sha256.js";
-import { isProjectionProxyMaterial } from "./source-render-policy.js";
+import { isProjectionProxyMaterial, shadowOnlyNodeIndices } from "./source-render-policy.js";
 
 function assertEmbeddedGlb(bytes) {
   const view = new DataView(bytes);
@@ -119,16 +119,25 @@ function indexedBounds(geometry) {
   return bounds;
 }
 
-/** Keep every original triangle; share repeated rocks/trees and preserve full
+/** Keep every visible source triangle; share repeated rocks/trees and preserve full
  * matrixWorld, including shear that glTF's TRS instancing cannot represent. */
-function batchStaticMeshes(scene, gameBuildId) {
+function batchStaticMeshes(scene, gameBuildId, shadowOnlyNodes = new Set(), associations = new Map()) {
   scene.updateMatrixWorld(true);
   const batches = new Map();
   const instance = new THREE.Matrix4();
   const prepared = new Set();
   let omittedProjectionInstances = 0;
+  let omittedShadowOnlyInstances = 0;
   scene.traverse((object) => {
     if (!object.isMesh || object.isSkinnedMesh) return;
+    // Multi-primitive glTF nodes can own child meshes. Resolve their associated
+    // node before batching; hidden panels must not affect camera/trail raycasts.
+    for (let owner = object; owner && owner !== scene; owner = owner.parent) {
+      if (shadowOnlyNodes.has(associations.get(owner)?.nodes)) {
+        omittedShadowOnlyInstances += object.isInstancedMesh ? object.count : 1;
+        return;
+      }
+    }
     const materials = Array.isArray(object.material) ? object.material : [object.material];
     const proxyMaterials = materials.map((material) => isProjectionProxyMaterial(gameBuildId, material));
     let geometry = object.geometry;
@@ -194,6 +203,7 @@ function batchStaticMeshes(scene, gameBuildId) {
   }
   root.userData.drawBatches = batches.size;
   root.userData.omittedProjectionInstances = omittedProjectionInstances;
+  root.userData.omittedShadowOnlyInstances = omittedShadowOnlyInstances;
   scene.clear();
   return root;
 }
@@ -274,5 +284,6 @@ export async function loadGameGeometry(layer, signal, gameBuildId) {
   assertEmbeddedGlb(bytes);
   const gltf = await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).parseAsync(bytes, "");
   preserveAffineMatrices(gltf);
-  return batchStaticMeshes(gltf.scene, gameBuildId);
+  return batchStaticMeshes(gltf.scene, gameBuildId,
+    shadowOnlyNodeIndices(gameBuildId, digest), gltf.parser.associations);
 }

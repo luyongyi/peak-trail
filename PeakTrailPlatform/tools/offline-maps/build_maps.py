@@ -174,6 +174,13 @@ class Scene:
                 if kind=='MeshRenderer' and meshfilter and cid not in excluded:
                     mr=self.read(cid)
                     if not mr['m_Enabled']: continue
+                    # Unity ShadowCastingMode.ShadowsOnly (3) has no visible
+                    # surface. Alpine's huge light-blocking quads use it.
+                    # Filter this renderer only, not its children or colliders;
+                    # Off/On/TwoSided (0/1/2) still have visible surfaces.
+                    if mr.get('m_CastShadows')==3:
+                        stats['shadowOnlyRenderers']+=1
+                        continue
                     ptr=self.read(meshfilter)['m_Mesh']
                     if not pid(ptr): continue
                     batch=mr.get('m_StaticBatchInfo',{}); world=self.world(tid)
