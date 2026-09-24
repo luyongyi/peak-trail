@@ -83,6 +83,33 @@ capacity and administrator-reviewed cleanup (each complete release is about 1 GB
 The receiver does not delete releases or shared assets. For rollback, an administrator
 can atomically change `current` to a previously verified release while no deploy runs.
 
+### Optional live-service activation
+
+Static deployment remains the default. After the administrator has separately
+installed and reviewed `peak-trail-live.service` and its root-owned launcher,
+creating a root-owned regular file `/srv/peak-trail/live-enabled` (mode `0644`,
+not a symlink) opts deployments into live activation. The launcher must resolve
+`/srv/peak-trail/state/current` on each start and launch the matching release's
+server as an unprivileged service user, not as root. Service state and any private
+recordings must stay outside `site-dist` and outside the Nginx document root.
+
+For this opt-in mode only, grant `peakdeploy` the single sudoers command
+`/usr/bin/systemctl restart peak-trail-live.service` with `NOPASSWD`; no wildcard,
+other service, shell, or general sudo permission. The receiver runs exactly
+`/usr/bin/sudo -n /usr/bin/systemctl restart peak-trail-live.service`, then polls
+unprivileged `systemctl is-active` and `http://127.0.0.1:8787/api/health` for at most
+about 30 seconds. Health must return HTTP 200 with
+`{"ok":true,"service":"peak-trail-live"}`; deployment never queries player data
+or depends on the game's upstream daily-map API for health.
+
+If activation fails, the receiver restores the previous site symlink and restarts
+and verifies its service. If this is the first publication, it removes only the
+newly created `current` symlink; no release is deleted, and the administrator must
+inspect the failed service. A rollback failure is reported explicitly and requires
+administrator intervention. This transaction runs under the same deployment lock.
+The sentinel and service/launcher installation are administrator-controlled and
+are never created or modified by GitHub Actions.
+
 `nginx.example.conf` serves only the static `current` directory on loopback 8080.
 Review it with the existing web-server configuration and HTTPS reverse proxy; do
 not blindly replace existing configuration or expose the live relay on port 8787.
@@ -119,3 +146,25 @@ owner's local connection to this server).
 Confirm `/release.json` over HTTPS after the first deployment before calling the
 site live. If SSH, the resource restore, Nginx or TLS is not ready, leave server
 deployment disabled: passing code tests alone is not a successful site deployment.
+
+## Full site on peak.mylus.cn
+
+`nginx.peak.mylus.cn.conf` adds only this exact hostname, preserving other sites.
+It uses a dedicated Let's Encrypt certificate and a persistent HTTP challenge
+directory `/var/www/peak-trail-acme`. Install the HTTPS config only after issuing
+the certificate; validate Nginx before reload and keep a rollback copy. A Certbot
+deploy hook must validate/reload Nginx when this certificate renews.
+
+`peak-trail-live.service` runs the relay as the separate, non-login `peaklive`
+account. Install the root-owned `live-start.sh` under `/srv/peak-trail`; it resolves
+the current release before launching Node from `/opt/peak-trail/node/bin/node`.
+There are no external npm dependencies. No `--dir` is supplied: incoming live
+records are held in relay memory, not written as recording files on the server.
+
+The owner explicitly chose the original four-character room flow without added
+login/password. `/api/` and `/watch/` are reverse proxied over HTTPS, including
+unbuffered SSE; the process listens only on `127.0.0.1:8787`. A room code is **not**
+strong access control, and live endpoints contain participant identifiers and
+positions. Do not describe this mode as private/authenticated or enable relay
+disk persistence without a separate decision. Personal local import files and
+historical recording archives are never part of deployment.

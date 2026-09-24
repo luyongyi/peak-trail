@@ -7,5 +7,6 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="..\..\src\PeakTrailRecorder\RunCode.cs" Link="RunCode.cs" />
+    <Compile Include="..\..\src\PeakTrailRecorder\LiveRelayConnection.cs" Link="LiveRelayConnection.cs" />
   </ItemGroup>
 </Project>

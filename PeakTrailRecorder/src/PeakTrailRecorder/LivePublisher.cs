@@ -13,8 +13,8 @@ namespace PeakTrailRecorder;
 /// Publishes the session's records to the live relay while the game runs.
 /// Everything happens on one background thread over outbound HTTP only — the
 /// Unity main thread just enqueues already-materialized POCO dictionaries and
-/// never touches sockets. v1 trust model: the 4-character run code is the only
-/// credential, confirmed server-side by re-deriving it from the runId.
+/// never touches sockets. The 4-character run code identifies the run and is
+/// confirmed server-side by re-deriving it from the runId; no login is required.
 /// </summary>
 internal sealed class LivePublisher : IDisposable
 {
@@ -45,9 +45,10 @@ internal sealed class LivePublisher : IDisposable
 
     public LivePublisher(string serverUrl, ManualLogSource log)
     {
-        _serverUrl = serverUrl.TrimEnd('/');
+        var connection = new LiveRelayConnection(serverUrl);
+        _serverUrl = connection.ServerUrl;
         _log = log;
-        _http = new HttpClient { Timeout = HttpClientTimeout };
+        _http = connection.CreateHttpClient(HttpClientTimeout);
         _thread = new Thread(RunLoop)
         {
             IsBackground = true,
@@ -105,7 +106,7 @@ internal sealed class LivePublisher : IDisposable
             {
                 if (!_cancellation.IsCancellationRequested)
                 {
-                    WarnThrottled("Live publisher retrying after: " + exception.Message);
+                    WarnThrottled("Live publisher retrying after: " + exception.GetType().Name);
                 }
                 Thread.Sleep(backoff);
                 backoff = TimeSpan.FromMilliseconds(Math.Min(backoff.TotalMilliseconds * 2, 8000));
@@ -171,7 +172,6 @@ internal sealed class LivePublisher : IDisposable
             string body = JsonConvert.SerializeObject(payload, Formatting.None, RecordingSession.CompactJsonSettings);
             using var content = new StringContent(body, Encoding.UTF8, "application/json");
             using var response = _http.PostAsync($"{_serverUrl}/api/runs", content).GetAwaiter().GetResult();
-            string text = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
             if (response.IsSuccessStatusCode)
             {
                 _code = code;
@@ -187,7 +187,7 @@ internal sealed class LivePublisher : IDisposable
             bool collision = (int)response.StatusCode == 409;
             if (!collision)
             {
-                WarnThrottled($"Relay rejected run registration ({(int)response.StatusCode}): {Truncate(text)}");
+                WarnThrottled($"Relay rejected run registration (HTTP {(int)response.StatusCode}). Check the relay service.");
                 return false;
             }
             // Another runId hashed to this code; the deterministic next attempt
@@ -223,7 +223,6 @@ internal sealed class LivePublisher : IDisposable
                 using var content = new StringContent(body, Encoding.UTF8, "application/x-ndjson");
                 using var response = _http.PostAsync($"{_serverUrl}/api/runs/{_code}/records?producer={Uri.EscapeDataString(_producer ?? "")}", content).GetAwaiter().GetResult();
                 if (response.IsSuccessStatusCode) return true;
-                string text = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
                 int status = (int)response.StatusCode;
                 if (status == 404)
                 {
@@ -236,11 +235,11 @@ internal sealed class LivePublisher : IDisposable
                     WarnThrottled($"Relay throttled a live batch ({status}); dropping it to protect the game.");
                     return true; // Treated as delivered: never block or grow unbounded.
                 }
-                WarnThrottled($"Relay rejected a live batch ({status}): {Truncate(text)}");
+                WarnThrottled($"Relay rejected a live batch (HTTP {status}). Check the relay service.");
             }
             catch (Exception exception)
             {
-                WarnThrottled($"Live batch attempt {attempt} failed: {exception.Message}");
+                WarnThrottled($"Live batch attempt {attempt} failed: {exception.GetType().Name}");
             }
             Thread.Sleep(TimeSpan.FromMilliseconds(250 * attempt));
         }
@@ -255,11 +254,6 @@ internal sealed class LivePublisher : IDisposable
         if (now - _lastWarningAtMs < 60_000 && _lastWarningAtMs != 0) return;
         _lastWarningAtMs = now;
         _log.LogWarning(message);
-    }
-
-    private static string Truncate(string text)
-    {
-        return text.Length <= 200 ? text : text[..200] + "…";
     }
 
     public void Dispose()

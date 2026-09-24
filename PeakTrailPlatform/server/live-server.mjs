@@ -9,6 +9,7 @@
 //     behind a reverse proxy with access control until a token lands.
 //
 // Endpoints:
+//   GET  /api/health                   safe deployment liveness probe
 //   POST /api/runs                     {code, runId, manifest?} -> confirm/register
 //   POST /api/runs/:code/records?producer=ID   body: NDJSON records -> dedupe + fan out
 //   GET  /api/runs                     active runs
@@ -378,6 +379,7 @@ export function createLiveServer(options = {}) {
     const json = (status, payload, headers = {}) => {
       res.writeHead(status, {
         "content-type": "application/json; charset=utf-8",
+        "cache-control": "no-store",
         "access-control-allow-origin": "*",
         "access-control-allow-headers": "content-type",
         "access-control-allow-methods": "GET, POST, OPTIONS",
@@ -395,6 +397,10 @@ export function createLiveServer(options = {}) {
       });
       res.end();
       return;
+    }
+
+    if (method === "GET" && path === "/api/health") {
+      return json(200, { ok: true, service: "peak-trail-live" });
     }
 
     if (method === "POST" && path === "/api/runs") {

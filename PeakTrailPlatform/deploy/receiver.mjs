@@ -8,6 +8,8 @@ import { fileURLToPath } from "node:url";
 export const REPOSITORY_URL = "https://github.com/luyongyi/peak-trail.git";
 export const STATE_ROOT = "/srv/peak-trail/state";
 export const ASSET_ROOT = "/srv/peak-trail/shared/assets";
+export const LIVE_ENABLED_FILE = "/srv/peak-trail/live-enabled";
+const LIVE_SERVICE = "peak-trail-live.service";
 
 export function parseDeployCommand(command) {
   const match = typeof command === "string" && /^deploy ([a-f0-9]{40})$/.exec(command);
@@ -76,6 +78,99 @@ export async function publishAtomically(stateRoot, candidate) {
   catch (error) { await unlink(pending); throw error; }
 }
 
+async function currentPublishedSite(stateRoot) {
+  const current = resolve(stateRoot, "current");
+  const entry = await optionalLstat(current);
+  if (!entry) return null;
+  if (!entry.isSymbolicLink()) throw new Error("Current is not a deployment symlink");
+  return releaseSitePath(stateRoot, resolve(stateRoot, await readlink(current)));
+}
+
+async function removeFirstPublication(stateRoot, candidate) {
+  const site = releaseSitePath(stateRoot, candidate);
+  if (await currentPublishedSite(stateRoot) !== site) {
+    throw new Error("Refusing to remove current: it no longer points to the failed first release");
+  }
+  await unlink(resolve(stateRoot, "current")); // Only the generated symlink; no release files.
+}
+
+const publicationOperations = {
+  readCurrent: currentPublishedSite,
+  publish: publishAtomically,
+  removeFirst: removeFirstPublication,
+};
+
+// Injection is for offline transaction tests; production always uses the filesystem operations above.
+export async function publishAndActivate(stateRoot, candidate, activate = null, operations = publicationOperations) {
+  const previous = await operations.readCurrent(stateRoot);
+  await operations.publish(stateRoot, candidate);
+  if (!activate) return candidate;
+  try {
+    await activate(candidate);
+    return candidate;
+  } catch (activationError) {
+    try {
+      if (await operations.readCurrent(stateRoot) !== candidate) {
+        throw new Error("Current changed during activation; refusing to overwrite another publication");
+      }
+      if (previous) {
+        await operations.publish(stateRoot, previous);
+        await activate(previous);
+      } else {
+        await operations.removeFirst(stateRoot, candidate);
+      }
+    } catch (rollbackError) {
+      const error = new AggregateError([activationError, rollbackError],
+        `Live activation failed and rollback did not complete: ${activationError.message}; rollback: ${rollbackError.message}. Administrator intervention required.`);
+      error.rollbackStatus = "failed";
+      throw error;
+    }
+    const error = new Error(previous
+      ? `Live activation failed; previous site restored and previous service restarted: ${activationError.message}`
+      : `First live activation failed; generated current symlink removed. No previous service exists; administrator must inspect service state: ${activationError.message}`,
+    { cause: activationError });
+    error.rollbackStatus = previous ? "restored" : "removed";
+    throw error;
+  }
+}
+
+export async function liveActivationEnabled(path = LIVE_ENABLED_FILE) {
+  const entry = await optionalLstat(path);
+  if (!entry) return false;
+  if (!entry.isFile() || entry.isSymbolicLink() || entry.uid !== 0 || (entry.mode & 0o022) !== 0 || await realpath(path) !== resolve(path)) {
+    throw new Error("Live activation flag must be a root-owned regular file without symlink ancestors or group/world write access");
+  }
+  return true;
+}
+
+export async function verifyLiveHealth(fetchImpl = fetch) {
+  const response = await fetchImpl("http://127.0.0.1:8787/api/health", { signal: AbortSignal.timeout(2000), redirect: "error" });
+  if (response.status !== 200) {
+    await response.body?.cancel();
+    throw new Error("Live health endpoint is not ready");
+  }
+  const state = await response.json();
+  if (state?.ok !== true || state?.service !== "peak-trail-live") {
+    throw new Error("Live health response is invalid or belongs to another service");
+  }
+}
+
+async function restartLiveService(options) {
+  const serviceOptions = { ...options, timeout: 30_000 };
+  await run("/usr/bin/sudo", ["-n", "/usr/bin/systemctl", "restart", LIVE_SERVICE], serviceOptions);
+  const deadline = Date.now() + 30_000;
+  let failure;
+  do {
+    try {
+      await run("/usr/bin/systemctl", ["is-active", "--quiet", LIVE_SERVICE], { ...serviceOptions, timeout: 2000 });
+      await verifyLiveHealth();
+      return;
+    } catch (error) { failure = error; }
+    await new Promise((accept) => setTimeout(accept, 500));
+  } while (Date.now() < deadline);
+  throw new Error(`Live service did not become healthy: ${failure?.message}`);
+}
+
 const forbiddenNames = new Set(["local", "recordings", "archives", ".git", ".ssh", "node_modules"]);
 
 export async function verifyStagedSite(site) {
@@ -140,6 +235,7 @@ export async function deploy(commit, { stateRoot = STATE_ROOT, assetRoot = ASSET
   }
   await plainDirectory(assetRoot);
   return withDeployLock(stateRoot, async () => {
+    const activateLive = await liveActivationEnabled();
     const releases = resolve(stateRoot, "releases");
     await plainDirectory(releases);
     const release = await mkdtemp(resolve(releases, `${commit.slice(0, 12)}-`));
@@ -164,11 +260,11 @@ export async function deploy(commit, { stateRoot = STATE_ROOT, assetRoot = ASSET
       const site = resolve(release, "PeakTrailPlatform", "site-dist");
       const summary = await verifyStagedSite(site);
       await writeFile(resolve(site, "release.json"), JSON.stringify({ commit, deployedAtUtc: new Date().toISOString(), ...summary }) + "\n", { flag: "wx", mode: 0o644 });
-      await publishAtomically(stateRoot, site);
-      console.log(`Published ${commit}; ${summary.mapPacks} map packs. Previous releases retained.`);
+      await publishAndActivate(stateRoot, site, activateLive ? () => restartLiveService(options) : null);
+      console.log(`Published ${commit}; ${summary.mapPacks} map packs.${activateLive ? " Live service restarted and verified." : " Static-only deployment."} Previous releases retained.`);
       return site;
     } catch (error) {
-      console.error(`Deployment failed. Current site unchanged; incomplete release retained at ${release}`);
+      console.error(`Deployment failed. ${error.rollbackStatus ? `Activation rollback status: ${error.rollbackStatus}.` : "Publication did not complete; inspect current before retrying."} Release retained at ${release}`);
       throw error;
     }
   });

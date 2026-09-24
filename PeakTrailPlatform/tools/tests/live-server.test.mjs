@@ -28,6 +28,16 @@ const register = async (base, body) => {
   return { status: response.status, json: await response.json() };
 };
 
+test("deployment health endpoint exposes no room or player information", async () => {
+  const { base, close } = await start();
+  try {
+    const response = await fetch(`${base}/api/health`);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("cache-control"), "no-store");
+    assert.deepEqual(await response.json(), { ok: true, service: "peak-trail-live" });
+  } finally { await close(); }
+});
+
 const postRecords = async (base, code, producer, records) => {
   const body = records.map((record) => JSON.stringify(record)).join("\n") + "\n";
   const response = await fetch(`${base}/api/runs/${code}/records?producer=${encodeURIComponent(producer)}`, {

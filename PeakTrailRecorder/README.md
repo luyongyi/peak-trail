@@ -142,14 +142,18 @@ build ID is captured so the viewer can refuse to overlay a trace on geometry fro
   by `PeakTrailPlatform/tools/game-assets`, and selected by exact Steam build.
 - Maximum frequency: 5 Hz by default.
 - Optional live publishing (`[Live] Enabled`, default **off**): while recording, a
-  background thread uploads the same records to a relay over outbound HTTP only.
+  background thread uploads the same records to a relay over outbound HTTP(S).
   The relay confirms a 4-character run code derived from the room-shared RunId and
   merges every teammate's upload of the same run into one stream: records carry a
   `roomTs` envelope (Photon's shared clock) and the relay deduplicates on
   `type|playerId|roomTs`. The code and protocol are pinned by cross-language
   vectors (`tests/LiveContract` ↔ `PeakTrailPlatform/server/run-code.mjs`). See
-  `PeakTrailPlatform/server/README.md`; the code is the only credential in v1, so
-  put access control in front of any public relay.
+  `PeakTrailPlatform/server/README.md`. Since 0.7.1, the default `[Live] ServerUrl`
+  is `https://peak.mylus.cn`; set `Enabled = true` to publish directly without a
+  password or token. Existing BepInEx configs keep their saved URL, so update an old
+  localhost URL explicitly. `ServerUrl` accepts HTTP(S) URLs without user information,
+  query strings or fragments; redirects are not followed. The public relay requires
+  no login, so live sessions should be treated as visible to anyone with site access.
 - Adaptive thresholds: 0.25 m movement, 5 degrees yaw, or a 1 second stationary heartbeat.
 - A separate `state` record is emitted whenever stamina changes by at least `0.002`, and at
   least once per second even if the player does not move. It contains `stamina`, `maxStamina`,
@@ -197,8 +201,8 @@ hash. Nicknames, actor numbers, platform, and the ID source are also stored.
 
 These stable identifiers, location trails, stamina curves and item/inventory histories are
 sensitive multiplayer telemetry and can identify or profile friends across sessions. The recorder
-never uploads anything, but users must obtain every participant's consent before recording or
-sharing a trace. This also applies to `PeakTrailHistory.ndjson`, which aggregates every mirrored
+does not upload unless optional live publishing is enabled; users must obtain every participant's
+consent before recording, broadcasting or sharing a trace. This also applies to `PeakTrailHistory.ndjson`, which aggregates every mirrored
 session. Avoid committing recordings to a public Git repository.
 
 ## Build
@@ -219,6 +223,7 @@ For the route reader's synthetic game-boundary tests, run:
 
 ```powershell
 dotnet run --project .\tests\RouteContract -c Release
+dotnet run --project .\tests\LiveContract -c Release -p:DeployModFiles=false
 ```
 
 The new route contract is additive to schema version 1. Head portraits can reuse the

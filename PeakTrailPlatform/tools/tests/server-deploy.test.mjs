@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from "node
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
-import { containedPath, parseDeployCommand, publishAtomically, verifyStagedSite, withDeployLock } from "../../deploy/receiver.mjs";
+import { containedPath, liveActivationEnabled, parseDeployCommand, publishAndActivate, publishAtomically, verifyLiveHealth, verifyStagedSite, withDeployLock } from "../../deploy/receiver.mjs";
 
 const commit = "a1".repeat(20);
 const mapPackId = `sha256-${"ab".repeat(32)}`;
@@ -101,4 +101,105 @@ test("publication refuses normal current directory and external or symlinked tar
   await rm(join(root, "current"));
   await symlink(site, join(site, "shortcut"));
   await assert.rejects(verifyStagedSite(site), /must not contain symlinks/);
+});
+
+function simulatedPublication(initial = "old") {
+  let current = initial;
+  const events = [];
+  return {
+    get current() { return current; }, events,
+    operations: {
+      readCurrent: async () => current,
+      publish: async (_root, target) => { current = target; events.push(`publish:${target}`); },
+      removeFirst: async (_root, target) => { assert.equal(current, target); current = null; events.push(`remove:${target}`); },
+    },
+  };
+}
+
+test("static publication never invokes a service; live activation follows publication", async () => {
+  const state = simulatedPublication();
+  await publishAndActivate("state", "new", null, state.operations);
+  assert.equal(state.current, "new");
+  assert.deepEqual(state.events, ["publish:new"]);
+  await publishAndActivate("state", "newer", async (target) => {
+    assert.equal(state.current, target);
+    state.events.push(`activate:${target}`);
+  }, state.operations);
+  assert.deepEqual(state.events, ["publish:new", "publish:newer", "activate:newer"]);
+});
+
+test("failed live activation restores previous site and restarts its service", async () => {
+  const state = simulatedPublication();
+  await assert.rejects(publishAndActivate("state", "new", async (target) => {
+    assert.equal(state.current, target);
+    state.events.push(`activate:${target}`);
+    if (target === "new") throw new Error("health failed");
+  }, state.operations), (error) => error.rollbackStatus === "restored" && /previous site restored/.test(error.message));
+  assert.equal(state.current, "old");
+  assert.deepEqual(state.events, ["publish:new", "activate:new", "publish:old", "activate:old"]);
+});
+
+test("failed first activation removes only its generated current symlink", async () => {
+  const state = simulatedPublication(null);
+  await assert.rejects(publishAndActivate("state", "new", async () => { throw new Error("service failed"); }, state.operations),
+    (error) => error.rollbackStatus === "removed" && /No previous service exists/.test(error.message));
+  assert.equal(state.current, null);
+  assert.deepEqual(state.events, ["publish:new", "remove:new"]);
+});
+
+test("rollback failure reports both failures without claiming service recovery", async () => {
+  const state = simulatedPublication();
+  await assert.rejects(publishAndActivate("state", "new", async (target) => { throw new Error(`${target} service failed`); }, state.operations),
+    (error) => error.rollbackStatus === "failed" && error.errors.length === 2 && /Administrator intervention required/.test(error.message));
+  assert.equal(state.current, "old");
+});
+
+test("activation rollback refuses to overwrite an intervening publication", async () => {
+  const state = simulatedPublication();
+  await assert.rejects(publishAndActivate("state", "new", async () => {
+    await state.operations.publish("state", "someone-else");
+    throw new Error("service failed");
+  }, state.operations), (error) => error.rollbackStatus === "failed" && /Current changed/.test(error.message));
+  assert.equal(state.current, "someone-else");
+});
+
+test("live health reads only the fixed non-private endpoint and validates its service identity", async () => {
+  await verifyLiveHealth(async (url, options) => {
+    assert.equal(url, "http://127.0.0.1:8787/api/health");
+    assert.equal(options.redirect, "error");
+    assert.ok(options.signal instanceof AbortSignal);
+    return new Response(JSON.stringify({ ok: true, service: "peak-trail-live" }));
+  });
+  for (const body of [{ ok: false, service: "peak-trail-live" }, { ok: true, service: "other" }]) {
+    await assert.rejects(verifyLiveHealth(async () => new Response(JSON.stringify(body))), /Live health response/);
+  }
+  await assert.rejects(verifyLiveHealth(async () => new Response("offline", { status: 503 })), /not ready/);
+});
+
+test("live activation is disabled by default and rejects a directory flag", async (t) => {
+  const root = await temporary(t);
+  assert.equal(await liveActivationEnabled(join(root, "absent")), false);
+  await assert.rejects(liveActivationEnabled(root), /root-owned regular file/);
+});
+
+test("filesystem activation failure restores the old symlink without deleting releases", { skip: process.platform === "win32" && "Production symlink semantics require Linux; exercised in Actions" }, async (t) => {
+  const root = await temporary(t);
+  const first = await fixture(root, "first");
+  const second = await fixture(root, "second");
+  await publishAtomically(root, first);
+  await assert.rejects(publishAndActivate(root, second, async (target) => {
+    if (target === second) throw new Error("failed");
+    assert.equal(await realpath(join(root, "current")), first);
+  }), (error) => error.rollbackStatus === "restored");
+  assert.equal(await realpath(join(root, "current")), first);
+  assert.match(await readFile(join(second, "index.html"), "utf8"), /PEAK Trail/);
+});
+
+test("failed first filesystem activation unlinks current but retains the release", { skip: process.platform === "win32" && "Production symlink semantics require Linux; exercised in Actions" }, async (t) => {
+  const root = await temporary(t);
+  const site = await fixture(root);
+  await assert.rejects(publishAndActivate(root, site, async () => { throw new Error("not healthy"); }),
+    (error) => error.rollbackStatus === "removed");
+  await assert.rejects(realpath(join(root, "current")), { code: "ENOENT" });
+  assert.match(await readFile(join(site, "index.html"), "utf8"), /PEAK Trail/);
 });

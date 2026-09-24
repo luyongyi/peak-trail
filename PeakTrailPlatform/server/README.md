@@ -35,6 +35,7 @@ node PeakTrailPlatform/server/live-server.mjs --port 8787 [--host 127.0.0.1] [--
 
 | 方法/路径 | 说明 |
 | --- | --- |
+| `GET /api/health` | 部署健康检查，仅返回 `{ok:true,service:"peak-trail-live"}`，不含对局或玩家信息 |
 | `POST /api/runs` | 注册/确认 run（code+runId 校验，409=撞码重试下一序号） |
 | `POST /api/runs/:code/records` | NDJSON 批量上传（≤500 行/批，≤1 MB，120 批/分钟） |
 | `GET /api/runs` | 活跃 run 列表（含生产者/观众/去重计数） |
@@ -62,6 +63,16 @@ node --test PeakTrailPlatform/tools/tests/live-server.test.mjs
 多生产者的 `t` 已由中继归一到房间时钟（`localT` 保留原值），回放时间线是全队一致的。
 
 ## 安全边界（公网部署前必读）
+
+### 当前个人服务器部署
+
+- 网页与直播共用 `https://peak.mylus.cn`；HTTPS 网页默认连接同源 `/api/`，不访问公网 `8787`。
+- 中继保持 `--host 127.0.0.1 --port 8787`，由 nginx 转发 `/api/`；SSE 需要 `proxy_buffering off` 和较长读取超时。
+- Recorder 0.7.1 的 `Live.ServerUrl` 默认改为 `https://peak.mylus.cn`。已有 BepInEx 配置不会被默认值覆盖，需要手动更新这一项；`Live.Enabled` 仍由用户控制。
+- 按当前部署选择，不增加账号或口令登录：网页可以列出活跃对局，知晓网址的人可观看直播。4 位码是房间标识，不是可靠访问控制。
+- 不启用 `--dir`，中继只在内存暂存；本地历史足迹不会自动上传。进程重启清空当前直播缓存。
+
+### 原有边界与可选加固
 
 - **码即凭证**：31⁴ ≈ 92 万种组合，可被穷举。v1 请置于反向代理（Caddy/nginx）的
   访问控制之后（basic auth / IP 白名单 / mTLS），或只对小圈子开放。

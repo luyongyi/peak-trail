@@ -86,10 +86,16 @@ Recorder 0.5.0 在日志中记录运行时真正选择的路线，网页优先�
 只复制已登记、已验证的资源，不会带上 `local/recordings` 或 `local/archives`。
 
 代码仓库为 [luyongyi/peak-trail](https://github.com/luyongyi/peak-trail)，GitHub 代码检查不需要大型资源。
-服务器发布采用独立部署密钥、严格主机指纹验证和原子版本切换；仅发布静态站，不开放实时
-足迹服务。服务器资源与部署权限验证完成后才启用 `PEAK_SERVER_ENABLED`，Pages 保持关闭。
+服务器发布采用独立部署密钥、严格主机指纹验证和原子版本切换。站点为 `https://peak.mylus.cn`，
+网页与直播 `/api/` 使用同一 HTTPS 域名；直播进程只监听服务器回环地址，不直接开放 8787。
+按个人使用需求保留四位房号，不增加登录口令。服务器资源与部署权限验证完成后才启用
+`PEAK_SERVER_ENABLED`，Pages 保持关闭。
 准备脚本不等于服务器已经上线；实际启用状态以 Actions 配置与运行结果为准。
 首次配置、资源边界与剩余操作见 [服务器部署说明](PeakTrailPlatform/deploy/README.md)。
+
+Recorder 0.7.1 的默认直播地址为 `https://peak.mylus.cn`。已经生成过 BepInEx 配置的玩家
+还需将 `[Live]` 下的 `ServerUrl` 改为该地址；更新 DLL 不会覆盖已有配置。直播开启时
+只推送运行中的局次，本地足迹继续保存，旧日志不会被自动上传。更换 DLL 前先退出游戏。
 
 ## 日志与旧目录
 

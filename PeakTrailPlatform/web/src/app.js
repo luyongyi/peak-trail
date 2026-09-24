@@ -24,6 +24,7 @@ import { createTrailEstimator, liveChaseTarget, LIVE_TRAIL_S } from "./live-foll
 import { createWakeLock } from "./wake-lock.js";
 import { HomePage } from "./home-page.js";
 import { buildHomeDailyView } from "./home-daily.js";
+import { defaultLiveRelay } from "./live-endpoint.js";
 
 const $ = (id) => document.getElementById(id);
 const elements = {
@@ -652,10 +653,7 @@ function setLiveStatus(text) {
 }
 
 function defaultRelayUrl() {
-  // The relay conventionally lives on :8787 of the same host serving this page,
-  // so a tablet on the LAN never has to type an address.
-  if (!location.hostname) return "";
-  return `${location.protocol}//${location.hostname}:8787`;
+  return defaultLiveRelay(location);
 }
 
 function setSourceMode(mode) {

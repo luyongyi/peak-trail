@@ -15,7 +15,7 @@ namespace PeakTrailRecorder;
 [BepInAutoPlugin]
 public partial class Plugin : BaseUnityPlugin
 {
-    internal const string RecorderVersion = "0.7.0";
+    internal const string RecorderVersion = "0.7.1";
 
     internal static ManualLogSource Log { get; private set; } = null!;
 
@@ -69,8 +69,8 @@ public partial class Plugin : BaseUnityPlugin
         _liveServerUrl = Config.Bind(
             "Live",
             "ServerUrl",
-            "http://127.0.0.1:8787",
-            "Base URL of the PeakTrail live relay. The relay confirms a 4-character code derived from the room-shared RunId and merges every teammate's upload into one run.");
+            LiveRelayConnection.DefaultServerUrl,
+            "Base HTTP(S) URL of the PeakTrail live relay, without user information, query or fragment. The relay confirms a 4-character code derived from the room-shared RunId and merges every teammate's upload into one run.");
 
         _mapExportKey = Config.Bind(
             "MapCapture",
@@ -266,7 +266,7 @@ public partial class Plugin : BaseUnityPlugin
                 }
                 catch (Exception liveException)
                 {
-                    Log.LogWarning($"Live publishing disabled for this session: {liveException.Message}");
+                    Log.LogWarning($"Live publishing disabled for this session ({liveException.GetType().Name}). Check Live ServerUrl.");
                 }
             }
             _session = new RecordingSession(root, Mathf.Clamp(_sampleHz.Value, 1f, 30f), Log, live);

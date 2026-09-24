@@ -1,4 +1,7 @@
 using PeakTrailRecorder;
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
 
 static void Assert(bool condition, string message, string actual = "")
 {
@@ -34,6 +37,38 @@ Assert(code.Length == RunCode.Length, "codes are exactly 4 characters");
 foreach (char character in code)
 {
     Assert(RunCode.Alphabet.Contains(character), "codes use only the unambiguous alphabet");
+}
+
+Assert(LiveRelayConnection.DefaultServerUrl == "https://peak.mylus.cn", "recorder defaults to the deployed HTTPS relay");
+var relay = new LiveRelayConnection(" https://peak.mylus.cn/ ");
+Assert(relay.ServerUrl == LiveRelayConnection.DefaultServerUrl, "relay URL normalizes trailing slash and whitespace");
+using (var client = relay.CreateHttpClient(TimeSpan.FromSeconds(2)))
+{
+    Assert(client.DefaultRequestHeaders.Authorization == null, "direct public publishing does not require credentials");
+}
+
+// A relay response must not redirect telemetry to a different endpoint.
+using (var listener = new TcpListener(IPAddress.Loopback, 0))
+using (var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5)))
+{
+    listener.Start();
+    int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+    string relayUrl = $"http://127.0.0.1:{port}";
+    var reply = Task.Run(async () =>
+    {
+        using TcpClient socket = await listener.AcceptTcpClientAsync(deadline.Token);
+        await using NetworkStream stream = socket.GetStream();
+        using var reader = new StreamReader(stream, Encoding.ASCII, leaveOpen: true);
+        var headers = new List<string>();
+        while (await reader.ReadLineAsync(deadline.Token) is { Length: > 0 } line) headers.Add(line);
+        Assert(!headers.Any(line => line.StartsWith("Authorization:", StringComparison.OrdinalIgnoreCase)), "transport sends no authentication header");
+        byte[] response = Encoding.ASCII.GetBytes($"HTTP/1.1 302 Found\r\nLocation: {relayUrl}/redirected\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+        await stream.WriteAsync(response, deadline.Token);
+    }, deadline.Token);
+    using var client = new LiveRelayConnection(relayUrl).CreateHttpClient(TimeSpan.FromSeconds(3));
+    using var response = await client.GetAsync(relayUrl + "/api/runs", deadline.Token);
+    await reply;
+    Assert(response.StatusCode == HttpStatusCode.Found, "relay redirects are returned, never followed");
 }
 
 Console.WriteLine("PeakTrail live contract passed.");

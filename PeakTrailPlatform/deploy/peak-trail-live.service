@@ -1,0 +1,31 @@
+[Unit]
+Description=PEAK Trail live relay (loopback only)
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/srv/peak-trail/state/current
+
+[Service]
+Type=simple
+User=peaklive
+Group=peaklive
+ExecStart=/srv/peak-trail/live-start.sh
+Restart=on-failure
+RestartSec=3
+Environment=NODE_ENV=production
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+UMask=0077
+MemoryMax=512M
+TasksMax=64
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
