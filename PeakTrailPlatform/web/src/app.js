@@ -26,6 +26,7 @@ import { HomePage } from "./home-page.js";
 import { buildHomeDailyView } from "./home-daily.js";
 import { defaultLiveRelay } from "./live-endpoint.js";
 import { createDailyRefreshClock, createDailySourceReader } from "./daily-refresh.js";
+import { bindCameraTouchControls } from "./camera-touch.js";
 
 const $ = (id) => document.getElementById(id);
 const elements = {
@@ -97,12 +98,14 @@ const elements = {
   currentTime: $("currentTime"),
   totalTime: $("totalTime"),
   speedSelect: $("speedSelect"),
+  phonePanelButton: $("phonePanelButton"),
   topViewButton: $("topViewButton"),
   fitViewButton: $("fitViewButton"),
   freeCameraButton: $("freeCameraButton"),
   cinematicButton: $("cinematicButton"),
   interiorViewButton: $("interiorViewButton"),
   cameraHelp: $("cameraHelp"),
+  cameraTouchControls: $("cameraTouchControls"),
   cameraPlacement: $("cameraPlacement"),
   followHud: $("followHud"),
   followHudText: $("followHudText"),
@@ -2257,9 +2260,28 @@ elements.sessionSelect.addEventListener("change", () => {
   });
 });
 elements.dismissError.addEventListener("click", hideError);
+// Canvas gestures belong to the camera. Keep a separate, reachable route to
+// the stacked inspector so touch users never have to find a tiny scroll margin.
+const replayInspector = document.querySelector(".inspector");
+const isAtPhoneInspector = () => replayInspector.getBoundingClientRect().top < window.innerHeight / 2;
+function updatePhonePanelButton() {
+  const atInspector = isAtPhoneInspector();
+  elements.phonePanelButton.textContent = atInspector ? "地图 ↑" : "玩家 ↓";
+  elements.phonePanelButton.setAttribute("aria-label", atInspector ? "回到地图" : "跳到玩家状态与回放设置");
+}
+elements.phonePanelButton.addEventListener("click", () => {
+  const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+  if (isAtPhoneInspector()) document.querySelector(".app-shell").scrollIntoView({ block: "start", behavior });
+  else replayInspector.scrollIntoView({ block: "start", behavior });
+});
+window.addEventListener("scroll", updatePhonePanelButton, { passive: true, capture: true });
 elements.topViewButton.addEventListener("click", () => viewer?.topView());
 elements.fitViewButton.addEventListener("click", () => viewer?.fitView());
 elements.freeCameraButton.addEventListener("click", () => viewer?.toggleFreeCamera());
+const disposeCameraTouch = bindCameraTouchControls({
+  root: elements.cameraTouchControls, canvas: elements.sceneCanvas,
+  getCamera: () => viewer?.freeCamera,
+});
 elements.interiorViewButton.addEventListener("click", () => viewer?.enterInteriorView());
 elements.worldToggle.addEventListener("change", () => {
   viewer?.setWorldVisibility(elements.worldToggle.checked);
@@ -2269,6 +2291,7 @@ elements.sceneCanvas.addEventListener("cameramodechange", (event) => {
   const free = event.detail.mode === "free";
   elements.freeCameraButton.setAttribute("aria-pressed", String(free));
   elements.cameraHelp.hidden = !free;
+  elements.cameraTouchControls.hidden = !free;
   elements.sceneCanvas.setAttribute("aria-label", free ? event.detail.help : "地图回放，可切换自由相机");
 });
 elements.sceneCanvas.addEventListener("cameraplacement", (event) => { elements.cameraPlacement.textContent = event.detail.note; });
@@ -2373,6 +2396,8 @@ window.addEventListener("drop", async (event) => {
 });
 
 window.addEventListener("beforeunload", () => {
+  window.removeEventListener("scroll", updatePhonePanelButton, true);
+  disposeCameraTouch();
   homePage.dispose();
   dailyClock.dispose();
   state.mapPack?.disposeAssets?.();

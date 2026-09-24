@@ -38,7 +38,32 @@ test("three install steps cover official prerequisites, DLL placement and local 
   assert.match(steps, /BepInEx\/plugins\//);
   assert.match(steps, /BepInEx\/PeakTrailRecordings\//);
   assert.match(steps, /PeakTrailHistory\.ndjson/);
-  assert.match(guide, /iPad 回放需先把日志文件传到设备/);
+  assert.match(guide, /Mod 只装在 Windows 游戏电脑上/);
+  assert.match(guide, /手机、iPad 和桌面都能观看/);
+  assert.match(guide, /手机和 iPad 回放需先把日志文件传到设备/);
+});
+
+test("public code and release links identify the source of the downloadable DLL", () => {
+  const source = html.match(/<section class="home-source"[\s\S]*?<\/section>/)[0];
+  assert.match(source, /网页与 DLL 源码均公开在 GitHub/);
+  assert.match(source, /href="https:\/\/github\.com\/luyongyi\/peak-trail"/);
+  assert.ok(source.includes(`href="https://github.com/luyongyi/peak-trail/tree/${release.sourceRevision}/PeakTrailRecorder"`));
+  assert.ok(source.includes(`href="https://github.com/luyongyi/peak-trail/releases/tag/recorder-v${release.version}"`));
+  assert.ok(source.includes(`DLL v${release.version}`));
+  assert.ok(source.includes(`RELEASE v${release.version}`));
+  assert.equal((source.match(/target="_blank" rel="noopener noreferrer"/g) || []).length, 3);
+  assert.doesNotMatch(source, /开源协议|MIT|随意使用/);
+});
+
+test("phone guide, source links and default finale artwork stay readable without horizontal scrolling", () => {
+  assert.match(html, /viewport-fit=cover/);
+  assert.match(css, /@media \(max-width: 743px\)/);
+  assert.match(css, /safe-area-inset-bottom/);
+  assert.match(css, /\.home-live-guide \{ grid-template-columns: minmax\(0, 1fr\); gap: 18px; \}/);
+  assert.match(css, /\.home-live-guide pre \{[^}]*overflow-wrap: anywhere/);
+  assert.match(css, /\.home-finale figure > img \{ width: 100%;/);
+  assert.match(css, /\.home-source-links a:first-child \{ grid-column: 1 \/ -1; \}/);
+  assert.doesNotMatch(css, /\.home-finale(?:\s+figure)?\s*\{\s*display:\s*none/);
 });
 
 test("optional live instructions preserve local recording and disclose real upload behavior", () => {

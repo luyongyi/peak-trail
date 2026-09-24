@@ -287,7 +287,7 @@ test("dispose restores original tab order and controls, removing every listener"
 });
 
 test("help text explains vertical movement, focus and non-physical spectator navigation", () => {
-  for (const term of ["点击地图", "WASD", "Q / E", "Shift", "Esc", "穿过墙体"]) {
+  for (const term of ["点击地图", "WASD", "Q / E", "Shift", "Esc", "触屏", "方向按钮", "拖动地图", "穿过墙体"]) {
     assert.ok(REPLAY_CAMERA_HELP.includes(term));
   }
 });
@@ -305,4 +305,147 @@ test("automatic interior placement can preserve focus on playback controls and i
   assert.equal(document.activeElement, input);
   replay.enterAt([2, 3, 4]);
   assert.equal(document.activeElement, canvas);
+});
+
+test("touch directions move along camera yaw and world height, focusing the canvas", () => {
+  const { replay, camera, canvas, document } = harness();
+  const expected = {
+    forward: [0.5, 0, 0], back: [-0.5, 0, 0],
+    left: [0, 0, -0.5], right: [0, 0, 0.5],
+    up: [0, 0.5, 0], down: [0, -0.5, 0],
+  };
+  for (const [direction, position] of Object.entries(expected)) {
+    replay.enterAt([0, 0, 0], [1, 0, 0], { focus: false });
+    document.activeElement = { tagName: "BUTTON" };
+    assert.equal(replay.setTouchMovement(direction, true), true);
+    assert.equal(document.activeElement, canvas);
+    assert.equal(replay.update(0.05), true);
+    vector(camera.position, position);
+    replay.setTouchMovement(direction, false);
+    assert.equal(replay.update(0.05), false);
+  }
+});
+
+test("touch input rejects unknown directions and cannot start in orbit, hidden or disposed state", () => {
+  const { replay, canvas, document } = harness();
+  const originalFocus = { tagName: "BUTTON" };
+  document.activeElement = originalFocus;
+  assert.equal(replay.setTouchMovement("forward", true, 1), false);
+  assert.equal(document.activeElement, originalFocus);
+  replay.enterAt([0, 0, 0]);
+  assert.equal(replay.setTouchMovement("teleport", true), false);
+  document.hidden = true;
+  assert.equal(replay.setTouchMovement("forward", true), false);
+  document.hidden = false;
+  document.activeElement = originalFocus;
+  canvas.focus = () => {};
+  assert.equal(replay.setTouchMovement("forward", true), false);
+  assert.equal(replay.touchMovement.size, 0);
+  replay.dispose();
+  assert.equal(replay.setTouchMovement("forward", true), false);
+});
+
+test("duplicate presses and multiple fingers do not accelerate or stop each other", () => {
+  const { replay, camera } = harness();
+  replay.enterAt([0, 0, 0], [0, 0, -1]);
+  replay.setTouchMovement("forward", true, 10);
+  replay.setTouchMovement("forward", true, 10);
+  assert.equal(replay.touchMovement.size, 1);
+  replay.setTouchMovement("forward", true, 11);
+  replay.update(0.05);
+  vector(camera.position, [0, 0, -0.5]);
+  replay.setTouchMovement("forward", false, 10);
+  replay.update(0.05);
+  vector(camera.position, [0, 0, -1]);
+  replay.setTouchMovement("forward", false, 11);
+  assert.equal(replay.update(0.05), false);
+  replay.setTouchMovement("forward", true, 12);
+  replay.setTouchMovement("right", true, 12);
+  replay.setTouchMovement("forward", false, 12);
+  replay.update(0.05);
+  vector(camera.position, [0.5, 0, -1]);
+});
+
+test("keyboard and touch sources release independently, without doubling shared directions", () => {
+  const { replay, camera, key, up } = harness();
+  replay.enterAt([0, 0, 0], [0, 0, -1]);
+  key("KeyW");
+  replay.setTouchMovement("forward", true, 1);
+  replay.update(0.05);
+  vector(camera.position, [0, 0, -0.5]);
+  up("KeyW");
+  replay.update(0.05);
+  vector(camera.position, [0, 0, -1]);
+  key("KeyW");
+  replay.clearTouchMovement();
+  replay.update(0.05);
+  vector(camera.position, [0, 0, -1.5]);
+  replay.setTouchMovement("back", true, 2);
+  assert.equal(replay.update(0.05), false);
+  replay.setTouchMovement("back", false, 2);
+  replay.update(0.05);
+  vector(camera.position, [0, 0, -2]);
+});
+
+test("touch diagonals and vertical combinations have the same bounded speed as keyboard", () => {
+  const { replay, camera } = harness();
+  replay.enterAt([0, 0, 0], [0, 1, -1]);
+  replay.setTouchMovement("forward", true, 1);
+  replay.setTouchMovement("right", true, 2);
+  replay.setTouchMovement("up", true, 3);
+  replay.update(100);
+  assert.ok(Math.abs(camera.position.length() - 0.5) < 1e-8);
+  assert.ok(camera.position.x > 0 && camera.position.y > 0 && camera.position.z < 0);
+});
+
+test("touch movement is cleared on all focus, visibility, mode and placement boundaries", () => {
+  const { replay, canvas, document } = harness();
+  replay.enterAt([0, 0, 0]);
+  for (const clear of [
+    () => canvas.emit("blur"),
+    () => document.defaultView.emit("blur"),
+    () => { document.hidden = true; document.emit("visibilitychange"); document.hidden = false; },
+    () => { document.activeElement = null; replay.update(0.05); replay.focus(); },
+    () => { replay.setMode("orbit"); replay.setMode("free"); },
+    () => replay.enterAt([0, 0, 0]),
+    () => replay.dispose(),
+  ]) {
+    replay.setTouchMovement("forward", true, 1);
+    clear();
+    assert.equal(replay.touchMovement.size, 0);
+    assert.equal(replay.update(0.05), false);
+  }
+});
+
+test("document pointerup and pointercancel fail-safe releases only the matching pad finger", () => {
+  const { replay, document } = harness();
+  replay.enterAt([0, 0, 0]);
+  replay.setTouchMovement("forward", true, 1);
+  replay.setTouchMovement("right", true, 2);
+  document.emit("pointerup", { pointerId: 99 });
+  assert.equal(replay.touchMovement.size, 2);
+  document.emit("pointercancel", { pointerId: 1 });
+  assert.deepEqual([...replay.touchMovement], [[2, "right"]]);
+  document.emit("pointerup", { pointerId: 2 });
+  assert.equal(replay.update(0.05), false);
+});
+
+test("second touch finger can look while holding the pad, without replacing an existing look gesture", () => {
+  const { replay, camera, canvas, document } = harness();
+  replay.enterAt([0, 0, 0], [0, 0, -1]);
+  replay.setTouchMovement("forward", true, 1);
+  canvas.emit("pointerdown", { pointerId: 2, pointerType: "touch", isPrimary: false,
+    button: 0, clientX: 100, clientY: 100 });
+  assert.equal(replay.pointer.id, 2);
+  canvas.emit("pointerdown", { pointerId: 3, pointerType: "touch", isPrimary: false,
+    button: 0, clientX: 100, clientY: 100 });
+  assert.equal(replay.pointer.id, 2);
+  document.emit("pointermove", { pointerId: 2, clientX: 200, clientY: 100 });
+  replay.update(0.05);
+  assert.ok(camera.position.x > 0 && camera.position.z < 0);
+  document.emit("pointerup", { pointerId: 2 });
+  assert.equal(replay.pointer, null);
+  assert.equal(replay.touchMovement.size, 1);
+  document.emit("pointercancel", { pointerId: 1 });
+  assert.equal(replay.update(0.05), false);
 });

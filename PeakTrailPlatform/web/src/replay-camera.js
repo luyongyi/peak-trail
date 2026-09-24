@@ -1,8 +1,9 @@
 const MOVEMENT_KEYS = new Set(["KeyW", "KeyA", "KeyS", "KeyD", "KeyQ", "KeyE", "ShiftLeft", "ShiftRight"]);
+const TOUCH_DIRECTIONS = new Set(["forward", "back", "left", "right", "up", "down"]);
 const MAX_FRAME_SECONDS = 0.05;
 const MAX_PITCH = Math.PI * 0.495;
 
-export const REPLAY_CAMERA_HELP = "点击地图后：WASD 前后左右，Q / E 下降 / 上升，Shift 加速，按住鼠标拖动转向，Esc 返回环绕视角。自由相机可穿过墙体，不模拟玩家碰撞。";
+export const REPLAY_CAMERA_HELP = "点击地图后：WASD 前后左右，Q / E 下降 / 上升，Shift 加速，按住鼠标拖动转向，Esc 返回环绕视角。触屏可按住方向按钮移动，拖动地图转向。自由相机可穿过墙体，不模拟玩家碰撞。";
 
 function typingTarget(target) {
   return Boolean(target && (target.isContentEditable
@@ -38,6 +39,7 @@ export class ReplayCamera {
     this.mode = "orbit";
     this.disposed = false;
     this.keys = new Set();
+    this.touchMovement = new Map();
     this.pointer = null;
     this.savedOrbit = null;
     this.euler = new THREE.Euler(0, 0, 0, "YXZ");
@@ -57,8 +59,12 @@ export class ReplayCamera {
     });
     this.listen(canvas, "pointerdown", (event) => this.onPointerDown(event));
     this.listen(this.document || canvas, "pointermove", (event) => this.onPointerMove(event));
-    this.listen(this.document || canvas, "pointerup", (event) => this.releasePointer(event.pointerId));
-    this.listen(this.document || canvas, "pointercancel", (event) => this.releasePointer(event.pointerId));
+    for (const name of ["pointerup", "pointercancel"]) {
+      this.listen(this.document || canvas, name, (event) => {
+        this.releasePointer(event.pointerId);
+        this.touchMovement.delete(event.pointerId);
+      });
+    }
     this.listen(canvas, "lostpointercapture", () => { this.pointer = null; });
     this.listen(canvas, "contextmenu", (event) => {
       if (this.mode === "free" && this.isFocused()) event.preventDefault();
@@ -80,7 +86,31 @@ export class ReplayCamera {
 
   clearInput() {
     this.keys.clear();
+    this.clearTouchMovement();
     this.releasePointer();
+  }
+
+  /**
+   * Hold/release a touch-pad direction without synthesizing keyboard events.
+   * Bindings should preventDefault on pointerdown, capture that pointer on the
+   * button and pass its pointerId on both press and release/cancel. A source is
+   * idempotent; multiple pointers may hold the same direction independently.
+   */
+  setTouchMovement(direction, active, sourceId = direction) {
+    if (!TOUCH_DIRECTIONS.has(direction)) return false;
+    if (!active) {
+      if (this.touchMovement.get(sourceId) === direction) this.touchMovement.delete(sourceId);
+      return true;
+    }
+    if (this.disposed || this.mode !== "free" || this.document?.hidden) return false;
+    this.focus();
+    if (!this.isFocused()) return false;
+    this.touchMovement.set(sourceId, direction);
+    return true;
+  }
+
+  clearTouchMovement() {
+    this.touchMovement.clear();
   }
 
   releasePointer(pointerId = this.pointer?.id) {
@@ -106,7 +136,11 @@ export class ReplayCamera {
   }
 
   onPointerDown(event) {
-    if (event.isPrimary === false || (event.button !== 0 && event.button !== 2)) return;
+    // A pad finger can be the primary pointer while a second finger looks.
+    // Never replace a currently captured look gesture with another finger.
+    if ((event.isPrimary === false && event.pointerType !== "touch")
+      || (event.pointerType === "touch" && this.pointer)
+      || (event.button !== 0 && event.button !== 2)) return;
     this.focus();
     if (this.mode !== "free") return;
     event.preventDefault();
@@ -211,13 +245,15 @@ export class ReplayCamera {
       return false;
     }
     const elapsed = Number.isFinite(deltaSeconds) ? Math.max(0, Math.min(MAX_FRAME_SECONDS, deltaSeconds)) : 0;
-    if (!elapsed || !this.keys.size) return false;
+    if (!elapsed || (!this.keys.size && !this.touchMovement.size)) return false;
     const yaw = this.euler.y;
     this.forward.set(-Math.sin(yaw), 0, -Math.cos(yaw));
     this.right.set(Math.cos(yaw), 0, -Math.sin(yaw));
-    const forward = Number(this.keys.has("KeyW")) - Number(this.keys.has("KeyS"));
-    const sideways = Number(this.keys.has("KeyD")) - Number(this.keys.has("KeyA"));
-    const vertical = Number(this.keys.has("KeyE")) - Number(this.keys.has("KeyQ"));
+    const touch = new Set(this.touchMovement.values());
+    const held = (key, direction) => Number(this.keys.has(key) || touch.has(direction));
+    const forward = held("KeyW", "forward") - held("KeyS", "back");
+    const sideways = held("KeyD", "right") - held("KeyA", "left");
+    const vertical = held("KeyE", "up") - held("KeyQ", "down");
     this.movement.copy(this.forward).multiplyScalar(forward).addScaledVector(this.right, sideways);
     this.movement.y = vertical;
     if (this.movement.lengthSq() < 1e-12) return false;

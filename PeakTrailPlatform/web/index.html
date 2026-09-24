@@ -2,7 +2,7 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta
       name="description"
       content="PEAK Trail 多人足迹回放器。下载记录 Mod，回看每一次同行。本地导入不上传，实时分享需主动开启。"
@@ -149,7 +149,7 @@
               <p>打开「我的足迹」，导入这个总目录，或选择其中的 <code>PeakTrailHistory.ndjson</code>。按日期、局次切换，拖动时间线回看。</p>
             </li>
           </ol>
-          <div class="home-guide-note"><span aria-hidden="true">↟</span><p>已验证 PEAK 2.4.c / BepInEx 5.4.23.3。Mod 只装在游戏电脑上，观看者无需安装；一人可记录本机已同步的队伍信息，并非全知视角。桌面和 iPad 都能观看，iPad 回放需先把日志文件传到设备，再选择「历史日志文件」。</p></div>
+          <div class="home-guide-note"><span aria-hidden="true">↟</span><p>已验证 PEAK 2.4.c / BepInEx 5.4.23.3。Mod 只装在 Windows 游戏电脑上，观看者无需安装；一人可记录本机已同步的队伍信息，并非全知视角。手机、iPad 和桌面都能观看；手机和 iPad 回放需先把日志文件传到设备，再选择「历史日志文件」。</p></div>
           <div class="home-guide-faq">
             <details>
               <summary><span>想让朋友实时观看？<small>可选 · 默认关闭</small></span><b aria-hidden="true">＋</b></summary>
@@ -182,6 +182,18 @@ ServerUrl = https://peak.mylus.cn</code></pre>
               </div>
             </details>
           </div>
+        </section>
+        <section class="home-source" id="homeSource" aria-labelledby="homeSourceTitle">
+          <div>
+            <p class="home-eyebrow"><span></span> BUILT IN THE OPEN</p>
+            <h2 id="homeSourceTitle">代码可审查，版本有来处。</h2>
+            <p>网页与 DLL 源码均公开在 GitHub。下载前可以查看实现、核对版本，也欢迎反馈问题。</p>
+          </div>
+          <nav class="home-source-links" aria-label="项目源码与 DLL 版本">
+            <a href="https://github.com/luyongyi/peak-trail" target="_blank" rel="noopener noreferrer"><span><small>GITHUB</small>项目仓库</span><b aria-hidden="true">↗</b></a>
+            <a href="https://github.com/luyongyi/peak-trail/tree/8cae7236e6eef0f8d6705837273082e73ae7f270/PeakTrailRecorder" target="_blank" rel="noopener noreferrer"><span><small>DLL v0.7.1</small>对应源码</span><b aria-hidden="true">↗</b></a>
+            <a href="https://github.com/luyongyi/peak-trail/releases/tag/recorder-v0.7.1" target="_blank" rel="noopener noreferrer"><span><small>RELEASE v0.7.1</small>发布与校验</span><b aria-hidden="true">↗</b></a>
+          </nav>
         </section>
         <footer class="home-footer"><span>非官方粉丝工具 · 与 Landfall / Aggro Crab 无关联</span><details><summary>开发工具</summary><button class="gate-debug" id="gateDebug" type="button">演示直播（非真实对局）</button></details><span>本地导入不上传 · 直播需主动开启</span></footer>
       </div>
@@ -252,7 +264,7 @@ ServerUrl = https://peak.mylus.cn</code></pre>
             <div class="camera-actions" aria-label="视角控制">
               <button class="camera-text-button" id="interiorViewButton" type="button" title="移到已记录玩家中心（非眼位）；没有记录时寻找真实模型内部地板">进入关内</button>
               <button class="camera-text-button" id="cinematicButton" type="button" title="沿路径自动跟随当前玩家，每 60 秒轮换；点击玩家卡 ◎ 可锁定">自动跟随</button>
-              <button class="camera-text-button" id="freeCameraButton" type="button" aria-pressed="false">自由相机 WASD</button>
+              <button class="camera-text-button" id="freeCameraButton" type="button" aria-pressed="false">自由相机<span class="camera-help-desktop"> WASD</span></button>
               <button class="icon-button" id="topViewButton" type="button" title="俯视视角" aria-label="俯视视角">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 7l8 4 8-4-8-4Zm-8 9 8 4 8-4M4 17l8 4 8-4" /></svg>
               </button>
@@ -263,8 +275,22 @@ ServerUrl = https://peak.mylus.cn</code></pre>
           </div>
 
           <div class="camera-help" id="cameraHelp" role="status" hidden>
-            <strong>自由相机</strong><span>点击地图 · WASD 移动 · Q/E 升降 · Shift 加速 · 拖动转向 · Esc 返回</span>
+            <strong>自由相机</strong><span class="camera-help-desktop">点击地图 · WASD 移动 · Q/E 升降 · Shift 加速 · 拖动转向 · Esc 返回</span>
+            <span class="camera-help-touch">拖动地图转向 · 按住方向键移动 · 再点「自由相机」返回环绕</span>
             <small id="cameraPlacement">可穿墙的回放摄像机，不模拟玩家碰撞</small>
+          </div>
+
+          <div class="camera-touch-controls" id="cameraTouchControls" role="group" aria-label="按住移动自由相机" hidden>
+            <div class="camera-touch-pad">
+              <button class="camera-move-forward" data-camera-move="forward" type="button" aria-label="按住前进">前</button>
+              <button class="camera-move-left" data-camera-move="left" type="button" aria-label="按住左移">左</button>
+              <button class="camera-move-back" data-camera-move="back" type="button" aria-label="按住后退">后</button>
+              <button class="camera-move-right" data-camera-move="right" type="button" aria-label="按住右移">右</button>
+            </div>
+            <div class="camera-touch-height">
+              <button data-camera-move="up" type="button" aria-label="按住上升">升</button>
+              <button data-camera-move="down" type="button" aria-label="按住下降">降</button>
+            </div>
           </div>
 
           <nav class="segment-navigator is-collapsed" id="segmentNavigator" aria-label="关卡分区导航" hidden>
@@ -511,6 +537,7 @@ ServerUrl = https://peak.mylus.cn</code></pre>
             <option value="4">4×</option>
           </select>
         </label>
+        <button class="phone-panel-button" id="phonePanelButton" type="button" aria-label="跳到玩家状态与回放设置">玩家 ↓</button>
       </footer>
     </div>
 

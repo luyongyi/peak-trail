@@ -2658,3 +2658,318 @@ body.gate-open .app-shell { visibility: hidden; }
   .top-actions .button, .camera-text-button, .camera-button,
   .segment-mode-button, .play-button, .speed-control select { min-height: 44px; }
 }
+
+/* Touch free-camera controls complement OrbitControls' one/two-finger gestures.
+   The application only reveals the pad while free-camera mode is active. */
+.camera-touch-controls,
+.camera-help-touch,
+.phone-panel-button { display: none; }
+.camera-touch-controls[hidden] { display: none !important; }
+
+@media (max-width: 743px), (max-width: 950px) and (max-height: 500px) and (orientation: landscape), (pointer: coarse) {
+  .camera-touch-controls {
+    position: absolute;
+    z-index: 7;
+    right: 10px;
+    bottom: 76px;
+    left: 10px;
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    pointer-events: none;
+  }
+  .camera-touch-pad,
+  .camera-touch-height {
+    display: flex;
+    gap: 3px;
+    padding: 3px;
+    border: 1px solid var(--line-strong);
+    border-radius: 11px;
+    background: rgba(10, 20, 18, 0.9);
+    backdrop-filter: blur(12px);
+    pointer-events: auto;
+  }
+  .camera-touch-controls button {
+    display: grid;
+    min-width: 44px;
+    min-height: 44px;
+    place-items: center;
+    padding: 0 5px;
+    border: 0;
+    border-radius: 7px;
+    background: rgba(255, 255, 255, 0.055);
+    color: var(--text);
+    font-size: 0.85rem;
+    cursor: pointer;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .camera-touch-controls button:active,
+  .camera-touch-controls button[data-held] {
+    background: var(--accent-soft);
+    color: var(--accent-strong);
+  }
+  .camera-help { bottom: 140px; }
+  .camera-help-desktop { display: none; }
+  .camera-help-touch { display: inline; }
+}
+
+/* Phones use a single document scroll: map first, then player details. A fixed
+   timeline keeps seeking/playback reachable without trapping the map in a tiny
+   independently scrolling pane. Desktop and iPad layouts above stay intact. */
+@media (max-width: 743px), (max-width: 950px) and (max-height: 500px) and (orientation: landscape) {
+  html, body {
+    min-width: 320px;
+    height: auto;
+    overflow-x: clip;
+    overflow-y: auto;
+  }
+  body { overflow: visible; }
+  body.gate-open { overflow: hidden; }
+  body.gate-open .app-shell { position: fixed; overflow: hidden; }
+  .app-shell {
+    position: relative;
+    inset: auto;
+    display: block;
+    width: 100%;
+    height: auto;
+    min-height: 100dvh;
+    padding-bottom: calc(108px + env(safe-area-inset-bottom, 0px));
+  }
+  .topbar {
+    position: sticky;
+    top: 0;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 3px 8px;
+    padding: calc(8px + env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px)) 6px max(12px, env(safe-area-inset-left, 0px));
+  }
+  .topbar .brand { min-height: 44px; gap: 8px; }
+  .topbar .brand-mark { width: 32px; height: 32px; flex: 0 0 32px; }
+  .topbar .brand-mark svg { width: 23px; height: 23px; }
+  .topbar .brand strong { font-size: 0.77rem; letter-spacing: 0.065em; }
+  .topbar .brand small { display: block; font-size: 0.6rem; }
+  .top-actions { grid-column: 2; grid-row: 1; gap: 5px; }
+  .top-actions .button { min-height: 44px; padding: 0 10px; font-size: 0.76rem; }
+  .daily-card {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-self: stretch;
+    justify-content: space-between;
+    min-width: 0;
+    padding: 1px 0;
+  }
+  .daily-card strong { max-width: 65%; font-size: 0.7rem; }
+  .daily-card > span:last-child { display: inline; font-size: 0.64rem; }
+  .import-menu-pop { min-width: 200px; max-width: calc(100vw - 24px); }
+  .import-menu-pop label { display: flex; min-height: 44px; align-items: center; }
+  .workspace { display: block; }
+  .viewport-panel {
+    display: flex;
+    flex-direction: column;
+    height: clamp(580px, 78svh, 700px);
+    min-height: 580px;
+  }
+  .viewport-toolbar {
+    position: relative;
+    inset: auto;
+    flex: 0 0 auto;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    margin: 10px 10px 0;
+  }
+  .viewport-statuses { min-width: 0; gap: 5px; }
+  .compatibility-pill {
+    max-width: 100%;
+    min-height: 28px;
+    padding: 4px 9px;
+    font-size: 0.68rem;
+  }
+  .compatibility-pill > span:last-child { overflow-wrap: anywhere; }
+  .analysis-overlay-note { max-width: 100%; font-size: 0.58rem; }
+  .camera-actions { flex-wrap: wrap; gap: 3px; box-shadow: none; }
+  .camera-text-button { flex: 1 1 auto; min-height: 44px; padding: 5px 7px; }
+  .camera-actions .icon-button { width: 44px; height: 44px; flex: 0 0 44px; }
+  .camera-actions #freeCameraButton { flex-basis: 100%; order: 1; }
+  .segment-navigator,
+  .segment-navigator.is-collapsed {
+    position: relative;
+    top: auto;
+    left: auto;
+    flex: 0 0 auto;
+    align-self: center;
+    width: calc(100% - 20px);
+    min-width: 0;
+    max-width: 486px;
+    margin-top: 8px;
+    padding: 5px;
+    transform: none;
+  }
+  .segment-navigation-main { grid-template-columns: 68px minmax(0, 1fr) 68px; }
+  .segment-current { min-height: 44px; padding: 4px; }
+  .segment-step-button { min-height: 44px; padding: 0 4px; font-size: 0.66rem; }
+  .segment-navigator.is-collapsed .segment-navigation-main { display: block; }
+  .segment-navigator.is-collapsed .segment-current { justify-content: center; align-items: center; }
+  .segment-navigation-meta { grid-template-columns: 1fr 1fr; }
+  .segment-mode-button { min-height: 44px; font-size: 0.66rem; }
+  .segment-load-status { grid-column: 1 / -1; grid-row: 2; padding: 4px; }
+  .route-summary { overflow-wrap: anywhere; }
+  .empty-state {
+    top: 57%;
+    width: calc(100% - 32px);
+    padding: 12px 0;
+  }
+  .empty-glyph { width: 72px; height: 56px; margin-bottom: 14px; }
+  .empty-state h1 { font-size: 1.25rem; }
+  .empty-state p { font-size: 0.79rem; overflow-wrap: anywhere; }
+  .empty-actions { flex-direction: column; gap: 7px; margin-top: 16px; }
+  .empty-actions .button { min-height: 44px; }
+  .scene-meta { right: 10px; bottom: 10px; left: 10px; }
+  .scene-meta > div { flex: 1 1 0; min-width: 0; padding: 7px 8px; }
+  .scene-meta span { font-size: 0.58rem; }
+  .scene-meta strong { font-size: 0.65rem; }
+  .event-toast { right: 10px; bottom: 76px; left: 10px; min-width: 0; padding: 9px 11px; }
+  .event-toast > div { min-width: 0; overflow-wrap: anywhere; }
+  .follow-hud { bottom: 76px; gap: 5px; padding: 7px 10px; border-radius: 11px; font-size: 0.72rem; }
+  .follow-hud small { font-size: 0.61rem; text-align: center; }
+  .camera-help { left: 10px; max-width: calc(100% - 20px); padding: 8px 10px; font-size: 10px; }
+  .drop-overlay > div { max-width: 100%; padding: 12px; text-align: center; overflow-wrap: anywhere; }
+  .inspector { overflow: visible; border-top: 1px solid var(--line); border-left: 0; scroll-margin-top: 84px; }
+  .inspector-section { padding: 12px; }
+  .inspector-section .section-heading { min-height: 44px; align-items: center; margin-bottom: 8px; }
+  .inspector-section.is-collapsed .section-heading { margin-bottom: 0; }
+  .source-tab, .source-row, .live-run-card, .live-relay-row button,
+  .live-state-row button, .live-follow, .switch-row,
+  .developer-tools summary, .developer-tools .button { min-height: 44px; }
+  .developer-tools summary { align-content: center; }
+  .select-wrap select, .live-relay-row input[type="text"] { min-height: 44px; font-size: 16px; }
+  .live-state-row { flex-wrap: wrap; gap: 6px; }
+  .live-state-row small { flex-basis: calc(100% - 26px); overflow-wrap: anywhere; }
+  .live-run-card strong, .live-run-card small { overflow-wrap: anywhere; }
+  .player-list { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .player-card { padding: 10px; }
+  .player-card-header { grid-template-columns: 44px minmax(0, 1fr) 44px 44px; gap: 7px; }
+  .player-toggle, .player-follow-button { min-width: 44px; min-height: 44px; }
+  .player-overview { grid-template-columns: 84px minmax(0, 1fr); gap: 8px; }
+  .player-telemetry { min-width: 0; }
+  .control-note, .archive-summary, .world-summary { overflow-wrap: anywhere; }
+  .timeline-panel {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    grid-template-columns: 44px minmax(0, 1fr) minmax(0, 1fr) 60px 50px;
+    grid-template-areas: "track track track track track" "play current total speed panel";
+    gap: 2px 6px;
+    padding: 3px max(12px, env(safe-area-inset-right, 0px)) calc(9px + env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px));
+    backdrop-filter: blur(18px);
+  }
+  .play-button { grid-area: play; }
+  .time-current { grid-area: current; text-align: left; }
+  .time-total { grid-area: total; text-align: right; }
+  .timeline-track { grid-area: track; height: 44px; min-width: 0; }
+  .speed-control { grid-area: speed; }
+  .speed-control select { height: 44px; font-size: 16px; }
+  .phone-panel-button {
+    grid-area: panel;
+    display: block;
+    min-height: 44px;
+    padding: 0 3px;
+    border: 1px solid var(--line-strong);
+    border-radius: 9px;
+    background: var(--surface-raised);
+    color: var(--text);
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .scrub-hint { display: none; }
+  /* JS supplies the progress gradient inline. Keep that gradient a thin rail
+     while the actual range input has a finger-sized hit area. */
+  #timeline, .range {
+    height: 44px;
+    background-size: 100% 5px !important;
+    background-position: center !important;
+    background-repeat: no-repeat !important;
+    touch-action: pan-y;
+  }
+  .range { margin: 0; }
+  #timeline::-webkit-slider-thumb, .range::-webkit-slider-thumb { width: 23px; height: 23px; }
+  #timeline::-moz-range-thumb, .range::-moz-range-thumb { width: 17px; height: 17px; }
+  .timeline-markers { top: 16px; height: 12px; }
+  .error-banner {
+    right: 12px;
+    bottom: calc(118px + env(safe-area-inset-bottom, 0px));
+    width: calc(100vw - 24px);
+    gap: 8px;
+  }
+  .error-banner span { overflow-wrap: anywhere; }
+  .error-banner button { width: 44px; height: 44px; }
+  .startup-notice { top: 12px; padding: 12px; font-size: 0.85rem; overflow-wrap: anywhere; }
+}
+
+/* A sideways phone needs its height for the map, not stacked chrome. Keep the
+   same touch targets while fitting header and playback into one row each. */
+@media (min-width: 480px) and (max-width: 950px) and (max-height: 500px) and (orientation: landscape) {
+  .app-shell { padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px)); }
+  .topbar {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 10px;
+    padding-top: calc(5px + env(safe-area-inset-top, 0px));
+    padding-bottom: 5px;
+  }
+  .top-actions { grid-column: 3; }
+  .daily-card { grid-column: 2; grid-row: 1; justify-content: center; flex-wrap: wrap; gap: 3px 10px; }
+  .daily-card strong { max-width: 100%; }
+  .viewport-panel {
+    height: calc(100svh - 114px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    min-height: 260px;
+  }
+  .viewport-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 8px;
+    margin-top: 6px;
+  }
+  .viewport-statuses { gap: 3px; }
+  .compatibility-pill { min-height: 25px; font-size: 0.62rem; }
+  .analysis-overlay-note { flex-wrap: wrap; padding: 3px 7px; font-size: 0.54rem; }
+  .camera-actions { flex-wrap: nowrap; }
+  .camera-actions #freeCameraButton { flex-basis: auto; order: 0; }
+  .camera-text-button { flex: 0 0 auto; white-space: nowrap; }
+  .segment-navigator,
+  .segment-navigator.is-collapsed {
+    position: absolute;
+    top: 66px;
+    left: 10px;
+    width: min(486px, calc(100% - 20px));
+    max-height: calc(100% - 76px);
+    margin: 0;
+    overflow-y: auto;
+  }
+  .segment-navigator.is-collapsed { width: auto; max-width: calc(100% - 20px); padding: 0 9px; }
+  .segment-navigator.is-collapsed .segment-current strong { font-size: 0.76rem; }
+  .camera-touch-controls { bottom: 56px; }
+  .camera-help { right: 10px; bottom: 112px; left: auto; max-width: min(460px, calc(100% - 20px)); padding: 6px 9px; }
+  .camera-help > strong,
+  .camera-help #cameraPlacement { display: none; }
+  .scene-meta { bottom: 6px; }
+  .scene-meta > div { padding: 5px 8px; }
+  .follow-hud, .event-toast { bottom: 56px; }
+  .follow-hud small { display: none; }
+  .empty-state { top: 54%; width: min(550px, calc(100% - 32px)); padding: 0; }
+  .empty-glyph { display: none; }
+  .empty-state h1 { margin-bottom: 6px; font-size: 1.05rem; }
+  .empty-state p { font-size: 0.74rem; line-height: 1.5; }
+  .empty-actions { flex-direction: row; margin-top: 10px; }
+  .inspector { scroll-margin-top: 60px; }
+  .timeline-panel {
+    grid-template-columns: 44px minmax(0, 40px) minmax(60px, 1fr) minmax(0, 40px) 56px 50px;
+    grid-template-areas: "play current track total speed panel";
+    gap: 6px;
+    padding-top: 6px;
+    padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
+  }
+  .error-banner { bottom: calc(68px + env(safe-area-inset-bottom, 0px)); }
+}

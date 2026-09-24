@@ -8,7 +8,7 @@
 2. 将原始 `PeakTrailRecorder.dll` 和校验文件发布到 `recorder-v<版本>` GitHub Release。标签指向 DLL 中记录的构建来源提交。不要覆盖已发布的同版本二进制；变更请升版本。
 3. 更新 `PeakTrailPlatform/data/recorder/release.json`，填写精确版本、来源提交、大小、摘要、GitHub 版本化下载 URL 与 `downloads/recorder/<版本>/PeakTrailRecorder.dll`。
 4. 同步首页下载链接/版本/大小及发行说明。首页回归测试会检查其与 manifest、源码版本一致。
-5. 推送代码后 Actions 验证公开附件可下载且摘要匹配。部署预检再次拉取并校验，之后才将单个 DLL 放进静态网站。下载失败或不匹配会阻止新站点发布，不替换旧站点。
+5. 推送代码后 Actions 验证公开附件可下载且摘要匹配，并核对 `recorder-v<版本>` 标签最终指向 manifest 中的 `sourceRevision`（支持普通标签与附注标签）。标签缺失、被移动或校验失败都会阻止这次发布。部署预检再次拉取并校验附件，之后才将单个 DLL 放进静态网站。下载失败或不匹配不替换旧站点。
 6. 发布后从线上同站下载地址读取并核对 SHA-256。网页更改不会自动替换玩家电脑上的 DLL，用户需退出游戏后手动更新。
 
 ## 本地预览
@@ -20,4 +20,4 @@ node PeakTrailPlatform/tools/check-recorder-download.mjs
 node PeakTrailPlatform/tools/stage-site.mjs
 ```
 
-第一条命令始终验证远端附件，不采用本地覆盖。
+第一条命令始终验证远端附件，不采用本地覆盖；同时使用 Git 读取公开仓库的精确标签及其解引用提交，不需要 GitHub API token。请确保本机已安装 Git。网络暂时失败会有限重试，标签与来源不一致则直接失败。
