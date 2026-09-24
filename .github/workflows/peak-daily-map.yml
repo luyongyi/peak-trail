@@ -58,6 +58,7 @@ jobs:
     needs: update
     if: vars.PEAK_SERVER_ENABLED == 'true'
     uses: ./.github/workflows/peak-server-deploy.yml
+    secrets: inherit
     with:
       revision: ${{ needs.update.outputs.revision }}
 

@@ -7,6 +7,11 @@ on:
         description: Exact tested commit on the default branch
         required: true
         type: string
+    secrets:
+      PEAK_DEPLOY_KEY:
+        required: false
+      PEAK_KNOWN_HOSTS:
+        required: false
 
 permissions:
   contents: read
