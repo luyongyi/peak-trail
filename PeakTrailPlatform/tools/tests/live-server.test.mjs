@@ -242,6 +242,54 @@ test("concurrent daily requests coalesce into one upstream fetch and the warm ca
   }
 });
 
+test("daily cache expires at the rotation boundary even before its ten-minute TTL", async () => {
+  let now = Date.parse("2026-09-24T16:59:50Z"), calls = 0;
+  const deadline = now + 10_000;
+  const { base, close } = await start({ dailyNow: () => now, dailyResolver: async () => {
+    calls += 1;
+    return { sceneName: calls === 1 ? "Level_4" : "Level_5", nextChangeAtUtc: new Date(calls === 1 ? deadline : deadline + 86400_000).toISOString() };
+  } });
+  try {
+    assert.equal((await (await fetch(`${base}/api/daily`)).json()).sceneName, "Level_4");
+    now = deadline - 1;
+    await fetch(`${base}/api/daily`);
+    assert.equal(calls, 1);
+    now = deadline;
+    assert.equal((await (await fetch(`${base}/api/daily`)).json()).sceneName, "Level_5");
+    assert.equal(calls, 2);
+  } finally { await close(); }
+});
+
+test("upstream stale data does not acquire a fresh cache TTL and a failure can recover", async () => {
+  const now = Date.parse("2026-09-24T17:00:00Z"); let calls = 0;
+  const { base, close } = await start({ dailyNow: () => now, dailyResolver: async () => {
+    calls += 1;
+    if (calls === 2) throw new Error("upstream temporarily offline");
+    return { sceneName: calls === 1 ? "Level_4" : "Level_5", nextChangeAtUtc: new Date(calls === 1 ? now : now + 86400_000).toISOString() };
+  } });
+  try {
+    assert.equal((await (await fetch(`${base}/api/daily`)).json()).sceneName, "Level_4");
+    assert.equal((await fetch(`${base}/api/daily`)).status, 502);
+    assert.equal((await (await fetch(`${base}/api/daily`)).json()).sceneName, "Level_5");
+    await fetch(`${base}/api/daily`);
+    assert.equal(calls, 3, "failure and stale data never mask the next successful observation");
+  } finally { await close(); }
+});
+
+test("daily cache still observes the short TTL within a long rotation", async () => {
+  let now = Date.parse("2026-09-24T17:00:00Z"), calls = 0;
+  const deadline = now + 86400_000;
+  const { base, close } = await start({ dailyNow: () => now, dailyResolver: async () => {
+    calls += 1; return { sceneName: "Level_5", nextChangeAtUtc: new Date(deadline).toISOString() };
+  } });
+  try {
+    await fetch(`${base}/api/daily`);
+    now += 10 * 60_000;
+    await fetch(`${base}/api/daily`);
+    assert.equal(calls, 2);
+  } finally { await close(); }
+});
+
 test("SSE streams carry observable ping events so viewers can detect silently-dead sockets", async () => {
   const { base, close } = await start({ pingIntervalMs: 50 });
   let reader;

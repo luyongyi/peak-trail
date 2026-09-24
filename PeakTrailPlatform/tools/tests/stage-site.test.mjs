@@ -39,6 +39,7 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
     mkdir(resolve(platform, "vendor"), { recursive: true }),
     mkdir(resolve(platform, "data", "daily"), { recursive: true }),
     mkdir(resolve(platform, "data", "maps"), { recursive: true }),
+    mkdir(resolve(platform, "data", "recorder"), { recursive: true }),
     mkdir(resolve(platform, "schema"), { recursive: true }),
     mkdir(pack, { recursive: true }),
     mkdir(secondPack, { recursive: true }),
@@ -51,6 +52,7 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
     copyFile(resolve(platformSource, "tools", "stage-site.mjs"), resolve(tools, "stage-site.mjs")),
     copyFile(resolve(platformSource, "tools", "lib", "game-assets.mjs"), resolve(tools, "lib", "game-assets.mjs")),
     copyFile(resolve(platformSource, "tools", "lib", "local-paths.mjs"), resolve(tools, "lib", "local-paths.mjs")),
+    copyFile(resolve(platformSource, "tools", "lib", "recorder-release.mjs"), resolve(tools, "lib", "recorder-release.mjs")),
     copyFile(resolve(platformSource, "web", "src", "map-fog.js"), resolve(platform, "web", "src", "map-fog.js")),
     copyFile(resolve(platformSource, "web", "src", "map-water.js"), resolve(platform, "web", "src", "map-water.js")),
     copyFile(resolve(platformSource, "web", "src", "map-enclosures.js"), resolve(platform, "web", "src", "map-enclosures.js")),
@@ -181,9 +183,22 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
     writeFile(resolve(gameAssets, "123", "icons", "item.png"), item),
   ]);
 
-  const options = { env: { ...process.env, PEAK_TRAIL_ASSET_ROOT: assets } };
+  const recorderBytes = Buffer.from("MZ pinned recorder fixture");
+  const recorderPath = resolve(repository, "local", "PeakTrailRecorder.dll");
+  const recorderRelease = { schemaVersion: 1, version: "0.7.1", filename: "PeakTrailRecorder.dll",
+    sourceRevision: "e".repeat(40), size: recorderBytes.length, sha256: sha256(recorderBytes),
+    artifactUrl: "https://github.com/luyongyi/peak-trail/releases/download/recorder-v0.7.1/PeakTrailRecorder.dll",
+    downloadPath: "downloads/recorder/0.7.1/PeakTrailRecorder.dll" };
+  await writeFile(recorderPath, recorderBytes);
+  await writeFile(resolve(repository, "local", "Assembly-CSharp.dll"), "game assembly must not publish");
+  await writeFile(resolve(repository, "local", "PeakTrailRecorder.cfg"), "private configuration must not publish");
+  await writeFile(resolve(platform, "data", "recorder", "release.json"), JSON.stringify(recorderRelease));
+  const options = { env: { ...process.env, PEAK_TRAIL_ASSET_ROOT: assets, PEAK_TRAIL_RECORDER_DLL: recorderPath } };
   await execFileAsync(process.execPath, [resolve(tools, "stage-site.mjs")], options);
   const staged = resolve(platform, "site-dist");
+  assert.deepEqual(await readFile(resolve(staged, recorderRelease.downloadPath)), recorderBytes);
+  assert.deepEqual(JSON.parse(await readFile(resolve(staged, "data", "recorder", "release.json"), "utf8")), recorderRelease);
+  assert.deepEqual(await readdir(resolve(staged, "downloads", "recorder", "0.7.1")), ["PeakTrailRecorder.dll"]);
   assert.deepEqual((await readdir(resolve(staged, 'data', 'home-art'))).sort(), [...HOME_ART_FILES].sort(), 'publish every illustration, and no neighboring private files');
   for (const file of retiredHomeArt) await assert.rejects(access(resolve(staged, 'data', 'home-art', file)), { code: 'ENOENT' }, 'do not publish retired illustration versions');
   const stagedManifestPath = resolve(staged, "data", "maps", "packs", packId, "map-pack.json");
@@ -222,6 +237,12 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
   assert.equal(await readFile(resolve(secondPack, 'map-pack.json'), 'utf8'), secondManifestBytes);
 
   await writeFile(resolve(staged, "preflight-marker.txt"), "keep on failure");
+  const wrongRecorder = Buffer.from(recorderBytes); wrongRecorder[3] ^= 1;
+  await writeFile(recorderPath, wrongRecorder);
+  await assert.rejects(execFileAsync(process.execPath, [resolve(tools, "stage-site.mjs")], options), /Recorder DLL SHA-256 mismatch/);
+  assert.equal(await readFile(resolve(staged, "preflight-marker.txt"), "utf8"), "keep on failure");
+  assert.deepEqual(await readFile(resolve(staged, recorderRelease.downloadPath)), recorderBytes);
+  await writeFile(recorderPath, recorderBytes);
   const invalidFog = structuredClone(fogEvidence);
   invalidFog.maps[0].sourceSceneSha256 = '0'.repeat(64);
   await writeFile(fogPath, JSON.stringify(invalidFog));

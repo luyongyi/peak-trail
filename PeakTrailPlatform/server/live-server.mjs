@@ -48,6 +48,7 @@ export function createLiveServer(options = {}) {
   const persistenceDir = options.persistenceDir ? resolve(options.persistenceDir) : null;
   if (persistenceDir) mkdirSync(persistenceDir, { recursive: true });
   const dailyResolver = options.dailyResolver ?? resolveDaily;
+  const dailyNow = options.dailyNow ?? Date.now;
   const pingIntervalMs = Math.max(100, Number(options.pingIntervalMs) || 15_000);
   // The relay owns the daily rotation now (no GitHub Action dependency): it
   // proxies PEAK's login API with a short cache so every viewer sees fresh data.
@@ -56,7 +57,9 @@ export function createLiveServer(options = {}) {
   let dailyRefresh = null;
 
   function dailyPayload() {
-    if (dailyCache.data && Date.now() - dailyCache.at < DAILY_CACHE_MS) return Promise.resolve(dailyCache.data);
+    const expiresAt = Date.parse(dailyCache.data?.nextChangeAtUtc);
+    if (dailyCache.data && dailyNow() - dailyCache.at < DAILY_CACHE_MS
+      && Number.isFinite(expiresAt) && dailyNow() < expiresAt) return Promise.resolve(dailyCache.data);
     // Coalesce concurrent cold requests: every viewer booting during a refresh
     // awaits the same in-flight fetch instead of each hitting PEAK's login API
     // (a cold cache otherwise stalls every first page open for the full upstream
@@ -64,7 +67,9 @@ export function createLiveServer(options = {}) {
     if (!dailyRefresh) {
       dailyRefresh = (async () => {
         const data = await dailyResolver();
-        dailyCache = { at: Date.now(), data, error: null };
+        // Even if upstream briefly returns the previous rotation at the boundary,
+        // its expired deadline prevents this response becoming a fresh 10m cache.
+        dailyCache = { at: dailyNow(), data, error: null };
         return data;
       })().finally(() => { dailyRefresh = null; });
     }

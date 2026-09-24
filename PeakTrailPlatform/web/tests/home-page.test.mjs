@@ -128,7 +128,7 @@ test("an unconfirmed home initially hides the finale and cannot expose a guessed
   assert.ok(cells.every((cell) => cell.querySelector("button").disabled));
 });
 
-test("each confirmed route displays the correct interior thumbnail, full illustration and route copy", () => {
+test("each confirmed route defaults to its expanded interior illustration and correct route copy", () => {
   for (const [branch, title, precedingTitle, exterior] of [
     ["swamp-temple", "城塞", "雾岛", HOME_ART.swamp],
     ["volcano-kiln", "熔炉", "火山", HOME_ART.volcano],
@@ -138,7 +138,7 @@ test("each confirmed route displays the correct interior thumbnail, full illustr
     const ending = HOME_ENDINGS[branch];
     assert.equal(nodes.homeFinale.hidden, false);
     assert.equal(nodes.homeFinale.dataset.branch, branch);
-    assert.equal(nodes.homeFinale.open, false);
+    assert.equal(nodes.homeFinale.open, true);
     assert.equal(nodes.homeEnding.textContent, title);
     assert.equal(nodes.homeEndingRoute.textContent, `${precedingTitle}之后 / ${ending.english}`);
     assert.equal(nodes.homeEndingDescription.textContent, ending.description);
@@ -152,7 +152,7 @@ test("each confirmed route displays the correct interior thumbnail, full illustr
   }
 });
 
-test("clock ticks preserve an expanded ending but switching branches collapses and replaces its images", () => {
+test("clock ticks preserve the user's fold choice but a new branch opens its own illustration", () => {
   const { page, nodes, show } = fixture();
   show("swamp-temple");
   nodes.homeFinale.open = true;
@@ -160,8 +160,11 @@ test("clock ticks preserve an expanded ending but switching branches collapses a
   page.tick();
   assert.equal(nodes.homeFinale.open, true);
   assert.equal(nodes.homeEndingArt.srcWrites, writes, "same illustration should not be reloaded each second");
+  nodes.homeFinale.open = false;
+  page.tick();
+  assert.equal(nodes.homeFinale.open, false, "do not reopen a manually folded illustration every second");
   show("volcano-kiln");
-  assert.equal(nodes.homeFinale.open, false);
+  assert.equal(nodes.homeFinale.open, true);
   assert.equal(nodes.homeFinale.hidden, false);
   assert.equal(nodes.homeFinale.dataset.branch, "volcano-kiln");
   assert.equal(nodes.homeEndingArt.src, HOME_ART.kiln);
@@ -169,7 +172,7 @@ test("clock ticks preserve an expanded ending but switching branches collapses a
   assert.equal(nodes.homeEndingArt.srcWrites, writes + 1);
   nodes.homeFinale.open = true;
   show("swamp-temple");
-  assert.equal(nodes.homeFinale.open, false);
+  assert.equal(nodes.homeFinale.open, true);
   assert.equal(nodes.homeEndingArt.src, HOME_ART.temple);
 });
 
@@ -207,4 +210,17 @@ test("Roots is rendered as 森蕈 in the card, accessible action and illustratio
   assert.equal(roots.querySelector("button").getAttribute("aria-label"), "查看本轮第2关：森蕈");
   assert.equal(roots.querySelector("img").src, HOME_ART.roots);
   assert.equal(roots.querySelector("img").alt, "森蕈主题氛围插画，并非本轮地图实景");
+});
+
+test("Tropics is named 雨林 in the card, accessible action and illustration description", () => {
+  const { page, cells, show } = fixture();
+  show();
+  page.mapPack.layers[1].biome = "Tropics";
+  Object.assign(page.mapPack.route.segments[1], { biome: "Tropics", biomeId: 1, name: "Jungle_Segment" });
+  page.tick();
+  const tropics = cells[1];
+  assert.equal(tropics.querySelector(".home-biome-title").textContent, "雨林");
+  assert.equal(tropics.querySelector("button").getAttribute("aria-label"), "查看本轮第2关：雨林");
+  assert.equal(tropics.querySelector("img").src, HOME_ART.tropics);
+  assert.equal(tropics.querySelector("img").alt, "雨林主题氛围插画，并非本轮地图实景");
 });

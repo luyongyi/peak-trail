@@ -107,8 +107,10 @@ export class HomePage {
     const ending = view.cards[3]?.ending;
     const finale = HOME_ENDINGS[ending?.branch];
     const finaleElement = this.$('homeFinale');
-    // Close a previously expanded illustration when rotation changes its ending.
-    if (finaleElement.dataset.branch !== (ending?.branch || '')) finaleElement.open = false;
+    // Present the real ending's illustration by default. Clock ticks must keep
+    // a user's subsequent fold/unfold choice; a new branch opens its own art.
+    if (!finale) finaleElement.open = false;
+    else if (finaleElement.dataset.branch !== ending.branch) finaleElement.open = true;
     finaleElement.dataset.branch = ending?.branch || '';
     finaleElement.hidden = !finale;
     this.$('homeEnding').textContent = ending?.title || '终章待确认';

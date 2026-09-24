@@ -8,6 +8,7 @@ import { normalizeMapWater } from "../web/src/map-water.js";
 import { normalizeMapEnclosures } from "../web/src/map-enclosures.js";
 import { createHash } from "node:crypto";
 import { HOME_ART_FILES } from "../web/src/home-art.js";
+import { loadRecorderArtifact, readRecorderRelease } from "./lib/recorder-release.mjs";
 
 const toolDirectory = dirname(fileURLToPath(import.meta.url));
 const platformDirectory = resolve(toolDirectory, "..");
@@ -17,6 +18,11 @@ const mapsDirectory = resolve(dataDirectory, "maps");
 const schemaDirectory = resolve(platformDirectory, "schema");
 const outputDirectory = resolve(platformDirectory, "site-dist");
 const { gameAssetsDirectory, mapPacksDirectory, mapEnclosuresDirectory, homeArtDirectory } = localAssetPaths;
+// Pin and verify the public DLL before replacing a previously staged site.
+const recorderRelease = await readRecorderRelease(resolve(dataDirectory, "recorder", "release.json"));
+const recorderBytes = await loadRecorderArtifact(recorderRelease, {
+  localPath: process.env.PEAK_TRAIL_RECORDER_DLL,
+});
 // Only allowlisted illustrations are public; never copy a local folder wholesale.
 for (const file of HOME_ART_FILES) {
   const entry = await lstat(resolve(homeArtDirectory, file));
@@ -77,6 +83,10 @@ await rm(outputDirectory, { recursive: true, force: true });
 await mkdir(outputDirectory, { recursive: true });
 await mkdir(resolve(outputDirectory, "data", "maps"), { recursive: true });
 await mkdir(resolve(outputDirectory, "schema"), { recursive: true });
+await mkdir(dirname(resolve(outputDirectory, recorderRelease.downloadPath)), { recursive: true });
+await mkdir(resolve(outputDirectory, "data", "recorder"), { recursive: true });
+await writeFile(resolve(outputDirectory, recorderRelease.downloadPath), recorderBytes);
+await writeFile(resolve(outputDirectory, "data", "recorder", "release.json"), JSON.stringify(recorderRelease, null, 2) + "\n");
 await Promise.all([
   cp(resolve(webDirectory, "index.html"), resolve(outputDirectory, "index.html")),
   cp(resolve(webDirectory, "styles.css"), resolve(outputDirectory, "styles.css")),

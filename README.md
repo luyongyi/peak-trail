@@ -54,7 +54,7 @@ dotnet build PeakTrailRecorder/PeakTrailRecorder.slnx -c Release -p:DeployModFil
 
 ## 本局分支与玩家头像
 
-首页以统一手绘风格呈现当前四关，Roots 中文名称为「森蕈」。终章插画可展开查看，
+首页以统一手绘风格呈现当前四关，Roots 中文名称为「森蕈」，Tropics 为「雨林」。终章插画默认展开，
 随真实路线选择熔炉或城塞，分别表现火山与高塔的内部攀登空间。插画只负责氛围，
 不作为地图或足迹定位依据；点击四关仍进入对应的真实地图。轮换数据过期会明确显示
 「上次确认的四关」，不会按日期猜测关卡；导入历史足迹也不会改变首页当前路线。
@@ -96,6 +96,12 @@ Recorder 0.5.0 在日志中记录运行时真正选择的路线，网页优先�
 Recorder 0.7.1 的默认直播地址为 `https://peak.mylus.cn`。已经生成过 BepInEx 配置的玩家
 还需将 `[Live]` 下的 `ServerUrl` 改为该地址；更新 DLL 不会覆盖已有配置。直播开启时
 只推送运行中的局次，本地足迹继续保存，旧日志不会被自动上传。更换 DLL 前先退出游戏。
+
+首页提供同站 DLL 下载、GitHub 备用下载和三步安装教程（BepInEx 5 Windows x64 →
+放入 DLL → 导入本地足迹），另有可选直播设置与排障说明。发行二进制仅作为
+GitHub Release 附件保存，网站发布时按版本 manifest 的 SHA-256 校验后同步；
+不提交 DLL、游戏依赖或个人配置到 Git。后续升级流程见
+[Recorder 发布说明](PeakTrailRecorder/releases/README.md)。
 
 ## 日志与旧目录
 

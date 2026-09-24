@@ -4,7 +4,7 @@ import { normalizeRoute, routeSegmentName } from "./map-route.js";
 const BIOMES = {
   shore: { title: "海岸", theme: "shore" },
   roots: { title: "森蕈", theme: "roots" },
-  tropics: { title: "热带雨林", theme: "tropics" },
+  tropics: { title: "雨林", theme: "tropics" },
   alpine: { title: "雪山", theme: "alpine" },
   mesa: { title: "台地", theme: "mesa" },
   volcano: { title: "火山", theme: "volcano" },

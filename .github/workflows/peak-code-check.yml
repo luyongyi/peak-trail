@@ -24,6 +24,8 @@ jobs:
           npm --prefix PeakTrailPlatform/web run check
           npm --prefix PeakTrailPlatform/web test
           node --test PeakTrailPlatform/tools/tests/*.test.mjs
+      - name: Verify published recorder download before deployment
+        run: node PeakTrailPlatform/tools/check-recorder-download.mjs
 
   deploy-server:
     needs: web

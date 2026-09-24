@@ -8,7 +8,7 @@
 - 当前仅支持 iPad 和桌面布局；不维护手机专用样式与手机验收。
 - iPad 竖屏（744–1100 CSS px）两列，横屏与桌面四列；大型 Pro 竖屏也采用两列。
 - 原有手机缩字、隐藏日期、压缩按钮规则已移除；下方手机验收仅是历史记录。
-- 七个主主题：海岸、森蕈、热带雨林、雪山、台地、火山、雾岛。
+- 七个主主题：海岸、森蕈、雨林、雪山、台地、火山、雾岛。
 - 两个终章：熔炉（火山内部）、城塞（高塔内部），共九张 1024×1536 PNG。
 - 内置 image_gen 生成，海岸图作风格参考；完整提示词在 `home-art-prompts.json`。
 - 原图复制到仓库总目录内的 `local/assets/home-art`；Git 忽略，需独立备份。
@@ -43,7 +43,7 @@
 | --- | --- | --- |
 | 海岸 | 淡紫扁伞海蜇、紫红长刺海胆 | Level_0 Beach_Segment 的 SlipperyJellyfish / Urch；Jelly、M_Urchin |
 | 森蕈 | 巨型斑点蘑菇林、可爱化的橙色蘑菇僵尸、绿色孢子菌及橙色爆炸菌 | Level_0 Roots Segment 的 Mushroom tree / MushroomZombieSpawner / Forest_SporeFungus / Jungle_SporeMushroomExplo |
-| 热带雨林 | 深青绿色团块毒菌、毒雾、尖叶植物；不放僵尸 | Level_1 Jungle_Segment 的 Jungle_SporeMushroom / Jungle_SharpPlant |
+| 雨林 | 深青绿色团块毒菌、毒雾、尖叶植物；不放僵尸 | Level_1 Jungle_Segment 的 Jungle_SporeMushroom / Jungle_SharpPlant |
 | 雪山 | 冰松与岩石间歇泉 | Level_17 Snow_Segment 的 Ice_Pine / Geysers/Geyser |
 | 台地 | 高枝仙人掌、圆形刺球 | Level_16 Desert_Segment 的 Tall Cactus / Cactus Ball Big |
 | 火山 | 低平熔岩荒原、神鹫与鸟巢 | Level_16 Caldera_Segment 的 Condor / BirdNest；不是白头鹰 |
@@ -72,8 +72,9 @@
 每日观察需要合法序号、场景、槽位、时间及精确 build/mapPack 身份。时间过期会明确
 降级到「上次确认的四关」。不按日期、奇偶、图案或上一局日志猜测本轮路线。
 
-真实分支决定终章：火山 → 熔炉，雾岛 → 城塞。四关下方可展开本轮终章插画，
-分支变化时自动收起。首页的地图包独立于历史日志；进入首页地图暂时离开回放，
+真实分支决定终章：火山 → 熔炉，雾岛 → 城塞。四关下方默认展开本轮终章插画，
+用户可自行收起，倒计时更新不会反复展开；分支变化时默认展示新的对应终章。
+首页的地图包独立于历史日志；进入首页地图暂时离开回放，
 再次点「我的足迹」恢复之前选择的本地会话。
 
 ## v3 验证记录

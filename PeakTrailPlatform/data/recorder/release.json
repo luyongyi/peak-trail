@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "version": "0.7.1",
+  "filename": "PeakTrailRecorder.dll",
+  "sourceRevision": "8cae7236e6eef0f8d6705837273082e73ae7f270",
+  "sha256": "12e6df0b4c01f04f39138dcc491dd292e08607e669b33c6f3e49df78e0acebbd",
+  "size": 212992,
+  "artifactUrl": "https://github.com/luyongyi/peak-trail/releases/download/recorder-v0.7.1/PeakTrailRecorder.dll",
+  "downloadPath": "downloads/recorder/0.7.1/PeakTrailRecorder.dll"
+}

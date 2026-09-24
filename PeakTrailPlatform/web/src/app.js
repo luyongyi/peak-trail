@@ -25,6 +25,7 @@ import { createWakeLock } from "./wake-lock.js";
 import { HomePage } from "./home-page.js";
 import { buildHomeDailyView } from "./home-daily.js";
 import { defaultLiveRelay } from "./live-endpoint.js";
+import { createDailyRefreshClock, createDailySourceReader } from "./daily-refresh.js";
 
 const $ = (id) => document.getElementById(id);
 const elements = {
@@ -140,7 +141,7 @@ const state = {
   toastTimer: null,
   errorTimer: null,
   daily: null,
-  dailyRequestInFlight: false,
+  dailyRequestInFlight: null,
   dailyMapStatus: null,
   dailyMapErrorKey: null,
   mapSourceKind: null,
@@ -148,9 +149,6 @@ const state = {
   manualMapLoads: 0,
   sourceLoadingCounts: { map: 0, trace: 0 },
   expiredDailyKey: null,
-  dailyExpiryTimer: null,
-  dailySource: null,
-  dailyBackendDownUntil: 0,
   mapCatalog: null,
   mapCatalogBaseUrl: null,
   gameAssetPack: null,
@@ -197,7 +195,7 @@ const homePage = new HomePage({ root: elements.modeGate, loadCatalog: () => ensu
 const SEGMENT_NAMES_ZH = new Map([
   ["shore", "海岸"],
   ["roots", "森蕈"],
-  ["tropics", "热带雨林"],
+  ["tropics", "雨林"],
   ["alpine", "雪山"],
   ["mesa", "台地"],
   ["volcano", "火山"],
@@ -1837,37 +1835,24 @@ function dailySources() {
   const list = [];
   const backend = defaultRelayUrl();
   if (backend && !list.includes(`${backend}/api/daily`)) list.push(`${backend}/api/daily`);
-  if (state.dailySource) list.push(state.dailySource);
   list.push("./data/daily/current.json");
   return [...new Set(list)];
 }
 
-async function fetchDailyData() {
-  const now = Date.now();
-  let stale = null;
-  for (const url of dailySources()) {
-    if (url.endsWith("/api/daily") && now < state.dailyBackendDownUntil) continue;
-    try {
-      const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(5000) });
-      if (!response.ok) continue;
-      const data = await response.json();
-      const freshness = buildHomeDailyView({ daily: data, now: Date.now() }).freshness;
-      if (freshness === "unavailable") continue;
-      if (freshness === "current") { state.dailySource = url; return data; }
-      stale ||= data;
-    } catch { /* try the next source */ }
-  }
-  if (dailySources().some((url) => url.endsWith("/api/daily"))) {
-    state.dailyBackendDownUntil = now + 10 * 60_000;
-  }
-  return stale;
+const dailyReader = createDailySourceReader({
+  sources: dailySources,
+  freshness: (daily, now) => buildHomeDailyView({ daily, now }).freshness,
+});
+const dailyClock = createDailyRefreshClock({ refresh: loadDailyStatus, expire: expireDailyStatus });
+
+function loadDailyStatus() {
+  if (!state.dailyRequestInFlight) state.dailyRequestInFlight = applyDailyStatus();
+  return state.dailyRequestInFlight;
 }
 
-async function loadDailyStatus() {
-  if (state.dailyRequestInFlight) return;
-  state.dailyRequestInFlight = true;
+async function applyDailyStatus() {
   try {
-    const daily = await fetchDailyData();
+    const daily = await dailyReader.read();
     if (!daily) {
       if (!state.daily) {
         elements.dailyScene.textContent = "本地模式";
@@ -1877,8 +1862,6 @@ async function loadDailyStatus() {
     }
     state.daily = daily;
     void homePage.update(daily);
-    clearTimeout(state.dailyExpiryTimer);
-    state.dailyExpiryTimer = null;
     elements.dailyScene.textContent = daily.sceneName || `Level ${daily.mapSlot ?? daily.levelIndex ?? "?"}`;
     if (!isDailyMapFresh(daily)) {
       elements.dailyCountdown.textContent = Number.isFinite(Date.parse(daily.nextChangeAtUtc))
@@ -1888,7 +1871,6 @@ async function loadDailyStatus() {
       return;
     }
     state.expiredDailyKey = null;
-    scheduleDailyExpiry(daily);
     updateDailyCountdown();
     if (gateOpen()) return; // The home owns its lightweight manifest and four previews.
     try {
@@ -1929,7 +1911,8 @@ async function loadDailyStatus() {
       elements.dailyCountdown.textContent = "未同步轮换";
     }
   } finally {
-    state.dailyRequestInFlight = false;
+    state.dailyRequestInFlight = null;
+    dailyClock.schedule(state.daily, dailyReader.retryAt);
     if (!state.daily) void homePage.update(null);
   }
 }
@@ -2124,6 +2107,9 @@ function updateDailyCountdown() {
 }
 
 async function expireDailyStatus(daily) {
+  // A boundary callback may still hold the previous observation while a manual
+  // refresh has already installed the next one. Never clear that newer map.
+  if (daily !== state.daily || isDailyMapFresh(daily)) return;
   const expiryKey = `${daily?.fetchedAtUtc || "unknown"}:${daily?.nextChangeAtUtc || "invalid"}`;
   if (state.expiredDailyKey === expiryKey) return;
   state.expiredDailyKey = expiryKey;
@@ -2132,21 +2118,18 @@ async function expireDailyStatus(daily) {
     state.mapRequestRevision += 1;
   }
   if (state.mapSourceKind === "daily") await clearDailyMap();
+  // Rendering the cleared map yields; the current observation can change there.
+  if (daily !== state.daily || isDailyMapFresh(daily) || state.trace) return;
   state.dailyMapStatus = {
     title: `${daily?.sceneName || "今日"} 地图状态已过期`,
-    detail: "已隐藏自动底图，等待 GitHub Action 写入下一轮数据",
+    detail: "已隐藏过期的自动底图，正在重新确认本轮地图；接口恢复后会自动更新",
   };
   updateMapUI();
 }
 
-function scheduleDailyExpiry(daily) {
-  const delay = Date.parse(daily.nextChangeAtUtc) - Date.now();
-  if (!Number.isFinite(delay) || delay <= 0) return;
-  state.dailyExpiryTimer = setTimeout(() => {
-    elements.dailyCountdown.textContent = "轮换数据已过期";
-    void expireDailyStatus(daily);
-  }, delay + 50);
-}
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) void dailyClock.wake();
+});
 
 elements.eventList.addEventListener("scroll", scheduleEventWindow, { passive: true });
 elements.modeReplay.addEventListener("click", () => setSourceMode("replay"));
@@ -2391,7 +2374,7 @@ window.addEventListener("drop", async (event) => {
 
 window.addEventListener("beforeunload", () => {
   homePage.dispose();
-  clearTimeout(state.dailyExpiryTimer);
+  dailyClock.dispose();
   state.mapPack?.disposeAssets?.();
   viewer?.dispose();
 });

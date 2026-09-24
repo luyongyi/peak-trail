@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="PEAK Trail 本地多人足迹 2.5D 回放器。轨迹只在当前浏览器中解析，不会上传。"
+      content="PEAK Trail 多人足迹回放器。下载记录 Mod，回看每一次同行。本地导入不上传，实时分享需主动开启。"
     />
     <meta name="theme-color" content="#0b1010" />
     <title>PEAK Trail · 足迹回放</title>
@@ -31,6 +31,8 @@
           <span><strong>PEAK TRAIL</strong><small>每一程，都有迹可循。</small></span>
         </div>
         <nav class="home-actions" aria-label="足迹工具">
+          <a class="home-nav-link" href="./downloads/recorder/0.7.1/PeakTrailRecorder.dll" download="PeakTrailRecorder.dll">下载 Mod <span aria-hidden="true">↓</span></a>
+          <a class="home-nav-link" href="#homeGuide">安装教程</a>
           <button class="home-live is-empty" id="gateLive" type="button" aria-controls="gateLiveList" aria-expanded="false">
             <i aria-hidden="true"></i><span>现场观测</span><span class="home-live-count" id="homeLiveCount">—</span>
           </button>
@@ -98,7 +100,7 @@
             <summary>
               <img id="homeEndingThumb" alt="" />
               <span class="home-finale-label"><small>旅程的最后一章</small><strong id="homeEnding">终章待确认</strong></span>
-              <span class="home-finale-expand">看看终章 <b aria-hidden="true">＋</b></span>
+              <span class="home-finale-expand">终章插画 <b aria-hidden="true">＋</b></span>
             </summary>
             <figure>
               <img id="homeEndingArt" alt="" loading="lazy" />
@@ -111,7 +113,77 @@
           <div><span class="home-coordinate" aria-hidden="true">↟</span><p><strong>山会变，足迹会留下。</strong><span>本地导入 · 多人同看 · 沿时间重走每一段路</span></p></div>
           <button type="button" class="home-open-replay" id="homeReplayLink">打开足迹回放 <span aria-hidden="true">→</span></button>
         </section>
-        <footer class="home-footer"><span>非官方粉丝工具 · 与 Landfall / Aggro Crab 无关联</span><details><summary>开发工具</summary><button class="gate-debug" id="gateDebug" type="button">演示直播（非真实对局）</button></details><span>日志只在本机解析，不上传</span></footer>
+
+        <section class="home-guide" id="homeGuide" aria-labelledby="homeGuideTitle">
+          <div class="home-guide-heading">
+            <div>
+              <p class="home-eyebrow"><span></span> BEFORE THE ASCENT</p>
+              <h2 id="homeGuideTitle">下一次同行，<em>记得留下足迹。</em></h2>
+              <p class="home-guide-intro">在游戏电脑上装好一个 Mod，回来就能沿时间重走整段旅程。</p>
+            </div>
+            <div class="home-mod-download">
+              <a class="home-download-button" href="./downloads/recorder/0.7.1/PeakTrailRecorder.dll" download="PeakTrailRecorder.dll" aria-label="下载 PeakTrailRecorder 0.7.1 DLL">下载足迹 Mod <span aria-hidden="true">↓</span></a>
+              <span>v0.7.1 · 208 KiB · Windows 电脑</span>
+              <a class="home-release-link" href="https://github.com/luyongyi/peak-trail/releases/download/recorder-v0.7.1/PeakTrailRecorder.dll" target="_blank" rel="noopener noreferrer">GitHub 备用下载 ↗</a>
+            </div>
+          </div>
+          <ol class="home-guide-steps">
+            <li>
+              <span class="home-step-number" aria-hidden="true">01</span>
+              <h3>先装好加载器</h3>
+              <p>关闭游戏。在 Steam 的 PEAK 页面选择「管理 → 浏览本地文件」，找到 <code>PEAK.exe</code> 所在目录。</p>
+              <p>在 <a href="https://github.com/BepInEx/BepInEx/releases/tag/v5.4.23.3" target="_blank" rel="noopener noreferrer">BepInEx 5 官方发布页 ↗</a> 下载 <strong>Windows x64</strong> 包 <code>BepInEx_win_x64_5.4.23.3.zip</code>，解压到这里，启动一次游戏后退出。已有 BepInEx 5 可跳过。</p>
+            </li>
+            <li>
+              <span class="home-step-number" aria-hidden="true">02</span>
+              <h3>放入一个 DLL</h3>
+              <p>下载上方的 <code>PeakTrailRecorder.dll</code>，放进游戏目录下的：</p>
+              <code class="home-guide-path">BepInEx/plugins/</code>
+              <p>升级时替换旧的同名 DLL，不要同时保留两份。无需另外下载地图，也不用再安装第二个足迹 Mod。</p>
+            </li>
+            <li>
+              <span class="home-step-number" aria-hidden="true">03</span>
+              <h3>开一局，再回来看看</h3>
+              <p>进岛后自动记录本机已同步的队伍足迹，无需游戏内开关；停留在机场不记录。文件保存在：</p>
+              <code class="home-guide-path">BepInEx/PeakTrailRecordings/</code>
+              <p>打开「我的足迹」，导入这个总目录，或选择其中的 <code>PeakTrailHistory.ndjson</code>。按日期、局次切换，拖动时间线回看。</p>
+            </li>
+          </ol>
+          <div class="home-guide-note"><span aria-hidden="true">↟</span><p>已验证 PEAK 2.4.c / BepInEx 5.4.23.3。Mod 只装在游戏电脑上，观看者无需安装；一人可记录本机已同步的队伍信息，并非全知视角。桌面和 iPad 都能观看，iPad 回放需先把日志文件传到设备，再选择「历史日志文件」。</p></div>
+          <div class="home-guide-faq">
+            <details>
+              <summary><span>想让朋友实时观看？<small>可选 · 默认关闭</small></span><b aria-hidden="true">＋</b></summary>
+              <div class="home-faq-body home-live-guide">
+                <div>
+                  <p>装好 DLL 后先启动并退出游戏，打开 <code>BepInEx/config/PeakTrailRecorder.cfg</code>，仅修改对应配置项，再启动游戏。</p>
+                  <p>进入对局后，朋友可在本网站的「现场观测」中选择正在进行的对局。改回 <code>[Live] Enabled = false</code> 并重启游戏即可关闭直播；本地记录可继续保留。</p>
+                  <p class="home-sharing-note"><strong>开启前请征得同局玩家同意。</strong>直播会上传昵称、稳定玩家 ID、位置与游戏状态，能访问本网站的人可观看。仅导入本地日志不会上传文件。</p>
+                </div>
+                <pre aria-label="开启可选直播的配置示例"><code>[Recording]
+Enabled = true
+
+[Live]
+Enabled = true
+ServerUrl = https://peak.mylus.cn</code></pre>
+              </div>
+            </details>
+            <details>
+              <summary><span>没找到日志，或安装后没有反应？</span><b aria-hidden="true">＋</b></summary>
+              <div class="home-faq-body">
+                <p>记录在实际对局开始后生成，只停留在主菜单还不会有足迹。确认 DLL 在 <code>BepInEx/plugins/</code> 中，而不是留在下载目录或压缩包里。</p>
+                <p>若 <code>BepInEx/config/PeakTrailRecorder.cfg</code> 没有生成，先检查 BepInEx 是否正常加载；可查看 <code>BepInEx/LogOutput.log</code> 中的报错。已有配置时，确认 <code>[Recording]</code> 下的 <code>Enabled = true</code>。若自行修改过 <code>OutputDirectory</code>，请在设置的目录找日志。</p>
+              </div>
+            </details>
+            <details>
+              <summary><span>已有记录怎么保留？如何卸载？</span><b aria-hidden="true">＋</b></summary>
+              <div class="home-faq-body">
+                <p>升级只需在关闭游戏后替换 DLL，保留原配置和足迹目录。旧记录可直接导入，不需要重新进游戏录制。卸载时关闭游戏，移走 <code>PeakTrailRecorder.dll</code> 即可；已保存的足迹不会因此删除。</p>
+                <p>日志含昵称、玩家 ID 与行程，分享给别人前请征得参与者同意。</p>
+              </div>
+            </details>
+          </div>
+        </section>
+        <footer class="home-footer"><span>非官方粉丝工具 · 与 Landfall / Aggro Crab 无关联</span><details><summary>开发工具</summary><button class="gate-debug" id="gateDebug" type="button">演示直播（非真实对局）</button></details><span>本地导入不上传 · 直播需主动开启</span></footer>
       </div>
     </div>
 
