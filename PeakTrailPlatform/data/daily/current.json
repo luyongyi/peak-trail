@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
-  "fetchedAtUtc": "2026-09-24T20:28:26.869Z",
-  "nextChangeAtUtc": "2026-09-25T16:59:59.869Z",
+  "fetchedAtUtc": "2026-09-25T20:27:49.855Z",
+  "nextChangeAtUtc": "2026-09-26T16:59:59.855Z",
   "source": "https://peaklogin3.azurewebsites.net/api/VersionCheck?version=2.4",
   "apiVersion": "2.4",
   "versionOkay": true,
-  "levelIndex": 467,
+  "levelIndex": 468,
   "mapCount": 21,
-  "mapSlot": 5,
-  "sceneName": "Level_5",
-  "secondsRemaining": 73893,
+  "mapSlot": 6,
+  "sceneName": "Level_6",
+  "secondsRemaining": 73930,
   "message": "if you had your bookworm badge deleted last week, SORRY ABOUT THAT!!!<br><br> check the patch notes for instructions on getting it back^^^"
 }
