@@ -25,7 +25,7 @@ test("browser route/head fixture splits into two synthetic days with mutually ex
   const byScene = new Map(collection.sessions.map((trace) => [trace.manifest.sceneName, trace]));
   for (const [scene, branch, labels] of [
     ["Level_16", "volcano-kiln", ["火山", "熔炉"]],
-    ["Level_1", "swamp-temple", ["雾岛", "城塞"]],
+    ["Level_1", "swamp-temple", ["雾沼", "城塞"]],
   ]) {
     const trace = byScene.get(scene);
     assert.ok(trace);

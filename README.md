@@ -65,7 +65,7 @@ dotnet build PeakTrailRecorder/PeakTrailRecorder.slnx -c Release -p:DeployModFil
 9 幅 PNG 存于 `local/assets/home-art`，继续由 Git 忽略。生成模式与完整提示词见
 `PeakTrailPlatform/docs/home-art-prompts.json`；恢复资源备份时需包含这些插画。
 
-登山路线最后两关按实际分支配对：**火山 → 熔炉** 或 **雾岛 → 城塞**，不会将两条
+登山路线最后两关按实际分支配对：**火山 → 熔炉** 或 **雾沼 → 城塞**，不会将两条
 线路串在一起。游戏的每对关卡共用同一个 biome 枚举，因此不能按枚举名称直接命名。
 当前 21 套资源的分支证据在 `PeakTrailPlatform/data/maps/routes.25306743.json`，绑定
 确切地图 ID 与源场景哈希。构建网页时附加该元数据，不改动原始网格或地图身份。

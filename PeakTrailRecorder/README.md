@@ -114,7 +114,7 @@ build ID is captured so the viewer can refuse to overlay a trace on geometry fro
   map-pack identity or infer an individual player's owning stage.
 - In PEAK build `25306743`, the regular route's stages 3 and 4 share a biome enum:
   `Volcano` (3) means 火山 → 熔炉 (`volcano-kiln`), while `Swamp` (8) means
-  雾岛 → 城塞 (`swamp-temple`). The public `Segment` enum still calls these stages
+  雾沼 → 城塞 (`swamp-temple`). The public `Segment` enum still calls these stages
   `Caldera` and `TheKiln` for both branches. The recorder therefore reads
   `MapHandler.MapSegment.biome` and `segmentParent`, whose getters resolve variants
   through `hasVariant` and `BiomeIsPresent`; it never checks `activeSelf`, since PEAK

@@ -8,7 +8,7 @@ const BIOMES = {
   alpine: { title: "雪山", theme: "alpine" },
   mesa: { title: "台地", theme: "mesa" },
   volcano: { title: "火山", theme: "volcano" },
-  swamp: { title: "雾岛", theme: "swamp" },
+  swamp: { title: "雾沼", theme: "swamp" },
 };
 
 function timestamp(value) {

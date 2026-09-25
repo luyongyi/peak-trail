@@ -130,7 +130,7 @@ test("an unconfirmed home initially hides the finale and cannot expose a guessed
 
 test("each confirmed route defaults to its expanded interior illustration and correct route copy", () => {
   for (const [branch, title, precedingTitle, exterior] of [
-    ["swamp-temple", "城塞", "雾岛", HOME_ART.swamp],
+    ["swamp-temple", "城塞", "雾沼", HOME_ART.swamp],
     ["volcano-kiln", "熔炉", "火山", HOME_ART.volcano],
   ]) {
     const { nodes, cells, show } = fixture();

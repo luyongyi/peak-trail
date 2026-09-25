@@ -1,7 +1,7 @@
 // BiomeType is reused for the last two chapters. A branch is evidence from a
 // resolved MapHandler, never a choice computed from the date or level parity.
 const BRANCHES = new Set(["volcano-kiln", "swamp-temple"]);
-const NAMES = { "volcano-kiln": ["火山", "熔炉"], "swamp-temple": ["雾岛", "城塞"] };
+const NAMES = { "volcano-kiln": ["火山", "熔炉"], "swamp-temple": ["雾沼", "城塞"] };
 
 function biomeKey(segment) {
   const value = String(segment?.biome || "").toLowerCase();

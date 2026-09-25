@@ -13,7 +13,7 @@ const pack = { route: volcano, layers: volcano.segments.map((segment) => ({ segm
 
 test("both route pairs have distinct fourth and final chapter names, not duplicate biome labels", () => {
   assert.deepEqual([3, 4].map((index) => routeSegmentName(normalizeRoute(volcano), index)), ["火山", "熔炉"]);
-  assert.deepEqual([3, 4].map((index) => routeSegmentName(normalizeRoute(swamp), index)), ["雾岛", "城塞"]);
+  assert.deepEqual([3, 4].map((index) => routeSegmentName(normalizeRoute(swamp), index)), ["雾沼", "城塞"]);
   assert.equal(routeSegmentName(normalizeRoute(swamp), 1), null);
 });
 
@@ -35,7 +35,7 @@ test("legacy logs use matched map evidence with explicit provenance, not a fabri
 
 test("a recorded alternative hides both wrong ending geometries but preserves shared chapters", () => {
   const view = resolveReplayRoute(pack, { manifest: { route: swamp } });
-  assert.equal(view.label, "雾岛 → 城塞");
+  assert.equal(view.label, "雾沼 → 城塞");
   assert.deepEqual([...view.hiddenSegments], [3, 4]);
   assert.deepEqual(view.layers.map((layer) => layer.segment), [0]);
   assert.match(view.message, /已隐藏/);

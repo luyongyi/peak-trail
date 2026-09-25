@@ -28,7 +28,7 @@ class RouteTests(unittest.TestCase):
         value = route_metadata(handler(True), lambda name: name)
         self.assertEqual(value['branch'], 'swamp-temple')
         self.assertEqual([stage['biomeId'] for stage in value['segments'][3:]], [8, 8])
-        self.assertEqual([stage['displayName'] for stage in value['segments'][3:]], ['雾岛', '城塞'])
+        self.assertEqual([stage['displayName'] for stage in value['segments'][3:]], ['雾沼', '城塞'])
         self.assertEqual([stage['name'] for stage in value['segments'][3:]], ['Swamp_Segment', 'Temple_Segment'])
 
     def test_unselected_null_alternatives_are_not_used(self):

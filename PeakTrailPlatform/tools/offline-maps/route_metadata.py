@@ -56,7 +56,7 @@ def route_metadata(handler, root_name):
     branch = 'volcano-kiln' if pair == [3, 3] and has_geometry else 'swamp-temple' if pair == [8, 8] and has_geometry else 'unknown'
     labels = {
         'volcano-kiln': (('caldera', '火山'), ('kiln', '熔炉')),
-        'swamp-temple': (('swamp', '雾岛'), ('temple', '城塞')),
+        'swamp-temple': (('swamp', '雾沼'), ('temple', '城塞')),
     }
     if branch in labels:
         for segment, (stage_id, display_name) in zip(segments[3:5], labels[branch]):

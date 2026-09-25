@@ -36,7 +36,7 @@ test("current observation exposes four real chapter cards and the paired Citadel
   assert.equal(result.freshness, "current");
   assert.equal(result.statusLabel, "今日四关");
   assert.equal(result.mapStatus, "ready");
-  assert.deepEqual(result.cards.map((card) => card.title), ["海岸", "森蕈", "雪山", "雾岛"]);
+  assert.deepEqual(result.cards.map((card) => card.title), ["海岸", "森蕈", "雪山", "雾沼"]);
   assert.equal(result.cards[3].ending.title, "城塞");
   assert.equal(result.cards[3].ending.segment, 4);
   assert.equal(result.cards[3].ending.branch, "swamp-temple");
@@ -59,7 +59,7 @@ test("expired observation preserves a clearly labelled archive, not today's rout
   assert.equal(result.isCurrent, false);
   assert.equal(result.statusLabel, "上次确认的四关");
   assert.equal(result.sceneName, "Level_3");
-  assert.equal(result.cards[3].title, "雾岛");
+  assert.equal(result.cards[3].title, "雾沼");
   assert.equal(result.remainingSeconds, null);
   assert.equal(result.countdownLabel, "等待新一轮确认");
 });

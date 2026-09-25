@@ -12,5 +12,5 @@ export const HOME_ART = Object.freeze(Object.fromEntries(HOME_ART_FILES.map(file
 // never that enum alone, to choose the distinct interior illustration.
 export const HOME_ENDINGS = Object.freeze({
   'volcano-kiln': Object.freeze({ art: HOME_ART.kiln, english: 'THE KILN', description: '走进火山深处，跨过岩桥，赶在熔岩升起前沿内壁向上。' }),
-  'swamp-temple': Object.freeze({ art: HOME_ART.temple, english: 'THE CITADEL', description: '穿过雾岛，在围墙环抱的高塔内部，避开箭道，循着微光向上。' }),
+  'swamp-temple': Object.freeze({ art: HOME_ART.temple, english: 'THE CITADEL', description: '穿过雾沼，在围墙环抱的高塔内部，避开箭道，循着微光向上。' }),
 });

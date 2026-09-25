@@ -40,7 +40,7 @@ test('terminal route stages are mutually exclusive without changing their origin
       assert.deepEqual(terminals.map(stage => stage.biome), ['Swamp', 'Swamp']);
       assert.deepEqual(terminals.map(stage => stage.biomeId), [8, 8]);
       assert.deepEqual(terminals.map(stage => stage.name), ['Swamp_Segment', 'Temple_Segment']);
-      assert.deepEqual(terminals.map(stage => stage.displayName), ['雾岛', '城塞']);
+      assert.deepEqual(terminals.map(stage => stage.displayName), ['雾沼', '城塞']);
     }
   }
   assert.deepEqual([...branches].sort(), ['swamp-temple', 'volcano-kiln']);
