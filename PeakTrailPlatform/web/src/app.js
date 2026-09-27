@@ -886,7 +886,6 @@ async function enterModeFromGate(mode) {
 async function openHomeChapter(map, segment, presentedView, intent = null) {
   // File import owns navigation until parsing completes. Do not race a directory import.
   if (state.sourceLoadingCounts.trace || state.manualMapLoads) {
-    $("homeEvidence").textContent = "正在读取文件，请完成后再打开首页关卡。";
     return;
   }
   const current = buildHomeDailyView({ daily: state.daily, catalog: state.mapCatalog, mapPack: map });

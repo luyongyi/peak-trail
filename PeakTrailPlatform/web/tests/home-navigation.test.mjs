@@ -67,7 +67,7 @@ function fixture() {
     segmentMapStatuses: new Map([["2", { status: "ready" }]]), segmentOptions: [], toastTimer: 77, playing: true,
     live: { es: null, code: null, trace: null, timer: 0, demoTimer: 0, pollTimer: 0, dirty: false, lastSeq: 0, reconnectAttempts: 0 },
   };
-  const elements = Object.fromEntries(["liveStateRow", "eventToast", "modeReplay", "modeLive", "replaySource", "liveSource", "modeChip", "liveUrl", "layerSelect", "homeEvidence"].map((key) => [key, node()]));
+  const elements = Object.fromEntries(["liveStateRow", "eventToast", "modeReplay", "modeLive", "replaySource", "liveSource", "modeChip", "liveUrl", "layerSelect"].map((key) => [key, node()]));
   const calls = { renders: [], assets: [], urls: [], clearedIntervals: [], errors: [], loading: [], statuses: [], compatibility: [], archive: 0, dismissed: 0, daily: 0, liveRefreshes: 0, attached: 0 };
   const streams = [];
   class FakeEventSource {
@@ -159,7 +159,6 @@ test("directory import and manual map import each block home navigation without 
     assert.equal(f.state.mapRequestRevision, 7);
     assert.equal(f.calls.dismissed, 0);
     assert.equal(f.calls.renders.length, 0);
-    assert.match(f.elements.homeEvidence.textContent, /正在读取文件/);
   }
 });
 

@@ -47,7 +47,8 @@ test("three install steps cover official prerequisites, DLL placement and local 
 });
 
 test("public code and release links identify the source of the downloadable DLL", () => {
-  const source = html.match(/<section class="home-source"[\s\S]*?<\/section>/)[0];
+  const source = guideHtml.match(/<section class="home-source"[\s\S]*?<\/section>/)[0];
+  assert.doesNotMatch(html, /<section class="home-source"|id="homeSource"/);
   assert.match(source, /查看网站源码、DLL 源码和发布校验/);
   assert.match(source, /href="https:\/\/github\.com\/luyongyi\/peak-trail"/);
   assert.ok(source.includes(`href="https://github.com/luyongyi/peak-trail/tree/${release.sourceRevision}/PeakTrailRecorder"`));

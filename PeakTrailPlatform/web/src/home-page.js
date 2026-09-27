@@ -106,14 +106,11 @@ export class HomePage {
       button.setAttribute('aria-label', `${view.isCurrent ? '查看本轮' : '查看上次确认的'}第${card.segment + 1}关：${card.title}`);
       cell.querySelector('.home-biome-title').textContent = card.title;
       cell.querySelector('.home-biome-en').textContent = COPY[card.biome] || `CHAPTER ${card.ordinal}`;
-      const detail = cell.querySelector('.home-biome-detail');
-      detail.textContent = card.ending ? `通往${card.ending.title}` : '';
-      detail.hidden = !detail.textContent;
       const img = cell.querySelector('img');
       const url = card.available ? HOME_ART[card.biome] : null;
       if (url && img.getAttribute('src') !== url) img.src = url;
       img.hidden = !url;
-      img.alt = url ? `${card.title}主题氛围插画，并非本轮地图实景` : '';
+      img.alt = url ? `${card.title}区域插画` : '';
       cell.querySelector('.home-model-status').textContent = card.available ? '' : '等待确认';
     }
     const ending = view.cards[3]?.ending;
@@ -127,32 +124,23 @@ export class HomePage {
     finaleButton.setAttribute('aria-label', finale && ending ? `${view.isCurrent ? '查看本轮' : '查看上次确认的'}第5关：${ending.title}` : '终段等待路线确认');
     this.$('homeEnding').textContent = ending?.title || '终段待确认';
     this.$('homeEndingEnglish').textContent = finale?.english || 'FINAL ASCENT';
-    this.$('homeEndingDescription').textContent = '';
-    this.$('homeEndingDescription').hidden = true;
     this.$('homeEndingStatus').textContent = finale ? '' : '等待路线确认';
     const finaleArt = this.$('homeEndingArt');
     if (finale && finaleArt.getAttribute('src') !== finale.art) finaleArt.src = finale.art;
     finaleArt.hidden = !finale;
-    finaleArt.alt = ending ? `${ending.title}内部攀登空间主题插画，非地图实景` : '';
+    finaleArt.alt = ending ? `${ending.title}内部区域插画` : '';
     for (const destination of view.destinations) {
-      this.$(`home-${destination.id}-description`).textContent = destination.description;
-      this.$(`home-${destination.id}-outcome`).textContent = destination.outcomeLabel;
       const art = this.$(`home-${destination.id}-art`);
       // These are alternative ending illustrations, not evidence that this
       // daily map or a recording has visited/selected either ending.
       const url = HOME_ART[destination.id];
       if (art.getAttribute('src') !== url) art.src = url;
-      art.alt = `${destination.title}终局 AI 主题插画，非地图实景；与${destination.alternativeId === 'nadir' ? '天底' : '顶峰'}结局互斥`;
+      art.alt = `${destination.title}结局区域插画`;
       const button = this.$(`home-${destination.id}-explore`);
       button.disabled = !destination.available;
       button.textContent = destination.actionLabel;
       button.setAttribute('aria-label', `${view.isCurrent ? '本轮' : '上次确认的地图'}：${destination.actionLabel}`);
     }
-    this.$('homeEvidence').textContent = this.error ? `路线暂不可用 · ${this.error}`
-      : view.mapStatus === 'ready' ? `AI 主题插画 · 非地图实景 · 轮换于 ${view.observedLabel} 确认`
-        : view.mapStatus === 'missing-build' ? '本轮地图尚无匹配的版本资源，未借用其他地图。'
-          : view.mapStatus === 'route-unconfirmed' ? '部分路线待确认，未推测互斥关卡。'
-            : '正在确认本轮关卡组合…';
   }
 
   setVisible(visible) {

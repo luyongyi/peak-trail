@@ -101,13 +101,12 @@ function element() {
 function fixture() {
   const ids = [
     "homeRefresh", "homeDate", "homeDateMeta", "homeStatus", "homeRouteLabel", "homeCountdown",
-    "homeFinale", "homeEndingExplore", "homeEnding", "homeEndingEnglish", "homeEndingDescription", "homeEndingStatus", "homeEndingArt", "homeEvidence",
-    "home-peak-explore", "home-nadir-explore", "home-peak-description", "home-nadir-description",
-    "home-peak-art", "home-nadir-art", "home-peak-outcome", "home-nadir-outcome",
+    "homeFinale", "homeEndingExplore", "homeEnding", "homeEndingEnglish", "homeEndingStatus", "homeEndingArt",
+    "home-peak-explore", "home-nadir-explore", "home-peak-art", "home-nadir-art",
   ];
   const nodes = Object.fromEntries(ids.map((id) => [id, element()]));
   const cells = Array.from({ length: 4 }, () => {
-    const parts = Object.fromEntries(["button", ".home-biome-title", ".home-biome-en", ".home-biome-detail", "img", ".home-model-status"].map((selector) => [selector, element()]));
+    const parts = Object.fromEntries(["button", ".home-biome-title", ".home-biome-en", "img", ".home-model-status"].map((selector) => [selector, element()]));
     return { ...element(), querySelector: (selector) => parts[selector] };
   });
   const root = { dataset: {}, querySelector: (selector) => nodes[selector.slice(1)], querySelectorAll: () => cells };
@@ -135,8 +134,6 @@ test("an unconfirmed home initially hides the finale and cannot expose a guessed
   assert.equal(nodes.homeEndingExplore.disabled, true);
   assert.equal(nodes.homeEnding.textContent, "终段待确认");
   assert.equal(nodes.homeEndingEnglish.textContent, "FINAL ASCENT");
-  assert.equal(nodes.homeEndingDescription.textContent, "");
-  assert.equal(nodes.homeEndingDescription.hidden, true);
   assert.equal(nodes.homeEndingStatus.textContent, "等待路线确认");
   assert.equal(nodes.homeEndingArt.getAttribute("src"), null);
   assert.ok(cells.every((cell) => cell.querySelector("button").disabled));
@@ -156,15 +153,12 @@ test("each confirmed finale is a fifth normal map card with the correct interior
     assert.equal(nodes.homeEndingExplore.getAttribute("aria-label"), `查看本轮第5关：${title}`);
     assert.equal(nodes.homeEnding.textContent, title);
     assert.equal(nodes.homeEndingEnglish.textContent, ending.english);
-    assert.equal(nodes.homeEndingDescription.textContent, "");
-    assert.equal(nodes.homeEndingDescription.hidden, true);
     assert.equal(nodes.homeEndingStatus.textContent, "");
     assert.equal(nodes.homeEndingArt.src, ending.art);
     assert.equal(nodes.homeEndingArt.hidden, false);
-    assert.equal(nodes.homeEndingArt.alt, `${title}内部攀登空间主题插画，非地图实景`);
+    assert.equal(nodes.homeEndingArt.alt, `${title}内部区域插画`);
     assert.equal(cells[3].querySelector("img").src, exterior);
     assert.notEqual(nodes.homeEndingArt.src, cells[3].querySelector("img").src);
-    assert.equal(cells[3].querySelector(".home-biome-detail").textContent, `通往${title}`);
   }
 });
 
@@ -203,8 +197,6 @@ test("missing, unknown or contradictory route evidence hides and disables the fi
     assert.equal(nodes.homeFinale.dataset.branch, "");
     assert.equal(nodes.homeEndingExplore.disabled, true);
     assert.equal(nodes.homeEnding.textContent, "终段待确认");
-    assert.equal(nodes.homeEndingDescription.textContent, "");
-    assert.equal(nodes.homeEndingDescription.hidden, true);
     assert.equal(nodes.homeEndingStatus.textContent, "等待路线确认");
     assert.equal(nodes.homeEndingArt.alt, "");
     assert.equal(nodes.homeEndingArt.hidden, true);
@@ -219,7 +211,7 @@ test("Roots is rendered as 森蕈 in the card, accessible action and illustratio
   assert.equal(roots.querySelector(".home-biome-en").textContent, "ROOTS");
   assert.equal(roots.querySelector("button").getAttribute("aria-label"), "查看本轮第2关：森蕈");
   assert.equal(roots.querySelector("img").src, HOME_ART.roots);
-  assert.equal(roots.querySelector("img").alt, "森蕈主题氛围插画，并非本轮地图实景");
+  assert.equal(roots.querySelector("img").alt, "森蕈区域插画");
 });
 
 test("Tropics is named 雨林 in the card, accessible action and illustration description", () => {
@@ -232,7 +224,7 @@ test("Tropics is named 雨林 in the card, accessible action and illustration de
   assert.equal(tropics.querySelector(".home-biome-title").textContent, "雨林");
   assert.equal(tropics.querySelector("button").getAttribute("aria-label"), "查看本轮第2关：雨林");
   assert.equal(tropics.querySelector("img").src, HOME_ART.tropics);
-  assert.equal(tropics.querySelector("img").alt, "雨林主题氛围插画，并非本轮地图实景");
+  assert.equal(tropics.querySelector("img").alt, "雨林区域插画");
 });
 
 test("alternative-ending actions pass the source-bound summit intent and open the actual extra model", () => {
@@ -243,7 +235,6 @@ test("alternative-ending actions pass the source-bound summit intent and open th
   assert.equal(explored.length, 0);
   show();
   assert.equal(nodes["home-peak-explore"].disabled, false);
-  assert.match(nodes["home-peak-description"].textContent, /PeakHandler/);
   nodes["home-peak-explore"].listeners.get("click")();
   assert.equal(explored.at(-1).segment, 4);
   assert.deepEqual(explored.at(-1).intent, { destinationId: "peak", viewIntent: "summit" });
@@ -270,8 +261,7 @@ test("both ending illustrations remain alternatives, including while map evidenc
   for (const id of ["peak", "nadir"]) {
     const art = nodes[`home-${id}-art`];
     assert.equal(art.src, HOME_ART[id]);
-    assert.match(art.alt, /AI 主题插画，非地图实景/);
-    assert.match(art.alt, /结局互斥/);
+    assert.equal(art.alt, `${id === "peak" ? "顶峰" : "天底"}结局区域插画`);
     assert.equal(nodes[`home-${id}-explore`].disabled, true);
     const writes = art.srcWrites;
     show();
@@ -281,10 +271,6 @@ test("both ending illustrations remain alternatives, including while map evidenc
     page.tick();
     assert.equal(art.src, HOME_ART[id]);
   }
-  assert.equal(nodes["home-peak-outcome"].textContent, "从顶峰撤离");
-  assert.equal(nodes["home-nadir-outcome"].textContent, "前往天底之门");
-  assert.match(nodes["home-peak-description"].textContent, /与天底互斥/);
-  assert.match(nodes["home-nadir-description"].textContent, /与顶峰结局互斥/);
 });
 
 test("home markup presents ending artwork as two alternatives, not more numbered chapters", async () => {
@@ -298,7 +284,7 @@ test("home markup presents ending artwork as two alternatives, not more numbered
   assert.ok(section);
   assert.match(section, /二选一终局/);
   assert.match(section, /顶峰与天底为互斥结局/);
-  assert.match(section, /不是连续的第五、第六关/);
+  assert.doesNotMatch(section, /AI 主题插画|非地图实景|不是连续的第五、第六关/);
   assert.equal((section.match(/class="home-destination"/g) || []).length, 2);
   assert.doesNotMatch(section, /home-chapter-number/);
   for (const id of ["peak", "nadir"]) {
