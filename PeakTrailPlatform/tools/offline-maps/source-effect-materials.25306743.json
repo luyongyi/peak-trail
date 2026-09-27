@@ -1532,6 +1532,140 @@
           "name": "<noninit>"
         }
       }
+    },
+    {
+      "name": "AntiSphere",
+      "shader": "AntiSphere",
+      "sourceFile": "resources.assets",
+      "pathId": 13,
+      "colors": {},
+      "floats": {
+        "_AddPrecomputedVelocity": 0.0,
+        "_Alpha": 1.0,
+        "_BorderLight": 0.0,
+        "_CameraFadeLength": 1.0,
+        "_CameraFadeOffset": 1.0,
+        "_DepthFade": 2.0,
+        "_Power": 0.25,
+        "_QueueControl": 0.0,
+        "_QueueOffset": 1.0,
+        "_ReceiveShadows": 1.0,
+        "_SoftInverse": 0.5,
+        "_Speed": 0.5,
+        "_Tiling": 0.10000000149011612,
+        "_XRMotionVectorsPass": 1.0
+      },
+      "passState": {
+        "rtBlend0": {
+          "srcBlend": {
+            "val": 5.0,
+            "name": "<noninit>"
+          },
+          "destBlend": {
+            "val": 10.0,
+            "name": "<noninit>"
+          },
+          "srcBlendAlpha": {
+            "val": 1.0,
+            "name": "<noninit>"
+          },
+          "destBlendAlpha": {
+            "val": 10.0,
+            "name": "<noninit>"
+          },
+          "blendOp": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "blendOpAlpha": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "colMask": {
+            "val": 15.0,
+            "name": "<noninit>"
+          }
+        },
+        "zTest": {
+          "val": 4.0,
+          "name": "<noninit>"
+        },
+        "zWrite": {
+          "val": 1.0,
+          "name": "<noninit>"
+        },
+        "culling": {
+          "val": 2.0,
+          "name": "<noninit>"
+        }
+      }
+    },
+    {
+      "name": "AntiSphereInterior",
+      "shader": "AntiSphere",
+      "sourceFile": "resources.assets",
+      "pathId": 14,
+      "colors": {},
+      "floats": {
+        "_AddPrecomputedVelocity": 0.0,
+        "_Alpha": 1.0,
+        "_BorderLight": 1.0,
+        "_CameraFadeLength": 1.0,
+        "_CameraFadeOffset": 1.0,
+        "_DepthFade": 2.0,
+        "_Power": 0.25,
+        "_QueueControl": 0.0,
+        "_QueueOffset": 1.0,
+        "_ReceiveShadows": 1.0,
+        "_SoftInverse": 0.5,
+        "_Speed": 0.5,
+        "_Tiling": 0.10000000149011612,
+        "_XRMotionVectorsPass": 1.0
+      },
+      "passState": {
+        "rtBlend0": {
+          "srcBlend": {
+            "val": 5.0,
+            "name": "<noninit>"
+          },
+          "destBlend": {
+            "val": 10.0,
+            "name": "<noninit>"
+          },
+          "srcBlendAlpha": {
+            "val": 1.0,
+            "name": "<noninit>"
+          },
+          "destBlendAlpha": {
+            "val": 10.0,
+            "name": "<noninit>"
+          },
+          "blendOp": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "blendOpAlpha": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "colMask": {
+            "val": 15.0,
+            "name": "<noninit>"
+          }
+        },
+        "zTest": {
+          "val": 4.0,
+          "name": "<noninit>"
+        },
+        "zWrite": {
+          "val": 1.0,
+          "name": "<noninit>"
+        },
+        "culling": {
+          "val": 2.0,
+          "name": "<noninit>"
+        }
+      }
     }
   ]
 }

@@ -34,7 +34,7 @@ function view(overrides = {}) {
 test("current observation exposes four real chapter cards and the paired Citadel finale", () => {
   const result = view();
   assert.equal(result.freshness, "current");
-  assert.equal(result.statusLabel, "今日四关");
+  assert.equal(result.statusLabel, "今日五段路线");
   assert.equal(result.mapStatus, "ready");
   assert.deepEqual(result.cards.map((card) => card.title), ["海岸", "森蕈", "雪山", "雾沼"]);
   assert.equal(result.cards[3].ending.title, "城塞");
@@ -57,7 +57,7 @@ test("expired observation preserves a clearly labelled archive, not today's rout
   const result = view({ now: Date.parse(end) + 86400000 });
   assert.equal(result.freshness, "stale");
   assert.equal(result.isCurrent, false);
-  assert.equal(result.statusLabel, "上次确认的四关");
+  assert.equal(result.statusLabel, "上次确认的五段路线");
   assert.equal(result.sceneName, "Level_3");
   assert.equal(result.cards[3].title, "雾沼");
   assert.equal(result.remainingSeconds, null);
@@ -183,4 +183,124 @@ test("home metadata does not mutate daily, catalog, pack, or route", () => {
   const before = JSON.stringify(inputs);
   buildHomeDailyView(inputs);
   assert.equal(JSON.stringify(inputs), before);
+});
+
+test("a shared finale never masquerades as an independently verified summit map", () => {
+  for (const branch of ["swamp-temple", "volcano-kiln"]) {
+    const result = view({ mapPack: mapPack(branch) });
+    const summit = result.destinations.find(item => item.id === "peak");
+    assert.equal(summit.title, "顶峰");
+    assert.equal(summit.available, false);
+    assert.equal(summit.sharedLayer, true);
+    assert.equal(summit.segment, 4);
+    assert.equal(summit.layerId, result.cards[3].ending.layerId);
+    assert.equal(summit.actionLabel, "等待顶峰模型精确导出");
+    assert.match(summit.description, /无法.*可靠拆出顶峰/);
+    assert.equal(result.cards.length, 4);
+    assert.equal(result.destinations.find(item => item.id === "nadir").available, false);
+  }
+});
+
+test("source-bound PeakHandler metadata enables a summit intent on the shared terminal layer", () => {
+  const pack = mapPack("swamp-temple");
+  pack.mapPeak = { segment: 4, collisionBounds: { min: [-70, 979, 2131], max: [78, 1233, 2315] } };
+  const summit = view({ mapPack: pack }).destinations.find(item => item.id === "peak");
+  assert.equal(summit.available, true);
+  assert.equal(summit.sharedLayer, true);
+  assert.equal(summit.segment, 4);
+  assert.equal(summit.viewIntent, "summit");
+  assert.equal(summit.actionLabel, "查看顶峰地图");
+  assert.match(summit.description, /PeakHandler/);
+});
+
+test("Nadir uses an actual Void model, independent of the daily four or the summit enum", () => {
+  const pack = mapPack();
+  pack.layers.push({ id: "segment-05-void", segment: 5, biome: "Void", name: "Void" });
+  const result = view({ mapPack: pack });
+  const nadir = result.destinations.find(item => item.id === "nadir");
+  assert.equal(nadir.title, "天底");
+  assert.equal(nadir.available, true);
+  assert.equal(nadir.segment, 5);
+  assert.equal(nadir.layerId, "segment-05-void");
+  assert.equal(result.destinations.find(item => item.id === "peak").segment, 4);
+  assert.equal(result.cards.length, 4);
+  assert.equal(result.mapStatus, "ready");
+  assert.equal("visited" in nadir, false, "available map is not recorded visit evidence");
+});
+
+test("daily map availability describes two mutually exclusive endings when both source models are verified", () => {
+  const pack = mapPack();
+  pack.mapPeak = { segment: 4, collisionBounds: { min: [-70, 979, 2131], max: [78, 1233, 2315] } };
+  pack.layers.push({ id: "void", segment: 5, biome: "Void" });
+  const result = view({ mapPack: pack });
+  assert.equal(result.destinations.find(destination => destination.id === "peak").available, true);
+  assert.equal(result.destinations.find(destination => destination.id === "nadir").available, true);
+  for (const destination of result.destinations) {
+    assert.equal(destination.exclusiveGroup, "run-ending");
+    assert.equal(destination.alternativeId, destination.id === "peak" ? "nadir" : "peak");
+    for (const field of ["visited", "selected", "completed", "outcome"]) {
+      assert.equal(field in destination, false, `daily availability cannot establish ${field}`);
+    }
+  }
+  assert.match(result.destinations[0].description, /不再进入天底/);
+  assert.match(result.destinations[1].description, /即使路过顶峰.*不再计作顶峰结局/);
+  assert.equal(result.cards.length, 4);
+});
+
+test("unknown, absent, duplicate and contradictory extra-area metadata never invents Nadir", () => {
+  for (const extra of [
+    { segment: 5, name: "Segment 5" },
+    { segment: 5, biome: "Peak", biomeId: 17 },
+    { segment: "5", biome: "Void" },
+    { segment: -1, biome: "Void" },
+  ]) {
+    const pack = mapPack(); pack.layers.push(extra);
+    assert.equal(view({ mapPack: pack }).destinations[1].available, false);
+  }
+  const pack = mapPack();
+  pack.layers.push({ segment: 5, biome: "Void" }, { segment: 6, biome: "Void" });
+  assert.equal(view({ mapPack: pack }).destinations[1].available, false);
+  pack.layers.pop();
+  pack.layers.push({ segment: 5, biome: "FutureBiome" });
+  assert.equal(view({ mapPack: pack }).destinations[1].available, false);
+  pack.layers.pop();
+  pack.route.segments.push({ index: 5, biome: "Peak", biomeId: 5 });
+  assert.equal(view({ mapPack: pack }).destinations[1].available, false);
+});
+
+test("unconfirmed map identity disables both destinations without hiding their meaning", () => {
+  const pack = mapPack(); pack.layers.push({ segment: 5, biome: "Void" });
+  for (const changes of [
+    { daily: null, mapPack: pack },
+    { mapPack: { ...pack, gameBuildId: "999" } },
+    { mapPack: null },
+  ]) {
+    const result = view(changes);
+    assert.deepEqual(result.destinations.map(item => item.title), ["顶峰", "天底"]);
+    assert.ok(result.destinations.every(item => !item.available && item.segment === null));
+  }
+});
+
+test("shared summit mapping is not extended to an unverified future build", () => {
+  const futureBuild = "999";
+  const futureCatalog = { ...catalog, activeGameBuildId: futureBuild,
+    mapPacks: [{ ...entry, gameBuildId: futureBuild }] };
+  const pack = { ...mapPack(), gameBuildId: futureBuild };
+  assert.equal(view({ catalog: futureCatalog, mapPack: pack }).destinations[0].available, false);
+  pack.layers.push({ id: "explicit-peak", segment: 6, biome: "Peak", biomeId: 5 });
+  const summit = view({ catalog: futureCatalog, mapPack: pack }).destinations[0];
+  assert.equal(summit.available, true);
+  assert.equal(summit.sharedLayer, false);
+  assert.equal(summit.segment, 6);
+});
+
+test("stale observations can expose special regions only as an archive, and do not mutate evidence", () => {
+  const pack = mapPack();
+  pack.mapPeak = { segment: 4, collisionBounds: { min: [-70, 979, 2131], max: [78, 1233, 2315] } };
+  pack.layers.push({ segment: 5, biome: "Void" });
+  const before = JSON.stringify(pack);
+  const result = view({ mapPack: pack, now: Date.parse(end) });
+  assert.equal(result.isCurrent, false);
+  assert.ok(result.destinations.every(item => item.available));
+  assert.equal(JSON.stringify(pack), before);
 });

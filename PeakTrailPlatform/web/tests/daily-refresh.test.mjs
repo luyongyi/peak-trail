@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { createDailyRefreshClock, createDailySourceReader } from "../src/daily-refresh.js";
+import { createDailyRefreshClock, createDailySourceReader, dailyObservationIsFresh,
+  latestDailyBoundary, nextDailyBoundary } from "../src/daily-refresh.js";
 import { buildHomeDailyView } from "../src/home-daily.js";
 
 const START = Date.parse("2026-09-24T16:59:50Z");
@@ -14,6 +15,19 @@ function daily(slot = 4, deadline = START + 10_000) {
 }
 const response = data => ({ ok: true, json: async () => data });
 const freshness = (data, now) => buildHomeDailyView({ daily: data, now }).freshness;
+
+test("the refresh boundary is the most recent reached 01:00 in Asia/Shanghai", () => {
+  const before = Date.parse("2026-09-24T16:59:59.999Z");
+  const at = Date.parse("2026-09-24T17:00:00.000Z");
+  assert.equal(latestDailyBoundary(before), Date.parse("2026-09-23T17:00:00.000Z"));
+  assert.equal(nextDailyBoundary(before), at);
+  assert.equal(latestDailyBoundary(at), at);
+  assert.equal(nextDailyBoundary(at), Date.parse("2026-09-25T17:00:00.000Z"));
+  const misleadingDeadline = Date.parse("2026-09-26T17:00:00.000Z");
+  assert.equal(dailyObservationIsFresh(daily(4, misleadingDeadline), before), true);
+  assert.equal(dailyObservationIsFresh(daily(4, misleadingDeadline), at), false);
+  assert.equal(dailyObservationIsFresh({ ...daily(4, misleadingDeadline), fetchedAtUtc: new Date(at).toISOString() }, at), true);
+});
 
 test("daily readers coalesce overlapping fetches and prefer the current API", async () => {
   let release;
@@ -36,7 +50,9 @@ test("skipped stale API retries do not move their deadline and recover without s
   const reader = createDailySourceReader({ sources: () => [API, STATIC], freshness, now: () => now,
     fetchImpl: async url => {
       if (url === API) apiCalls += 1;
-      return response(url === API && apiCalls > 1 ? daily(5, START + 86400_000) : daily());
+      return response(url === API && apiCalls > 1
+        ? { ...daily(5, START + 86400_000), fetchedAtUtc: new Date(now).toISOString() }
+        : daily());
     } });
   assert.equal((await reader.read()).sceneName, "Level_4");
   assert.equal(reader.retryAt, initial + 30_000);
@@ -78,7 +94,7 @@ test("expired observations remain labelled last-confirmed, never inferred as the
   assert.equal(result.sceneName, "Level_4");
   assert.equal(view.isCurrent, false);
   assert.equal(view.freshness, "stale");
-  assert.equal(view.statusLabel, "上次确认的四关");
+  assert.equal(view.statusLabel, "上次确认的五段路线");
 });
 
 test("unavailable or malformed observations remain unknown", async () => {
@@ -107,6 +123,18 @@ test("the rotation boundary expires old data and refreshes immediately, without 
   const clock = createDailyRefreshClock({ ...timer, expire: async value => calls.push(`expire:${value.sceneName}`),
     refresh: async () => calls.push("refresh") });
   clock.schedule(daily());
+  await timer.advance(START + 9999);
+  assert.deepEqual(calls, []);
+  await timer.advance(START + 10_050);
+  assert.deepEqual(calls, ["expire:Level_4", "refresh"]);
+  clock.dispose();
+});
+
+test("the Shanghai boundary refreshes a pre-01:00 cache even when its reported deadline is later", async () => {
+  const timer = fakeTimers(), calls = [];
+  const clock = createDailyRefreshClock({ ...timer, expire: async value => calls.push(`expire:${value.sceneName}`),
+    refresh: async () => calls.push("refresh") });
+  clock.schedule(daily(4, START + 86400_000));
   await timer.advance(START + 9999);
   assert.deepEqual(calls, []);
   await timer.advance(START + 10_050);
@@ -144,6 +172,17 @@ test("visibility wake rechecks expired data after suspended timers and coalesces
   assert.deepEqual(calls, ["expire", "refresh"]);
 });
 
+test("visibility and slow polls do not refetch a cache already confirmed after this boundary", async () => {
+  const timer = fakeTimers(); let calls = 0;
+  const current = { ...daily(4, START + 86400_000), fetchedAtUtc: new Date(START + 10_000).toISOString() };
+  const clock = createDailyRefreshClock({ ...timer, expire: async () => {}, refresh: async () => { calls += 1; } });
+  timer.sleepUntil(START + 20_000);
+  clock.schedule(current);
+  await Promise.all([clock.wake(), clock.wake(), clock.wake()]);
+  assert.equal(calls, 0);
+  clock.dispose();
+});
+
 test("application expiry preserves imported traces and wires visibility recovery", () => {
   const source = readFileSync(new URL("../src/app.js", import.meta.url), "utf8");
   const expire = source.slice(source.indexOf("async function expireDailyStatus"), source.indexOf('elements.eventList.addEventListener("scroll"'));
@@ -151,6 +190,7 @@ test("application expiry preserves imported traces and wires visibility recovery
   assert.match(expire, /if \(!document\.hidden\) void dailyClock\.wake\(\);/);
   assert.match(source, /const trace = state\.trace;\s+await syncMapForTrace\(trace, true\);/);
   assert.match(source, /dailyClock\.schedule\(state\.daily, dailyReader\.retryAt\);/);
+  assert.match(source, /setInterval\(\(\) => void dailyClock\.wake\(\), 5 \* 60_000\);/);
 });
 
 function applicationExpiry(state, clearDailyMap, updateMapUI = () => {}) {
@@ -163,7 +203,7 @@ function applicationExpiry(state, clearDailyMap, updateMapUI = () => {}) {
 }
 
 test("an old expiry callback cannot clear a newly refreshed daily map", async () => {
-  const next = daily(5, START + 86400_000);
+  const next = { ...daily(5, START + 86400_000), fetchedAtUtc: new Date(START + 10_000).toISOString() };
   const state = { daily: next, mapSourceKind: "daily", mapRequestRevision: 7, dailyMapStatus: null };
   let cleared = 0;
   const expire = applicationExpiry(state, async () => { cleared += 1; });
@@ -174,20 +214,15 @@ test("an old expiry callback cannot clear a newly refreshed daily map", async ()
   assert.equal(state.dailyMapStatus, null);
 });
 
-test("expiry yielding during map clear cannot overwrite the newer observation's status", async () => {
-  const previous = daily(), next = daily(5, START + 86400_000);
-  const nextMap = { sceneName: "Level_5" };
-  const state = { daily: previous, mapSourceKind: "daily", mapRequestRevision: 7, manualMapLoads: 0 };
-  let release, updates = 0;
-  const pending = new Promise(resolve => { release = resolve; });
-  const expire = applicationExpiry(state, async () => { state.mapSourceKind = null; await pending; }, () => { updates += 1; });
-  const expiring = expire(previous);
-  state.daily = next;
-  state.mapPack = nextMap;
-  state.mapSourceKind = "daily";
-  state.dailyMapStatus = null;
-  release(); await expiring;
-  assert.equal(state.dailyMapStatus, null);
-  assert.equal(state.mapPack, nextMap);
-  assert.equal(updates, 0);
+test("expiry keeps the last confirmed automatic map visible while refresh recovers", async () => {
+  const previous = daily(), previousMap = { sceneName: "Level_4" };
+  const state = { daily: previous, mapSourceKind: "daily", mapPack: previousMap,
+    mapRequestRevision: 7, manualMapLoads: 0 };
+  let cleared = 0, updates = 0;
+  const expire = applicationExpiry(state, async () => { cleared += 1; }, () => { updates += 1; });
+  await expire(previous);
+  assert.equal(cleared, 0);
+  assert.equal(state.mapPack, previousMap);
+  assert.match(state.dailyMapStatus.detail, /保留上次确认的地图/);
+  assert.equal(updates, 1);
 });

@@ -22,7 +22,7 @@ import { createServer } from "node:http";
 import { appendFileSync, mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { deriveRunCode, isValidRunCode, normalizeRunId, runCodeMatches } from "./run-code.mjs";
-import { resolveDaily } from "./peak-daily.mjs";
+import { cachedDailyIsFresh, resolveDaily } from "./peak-daily.mjs";
 
 const MAX_RUNS = 200;
 const MAX_RECORDS_PER_RUN = 20_000;      // ~10 minutes of a 6-player session in memory
@@ -57,9 +57,8 @@ export function createLiveServer(options = {}) {
   let dailyRefresh = null;
 
   function dailyPayload() {
-    const expiresAt = Date.parse(dailyCache.data?.nextChangeAtUtc);
     if (dailyCache.data && dailyNow() - dailyCache.at < DAILY_CACHE_MS
-      && Number.isFinite(expiresAt) && dailyNow() < expiresAt) return Promise.resolve(dailyCache.data);
+      && cachedDailyIsFresh(dailyCache.data, dailyNow())) return Promise.resolve(dailyCache.data);
     // Coalesce concurrent cold requests: every viewer booting during a refresh
     // awaits the same in-flight fetch instead of each hitting PEAK's login API
     // (a cold cache otherwise stalls every first page open for the full upstream

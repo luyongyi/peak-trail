@@ -2,11 +2,36 @@
 // resolved MapHandler, never a choice computed from the date or level parity.
 const BRANCHES = new Set(["volcano-kiln", "swamp-temple"]);
 const NAMES = { "volcano-kiln": ["火山", "熔炉"], "swamp-temple": ["雾沼", "城塞"] };
+const SPECIAL_STAGES = [
+  { biome: "peak", biomeId: 5, stageId: "peak", name: "顶峰", kind: "summit" },
+  { biome: "void", biomeId: 17, stageId: "nadir", name: "天底", kind: "nadir" },
+];
+
+/**
+ * Classify recorded biomes, never Segment enum values or route array indices.
+ * In the current game Peak shares the final chapter at array index 4; it is not
+ * a separately exported layer. Explicit Peak biome support is for other/custom
+ * route evidence. Void is appended at array index 5. Neither a route entry nor
+ * this label proves a player visited it.
+ */
+export function classifyRouteSegment(entry) {
+  const biome = typeof entry?.biome === "string" ? entry.biome.trim().toLowerCase() : "";
+  const biomeId = Number.isInteger(entry?.biomeId) ? entry.biomeId : null;
+  const stage = SPECIAL_STAGES.find((candidate) => (biome || biomeId !== null)
+    && (!biome || biome === candidate.biome)
+    && (biomeId === null || biomeId === candidate.biomeId));
+  return stage
+    ? { stageId: stage.stageId, name: stage.name, kind: stage.kind }
+    : { stageId: null, name: null, kind: "chapter" };
+}
 
 function biomeKey(segment) {
   const value = String(segment?.biome || "").toLowerCase();
   if (segment?.biomeId === 3 || value === "volcano") return "volcano";
   if (segment?.biomeId === 8 || value === "swamp") return "swamp";
+  const special = classifyRouteSegment(segment);
+  if (special.kind === "summit") return "peak";
+  if (special.kind === "nadir") return "void";
   return value;
 }
 
@@ -48,6 +73,8 @@ export function routeAtTime(trace, seconds) {
 }
 
 export function routeSegmentName(route, index) {
+  const special = classifyRouteSegment(route?.segments?.find((entry) => entry.index === index));
+  if (special.name) return special.name;
   return index === 3 || index === 4 ? NAMES[route?.branch]?.[index - 3] || null : null;
 }
 

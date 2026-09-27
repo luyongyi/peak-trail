@@ -3,6 +3,7 @@ export const HOME_ART_FILES = Object.freeze([
   'shore-v3.png', 'roots-v3.png', 'tropics-v3.png', 'alpine-v3.png',
   'mesa-v3.png', 'volcano-v3.png', 'swamp-v3.png',
   'kiln-v3.png', 'temple-v3.png',
+  'peak-v1.png', 'nadir-v1.png',
 ]);
 export const HOME_ART = Object.freeze(Object.fromEntries(HOME_ART_FILES.map(file => [
   file.replace(/-v\d+\.png$/, ''), `./data/home-art/${file}`,

@@ -38,6 +38,7 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
     mkdir(resolve(platform, "web", "src"), { recursive: true }),
     mkdir(resolve(platform, "vendor"), { recursive: true }),
     mkdir(resolve(platform, "data", "daily"), { recursive: true }),
+    mkdir(resolve(platform, "data", "home-art"), { recursive: true }),
     mkdir(resolve(platform, "data", "maps"), { recursive: true }),
     mkdir(resolve(platform, "data", "recorder"), { recursive: true }),
     mkdir(resolve(platform, "schema"), { recursive: true }),
@@ -56,6 +57,7 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
     copyFile(resolve(platformSource, "web", "src", "map-fog.js"), resolve(platform, "web", "src", "map-fog.js")),
     copyFile(resolve(platformSource, "web", "src", "map-water.js"), resolve(platform, "web", "src", "map-water.js")),
     copyFile(resolve(platformSource, "web", "src", "map-enclosures.js"), resolve(platform, "web", "src", "map-enclosures.js")),
+    copyFile(resolve(platformSource, "web", "src", "map-peak.js"), resolve(platform, "web", "src", "map-peak.js")),
     copyFile(resolve(platformSource, "web", "src", "home-art.js"), resolve(platform, "web", "src", "home-art.js")),
     writeFile(resolve(platform, "web", "index.html"), "<!doctype html>"),
     writeFile(resolve(platform, "web", "styles.css"), "body{}"),
@@ -65,7 +67,10 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
     writeFile(resolve(platform, "data", "daily", "current.json"), "{}"),
     writeFile(resolve(repository, "local", "recordings", "private-session.ndjson"), "private trail"),
   ]);
-  await Promise.all(HOME_ART_FILES.map(file => writeFile(resolve(assets, 'home-art', file), 'illustration fixture')));
+  const bundledHomeArt = new Set(['peak-v1.png', 'nadir-v1.png']);
+  await Promise.all(HOME_ART_FILES.map(file => writeFile(resolve(
+    bundledHomeArt.has(file) ? resolve(platform, 'data', 'home-art') : resolve(assets, 'home-art'), file,
+  ), 'illustration fixture')));
   const retiredHomeArt = ['shore', 'roots', 'tropics', 'alpine', 'mesa', 'volcano', 'swamp', 'kiln', 'temple']
     .flatMap(name => [1, 2].map(version => `${name}-v${version}.png`));
   await Promise.all(retiredHomeArt.map(file => writeFile(resolve(assets, 'home-art', file), 'retired illustration')));

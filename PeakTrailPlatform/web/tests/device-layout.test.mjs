@@ -11,7 +11,8 @@ test('home and replay share an iPad portrait range including mini and large Pro 
   assert.match(home, portrait);
   assert.match(replay, portrait);
   assert.match(home, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
-  assert.match(home, /grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/);
+  assert.match(home, /grid-template-columns: repeat\(5, minmax\(0, 1fr\)\)/);
+  assert.match(home, /grid-template-columns: repeat\(6, minmax\(0, 1fr\)\)/);
   assert.match(replay, /\.workspace \{ display: block; \}/);
   assert.doesNotMatch(replay, /\.speed-control\s*\{\s*display:\s*none/);
 });

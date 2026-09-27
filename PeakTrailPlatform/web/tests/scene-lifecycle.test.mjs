@@ -5,6 +5,7 @@ import { layoutPortraitLabels, clusterPlayerEntries } from "../src/portrait-layo
 import { latestLifeEventBefore, MARKER_LIFE_EVENT_TYPES } from "../src/protocol.js";
 import { chooseRecordedInteriorPose, isInteriorLayer } from "../src/camera-placement.js";
 import { ReplayCamera } from "../src/replay-camera.js";
+import { nadirCameraBounds } from "../src/nadir-camera-bounds.js";
 import * as THREE from "../../vendor/three/0.180.0/build/three.module.js";
 
 // Exercise the actual scene methods without a browser/WebGL context. Only the
@@ -34,8 +35,8 @@ function model() {
 function fixture(selected = 0) {
   const requests = [];
   const load = (layer, signal, gameBuildId) => new Promise((resolve, reject) => requests.push({ layer: layer.id, signal, gameBuildId, resolve, reject }));
-  const TrailScene = new Function("THREE", "loadGameGeometry", "cancelAnimationFrame", "layoutPortraitLabels", "clusterPlayerEntries", "latestLifeEventBefore", "MARKER_LIFE_EVENT_TYPES", "isInteriorLayer", "chooseRecordedInteriorPose", `${source}\nreturn TrailScene;`)(
-    THREE, load, () => {}, layoutPortraitLabels, clusterPlayerEntries, latestLifeEventBefore, MARKER_LIFE_EVENT_TYPES, isInteriorLayer, chooseRecordedInteriorPose,
+  const TrailScene = new Function("THREE", "loadGameGeometry", "cancelAnimationFrame", "layoutPortraitLabels", "clusterPlayerEntries", "latestLifeEventBefore", "MARKER_LIFE_EVENT_TYPES", "isInteriorLayer", "chooseRecordedInteriorPose", "nadirCameraBounds", `${source}\nreturn TrailScene;`)(
+    THREE, load, () => {}, layoutPortraitLabels, clusterPlayerEntries, latestLifeEventBefore, MARKER_LIFE_EVENT_TYPES, isInteriorLayer, chooseRecordedInteriorPose, nadirCameraBounds,
   );
   const layers = [
     { id: "A", segment: 0, biome: "shore" },
@@ -53,6 +54,7 @@ function fixture(selected = 0) {
     cameraSelectionRevision: 0,
     freeCamera: { mode: "orbit", setMode(value) { this.mode = value; }, focus() {}, dispose() {} }, worldRenderer: { dispose() {} }, fogDepthPass: { dispose() {} },
     emitMapStatus(...args) { this.statuses.push(args); }, setTime() {}, fitView() { ++this.cameraSelectionRevision; },
+    nadirGeometryBounds() { return null; },
   });
   scene.terrainRoot.children = layers.map(group);
   return { scene, requests };
@@ -141,6 +143,48 @@ test("an explicit Void chapter loads normally but overview neither loads nor rev
   requests[0].resolve(model()); await flush();
   assert.equal(voidGroup.visible, true);
   assert.equal(voidGroup.userData.loaded, true);
+});
+
+test("Nadir camera fitting uses real transformed instances without shrinking player or trail bounds", () => {
+  const { scene } = fixture(5);
+  delete scene.nadirGeometryBounds;
+  const layer = { id: "Void", segment: 5, biome: "Void", minX: -2505, maxX: 2505, minY: -272, maxY: 1016, minZ: -2294, maxZ: 2716 };
+  scene.mapPack.layers.push(layer);
+  scene.origin = new THREE.Vector3(13, 400, 90);
+  scene.terrainRoot = new THREE.Group(); scene.terrainRoot.scale.set(1, 2, -1);
+  const chapter = new THREE.Group(); chapter.userData = { mapLayer: layer, loaded: true, segment: 5 };
+  const model = new THREE.Group(); model.position.copy(scene.origin).multiplyScalar(-1);
+  const waterMaterial = new THREE.MeshBasicMaterial();
+  waterMaterial.userData.peakTerrain = { sourceMaterial: "M_Void Water", sourceColors: { shader: "GD/Water-GD" } };
+  const water = new THREE.InstancedMesh(new THREE.PlaneGeometry(10, 10).rotateX(-Math.PI / 2), waterMaterial, 1);
+  water.setMatrixAt(0, new THREE.Matrix4().compose(new THREE.Vector3(0, 702.6, 210), new THREE.Quaternion(), new THREE.Vector3(500, 1, 500)));
+  const rock = new THREE.Mesh(new THREE.BoxGeometry(20, 30, 40), new THREE.MeshBasicMaterial());
+  rock.position.set(100, 800, 300);
+  model.add(water, rock); chapter.add(model); scene.terrainRoot.add(chapter);
+  const clippingBounds = scene.viewBounds();
+  assert.deepEqual(scene.cameraFitBounds(), { min: [90, 785, 280], max: [110, 815, 320] });
+  assert.deepEqual(scene.viewBounds(), clippingBounds);
+  assert.equal(water.visible, true);
+  assert.equal(water.count, 1);
+  assert.equal(model.children.length, 2);
+  scene.mapPack.gameBuildId = "unknown";
+  assert.deepEqual(scene.cameraFitBounds(), clippingBounds);
+});
+
+test("Nadir lazy-load refit respects current selection and later user camera choices", async () => {
+  for (const action of ["stay", "leave", "camera"]) {
+    const { scene, requests } = fixture();
+    const layer = { id: "Void", segment: 5, biome: "Void" };
+    scene.mapPack.layers.push(layer); scene.terrainRoot.children.push(group(layer));
+    scene.nadirGeometryBounds = () => scene.activeSegment === 5 ? { min: [0, 0, 0], max: [1, 1, 1] } : null;
+    let fits = 0; scene.fitView = () => { fits++; scene.cameraSelectionRevision++; };
+    scene.setActiveSegment(5);
+    if (action === "leave") scene.setActiveSegment(1);
+    if (action === "camera") scene.cameraSelectionRevision++;
+    requests[0].resolve(model()); await flush();
+    assert.equal(fits, action === "camera" ? 1 : 2);
+    if (action === "leave") { requests[1].resolve(model()); await flush(); assert.equal(fits, 2); }
+  }
 });
 
 test("a failed current chapter clears its pending cache and can be retried", async () => {

@@ -55,15 +55,16 @@ test("public code and release links identify the source of the downloadable DLL"
   assert.doesNotMatch(source, /开源协议|MIT|随意使用/);
 });
 
-test("phone guide, source links and default finale artwork stay readable without horizontal scrolling", () => {
+test("phone guide, source links and five-card route stay readable without horizontal scrolling", () => {
   assert.match(html, /viewport-fit=cover/);
   assert.match(css, /@media \(max-width: 743px\)/);
   assert.match(css, /safe-area-inset-bottom/);
   assert.match(css, /\.home-live-guide \{ grid-template-columns: minmax\(0, 1fr\); gap: 18px; \}/);
   assert.match(css, /\.home-live-guide pre \{[^}]*overflow-wrap: anywhere/);
-  assert.match(css, /\.home-finale figure > img \{ width: 100%;/);
+  assert.match(css, /\.home-chapters \{ height: auto; grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); grid-template-rows: repeat\(3,/);
+  assert.match(css, /\.home-chapter:first-child \{ grid-column: 1 \/ -1; \}/);
   assert.match(css, /\.home-source-links a:first-child \{ grid-column: 1 \/ -1; \}/);
-  assert.doesNotMatch(css, /\.home-finale(?:\s+figure)?\s*\{\s*display:\s*none/);
+  assert.match(css, /\.home-destination-list \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); gap: 12px; \}/);
 });
 
 test("optional live instructions preserve local recording and disclose real upload behavior", () => {

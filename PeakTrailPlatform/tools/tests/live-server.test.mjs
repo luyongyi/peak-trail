@@ -217,6 +217,7 @@ test("concurrent daily requests coalesce into one upstream fetch and the warm ca
   const gate = new Promise((resolveGate) => { release = resolveGate; });
   const payload = {
     schemaVersion: 1, sceneName: "Level_20", mapSlot: 20,
+    fetchedAtUtc: new Date().toISOString(),
     nextChangeAtUtc: new Date(Date.now() + 3600_000).toISOString(),
   };
   const { base, close } = await start({
@@ -247,7 +248,8 @@ test("daily cache expires at the rotation boundary even before its ten-minute TT
   const deadline = now + 10_000;
   const { base, close } = await start({ dailyNow: () => now, dailyResolver: async () => {
     calls += 1;
-    return { sceneName: calls === 1 ? "Level_4" : "Level_5", nextChangeAtUtc: new Date(calls === 1 ? deadline : deadline + 86400_000).toISOString() };
+    return { sceneName: calls === 1 ? "Level_4" : "Level_5", fetchedAtUtc: new Date(now).toISOString(),
+      nextChangeAtUtc: new Date(calls === 1 ? deadline : deadline + 86400_000).toISOString() };
   } });
   try {
     assert.equal((await (await fetch(`${base}/api/daily`)).json()).sceneName, "Level_4");
@@ -260,12 +262,33 @@ test("daily cache expires at the rotation boundary even before its ten-minute TT
   } finally { await close(); }
 });
 
+test("daily cache refreshes after Shanghai 01:00 even when the cached countdown claims later", async () => {
+  let now = Date.parse("2026-09-24T16:59:50Z"), calls = 0;
+  const boundary = Date.parse("2026-09-24T17:00:00Z");
+  const misleadingDeadline = Date.parse("2026-09-25T17:00:00Z");
+  const { base, close } = await start({ dailyNow: () => now, dailyResolver: async () => {
+    calls += 1;
+    return { sceneName: calls === 1 ? "Level_4" : "Level_5",
+      fetchedAtUtc: new Date(now).toISOString(), nextChangeAtUtc: new Date(misleadingDeadline).toISOString() };
+  } });
+  try {
+    assert.equal((await (await fetch(`${base}/api/daily`)).json()).sceneName, "Level_4");
+    now = boundary - 1;
+    await fetch(`${base}/api/daily`);
+    assert.equal(calls, 1);
+    now = boundary;
+    assert.equal((await (await fetch(`${base}/api/daily`)).json()).sceneName, "Level_5");
+    assert.equal(calls, 2);
+  } finally { await close(); }
+});
+
 test("upstream stale data does not acquire a fresh cache TTL and a failure can recover", async () => {
   const now = Date.parse("2026-09-24T17:00:00Z"); let calls = 0;
   const { base, close } = await start({ dailyNow: () => now, dailyResolver: async () => {
     calls += 1;
     if (calls === 2) throw new Error("upstream temporarily offline");
-    return { sceneName: calls === 1 ? "Level_4" : "Level_5", nextChangeAtUtc: new Date(calls === 1 ? now : now + 86400_000).toISOString() };
+    return { sceneName: calls === 1 ? "Level_4" : "Level_5", fetchedAtUtc: new Date(now).toISOString(),
+      nextChangeAtUtc: new Date(calls === 1 ? now : now + 86400_000).toISOString() };
   } });
   try {
     assert.equal((await (await fetch(`${base}/api/daily`)).json()).sceneName, "Level_4");
@@ -280,7 +303,8 @@ test("daily cache still observes the short TTL within a long rotation", async ()
   let now = Date.parse("2026-09-24T17:00:00Z"), calls = 0;
   const deadline = now + 86400_000;
   const { base, close } = await start({ dailyNow: () => now, dailyResolver: async () => {
-    calls += 1; return { sceneName: "Level_5", nextChangeAtUtc: new Date(deadline).toISOString() };
+    calls += 1; return { sceneName: "Level_5", fetchedAtUtc: new Date(now).toISOString(),
+      nextChangeAtUtc: new Date(deadline).toISOString() };
   } });
   try {
     await fetch(`${base}/api/daily`);

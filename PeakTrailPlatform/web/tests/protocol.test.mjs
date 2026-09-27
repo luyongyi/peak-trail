@@ -150,9 +150,11 @@ test("daily catalog refuses to guess without an explicitly active build", () => 
 
 test("expired or invalid daily data cannot keep an automatic map visible", () => {
   const now = Date.parse("2026-09-15T17:00:00Z");
-  assert.equal(isDailyMapFresh({ nextChangeAtUtc: "2026-09-15T17:00:01Z" }, now), true);
-  assert.equal(isDailyMapFresh({ nextChangeAtUtc: "2026-09-15T17:00:00Z" }, now), false);
-  assert.equal(isDailyMapFresh({ nextChangeAtUtc: "not-a-date" }, now), false);
+  const fetchedAtUtc = "2026-09-15T17:00:00Z";
+  assert.equal(isDailyMapFresh({ fetchedAtUtc, nextChangeAtUtc: "2026-09-15T17:00:01Z" }, now), true);
+  assert.equal(isDailyMapFresh({ fetchedAtUtc, nextChangeAtUtc: "2026-09-15T17:00:00Z" }, now), false);
+  assert.equal(isDailyMapFresh({ fetchedAtUtc, nextChangeAtUtc: "not-a-date" }, now), false);
+  assert.equal(isDailyMapFresh({ fetchedAtUtc: "2026-09-15T16:59:59Z", nextChangeAtUtc: "2026-09-16T17:00:00Z" }, now), false);
 });
 
 function textFile(name, contents, relativePath = "") {

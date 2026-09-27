@@ -15,15 +15,37 @@ test("all effect lookup entries reproduce their exact-build raw Unity source evi
     assert.equal(effect.source.asset, source.sourceFile);
     assert.equal(effect.source.pathId, source.pathId);
     const color = source.colors[effect.source.colorProperty];
-    assert.deepEqual(effect.source.storedColor, color.rgba);
-    assert.equal(effect.source.propertyFlags, color.flags);
-    const rgb = color.rgba.slice(0, 3).map((v) => color.flags & 16 ? v : linear(v));
-    assert.deepEqual(effect.source.sourceColorLinear, rgb);
-    assert.deepEqual(effect.kind === "lava" ? effect.emissive : effect.baseColor, rgb);
+    if (effect.source.colorProperty) {
+      assert.deepEqual(effect.source.storedColor, color.rgba);
+      assert.equal(effect.source.propertyFlags, color.flags);
+      const rgb = color.rgba.slice(0, 3).map((v) => color.flags & 16 ? v : linear(v));
+      assert.deepEqual(effect.source.sourceColorLinear, rgb);
+      assert.deepEqual(effect.kind === "lava" ? effect.emissive : effect.baseColor, rgb);
+    } else {
+      assert.equal(effect.kind, "antisphere");
+      assert.equal(effect.source.storedColor, null);
+      assert.equal(effect.source.sourceColorLinear, null);
+    }
     assert.equal(effect.source.pass.zWrite, source.passState.zWrite.val);
     if (effect.kind === "fog") assert.equal(effect.opacity, source.floats._Opacity);
   }
-  assert.equal(checked, 12);
+  assert.equal(checked, 14);
+});
+
+test("Void AntiSphere shells use exact transparent source evidence instead of opaque white PBR", () => {
+  for (const [name, pathId, borderLight] of [["AntiSphere", 13, 0], ["AntiSphereInterior", 14, 1]]) {
+    const effect = getSourceEffectMaterial("25306743", name, "AntiSphere");
+    assert.equal(effect.kind, "antisphere");
+    assert.equal(effect.transparent, true);
+    assert.equal(effect.depthWrite, true);
+    assert.equal(effect.opacity, 1, "source _Alpha remains 1; the shader computes per-pixel transparency");
+    assert.equal(effect.source.asset, "resources.assets");
+    assert.equal(effect.source.pathId, pathId);
+    assert.deepEqual(effect.source.alphaShape,
+      {_Alpha: 1, _Power: 0.25, _SoftInverse: 0.5, _BorderLight: borderLight});
+    assert.match(effect.source.approximation, /Fresnel shell/);
+  }
+  assert.equal(getSourceEffectMaterial("25306743", "AntiSphere", "other"), null);
 });
 
 test("Roots explosive mushroom uses source orange HDR albedo, not neutral tint or emission", () => {

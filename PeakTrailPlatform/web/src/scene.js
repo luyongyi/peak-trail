@@ -15,6 +15,7 @@ import { SpectatorCamera, FOLLOW_DISTANCE, FOLLOW_MIN_DISTANCE, FOLLOW_MAX_DISTA
 import { followLayerAtPosition } from "./map-enclosures.js";
 import { FollowTerrainQuery } from "./follow-terrain.js";
 import { SourceWaterRenderer } from "./source-water-renderer.js";
+import { nadirCameraBounds } from "./nadir-camera-bounds.js";
 
 const PLAYER_COLORS = [
   "#efb74e",
@@ -279,13 +280,14 @@ export class TrailScene {
     this.animationFrame = requestAnimationFrame(this.animate);
   }
 
-  async setData({ mapPack, trace, useMap, activeSegment }) {
+  async setData({ mapPack, trace, useMap, activeSegment, viewIntent = null }) {
     if (this.trace !== trace) this.setFollowTarget(null);
     const cameraRevision = this.cameraSelectionRevision;
     if (this.trace !== trace) this.playerPortraits.clear();
     this.mapPack = mapPack || null;
     this.trace = trace || null;
     this.useMap = Boolean(useMap && mapPack);
+    this.viewIntent = viewIntent === "summit" ? "summit" : null;
     const firstMountain = mapPack?.layers?.find((layer) => String(layer.biome).toLowerCase() !== "void");
     this.activeSegment = activeSegment === null ? null
       : Number.isInteger(activeSegment) ? activeSegment : firstMountain?.segment ?? null;
@@ -338,7 +340,7 @@ export class TrailScene {
     this.setTime(this.currentTime);
     if (cameraRevision === this.cameraSelectionRevision && this.followTargetId === null) {
       this.fitView();
-      if (isInteriorLayer(this.selectedLayer(), this.mapPack?.route)) this.enterInteriorView(false);
+      if (!this.summitCameraBounds() && isInteriorLayer(this.selectedLayer(), this.mapPack?.route)) this.enterInteriorView(false);
     }
   }
 
@@ -1271,9 +1273,21 @@ export class TrailScene {
     const selected = this.activeSegment;
     const cameraRevision = this.cameraSelectionRevision;
     const buildRevision = this.buildToken;
+    const selectionRevision = this.geometrySelectionToken;
     void this.ensureGeometryLayers().then(() => {
-      if (this.followTargetId == null && selected === this.activeSegment && buildRevision === this.buildToken && cameraRevision === this.cameraSelectionRevision && isInteriorLayer(this.selectedLayer(), this.mapPack?.route)) this.enterInteriorView(false);
+      if (this.followTargetId != null || selected !== this.activeSegment || buildRevision !== this.buildToken
+          || selectionRevision !== this.geometrySelectionToken || cameraRevision !== this.cameraSelectionRevision) return;
+      if (this.summitCameraBounds() || this.nadirGeometryBounds()) this.fitView();
+      else if (isInteriorLayer(this.selectedLayer(), this.mapPack?.route)) this.enterInteriorView(false);
     });
+  }
+
+  setViewIntent(intent) {
+    this.viewIntent = intent === "summit" ? "summit" : null;
+    if (this.followTargetId == null) {
+      this.fitView();
+      if (!this.viewIntent && isInteriorLayer(this.selectedLayer(), this.mapPack?.route)) this.enterInteriorView(false);
+    }
   }
 
   applyLayerVisibility() {
@@ -1302,6 +1316,47 @@ export class TrailScene {
   }
 
   selectedLayer() { return this.mapPack?.layers.find((entry) => entry.segment === this.activeSegment) || null; }
+
+  summitCameraBounds() {
+    const peak = this.mapPack?.mapPeak;
+    return this.useMap && this.viewIntent === "summit" && peak?.segment === this.activeSegment
+      ? peak.collisionBounds : null;
+  }
+
+  nadirGeometryBounds() {
+    const layer = this.selectedLayer();
+    if (!this.useMap || String(this.mapPack?.gameBuildId) !== "25306743" || String(layer?.biome).toLowerCase() !== "void") return null;
+    const group = this.terrainRoot.children.find((entry) => entry.userData.mapLayer === layer && entry.userData.loaded);
+    if (!group) return null;
+    if (Object.hasOwn(group.userData, "nadirCameraBounds")) return group.userData.nadirCameraBounds;
+    group.updateWorldMatrix(true, true);
+    // Undo display origin, height scaling and Z reflection before collecting
+    // source-world extents. Camera fitting must not alter viewBounds, which
+    // also governs player visibility and trail clipping.
+    const inverse = group.matrixWorld.clone().invert();
+    const instance = new THREE.Matrix4(), relative = new THREE.Matrix4();
+    const parts = [];
+    group.traverse((mesh) => {
+      if (!mesh.isMesh || !mesh.visible) return;
+      mesh.geometry.computeBoundingBox();
+      const materials = (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).map((material) => ({
+        name: material.userData?.peakTerrain?.sourceMaterial || material.name,
+        shader: material.userData?.peakTerrain?.sourceColors?.shader,
+      }));
+      const local = new THREE.Matrix4().multiplyMatrices(inverse, mesh.matrixWorld);
+      for (let i = 0; i < (mesh.isInstancedMesh ? mesh.count : 1); i++) {
+        if (mesh.isInstancedMesh) { mesh.getMatrixAt(i, instance); relative.multiplyMatrices(local, instance); }
+        else relative.copy(local);
+        const bounds = mesh.geometry.boundingBox.clone().applyMatrix4(relative);
+        bounds.min.add(this.origin); bounds.max.add(this.origin);
+        parts.push({ bounds: { min: bounds.min.toArray(), max: bounds.max.toArray() }, materials });
+      }
+    });
+    group.userData.nadirCameraBounds = nadirCameraBounds(layer, this.mapPack.gameBuildId, parts);
+    return group.userData.nadirCameraBounds;
+  }
+
+  cameraFitBounds() { return this.summitCameraBounds() || this.nadirGeometryBounds() || this.viewBounds(); }
 
   enterInteriorView(focus = true) {
     this.setFollowTarget(null);
@@ -1363,7 +1418,7 @@ export class TrailScene {
     this.setFollowTarget(null);
     ++this.cameraSelectionRevision;
     this.freeCamera.setMode("orbit");
-    const bounds = this.viewBounds();
+    const bounds = this.cameraFitBounds();
     if (!bounds) return;
     const width = Math.max(5, bounds.max[0] - bounds.min[0]);
     const height = Math.max(5, (bounds.max[1] - bounds.min[1]) * this.heightScale);
@@ -1391,7 +1446,7 @@ export class TrailScene {
     this.setFollowTarget(null);
     ++this.cameraSelectionRevision;
     this.freeCamera.setMode("orbit");
-    const bounds = this.viewBounds();
+    const bounds = this.cameraFitBounds();
     if (!bounds) return;
     const width = Math.max(5, bounds.max[0] - bounds.min[0]);
     const depth = Math.max(5, bounds.max[2] - bounds.min[2]);

@@ -35,6 +35,20 @@ function applySourceEffectMaterial(material, gameBuildId) {
   material.depthWrite = effect.depthWrite;
   material.alphaTest = 0;
   material.userData.peakSourceEffect = effect;
+  if (effect.kind === "antisphere") {
+    // Unity's AntiSphere Forward pass is alpha-blended. Its output alpha comes
+    // from view/depth/noise controls, not _BaseColor.a. Preserve the real two
+    // shells and approximate the missing animated/depth shader as a Fresnel
+    // edge instead of turning both into opaque white balls.
+    material.onBeforeCompile = (shader) => {
+      const shape = effect.source.alphaShape;
+      shader.uniforms.peakAntiPower = { value: shape._Power };
+      shader.uniforms.peakAntiSoftInverse = { value: shape._SoftInverse };
+      shader.fragmentShader = "uniform float peakAntiPower;\nuniform float peakAntiSoftInverse;\n" + shader.fragmentShader;
+      shader.fragmentShader = shader.fragmentShader.replace("#include <normal_fragment_maps>",
+        "#include <normal_fragment_maps>\nfloat peakAntiRim = 1.0 - abs(dot(normalize(normal), normalize(vViewPosition)));\npeakAntiRim = pow(clamp(peakAntiRim, 0.0, 1.0), peakAntiPower);\ndiffuseColor.a *= smoothstep(peakAntiSoftInverse, 1.0, peakAntiRim);");
+    };
+  }
   material.needsUpdate = true;
   return true;
 }

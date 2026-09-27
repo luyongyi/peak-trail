@@ -3,6 +3,26 @@
 // rejects requests without this project's User-Agent, so the header is mandatory.
 export const DEFAULT_API_VERSION = "2.4";
 export const DEFAULT_MAP_COUNT = 21;
+const SHANGHAI_OFFSET_MS = 8 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+export function latestDailyBoundary(now = Date.now()) {
+  const current = now instanceof Date ? now.getTime() : Number(now);
+  if (!Number.isFinite(current)) return NaN;
+  const local = new Date(current + SHANGHAI_OFFSET_MS);
+  let boundary = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate(), 1)
+    - SHANGHAI_OFFSET_MS;
+  if (current < boundary) boundary -= DAY_MS;
+  return boundary;
+}
+
+export function cachedDailyIsFresh(daily, now = Date.now()) {
+  const current = now instanceof Date ? now.getTime() : Number(now);
+  const fetched = Date.parse(daily?.fetchedAtUtc);
+  const deadline = Date.parse(daily?.nextChangeAtUtc);
+  return Number.isFinite(current) && Number.isFinite(fetched) && Number.isFinite(deadline)
+    && fetched >= latestDailyBoundary(current) && deadline > current;
+}
 
 export function dailyEndpoint(apiVersion = DEFAULT_API_VERSION) {
   return process.env.PEAK_DAILY_ENDPOINT

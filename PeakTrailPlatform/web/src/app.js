@@ -18,7 +18,7 @@ import {
 import { collectDroppedFiles } from "./file-intake.js";
 import { loadGameAssetPack } from "./game-assets.js";
 import { createPlayerCard, updatePlayerCard } from "./player-card.js";
-import { resolveReplayRoute, routeSegmentName } from "./map-route.js";
+import { classifyRouteSegment, resolveReplayRoute, routeSegmentName } from "./map-route.js";
 import { worldTelemetryNote } from "./world-timeline.js";
 import { createTrailEstimator, liveChaseTarget, LIVE_TRAIL_S } from "./live-follow.js";
 import { createWakeLock } from "./wake-lock.js";
@@ -160,6 +160,7 @@ const state = {
   segmentOptions: [],
   segmentTimeline: [],
   selectedSegment: undefined,
+  mapViewIntent: null,
   segmentSelectionMode: "auto",
   segmentMapStatuses: new Map(),
   segmentMapKey: null,
@@ -188,8 +189,8 @@ const state = {
 
 const gameAssetLoads = new Map();
 const homePage = new HomePage({ root: elements.modeGate, loadCatalog: () => ensureMapCatalog(),
-  loadMapPack: loadMapPackUrl, onExplore: (map, segment, view) => {
-    void openHomeChapter(map, segment, view).catch(error => {
+  loadMapPack: loadMapPackUrl, onExplore: (map, segment, view, intent) => {
+    void openHomeChapter(map, segment, view, intent).catch(error => {
       const detail = describeError(error); showError(detail.title, detail.message);
     });
   },
@@ -203,7 +204,6 @@ const SEGMENT_NAMES_ZH = new Map([
   ["mesa", "台地"],
   ["volcano", "火山"],
   ["swamp", "沼泽"],
-  ["void", "虚空"],
 ]);
 
 function asSegment(value) {
@@ -266,9 +266,21 @@ function segmentAtTime(seconds) {
 }
 
 function segmentChineseBase(option) {
-  const routed = routeSegmentName(state.routeView?.route, option?.segment);
-  if (routed) return routed;
-  if ([3, 4].includes(option?.segment)) return option.segment === 3 ? "第四关（分支未确认）" : "终关（分支未确认）";
+  const route = state.routeView?.route;
+  const routed = routeSegmentName(route, option?.segment);
+  if (routed) {
+    const routeBuild = state.routeView?.source === "recorded"
+      ? state.trace?.manifest?.gameBuildId : state.mapPack?.gameBuildId;
+    // Only this verified build shares the summit with the final regular layer.
+    // The label describes an available area, not a recorded summit arrival.
+    return String(routeBuild) === "25306743" && option?.segment === 4
+      && ["volcano-kiln", "swamp-temple"].includes(route?.branch)
+      && classifyRouteSegment(route.segments.find((entry) => entry.index === 4)).kind === "chapter"
+      ? `${routed} · 含顶峰` : routed;
+  }
+  const special = classifyRouteSegment(option);
+  if (special.name) return special.name;
+  if ([3, 4].includes(option?.segment)) return option.segment === 3 ? "第四关（分支未确认）" : "第五关（分支未确认）";
   const source = String(option?.biome || option?.name || "").trim();
   return SEGMENT_NAMES_ZH.get(source.toLowerCase()) || option?.name || `分区 ${option?.segment ?? "?"}`;
 }
@@ -291,8 +303,9 @@ function collectSegmentOptions() {
     bySegment.set(segment, {
       segment,
       name: String(layer.name || `Segment ${segment}`),
-      biome: String(layer.biome || layer.name || ""),
-      isVoid: String(layer.biome || layer.name || "").toLowerCase() === "void",
+      biome: String(layer.biome || ""),
+      biomeId: layer.biomeId,
+      isVoid: classifyRouteSegment(layer).kind === "nadir",
     });
   }
   for (const entry of state.segmentTimeline) {
@@ -310,7 +323,7 @@ function collectSegmentOptions() {
     bySegment.set(entry.index, {
       ...option,
       segment: entry.index, name: entry.name || entry.biome,
-      biome: entry.biome, isVoid: entry.biome.toLowerCase() === "void",
+      biome: entry.biome, biomeId: entry.biomeId, isVoid: classifyRouteSegment(entry).kind === "nadir",
     });
   }
   for (const samples of state.trace?.tracks?.values?.() || []) {
@@ -344,6 +357,16 @@ function segmentStatusKey(segment) {
 function overviewSegmentOptions() {
   const mountain = state.segmentOptions.filter((option) => !option.isVoid && !state.routeView?.hiddenSegments.has(option.segment));
   return mountain.length ? mountain : state.segmentOptions;
+}
+
+function adjacentSegment(options, selected, direction) {
+  const chapters = options.filter((option) => !option.isVoid);
+  const ordered = [...chapters, ...options.filter((option) => option.isVoid)];
+  const index = ordered.findIndex((option) => option.segment === selected);
+  // Overview returns to the mountain. From its final chapter the next control
+  // opens Nadir, which remains outside the chapter count and mountain overview.
+  if (index < 0) return direction < 0 ? chapters.at(-1) || ordered.at(-1) : ordered[0];
+  return ordered[index + (direction < 0 ? -1 : 1)];
 }
 
 function setSegmentLoadStatus(status, segment, message = "") {
@@ -409,7 +432,7 @@ function renderSegmentNavigation() {
   elements.routeSummary.textContent = state.routeView?.message || "关卡分支未确认";
   elements.segmentOrdinal.textContent = isOverview
     ? `共 ${chapters.length} 关`
-    : active?.isVoid ? "额外区域 · 非登山终关" : `第 ${activeIndex + 1} / ${chapters.length} 关`;
+    : active?.isVoid ? "额外区域 · 天底" : `第 ${activeIndex + 1} / ${chapters.length} 关`;
   elements.segmentName.textContent = isOverview ? "所有关概览" : segmentDisplayName(active);
   elements.segmentOriginalName.textContent = isOverview
     ? "仅在手动选择时加载"
@@ -428,8 +451,15 @@ function renderSegmentNavigation() {
   }
   segmentNavLastName = navName;
 
-  elements.previousSegmentButton.disabled = !options.length || (activeIndex === 0 && !isOverview);
-  elements.nextSegmentButton.disabled = !chapters.length || active?.isVoid || activeIndex === chapters.length - 1;
+  const previous = adjacentSegment(options, state.selectedSegment, -1);
+  const next = adjacentSegment(options, state.selectedSegment, 1);
+  elements.previousSegmentButton.disabled = !previous;
+  elements.nextSegmentButton.disabled = !next;
+  elements.previousSegmentButton.title = previous ? `浏览上一区域：${segmentDisplayName(previous)}` : "已到第一个区域";
+  elements.nextSegmentButton.title = next?.isVoid ? "浏览额外区域：天底（并非固定下一关）"
+    : next ? `浏览下一区域：${segmentDisplayName(next)}` : "已到最后一个区域";
+  elements.previousSegmentButton.setAttribute("aria-label", elements.previousSegmentButton.title);
+  elements.nextSegmentButton.setAttribute("aria-label", elements.nextSegmentButton.title);
   elements.followSegmentButton.classList.toggle("is-active", state.segmentSelectionMode === "auto");
   elements.followSegmentButton.setAttribute("aria-pressed", String(state.segmentSelectionMode === "auto"));
   elements.segmentOverviewButton.classList.toggle("is-active", isOverview);
@@ -464,10 +494,11 @@ function populateSegmentControls() {
   allOption.value = "all";
   allOption.textContent = "所有关概览（手动）";
   elements.layerSelect.append(allOption);
-  state.segmentOptions.forEach((option, index) => {
+  let chapterOrdinal = 0;
+  state.segmentOptions.forEach((option) => {
     const selectOption = document.createElement("option");
     selectOption.value = String(option.segment);
-    selectOption.textContent = `${option.isVoid ? "额外区域" : `第 ${index + 1} 关`} · ${segmentDisplayName(option)} / ${option.name}`;
+    selectOption.textContent = `${option.isVoid ? "额外区域" : `第 ${++chapterOrdinal} 关`} · ${segmentDisplayName(option)} / ${option.name}`;
     elements.layerSelect.append(selectOption);
   });
   elements.layerSelect.disabled = state.segmentOptions.length === 0;
@@ -479,13 +510,18 @@ function chooseSegment(segment, mode = "manual") {
   const normalized = segment === null ? null : asSegment(segment);
   if (normalized !== null && !state.segmentOptions.some((option) => option.segment === normalized)) return;
   const changed = normalized !== state.selectedSegment;
+  const clearedViewIntent = state.mapViewIntent !== null;
+  state.mapViewIntent = null;
   state.segmentSelectionMode = mode;
   state.selectedSegment = normalized;
   renderSegmentNavigation();
   updateSceneMeta();
-  if (changed && viewer) {
-    markSegmentTransition(normalized);
-    viewer.setActiveSegment(normalized);
+  if ((changed || clearedViewIntent) && viewer) {
+    viewer.setViewIntent(null);
+    if (changed) {
+      markSegmentTransition(normalized);
+      viewer.setActiveSegment(normalized);
+    }
     updateWorldTelemetry();
   }
 }
@@ -500,6 +536,7 @@ function resetSegmentNavigation(trace) {
   state.segmentTimeline = buildSegmentTimeline(trace);
   state.segmentSelectionMode = "auto";
   state.selectedSegment = undefined;
+  state.mapViewIntent = null;
   state.segmentMapStatuses.clear();
 }
 
@@ -846,14 +883,21 @@ async function enterModeFromGate(mode) {
   } catch (error) { const detail = describeError(error); showError(detail.title, detail.message); }
 }
 
-async function openHomeChapter(map, segment, presentedView) {
+async function openHomeChapter(map, segment, presentedView, intent = null) {
   // File import owns navigation until parsing completes. Do not race a directory import.
   if (state.sourceLoadingCounts.trace || state.manualMapLoads) {
     $("homeEvidence").textContent = "正在读取文件，请完成后再打开首页关卡。";
     return;
   }
   const current = buildHomeDailyView({ daily: state.daily, catalog: state.mapCatalog, mapPack: map });
-  if (!current.cards[segment]?.available || current.mapEntry?.mapPackId !== presentedView.mapEntry?.mapPackId) return;
+  const destination = intent?.destinationId
+    ? current.destinations?.find((entry) => entry.id === intent.destinationId) : null;
+  const available = current.cards.some((card) => card.segment === segment && card.available)
+    || current.cards.some((card) => card.ending?.segment === segment)
+    || current.destinations?.some((entry) => entry.segment === segment && entry.available);
+  if (!available || current.mapEntry?.mapPackId !== presentedView.mapEntry?.mapPackId) return;
+  if (intent?.destinationId && (!destination?.available || destination.segment !== segment
+      || (destination.viewIntent || null) !== (intent.viewIntent || null))) return;
   const revision = ++state.traceSelectionRevision;
   ++state.mapRequestRevision;
   if (state.trace && state.traceCollection === state.replayCollection) state.lastReplaySessionId = state.trace.manifest.sessionId;
@@ -874,6 +918,7 @@ async function openHomeChapter(map, segment, presentedView) {
   state.dailyMapStatus = null;
   resetSegmentNavigation(null);
   state.selectedSegment = segment;
+  state.mapViewIntent = destination?.viewIntent || null;
   state.segmentSelectionMode = "manual";
   state.compatibility = assessCompatibility(null, map);
   syncGameAssetsForTrace(null, revision);
@@ -1430,11 +1475,13 @@ async function renderDataNow() {
       state.trace?.manifest?.sessionId ?? null,
       useMap ? state.routeView.layers.map((layer) => layer.id).join(",") : null,
       useMap, activeSegment,
+      state.mapViewIntent,
     ].join("|");
     if (signature !== state.lastRenderSignature) {
       if (useMap) markSegmentTransition(activeSegment);
       const displayMap = state.mapPack ? { ...state.mapPack, layers: state.routeView.layers } : null;
-      await viewer.setData({ mapPack: displayMap, trace: state.trace, useMap, activeSegment });
+      await viewer.setData({ mapPack: displayMap, trace: state.trace, useMap, activeSegment,
+        viewIntent: state.mapViewIntent });
       state.lastRenderSignature = signature;
     }
     viewer.setGameAssetPack(state.gameAssetPack);
@@ -1863,6 +1910,12 @@ async function applyDailyStatus() {
       }
       return;
     }
+    const incomingFetchedAt = Date.parse(daily.fetchedAtUtc);
+    const currentFetchedAt = Date.parse(state.daily?.fetchedAtUtc);
+    if (state.daily && Number.isFinite(currentFetchedAt)
+        && (!Number.isFinite(incomingFetchedAt) || incomingFetchedAt < currentFetchedAt)) {
+      return; // A stale fallback must never replace a newer in-memory observation.
+    }
     state.daily = daily;
     void homePage.update(daily);
     elements.dailyScene.textContent = daily.sceneName || `Level ${daily.mapSlot ?? daily.levelIndex ?? "?"}`;
@@ -2117,15 +2170,12 @@ async function expireDailyStatus(daily) {
   if (state.expiredDailyKey === expiryKey) return;
   state.expiredDailyKey = expiryKey;
   if (state.trace) return;
-  if (state.manualMapLoads === 0 && (!state.mapSourceKind || state.mapSourceKind === "daily")) {
-    state.mapRequestRevision += 1;
-  }
-  if (state.mapSourceKind === "daily") await clearDailyMap();
-  // Rendering the cleared map yields; the current observation can change there.
+  // Keep the last confirmed automatic map visible while the network recovers.
+  // It is labelled as an archive below and can no longer claim to be today's map.
   if (daily !== state.daily || isDailyMapFresh(daily) || state.trace) return;
   state.dailyMapStatus = {
     title: `${daily?.sceneName || "今日"} 地图状态已过期`,
-    detail: "已隐藏过期的自动底图，正在重新确认本轮地图；接口恢复后会自动更新",
+    detail: "保留上次确认的地图，正在自动确认本轮地图；接口恢复后会自动更新",
   };
   updateMapUI();
 }
@@ -2304,17 +2354,11 @@ elements.layerSelect.addEventListener("change", () => {
   chooseSegment(elements.layerSelect.value === "all" ? null : Number(elements.layerSelect.value), "manual");
 });
 elements.previousSegmentButton.addEventListener("click", () => {
-  const chapters = state.segmentOptions.filter((option) => !option.isVoid);
-  if (!chapters.length) return;
-  const index = chapters.findIndex((option) => option.segment === state.selectedSegment);
-  const previous = index < 0 ? chapters.at(-1) : chapters[index - 1];
+  const previous = adjacentSegment(state.segmentOptions, state.selectedSegment, -1);
   if (previous) chooseSegment(previous.segment, "manual");
 });
 elements.nextSegmentButton.addEventListener("click", () => {
-  const chapters = state.segmentOptions.filter((option) => !option.isVoid);
-  if (!chapters.length) return;
-  const index = chapters.findIndex((option) => option.segment === state.selectedSegment);
-  const next = index < 0 ? chapters[0] : chapters[index + 1];
+  const next = adjacentSegment(state.segmentOptions, state.selectedSegment, 1);
   if (next) chooseSegment(next.segment, "manual");
 });
 elements.followSegmentButton.addEventListener("click", () => {
@@ -2437,7 +2481,7 @@ async function bootstrap() {
   await bootstrapMapFromQuery();
   await loadDailyStatus();
   setInterval(updateDailyCountdown, 30_000);
-  setInterval(loadDailyStatus, 5 * 60_000);
+  setInterval(() => void dailyClock.wake(), 5 * 60_000);
 }
 
 window.dispatchEvent(new Event("peaktrail-ready"));

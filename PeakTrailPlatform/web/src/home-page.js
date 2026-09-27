@@ -23,11 +23,24 @@ export class HomePage {
     this.cells = [...root.querySelectorAll('.home-chapter')];
     this.buttons = this.cells.map(cell => cell.querySelector('button'));
     this.$ = id => root.querySelector(`#${id}`);
-    this.buttons.forEach((button, segment) => button.addEventListener('click', () => {
+    this.buttons.slice(0, 4).forEach((button, segment) => button.addEventListener('click', () => {
       // Re-evaluate the deadline on the action, even if the browser was sleeping.
       const view = this.view();
       if (view.cards[segment]?.available && this.mapPack) this.onExplore(this.mapPack, segment, view);
     }));
+    this.$('homeEndingExplore').addEventListener('click', () => {
+      const view = this.view();
+      const ending = view.cards[3]?.ending;
+      if (ending && this.mapPack) this.onExplore(this.mapPack, ending.segment, view);
+    });
+    for (const id of ['peak', 'nadir']) {
+      this.$(`home-${id}-explore`).addEventListener('click', () => {
+        const view = this.view();
+        const destination = view.destinations.find(item => item.id === id);
+        if (destination?.available && this.mapPack) this.onExplore(this.mapPack, destination.segment, view,
+          { destinationId: destination.id, viewIntent: destination.viewIntent || null });
+      });
+    }
     this.$('homeRefresh').addEventListener('click', async () => {
       this.$('homeRefresh').disabled = true;
       try { await onRefresh(); } finally { this.$('homeRefresh').disabled = false; }
@@ -107,19 +120,33 @@ export class HomePage {
     const ending = view.cards[3]?.ending;
     const finale = HOME_ENDINGS[ending?.branch];
     const finaleElement = this.$('homeFinale');
-    // Present the real ending's illustration by default. Clock ticks must keep
-    // a user's subsequent fold/unfold choice; a new branch opens its own art.
-    if (!finale) finaleElement.open = false;
-    else if (finaleElement.dataset.branch !== ending.branch) finaleElement.open = true;
     finaleElement.dataset.branch = ending?.branch || '';
+    finaleElement.dataset.theme = ending?.branch === 'swamp-temple' ? 'swamp' : ending?.branch === 'volcano-kiln' ? 'volcano' : 'unknown';
     finaleElement.hidden = !finale;
-    this.$('homeEnding').textContent = ending?.title || '终章待确认';
-    this.$('homeEndingRoute').textContent = ending ? `${view.cards[3].title}之后 / ${finale?.english || ''}` : '';
-    this.$('homeEndingDescription').textContent = finale?.description || '';
-    for (const id of ['homeEndingThumb', 'homeEndingArt']) {
-      const img = this.$(id);
-      if (finale && img.getAttribute('src') !== finale.art) img.src = finale.art;
-      img.alt = id === 'homeEndingArt' && ending ? `${ending.title}内部攀登空间主题插画，非地图实景` : '';
+    const finaleButton = this.$('homeEndingExplore');
+    finaleButton.disabled = !finale;
+    finaleButton.setAttribute('aria-label', finale && ending ? `${view.isCurrent ? '查看本轮' : '查看上次确认的'}第5关：${ending.title}` : '终段等待路线确认');
+    this.$('homeEnding').textContent = ending?.title || '终段待确认';
+    this.$('homeEndingEnglish').textContent = finale?.english || 'FINAL ASCENT';
+    this.$('homeEndingDescription').textContent = finale ? `${view.cards[3].title}之后 · ${finale.description}` : '等待真实路线数据';
+    this.$('homeEndingStatus').textContent = finale ? '' : '等待路线确认';
+    const finaleArt = this.$('homeEndingArt');
+    if (finale && finaleArt.getAttribute('src') !== finale.art) finaleArt.src = finale.art;
+    finaleArt.hidden = !finale;
+    finaleArt.alt = ending ? `${ending.title}内部攀登空间主题插画，非地图实景` : '';
+    for (const destination of view.destinations) {
+      this.$(`home-${destination.id}-description`).textContent = destination.description;
+      this.$(`home-${destination.id}-outcome`).textContent = destination.outcomeLabel;
+      const art = this.$(`home-${destination.id}-art`);
+      // These are alternative ending illustrations, not evidence that this
+      // daily map or a recording has visited/selected either ending.
+      const url = HOME_ART[destination.id];
+      if (art.getAttribute('src') !== url) art.src = url;
+      art.alt = `${destination.title}终局 AI 主题插画，非地图实景；与${destination.alternativeId === 'nadir' ? '天底' : '顶峰'}结局互斥`;
+      const button = this.$(`home-${destination.id}-explore`);
+      button.disabled = !destination.available;
+      button.textContent = destination.actionLabel;
+      button.setAttribute('aria-label', `${view.isCurrent ? '本轮' : '上次确认的地图'}：${destination.actionLabel}`);
     }
     this.$('homeEvidence').textContent = this.error ? `路线暂不可用 · ${this.error}`
       : view.mapStatus === 'ready' ? `AI 主题插画 · 非地图实景 · 轮换于 ${view.observedLabel} 确认`

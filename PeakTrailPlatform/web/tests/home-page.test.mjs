@@ -4,19 +4,20 @@ import test from "node:test";
 import { HOME_ART, HOME_ART_FILES, HOME_ENDINGS } from "../src/home-art.js";
 import { buildHomeDailyView } from "../src/home-daily.js";
 
-test("home illustration registry permits exactly nine named assets, including two distinct interiors", () => {
-  const expected = ["shore", "roots", "tropics", "alpine", "mesa", "volcano", "swamp", "kiln", "temple"];
+test("home illustration registry permits exactly eleven named assets, including distinct special areas", () => {
+  const expected = ["shore", "roots", "tropics", "alpine", "mesa", "volcano", "swamp", "kiln", "temple", "peak", "nadir"];
   const files = [
     "shore-v3.png", "roots-v3.png", "tropics-v3.png", "alpine-v3.png", "mesa-v3.png",
     "volcano-v3.png", "swamp-v3.png", "kiln-v3.png", "temple-v3.png",
+    "peak-v1.png", "nadir-v1.png",
   ];
   assert.deepEqual(HOME_ART_FILES, files);
   assert.deepEqual(Object.keys(HOME_ART), expected);
-  assert.equal(new Set(HOME_ART_FILES).size, 9);
+  assert.equal(new Set(HOME_ART_FILES).size, 11);
   assert.equal(Object.isFrozen(HOME_ART_FILES), true);
   assert.equal(Object.isFrozen(HOME_ART), true);
   for (const [index, name] of expected.entries()) assert.equal(HOME_ART[name], `./data/home-art/${files[index]}`);
-  for (const oldFile of expected.flatMap((name) => [1, 2].map((version) => `${name}-v${version}.png`))) {
+  for (const oldFile of expected.slice(0, 9).flatMap((name) => [1, 2].map((version) => `${name}-v${version}.png`))) {
     assert.equal(HOME_ART_FILES.includes(oldFile), false, `${oldFile} must not be published`);
     assert.equal(Object.values(HOME_ART).includes(`./data/home-art/${oldFile}`), false);
   }
@@ -24,14 +25,21 @@ test("home illustration registry permits exactly nine named assets, including tw
 
 test("published illustrations have current prompt provenance and retain superseded history", async () => {
   const provenance = JSON.parse(await readFile(new URL("../../docs/home-art-prompts.json", import.meta.url), "utf8"));
+  const specialAreas = JSON.parse(await readFile(new URL("../../docs/peak-nadir-art-prompts.json", import.meta.url), "utf8"));
   assert.equal(provenance.tool, "built-in image_gen");
   assert.equal(provenance.styleReference, "shore-v3.png");
-  assert.deepEqual(provenance.assets.map(asset => asset.file), HOME_ART_FILES);
+  assert.equal(specialAreas.tool, "built-in image_gen");
+  assert.deepEqual([...provenance.assets, ...specialAreas.assets].map(asset => asset.file), HOME_ART_FILES);
   for (const asset of provenance.assets) {
     assert.equal(asset.mode, "edit");
     assert.ok(asset.prompt.length > 100);
     assert.ok(asset.references.length > 0 && asset.references.length <= 5);
     assert.ok(provenance.supersededAssets.some(old => old.file === asset.editTarget));
+  }
+  for (const asset of specialAreas.assets) {
+    assert.equal(asset.mode, "generate");
+    assert.ok(asset.prompt.length > 100);
+    assert.deepEqual(asset.references, []);
   }
   assert.ok(provenance.supersededAssets.every(old => !HOME_ART_FILES.includes(old.file)));
 });
@@ -74,6 +82,7 @@ function mapPack(branch = "swamp-temple") {
   const biomeIds = { Shore: 0, Roots: 7, Alpine: 2, Swamp: 8, Volcano: 3 };
   return {
     mapPackId, sceneName: "Level_3", gameBuildId: "25306743", mapSlot: 3,
+    mapPeak: { segment: 4, collisionBounds: { min: [-70, 979, 2131], max: [78, 1233, 2315] } },
     route: { authority: "serialized-map-handler", branch, segments: biomes.map((biome, index) => ({ index, biome, biomeId: biomeIds[biome], name: `${biome}_Segment` })) },
     layers: biomes.map((biome, segment) => ({ id: `segment-${segment}`, segment, biome, name: biome })),
   };
@@ -92,7 +101,9 @@ function element() {
 function fixture() {
   const ids = [
     "homeRefresh", "homeDate", "homeDateMeta", "homeStatus", "homeRouteLabel", "homeCountdown", "homeDescription",
-    "homeFinale", "homeEnding", "homeEndingRoute", "homeEndingDescription", "homeEndingThumb", "homeEndingArt", "homeEvidence",
+    "homeFinale", "homeEndingExplore", "homeEnding", "homeEndingEnglish", "homeEndingDescription", "homeEndingStatus", "homeEndingArt", "homeEvidence",
+    "home-peak-explore", "home-nadir-explore", "home-peak-description", "home-nadir-description",
+    "home-peak-art", "home-nadir-art", "home-peak-outcome", "home-nadir-outcome",
   ];
   const nodes = Object.fromEntries(ids.map((id) => [id, element()]));
   const cells = Array.from({ length: 4 }, () => {
@@ -107,28 +118,30 @@ function fixture() {
     setInterval: () => 1, clearInterval() {},
   };
   const HomePage = new Function(...Object.keys(ports), `${source}\nreturn HomePage;`)(...Object.values(ports));
-  const page = new HomePage({ root, loadCatalog: async () => ({ catalog }), loadMapPack: async () => mapPack(), onExplore() {}, onRefresh: async () => {} });
+  const explored = [];
+  const page = new HomePage({ root, loadCatalog: async () => ({ catalog }), loadMapPack: async () => mapPack(),
+    onExplore: (map, segment, view, intent) => explored.push({ map, segment, view, intent }), onRefresh: async () => {} });
   function show(branch = "swamp-temple") {
     Object.assign(page, { daily, catalog, mapPack: mapPack(branch) });
     page.tick();
   }
-  return { page, nodes, cells, show };
+  return { page, nodes, cells, show, explored };
 }
 
 test("an unconfirmed home initially hides the finale and cannot expose a guessed ending", () => {
   const { nodes, cells } = fixture();
   assert.equal(nodes.homeFinale.hidden, true);
-  assert.equal(nodes.homeFinale.open, false);
   assert.equal(nodes.homeFinale.dataset.branch, "");
-  assert.equal(nodes.homeEnding.textContent, "终章待确认");
-  assert.equal(nodes.homeEndingRoute.textContent, "");
-  assert.equal(nodes.homeEndingDescription.textContent, "");
-  assert.equal(nodes.homeEndingThumb.getAttribute("src"), null);
+  assert.equal(nodes.homeEndingExplore.disabled, true);
+  assert.equal(nodes.homeEnding.textContent, "终段待确认");
+  assert.equal(nodes.homeEndingEnglish.textContent, "FINAL ASCENT");
+  assert.equal(nodes.homeEndingDescription.textContent, "等待真实路线数据");
+  assert.equal(nodes.homeEndingStatus.textContent, "等待路线确认");
   assert.equal(nodes.homeEndingArt.getAttribute("src"), null);
   assert.ok(cells.every((cell) => cell.querySelector("button").disabled));
 });
 
-test("each confirmed route defaults to its expanded interior illustration and correct route copy", () => {
+test("each confirmed finale is a fifth normal map card with the correct interior model", () => {
   for (const [branch, title, precedingTitle, exterior] of [
     ["swamp-temple", "城塞", "雾沼", HOME_ART.swamp],
     ["volcano-kiln", "熔炉", "火山", HOME_ART.volcano],
@@ -138,13 +151,14 @@ test("each confirmed route defaults to its expanded interior illustration and co
     const ending = HOME_ENDINGS[branch];
     assert.equal(nodes.homeFinale.hidden, false);
     assert.equal(nodes.homeFinale.dataset.branch, branch);
-    assert.equal(nodes.homeFinale.open, true);
+    assert.equal(nodes.homeEndingExplore.disabled, false);
+    assert.equal(nodes.homeEndingExplore.getAttribute("aria-label"), `查看本轮第5关：${title}`);
     assert.equal(nodes.homeEnding.textContent, title);
-    assert.equal(nodes.homeEndingRoute.textContent, `${precedingTitle}之后 / ${ending.english}`);
-    assert.equal(nodes.homeEndingDescription.textContent, ending.description);
-    assert.equal(nodes.homeEndingThumb.src, ending.art);
+    assert.equal(nodes.homeEndingEnglish.textContent, ending.english);
+    assert.equal(nodes.homeEndingDescription.textContent, `${precedingTitle}之后 · ${ending.description}`);
+    assert.equal(nodes.homeEndingStatus.textContent, "");
     assert.equal(nodes.homeEndingArt.src, ending.art);
-    assert.equal(nodes.homeEndingThumb.alt, "");
+    assert.equal(nodes.homeEndingArt.hidden, false);
     assert.equal(nodes.homeEndingArt.alt, `${title}内部攀登空间主题插画，非地图实景`);
     assert.equal(cells[3].querySelector("img").src, exterior);
     assert.notEqual(nodes.homeEndingArt.src, cells[3].querySelector("img").src);
@@ -152,31 +166,24 @@ test("each confirmed route defaults to its expanded interior illustration and co
   }
 });
 
-test("clock ticks preserve the user's fold choice but a new branch opens its own illustration", () => {
-  const { page, nodes, show } = fixture();
+test("clock ticks do not reload the finale and its card opens segment five", () => {
+  const { page, nodes, show, explored } = fixture();
   show("swamp-temple");
-  nodes.homeFinale.open = true;
   const writes = nodes.homeEndingArt.srcWrites;
   page.tick();
-  assert.equal(nodes.homeFinale.open, true);
   assert.equal(nodes.homeEndingArt.srcWrites, writes, "same illustration should not be reloaded each second");
-  nodes.homeFinale.open = false;
-  page.tick();
-  assert.equal(nodes.homeFinale.open, false, "do not reopen a manually folded illustration every second");
+  nodes.homeEndingExplore.listeners.get("click")();
+  assert.equal(explored.at(-1).segment, 4);
   show("volcano-kiln");
-  assert.equal(nodes.homeFinale.open, true);
   assert.equal(nodes.homeFinale.hidden, false);
   assert.equal(nodes.homeFinale.dataset.branch, "volcano-kiln");
   assert.equal(nodes.homeEndingArt.src, HOME_ART.kiln);
-  assert.equal(nodes.homeEndingThumb.src, HOME_ART.kiln);
   assert.equal(nodes.homeEndingArt.srcWrites, writes + 1);
-  nodes.homeFinale.open = true;
   show("swamp-temple");
-  assert.equal(nodes.homeFinale.open, true);
   assert.equal(nodes.homeEndingArt.src, HOME_ART.temple);
 });
 
-test("missing, unknown or contradictory route evidence hides and collapses a previously visible finale", () => {
+test("missing, unknown or contradictory route evidence hides and disables the finale card", () => {
   for (const invalidate of [
     (page) => { page.mapPack.route = null; },
     (page) => { page.mapPack.route.branch = "unknown"; },
@@ -188,16 +195,16 @@ test("missing, unknown or contradictory route evidence hides and collapses a pre
   ]) {
     const { page, nodes, show } = fixture();
     show();
-    nodes.homeFinale.open = true;
     invalidate(page);
     page.tick();
     assert.equal(nodes.homeFinale.hidden, true);
-    assert.equal(nodes.homeFinale.open, false);
     assert.equal(nodes.homeFinale.dataset.branch, "");
-    assert.equal(nodes.homeEnding.textContent, "终章待确认");
-    assert.equal(nodes.homeEndingDescription.textContent, "");
-    assert.equal(nodes.homeEndingRoute.textContent, "");
+    assert.equal(nodes.homeEndingExplore.disabled, true);
+    assert.equal(nodes.homeEnding.textContent, "终段待确认");
+    assert.equal(nodes.homeEndingDescription.textContent, "等待真实路线数据");
+    assert.equal(nodes.homeEndingStatus.textContent, "等待路线确认");
     assert.equal(nodes.homeEndingArt.alt, "");
+    assert.equal(nodes.homeEndingArt.hidden, true);
   }
 });
 
@@ -223,4 +230,76 @@ test("Tropics is named 雨林 in the card, accessible action and illustration de
   assert.equal(tropics.querySelector("button").getAttribute("aria-label"), "查看本轮第2关：雨林");
   assert.equal(tropics.querySelector("img").src, HOME_ART.tropics);
   assert.equal(tropics.querySelector("img").alt, "雨林主题氛围插画，并非本轮地图实景");
+});
+
+test("alternative-ending actions pass the source-bound summit intent and open the actual extra model", () => {
+  const { page, nodes, show, explored } = fixture();
+  assert.equal(nodes["home-peak-explore"].disabled, true);
+  assert.equal(nodes["home-nadir-explore"].disabled, true);
+  nodes["home-nadir-explore"].listeners.get("click")();
+  assert.equal(explored.length, 0);
+  show();
+  assert.equal(nodes["home-peak-explore"].disabled, false);
+  assert.match(nodes["home-peak-description"].textContent, /PeakHandler/);
+  nodes["home-peak-explore"].listeners.get("click")();
+  assert.equal(explored.at(-1).segment, 4);
+  assert.deepEqual(explored.at(-1).intent, { destinationId: "peak", viewIntent: "summit" });
+  page.mapPack.layers.push({ id: "void", segment: 5, biome: "Void" });
+  page.tick();
+  assert.equal(nodes["home-nadir-explore"].disabled, false);
+  assert.equal(nodes["home-nadir-explore"].textContent, "查看天底地图");
+  nodes["home-nadir-explore"].listeners.get("click")();
+  assert.equal(explored.at(-1).segment, 5);
+  assert.equal(explored.at(-1).map, page.mapPack);
+  page.mapPack.layers.pop();
+  // Click-time validation also rejects stale buttons between clock ticks.
+  nodes["home-nadir-explore"].listeners.get("click")();
+  assert.equal(explored.length, 2);
+  page.tick();
+  assert.equal(nodes["home-nadir-explore"].disabled, true);
+  page.daily = null;
+  page.tick();
+  assert.equal(nodes["home-peak-explore"].disabled, true);
+});
+
+test("both ending illustrations remain alternatives, including while map evidence is unavailable", () => {
+  const { page, nodes, show } = fixture();
+  for (const id of ["peak", "nadir"]) {
+    const art = nodes[`home-${id}-art`];
+    assert.equal(art.src, HOME_ART[id]);
+    assert.match(art.alt, /AI 主题插画，非地图实景/);
+    assert.match(art.alt, /结局互斥/);
+    assert.equal(nodes[`home-${id}-explore`].disabled, true);
+    const writes = art.srcWrites;
+    show();
+    page.tick();
+    assert.equal(art.srcWrites, writes, "clock/map updates must not reload static ending art");
+    page.daily = null;
+    page.tick();
+    assert.equal(art.src, HOME_ART[id]);
+  }
+  assert.equal(nodes["home-peak-outcome"].textContent, "从顶峰撤离");
+  assert.equal(nodes["home-nadir-outcome"].textContent, "前往天底之门");
+  assert.match(nodes["home-peak-description"].textContent, /不再进入天底/);
+  assert.match(nodes["home-nadir-description"].textContent, /即使路过顶峰.*不再计作顶峰结局/);
+});
+
+test("home markup presents ending artwork as two alternatives, not more numbered chapters", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const chapters = html.match(/<ol class="home-chapters"[^]*?<\/ol>/)?.[0];
+  const section = html.match(/<section class="home-destinations"[^]*?<\/section>/)?.[0];
+  assert.ok(chapters);
+  assert.equal((chapters.match(/class="home-chapter(?: |")/g) || []).length, 5);
+  assert.match(chapters, /id="homeFinale"[^>]*data-segment="4"/);
+  assert.match(chapters, /id="homeEndingExplore" disabled/);
+  assert.ok(section);
+  assert.match(section, /二选一终局/);
+  assert.match(section, /不代表本局已经到达/);
+  assert.match(section, /不是连续的第五、第六关/);
+  assert.equal((section.match(/class="home-destination"/g) || []).length, 2);
+  assert.doesNotMatch(section, /home-chapter-number/);
+  for (const id of ["peak", "nadir"]) {
+    assert.match(section, new RegExp(`<img id="home-${id}-art"[^>]*loading="lazy"`));
+    assert.match(section, new RegExp(`id="home-${id}-explore" disabled`));
+  }
 });

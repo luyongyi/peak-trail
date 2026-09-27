@@ -6,6 +6,7 @@ import { localAssetHint, localAssetPaths } from "./lib/local-paths.mjs";
 import { normalizeMapFog } from "../web/src/map-fog.js";
 import { normalizeMapWater } from "../web/src/map-water.js";
 import { normalizeMapEnclosures } from "../web/src/map-enclosures.js";
+import { normalizeMapPeak } from "../web/src/map-peak.js";
 import { createHash } from "node:crypto";
 import { HOME_ART_FILES } from "../web/src/home-art.js";
 import { loadRecorderArtifact, readRecorderRelease } from "./lib/recorder-release.mjs";
@@ -16,6 +17,7 @@ const webDirectory = resolve(platformDirectory, "web");
 const dataDirectory = resolve(platformDirectory, "data");
 const mapsDirectory = resolve(dataDirectory, "maps");
 const schemaDirectory = resolve(platformDirectory, "schema");
+const bundledHomeArtDirectory = resolve(dataDirectory, "home-art");
 const outputDirectory = resolve(platformDirectory, "site-dist");
 const { gameAssetsDirectory, mapPacksDirectory, mapEnclosuresDirectory, homeArtDirectory } = localAssetPaths;
 // Pin and verify the public DLL before replacing a previously staged site.
@@ -24,10 +26,22 @@ const recorderBytes = await loadRecorderArtifact(recorderRelease, {
   localPath: process.env.PEAK_TRAIL_RECORDER_DLL,
 });
 // Only allowlisted illustrations are public; never copy a local folder wholesale.
+const homeArtSources = new Map();
 for (const file of HOME_ART_FILES) {
-  const entry = await lstat(resolve(homeArtDirectory, file));
+  const localPath = resolve(homeArtDirectory, file);
+  const bundledPath = resolve(bundledHomeArtDirectory, file);
+  let source = localPath;
+  let entry;
+  try {
+    entry = await lstat(localPath);
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+    source = bundledPath;
+    entry = await lstat(bundledPath);
+  }
   if (!entry.isFile() || entry.isSymbolicLink() || entry.size > 8 * 1024 * 1024)
     throw new Error(`Invalid homepage illustration: ${file}`);
+  homeArtSources.set(file, source);
 }
 // Fail before replacing the running preview if an extraction is incomplete.
 let gameAssets;
@@ -66,6 +80,7 @@ for (const entry of catalog.mapPacks) {
   const mapFog = await verifiedFogMetadata(manifest);
   const mapWater = await verifiedWaterMetadata(manifest);
   const mapEnclosures = await verifiedEnclosureMetadata(manifest);
+  const mapPeak = await verifiedPeakMetadata(manifest);
   for (const enclosure of mapEnclosures?.enclosures || []) {
     if (enclosureFiles.has(enclosure.geometry)) continue;
     const path = resolve(mapEnclosuresDirectory, enclosure.geometry);
@@ -75,7 +90,7 @@ for (const entry of catalog.mapPacks) {
     if (digest !== enclosure.geometrySha256) throw new Error("Map enclosure geometry SHA-256 mismatch");
     enclosureFiles.add(enclosure.geometry);
   }
-  mapPacks.push({ mapPackId, sourceDirectory, files, manifest, route, mapFog, mapWater, mapEnclosures });
+  mapPacks.push({ mapPackId, sourceDirectory, files, manifest, route, mapFog, mapWater, mapEnclosures, mapPeak });
 }
 
 // site-dist is generated exclusively by this script and is safe to recreate.
@@ -101,7 +116,7 @@ await Promise.all([
   )),
 ]);
 await mkdir(resolve(outputDirectory, "data", "home-art"), { recursive: true });
-for (const file of HOME_ART_FILES) await cp(resolve(homeArtDirectory, file), resolve(outputDirectory, "data", "home-art", file));
+for (const file of HOME_ART_FILES) await cp(homeArtSources.get(file), resolve(outputDirectory, "data", "home-art", file));
 
 for (const pack of mapPacks) {
   for (const reference of pack.files) {
@@ -111,12 +126,13 @@ for (const pack of mapPacks) {
   }
   // Route evidence is additive metadata and is not part of geometry identity.
   // Original canonical packs remain untouched; only the generated site is enriched.
-  if (pack.route || pack.mapFog || pack.mapWater || pack.mapEnclosures) await writeFile(
+  if (pack.route || pack.mapFog || pack.mapWater || pack.mapEnclosures || pack.mapPeak) await writeFile(
     resolve(outputDirectory, "data", "maps", "packs", pack.mapPackId, "map-pack.json"),
     JSON.stringify({ ...pack.manifest, ...(pack.route ? { route: pack.route } : {}),
       ...(pack.mapFog ? { mapFog: pack.mapFog } : {}),
       ...(pack.mapWater ? { mapWater: pack.mapWater } : {}),
-      ...(pack.mapEnclosures ? { mapEnclosures: pack.mapEnclosures } : {}) }, null, 2) + "\n",
+      ...(pack.mapEnclosures ? { mapEnclosures: pack.mapEnclosures } : {}),
+      ...(pack.mapPeak ? { mapPeak: pack.mapPeak } : {}) }, null, 2) + "\n",
   );
 }
 if (enclosureFiles.size) {
@@ -279,5 +295,26 @@ async function verifiedEnclosureMetadata(manifest) {
   const value = normalizeMapEnclosures({ ...matches[0], schemaVersion: 1, gameBuildId: build,
     authority: evidence.authority }, manifest);
   if (!value) throw new Error("Map enclosure evidence identity or geometry mismatch");
+  return value;
+}
+
+async function verifiedPeakMetadata(manifest) {
+  const build = String(manifest.gameBuildId || "");
+  if (!/^\d+$/.test(build)) return null;
+  let evidence;
+  try { evidence = JSON.parse(await readFile(resolve(mapsDirectory, `peaks.${build}.json`), "utf8")); }
+  catch (error) { if (error.code === "ENOENT") return null; throw error; }
+  if (evidence.schemaVersion !== 1 || evidence.authority !== "serialized-peak-handler"
+      || String(evidence.gameBuildId) !== build || !Array.isArray(evidence.maps)) {
+    throw new Error("Invalid PeakHandler evidence");
+  }
+  const matches = evidence.maps.filter(entry => entry.mapPackId === manifest.mapPackId);
+  if (!matches.length) return null;
+  if (matches.length !== 1) throw new Error("Duplicate PeakHandler evidence");
+  const value = normalizeMapPeak({ ...matches[0], schemaVersion: 1, gameBuildId: build,
+    authority: evidence.authority }, manifest);
+  if (!value || value.sourceSceneSha256 !== manifest.source?.sceneSha256) {
+    throw new Error("PeakHandler evidence identity or geometry mismatch");
+  }
   return value;
 }

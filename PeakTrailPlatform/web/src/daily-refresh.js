@@ -1,3 +1,32 @@
+const SHANGHAI_OFFSET_MS = 8 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Most recent 01:00 in Asia/Shanghai. Before 01:00, this is yesterday's boundary. */
+export function latestDailyBoundary(now = Date.now()) {
+  const current = now instanceof Date ? now.getTime() : Number(now);
+  if (!Number.isFinite(current)) return NaN;
+  const local = new Date(current + SHANGHAI_OFFSET_MS);
+  let boundary = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate(), 1)
+    - SHANGHAI_OFFSET_MS;
+  if (current < boundary) boundary -= DAY_MS;
+  return boundary;
+}
+
+export function nextDailyBoundary(now = Date.now()) {
+  const boundary = latestDailyBoundary(now);
+  return Number.isFinite(boundary) ? boundary + DAY_MS : NaN;
+}
+
+/** A pre-boundary observation must be rechecked even if its reported countdown is still positive. */
+export function dailyObservationIsFresh(daily, now = Date.now()) {
+  const current = now instanceof Date ? now.getTime() : Number(now);
+  const fetched = Date.parse(daily?.fetchedAtUtc);
+  const deadline = Date.parse(daily?.nextChangeAtUtc);
+  const boundary = latestDailyBoundary(current);
+  return Number.isFinite(current) && Number.isFinite(fetched) && Number.isFinite(deadline)
+    && fetched <= current && fetched >= boundary && deadline > current;
+}
+
 /** Prefer the live source, but never turn a skipped retry into a new cooldown. */
 export function createDailySourceReader({
   sources, freshness, fetchImpl = globalThis.fetch, now = Date.now,
@@ -48,15 +77,18 @@ export function createDailyRefreshClock({
   let daily = null;
   let expiryTimer = null;
   let retryTimer = null;
+  let scheduledRetryAt = 0;
   let inFlight = null;
   let disposed = false;
 
   function wake() {
     if (disposed) return Promise.resolve();
+    const current = now();
+    if (scheduledRetryAt > current) return Promise.resolve();
+    if (daily && dailyObservationIsFresh(daily, current) && scheduledRetryAt <= 0) return Promise.resolve();
     if (!inFlight) {
       inFlight = (async () => {
-        const deadline = Date.parse(daily?.nextChangeAtUtc);
-        if (Number.isFinite(deadline) && deadline <= now()) await expire(daily);
+        if (daily && !dailyObservationIsFresh(daily, now())) await expire(daily);
         await refresh();
       })().finally(() => { inFlight = null; });
     }
@@ -69,13 +101,22 @@ export function createDailyRefreshClock({
       clearTimer(expiryTimer);
       clearTimer(retryTimer);
       daily = value;
+      scheduledRetryAt = retryAt;
       if (disposed) return;
-      const delay = Date.parse(daily?.nextChangeAtUtc) - now();
+      const current = now();
+      const reportedDeadline = Date.parse(daily?.nextChangeAtUtc);
+      const boundary = nextDailyBoundary(current);
+      const deadline = Math.min(
+        Number.isFinite(reportedDeadline) ? reportedDeadline : Infinity,
+        Number.isFinite(boundary) ? boundary : Infinity,
+      );
+      const delay = deadline - current;
       if (Number.isFinite(delay) && delay > 0) expiryTimer = setTimer(wake, delay + 50);
       if (retryAt > now()) retryTimer = setTimer(wake, retryAt - now() + 50);
     },
     dispose() {
       disposed = true;
+      scheduledRetryAt = 0;
       clearTimer(expiryTimer);
       clearTimer(retryTimer);
     },

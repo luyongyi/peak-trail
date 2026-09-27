@@ -49,7 +49,7 @@
         <section class="home-intro" aria-labelledby="homeTitle">
           <div>
             <p class="home-eyebrow"><span></span> DAILY EXPEDITION <b id="homeStatus">正在同步轮换</b></p>
-            <h1 id="homeTitle">四段山野，<em>一次同行。</em></h1>
+            <h1 id="homeTitle">五段山野，<em>一次同行。</em></h1>
             <p class="home-description" id="homeDescription">从海岸出发，把沿途的每一次攀登留在地图上。</p>
           </div>
           <div class="home-date-block">
@@ -58,7 +58,7 @@
           </div>
         </section>
 
-        <section class="home-route" id="homeRoute" aria-label="每日四关主题插画">
+        <section class="home-route" id="homeRoute" aria-label="每日五段路线主题插画">
           <div class="home-route-heading">
             <span id="homeRouteLabel">等待确认本轮路线</span>
             <span class="home-countdown"><i aria-hidden="true"></i><span id="homeCountdown">正在获取更新时间</span><button type="button" id="homeRefresh" title="重新同步每日轮换" aria-label="重新同步每日轮换">↻</button></span>
@@ -93,20 +93,43 @@
                   <span class="home-chapter-copy"><small class="home-biome-en">THE FINAL ASCENT</small><strong class="home-biome-title">第四关</strong><span class="home-biome-detail">终章随真实路线确认</span><span class="home-chapter-link">进入地图 <b aria-hidden="true">↗</b></span></span>
                 </button>
               </li>
+              <li class="home-chapter home-chapter-finale" id="homeFinale" data-segment="4" data-theme="unknown" hidden>
+                <button type="button" class="home-chapter-button" id="homeEndingExplore" disabled>
+                  <img class="home-survey" id="homeEndingArt" alt="" hidden loading="lazy" decoding="async" /><span class="home-chapter-number">05 <i></i></span>
+                  <span class="home-model-status" id="homeEndingStatus">等待路线确认</span>
+                  <span class="home-chapter-copy"><small class="home-biome-en" id="homeEndingEnglish">FINAL ASCENT</small><strong class="home-biome-title" id="homeEnding">终段待确认</strong><span class="home-biome-detail" id="homeEndingDescription">等待真实路线数据</span><span class="home-chapter-link">进入地图 <b aria-hidden="true">↗</b></span></span>
+                </button>
+              </li>
             </ol>
           </div>
           <div class="home-route-footer"><p id="homeEvidence">正在确认本轮关卡组合，插画不代表地图实景。</p></div>
-          <details class="home-finale" id="homeFinale" hidden>
-            <summary>
-              <img id="homeEndingThumb" alt="" />
-              <span class="home-finale-label"><small>旅程的最后一章</small><strong id="homeEnding">终章待确认</strong></span>
-              <span class="home-finale-expand">终章插画 <b aria-hidden="true">＋</b></span>
-            </summary>
-            <figure>
-              <img id="homeEndingArt" alt="" loading="lazy" />
-              <figcaption><small id="homeEndingRoute"></small><p id="homeEndingDescription"></p><span>AI 主题插画 · 非地图实景</span></figcaption>
-            </figure>
-          </details>
+          <section class="home-destinations" aria-labelledby="homeDestinationsTitle">
+            <div class="home-destinations-heading">
+              <span>TWO POSSIBLE ENDINGS</span>
+              <h2 id="homeDestinationsTitle">旅程的两种结局</h2>
+              <span class="home-ending-choice">二选一终局</span>
+              <p>顶峰撤离，或前往天底。这里展示两种可能，不代表本局已经到达。</p>
+            </div>
+            <div class="home-destination-list">
+              <article class="home-destination" data-destination="peak">
+                <div class="home-destination-visual"><img id="home-peak-art" width="1024" height="1536" alt="顶峰终局 AI 主题插画，非地图实景" loading="lazy" decoding="async" /></div>
+                <div class="home-destination-copy">
+                  <div class="home-destination-name"><small>PEAK</small><h3>顶峰</h3><span id="home-peak-outcome">从顶峰撤离</span></div>
+                  <p id="home-peak-description">鲜花与绿草铺满小山丘。从这里撤离，旅程便在顶峰结束，不再进入天底。</p>
+                  <button type="button" id="home-peak-explore" disabled>等待顶峰所在分区确认</button>
+                </div>
+              </article>
+              <article class="home-destination" data-destination="nadir">
+                <div class="home-destination-visual"><img id="home-nadir-art" width="1024" height="1536" alt="天底终局 AI 主题插画，非地图实景" loading="lazy" decoding="async" /></div>
+                <div class="home-destination-copy">
+                  <div class="home-destination-name"><small>NADIR</small><h3>天底</h3><span id="home-nadir-outcome">前往天底之门</span></div>
+                  <p id="home-nadir-description">银白的悬浮山体通往童子军之门。进入天底的旅程，即使路过顶峰，也不再计作顶峰结局。</p>
+                  <button type="button" id="home-nadir-explore" disabled>等待天底地图资源</button>
+                </div>
+              </article>
+            </div>
+            <p class="home-destinations-caption">AI 主题插画 · 非地图实景 · 两种终局互斥，不是连续的第五、第六关</p>
+          </section>
         </section>
 
         <section class="home-bottom" aria-label="回放说明">

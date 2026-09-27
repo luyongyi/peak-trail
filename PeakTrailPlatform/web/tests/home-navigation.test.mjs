@@ -28,6 +28,7 @@ function makeMap(id = todayId, gameBuildId = build) {
     gameBuildId, gameVersion: "2.4.c", coordinateSpace: "unity-world-meters", projectionVersion: 1,
     route: { authority: "serialized-map-handler", branch: "swamp-temple", segments: biomes.map((biome, index) => ({ index, biome, biomeId: biomeIds[biome], name: `${biome}_Segment` })) },
     layers: biomes.map((biome, segment) => ({ id: `segment-${segment}`, segment, biome, name: biome })),
+    mapPeak: { segment: 4, collisionBounds: { min: [-70, 979, 2131], max: [78, 1233, 2315] } },
     disposed: 0, disposeAssets() { this.disposed++; },
   };
 }
@@ -185,6 +186,37 @@ test("expired daily observation is explored only as an explicitly historical map
   assert.equal(f.state.mapSourceKind, "archive");
   assert.equal(f.state.trace, null);
   assert.equal(f.state.selectedSegment, 3);
+});
+
+test("home summit and Nadir actions open verified real layer indices without losing imported replays", async () => {
+  for (const segment of [4, 5]) {
+    const f = fixture();
+    f.today.layers.push({ id: "void", segment: 5, biome: "Void", name: "Void" });
+    const intent = segment === 4 ? { destinationId: "peak", viewIntent: "summit" }
+      : { destinationId: "nadir", viewIntent: null };
+    await f.api.openHomeChapter(f.today, segment, f.view(), intent);
+    assert.equal(f.state.selectedSegment, segment);
+    assert.equal(f.state.mapPack, f.today);
+    assert.equal(f.state.trace, null);
+    assert.equal(f.state.replayCollection, f.archive);
+    assert.equal(f.state.segmentSelectionMode, "manual");
+    assert.equal(f.state.mapViewIntent, segment === 4 ? "summit" : null);
+    assert.equal(f.calls.dismissed, 1);
+  }
+});
+
+test("an unverified finale or removed Nadir model cannot be entered using a stale home view", async () => {
+  for (const segment of [4, 5]) {
+    const f = fixture();
+    f.today.layers.push({ id: "void", segment: 5, biome: "Void", name: "Void" });
+    const presented = f.view();
+    if (segment === 4) f.today.route.branch = "unknown";
+    else f.today.layers.pop();
+    await f.api.openHomeChapter(f.today, segment, presented);
+    assert.equal(f.state.trace, f.trace);
+    assert.equal(f.state.mapPack, f.archivedMap);
+    assert.equal(f.calls.dismissed, 0);
+  }
 });
 
 test("opening home exits SSE/demo sessions and polling without losing the imported archive", async () => {

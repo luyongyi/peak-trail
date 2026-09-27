@@ -4,6 +4,8 @@ import { normalizePlayerStatus } from "./player-conditions.js";
 import { sha256Hex } from "./sha256.js";
 import { normalizeMapWater } from "./map-water.js";
 import { normalizeMapEnclosures, enclosureGeometryReference } from "./map-enclosures.js";
+import { normalizeMapPeak } from "./map-peak.js";
+import { dailyObservationIsFresh } from "./daily-refresh.js";
 
 export class ProtocolError extends Error {
   constructor(message, detail = "") {
@@ -1553,7 +1555,9 @@ async function hydrateMapPack(raw, resolver) {
   validateMapPack(raw);
   if (raw.identityVersion === 3) await verifyMapPackIdentityV3(raw);
   const mapEnclosures = normalizeMapEnclosures(raw.mapEnclosures, raw);
+  const mapPeak = normalizeMapPeak(raw.mapPeak, raw);
   if (raw.mapEnclosures && !mapEnclosures) throw new ProtocolError("地图外围结构与原场景身份不匹配");
+  if (raw.mapPeak && !mapPeak) throw new ProtocolError("顶峰边界与原场景或终段模型身份不匹配");
   if (mapEnclosures) for (const enclosure of mapEnclosures.enclosures)
     enclosure.geometryUrl = await resolver.url(enclosureGeometryReference(enclosure), "geometry");
   const hydratedLayers = [];
@@ -1651,6 +1655,7 @@ async function hydrateMapPack(raw, resolver) {
     coordinateSpace: raw.coordinateSpace,
     mapWater: normalizeMapWater(raw.mapWater, raw),
     mapEnclosures,
+    mapPeak,
     layers: hydratedLayers,
     bounds: {
       min: [
@@ -1814,9 +1819,7 @@ export function selectTraceMapPack(catalog, manifest) {
 }
 
 export function isDailyMapFresh(daily, now = Date.now()) {
-  const deadline = Date.parse(daily?.nextChangeAtUtc);
-  const currentTime = now instanceof Date ? now.getTime() : Number(now);
-  return Number.isFinite(deadline) && Number.isFinite(currentTime) && deadline > currentTime;
+  return dailyObservationIsFresh(daily, now);
 }
 
 export function assessCompatibility(manifest, mapPack) {

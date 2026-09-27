@@ -1,5 +1,6 @@
 import { selectDailyMapPack } from "./protocol.js";
-import { normalizeRoute, routeSegmentName } from "./map-route.js";
+import { classifyRouteSegment, normalizeRoute, routeSegmentName } from "./map-route.js";
+import { latestDailyBoundary } from "./daily-refresh.js";
 
 const BIOMES = {
   shore: { title: "海岸", theme: "shore" },
@@ -95,6 +96,61 @@ function chapterCards(mapPack) {
   });
 }
 
+function specialDestinations(mapPack, cards) {
+  const summit = {
+    id: "peak", title: "顶峰", english: "PEAK", kind: "summit",
+    exclusiveGroup: "run-ending", alternativeId: "nadir", outcomeLabel: "从顶峰撤离",
+    segment: null, layerId: null, available: false, sharedLayer: false,
+    description: "鲜花与绿草铺满小山丘。从这里撤离，旅程便在顶峰结束，不再进入天底。",
+    actionLabel: "等待顶峰所在分区确认",
+  };
+  const nadir = {
+    id: "nadir", title: "天底", english: "NADIR", kind: "nadir",
+    exclusiveGroup: "run-ending", alternativeId: "peak", outcomeLabel: "前往天底之门",
+    segment: null, layerId: null, available: false, sharedLayer: false,
+    description: "银白的悬浮山体通往童子军之门。进入天底的旅程，即使路过顶峰，也不再计作顶峰结局。",
+    actionLabel: "等待天底地图资源",
+  };
+  if (!mapPack) return [summit, nadir];
+
+  const route = normalizeRoute(mapPack.route);
+  function confirmedLayer(kind) {
+    const candidates = mapPack.layers.filter(layer => classifyRouteSegment(layer).kind === kind);
+    if (candidates.length !== 1) return null;
+    const layer = candidates[0];
+    if (!Number.isInteger(layer.segment) || layer.segment < 0
+        || layerForSegment(mapPack, layer.segment) !== layer) return null;
+    const evidence = route?.segments.find(entry => entry.index === layer.segment);
+    // Offline routes omit the runtime-appended Void; a present but contradicting
+    // route entry must not be silently overruled by a geometry label.
+    return evidence && classifyRouteSegment(evidence).kind !== kind ? null : layer;
+  }
+  const peakLayer = confirmedLayer("summit");
+  const finale = cards[3]?.ending;
+  if (peakLayer) {
+    Object.assign(summit, { segment: peakLayer.segment, layerId: peakLayer.id || null,
+      available: true, actionLabel: "查看顶峰地图" });
+  } else if (String(mapPack.gameBuildId) === "25306743" && finale && mapPack.mapPeak?.segment === finale.segment) {
+    Object.assign(summit, { segment: finale.segment, layerId: finale.layerId,
+      available: true, sharedLayer: true, viewIntent: "summit",
+      description: `顶峰位于${finale.title}之上；视图按游戏场景中唯一 PeakHandler 子树的真实碰撞边界定位。从这里撤离后不再进入天底。`,
+      actionLabel: "查看顶峰地图" });
+  } else if (String(mapPack.gameBuildId) === "25306743" && finale) {
+    // Verified MapHandler.JumpToSegmentLogic in this build maps enum Peak=5 to
+    // array index 4 (the Kiln/Citadel), but the exported GLB does not retain a
+    // source-root boundary that safely isolates the summit. Do not open the
+    // finale's interior camera and present it as a verified Peak map.
+    Object.assign(summit, { segment: finale.segment, layerId: finale.layerId,
+      available: false, sharedLayer: true,
+      description: `顶峰与${finale.title}共用游戏分区，但当前导出无法从混合模型中可靠拆出顶峰；暂不把${finale.title}室内或离群岩块冒充顶峰地图。`,
+      actionLabel: "等待顶峰模型精确导出" });
+  }
+  const voidLayer = confirmedLayer("nadir");
+  if (voidLayer) Object.assign(nadir, { segment: voidLayer.segment, layerId: voidLayer.id || null,
+    available: true, actionLabel: "查看天底地图" });
+  return [summit, nadir];
+}
+
 /**
  * Pure home-page view model. Supply the observed daily record, the published
  * catalog, and only the map pack fetched for its exact selected catalog entry.
@@ -108,7 +164,9 @@ export function buildHomeDailyView({ daily = null, catalog = null, mapPack = nul
   const valid = observationIsValid(daily) && Number.isFinite(currentTime)
     && Number.isFinite(fetched) && Number.isFinite(deadline)
     && fetched <= currentTime && deadline >= fetched;
-  const freshness = !valid ? "unavailable" : currentTime < deadline ? "current" : "stale";
+  const boundary = latestDailyBoundary(currentTime);
+  const freshness = !valid ? "unavailable"
+    : currentTime < deadline && fetched >= boundary ? "current" : "stale";
   const remainingSeconds = freshness === "current" ? Math.ceil((deadline - currentTime) / 1000) : null;
   const observedLabel = valid ? localTimestamp(fetched, timeZone) : null;
   const rotationLabel = valid ? localTimestamp(deadline, timeZone) : null;
@@ -118,6 +176,7 @@ export function buildHomeDailyView({ daily = null, catalog = null, mapPack = nul
   }
   const identityMatched = valid && sameIdentity(mapPack, entry, daily);
   const cards = identityMatched ? chapterCards(mapPack) : Array.from({ length: 4 }, (_, segment) => pendingCard(segment));
+  const destinations = specialDestinations(identityMatched ? mapPack : null, cards);
   const mapStatus = !valid ? "waiting-observation" : !entry ? "missing-build"
     : !mapPack ? "waiting-pack" : !identityMatched ? "identity-mismatch"
       : cards.every((card) => card.available) ? "ready" : "route-unconfirmed";
@@ -126,11 +185,11 @@ export function buildHomeDailyView({ daily = null, catalog = null, mapPack = nul
     : `${String(Math.floor(remainingSeconds / 3600)).padStart(2, "0")}:${String(Math.floor(remainingSeconds % 3600 / 60)).padStart(2, "0")}:${String(remainingSeconds % 60).padStart(2, "0")}`;
   return {
     freshness, isCurrent: freshness === "current",
-    statusLabel: freshness === "current" ? "今日四关" : freshness === "stale" ? "上次确认的四关" : "等待轮换确认",
+    statusLabel: freshness === "current" ? "今日五段路线" : freshness === "stale" ? "上次确认的五段路线" : "等待轮换确认",
     sceneName: valid ? daily.sceneName : null, mapSlot: valid ? daily.mapSlot : null,
     observedLabel, rotationLabel, remainingSeconds, countdownLabel,
     fetchedAtUtc: valid ? daily.fetchedAtUtc : null,
     nextChangeAtUtc: valid ? daily.nextChangeAtUtc : null,
-    mapEntry: entry, mapStatus, cards,
+    mapEntry: entry, mapStatus, cards, destinations,
   };
 }
