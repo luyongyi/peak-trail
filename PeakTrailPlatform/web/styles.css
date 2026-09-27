@@ -2973,3 +2973,129 @@ body.gate-open .app-shell { visibility: hidden; }
   }
   .error-banner { bottom: calc(68px + env(safe-area-inset-bottom, 0px)); }
 }
+
+/* Replay follows a deliberate three-step flow: import, choose a recording,
+   then use the map. A daily map on the home page must not expose an empty
+   replay workspace. */
+.replay-empty-state { display: none; }
+.app-shell[data-replay-state="empty"] {
+  grid-template-rows: 56px minmax(0, 1fr);
+}
+.app-shell[data-replay-state="empty"] .workspace,
+.app-shell[data-replay-state="empty"] .timeline-panel,
+.app-shell[data-replay-state="empty"] .daily-card,
+.app-shell[data-replay-state="empty"] .import-menu { display: none; }
+.app-shell[data-replay-state="empty"] .replay-empty-state {
+  display: grid;
+  width: min(560px, calc(100% - 32px));
+  align-self: center;
+  justify-self: center;
+  justify-items: center;
+  gap: 12px;
+  padding: clamp(28px, 6vw, 56px);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  text-align: center;
+}
+.replay-empty-state .eyebrow,
+.replay-empty-state h1,
+.replay-empty-state p { margin: 0; }
+.replay-empty-state h1 { font-size: clamp(1.4rem, 4vw, 2rem); }
+.replay-empty-state > p:last-of-type { max-width: 430px; color: var(--muted-strong); line-height: 1.7; }
+.replay-empty-state .empty-actions { margin-top: 6px; }
+.app-shell:not([data-replay-state="ready"]) .timeline-panel { display: none; }
+.app-shell[data-replay-state="explore"] { grid-template-rows: 56px minmax(0, 1fr); }
+
+.view-menu { position: relative; z-index: 8; pointer-events: auto; }
+.view-menu > summary { list-style: none; border: 1px solid var(--line); border-radius: 9px; background: rgba(10, 15, 16, .88); }
+.view-menu > summary::-webkit-details-marker { display: none; }
+.view-menu[open] > summary { border-color: var(--accent); color: var(--accent-strong); }
+.view-menu-pop {
+  position: absolute;
+  top: calc(100% + 7px);
+  right: 0;
+  width: min(310px, calc(100vw - 32px));
+  padding: 6px;
+  background: #101a17;
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+.view-menu .camera-actions {
+  position: static;
+  flex-wrap: wrap;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.view-map-controls {
+  display: grid;
+  gap: 7px;
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  pointer-events: auto;
+}
+.view-map-controls .select-wrap { margin-top: 0; }
+.view-map-controls .range-header { margin-top: 2px; }
+.view-map-controls .switch-list { grid-template-columns: 1fr 1fr; gap: 5px; }
+.view-map-controls .switch-row { padding: 6px 7px; }
+
+.record-selector .section-heading { margin-bottom: 8px; cursor: default; }
+.record-selector .section-heading h2::after { display: none; }
+.record-selectors { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+.record-selectors > label { min-width: 0; color: var(--muted-strong); font-size: .68rem; }
+.record-selectors .select-wrap { display: block; margin-top: 5px; }
+.archive-summary { line-height: 1.55; }
+
+.world-details { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+.world-details > summary { color: var(--muted-strong); font-size: .76rem; cursor: pointer; }
+.world-details[open] > summary { margin-bottom: 10px; color: var(--text); }
+
+/* The useful live values stay visible after a player is selected; verbose
+   appearance, inventory and condition snapshots live behind one disclosure. */
+.player-card .player-details { margin-top: 8px; border-top: 1px solid var(--line); }
+.player-card .player-stable-id { display: none; }
+.player-card .player-identity {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.player-card .player-overview { display: none; }
+.player-card.is-expanded .player-overview { display: grid; grid-template-columns: minmax(0, 1fr); }
+.player-card .player-status > .loadout-heading { margin-bottom: 7px; }
+.player-card .player-details > summary {
+  padding: 9px 2px 1px;
+  color: var(--muted-strong);
+  font-size: .7rem;
+  cursor: pointer;
+}
+.player-card .player-details[open] > summary { margin-bottom: 8px; color: var(--accent-strong); }
+.player-row .player-details[open] .player-loadout,
+.player-row .player-details[open] .player-conditions { display: block; }
+.player-row .player-details[open] .appearance-panel:not(.is-unknown) { display: grid; }
+.player-row .player-details[open] .vital-cap,
+.player-row .player-details[open] .held-meta { display: inline-block; }
+.player-row .player-details[open] .snapshot-authority { display: inline; }
+
+@media (max-width: 743px) {
+  .app-shell[data-replay-state="empty"] { grid-template-rows: 56px minmax(0, 1fr); padding-bottom: 0; }
+  .app-shell[data-replay-state="empty"] .topbar { grid-template-columns: minmax(0, 1fr) auto; }
+  .app-shell[data-replay-state="empty"] .top-actions { grid-column: 2; }
+  .app-shell[data-replay-state="empty"] .replay-empty-state { padding: 28px 18px; border-radius: 14px; }
+  .replay-empty-state .empty-glyph { display: block; transform: scale(.72); margin-bottom: 0; }
+  .replay-empty-state .empty-actions { width: 100%; flex-direction: column; }
+  .replay-empty-state .empty-actions .button { width: 100%; }
+  .view-menu-pop { width: min(270px, calc(100vw - 24px)); max-height: calc(100dvh - 130px); overflow-y: auto; }
+  .view-menu .camera-actions { min-width: 0; flex-direction: column; align-items: stretch; }
+  .view-menu .camera-actions button { width: 100%; min-height: 38px; justify-content: flex-start; }
+  .record-selectors { grid-template-columns: 1fr; }
+}

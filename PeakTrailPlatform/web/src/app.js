@@ -30,6 +30,7 @@ import { bindCameraTouchControls } from "./camera-touch.js";
 
 const $ = (id) => document.getElementById(id);
 const elements = {
+  appShell: document.querySelector(".app-shell"),
   mapInput: $("mapInput"),
   traceInput: $("traceInput"),
   traceFolderInput: $("traceFolderInput"),
@@ -127,6 +128,7 @@ const elements = {
 };
 
 const state = {
+  workspaceMode: "home",
   mapPack: null,
   trace: null,
   traceCollection: null,
@@ -666,6 +668,7 @@ async function importTrace(files) {
     const collection = await loadTraceCollection(files);
     disconnectLive(true);
     elements.liveStateRow.hidden = true;
+    state.workspaceMode = "replay";
     setSourceMode("replay");
     state.traceCollection = collection;
     state.replayCollection = collection;
@@ -696,10 +699,10 @@ function defaultRelayUrl() {
 
 function setSourceMode(mode) {
   const live = mode === "live";
-  elements.modeReplay.classList.toggle("is-active", !live);
-  elements.modeLive.classList.toggle("is-active", live);
-  elements.modeReplay.setAttribute("aria-selected", String(!live));
-  elements.modeLive.setAttribute("aria-selected", String(live));
+  elements.modeReplay?.classList.toggle("is-active", !live);
+  elements.modeLive?.classList.toggle("is-active", live);
+  elements.modeReplay?.setAttribute("aria-selected", String(!live));
+  elements.modeLive?.setAttribute("aria-selected", String(live));
   elements.replaySource.hidden = live;
   elements.liveSource.hidden = !live;
   elements.modeChip.textContent = live ? "直播" : "回放";
@@ -719,6 +722,8 @@ function gateOpen() {
 }
 
 function showGate() {
+  state.workspaceMode = "home";
+  syncWorkspaceState();
   elements.modeGate.hidden = false;
   document.body.classList.add("gate-open");
   document.querySelector('.app-shell').inert = true;
@@ -858,12 +863,16 @@ function syncWakeLockChip() {
 
 function enterLive(code) {
   const base = state.live.baseUrl || defaultRelayUrl();
+  state.workspaceMode = "live";
+  syncWorkspaceState();
   dismissGate();
   setSourceMode("live");
   void connectLiveRun(base, code);
 }
 
 async function enterModeFromGate(mode) {
+  state.workspaceMode = mode;
+  syncWorkspaceState();
   dismissGate();
   if (mode === "replay" && (state.live.code || state.live.es || state.live.demoTimer)) {
     disconnectLive(true);
@@ -879,7 +888,22 @@ async function enterModeFromGate(mode) {
       populateTraceArchive();
       const id = state.lastReplaySessionId || state.traceCollection.sessions[0].manifest.sessionId;
       await selectTraceSession(id, false);
-    } else if (isDailyMapFresh(state.daily)) await syncDailyMap(state.daily);
+    } else {
+      // “我的足迹”是记录优先的入口。即使首页已预载今日地图，空态也不能
+      // 被地图占位；地图只在选中一局记录后按该局构建自动匹配。
+      ++state.mapRequestRevision;
+      const previous = state.mapPack;
+      state.mapPack = null;
+      state.mapSourceKind = null;
+      state.dailyMapStatus = null;
+      state.compatibility = assessCompatibility(null, null);
+      resetSegmentNavigation(null);
+      await renderData();
+      if (previous) previous.disposeAssets?.();
+      updateMapUI();
+      updateTraceUI();
+      updateCompatibilityUI(false);
+    }
   } catch (error) { const detail = describeError(error); showError(detail.title, detail.message); }
 }
 
@@ -902,6 +926,7 @@ async function openHomeChapter(map, segment, presentedView, intent = null) {
   if (state.trace && state.traceCollection === state.replayCollection) state.lastReplaySessionId = state.trace.manifest.sessionId;
   disconnectLive(true);
   elements.liveStateRow.hidden = true;
+  state.workspaceMode = "explore";
   setSourceMode("replay");
   setPlaying(false);
   clearTimeout(state.toastTimer);
@@ -1230,6 +1255,7 @@ function liveWatchdog() {
 
 async function attachLiveTrace(trace) {
   const selectionRevision = ++state.traceSelectionRevision;
+  state.workspaceMode = "live";
   state.trace = trace;
   resetSegmentNavigation(trace);
   syncGameAssetsForTrace(trace, selectionRevision);
@@ -1377,6 +1403,7 @@ async function selectTraceSession(sessionId, showMismatch = true) {
     (candidate) => candidate.manifest.sessionId === sessionId,
   );
   if (!trace) return;
+  state.workspaceMode = "replay";
   if (state.traceCollection === state.replayCollection) state.lastReplaySessionId = trace.manifest.sessionId;
   const selectionRevision = ++state.traceSelectionRevision;
   state.trace = trace;
@@ -1496,7 +1523,18 @@ async function renderDataNow() {
 }
 
 function updateEmptyState() {
-  elements.emptyState.classList.toggle("is-hidden", Boolean(state.trace || state.mapPack));
+  syncWorkspaceState();
+  elements.emptyState.classList.toggle("is-hidden", state.workspaceMode !== "replay" || Boolean(state.trace));
+}
+
+function syncWorkspaceState() {
+  const shell = elements.appShell;
+  if (!shell) return;
+  const replayEmpty = state.workspaceMode === "replay" && !state.trace;
+  shell.classList.toggle("is-empty-replay", replayEmpty);
+  shell.classList.toggle("has-trace", Boolean(state.trace));
+  shell.dataset.workspaceMode = state.workspaceMode;
+  shell.dataset.replayState = replayEmpty ? "empty" : state.trace ? "ready" : "explore";
 }
 
 function updateMapUI() {
@@ -1941,7 +1979,7 @@ async function applyDailyStatus() {
           updateMapUI();
           updateCompatibilityUI(false);
         }
-      } else {
+      } else if (state.workspaceMode !== "replay") {
         await syncDailyMap(daily, true);
       }
       state.dailyMapErrorKey = null;
@@ -2066,6 +2104,7 @@ async function syncMapForTrace(trace, refreshCatalog = false) {
 }
 
 async function syncDailyMap(daily, refreshCatalog = false) {
+  if (state.workspaceMode === "replay" && !state.trace) return;
   if (state.manualMapLoads > 0 || (state.mapSourceKind && state.mapSourceKind !== "daily")) return;
   const startingRevision = state.mapRequestRevision;
   if (state.mapSourceKind === "daily" && state.mapPack?.sceneName !== daily.sceneName) {
@@ -2184,7 +2223,7 @@ document.addEventListener("visibilitychange", () => {
 });
 
 elements.eventList.addEventListener("scroll", scheduleEventWindow, { passive: true });
-elements.modeReplay.addEventListener("click", () => setSourceMode("replay"));
+elements.modeReplay?.addEventListener("click", () => void enterModeFromGate("replay"));
 elements.gateReplay.addEventListener("click", () => enterModeFromGate("replay"));
 elements.gateLive.addEventListener("click", () => {
   if (!gateRuns.length) {
@@ -2208,6 +2247,8 @@ elements.backToGate.addEventListener("click", () => {
   showGate();
 });
 elements.gateDebug.addEventListener("click", () => {
+  state.workspaceMode = "live";
+  syncWorkspaceState();
   dismissGate();
   setSourceMode("live");
   startDemoLive();
@@ -2228,8 +2269,17 @@ elements.playerList.addEventListener("click", (event) => {
     if (playerId && viewer) viewer.lockFollowTarget(viewer.followTargetId === playerId ? null : playerId);
     return;
   }
-  if (event.target.closest("button, label, input, select")) return;
-  event.target.closest(".player-row")?.classList.toggle("is-expanded");
+  const identityButton = event.target.closest(".player-identity");
+  if (event.target.closest("button, label, input, select, summary") && !identityButton) return;
+  const row = event.target.closest(".player-row");
+  if (!row) return;
+  const expanded = row.classList.toggle("is-expanded");
+  row.setAttribute("aria-expanded", String(expanded));
+  identityButton?.setAttribute("aria-expanded", String(expanded));
+  identityButton?.setAttribute(
+    "aria-label",
+    `${expanded ? "收起" : "展开"} ${row.dataset.playerName} 的生命、体力与手持信息`,
+  );
 });
 
 // ===== 跟随相机：HUD + 快捷键 =====
@@ -2285,7 +2335,7 @@ window.addEventListener("keydown", (event) => {
     viewer.cycleFollowTarget();
   }
 });
-elements.modeLive.addEventListener("click", () => setSourceMode("live"));
+// 直播只从首页“现场观测”进入；回放工作台不再维护第二个直播入口。
 elements.liveRefresh.addEventListener("click", () => void refreshLiveRuns());
 elements.liveDisconnect.addEventListener("click", () => disconnectLive());
 elements.mapInput.addEventListener("change", () => importMap(elements.mapInput.files));

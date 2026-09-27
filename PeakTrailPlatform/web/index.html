@@ -166,16 +166,26 @@
             accept=".json,.ndjson,.partial,application/json,application/x-ndjson"
           />
           <details class="import-menu" id="importMenu">
-            <summary class="button button-secondary">导入 ▾</summary>
+            <summary class="button button-secondary">换记录 ▾</summary>
             <div class="import-menu-pop">
               <label for="traceFolderInput">足迹总目录</label>
               <label for="traceInput">历史日志文件</label>
-              <label for="mapInput">手动导入地图包</label>
             </div>
           </details>
           <button class="button button-ghost" id="backToGate" type="button" title="返回模式选择">返回</button>
         </div>
       </header>
+
+      <section class="replay-empty-state" id="replayEmptyState" aria-labelledby="replayEmptyTitle">
+        <div class="empty-glyph" aria-hidden="true"><span></span><span></span><span></span></div>
+        <p class="eyebrow">我的足迹</p>
+        <h1 id="replayEmptyTitle">导入足迹，开始回放</h1>
+        <p>选择足迹总目录，或导入历史日志文件。记录只在当前浏览器中解析，不会上传。</p>
+        <div class="empty-actions">
+          <label class="button button-primary" for="traceFolderInput">选择足迹总目录</label>
+          <label class="button button-ghost" for="traceInput">选择历史日志文件</label>
+        </div>
+      </section>
 
       <main class="workspace">
         <section class="viewport-panel" aria-label="2.5D 地图回放视图">
@@ -191,7 +201,10 @@
               </div>
               <span class="analysis-overlay-note"><i class="trail-key-visible"></i>可见轨迹 <i class="trail-key-occluded"></i>遮挡轨迹 · 淡色透视</span>
             </div>
-            <div class="camera-actions" aria-label="视角控制">
+            <details class="view-menu">
+              <summary class="camera-text-button">视角 ▾</summary>
+              <div class="view-menu-pop">
+              <div class="camera-actions" aria-label="视角控制">
               <button class="camera-text-button" id="interiorViewButton" type="button" title="移到已记录玩家中心（非眼位）；没有记录时寻找真实模型内部地板">进入关内</button>
               <button class="camera-text-button" id="cinematicButton" type="button" title="沿路径自动跟随当前玩家，每 60 秒轮换；点击玩家卡 ◎ 可锁定">自动跟随</button>
               <button class="camera-text-button" id="freeCameraButton" type="button" aria-pressed="false">自由相机<span class="camera-help-desktop"> WASD</span></button>
@@ -201,7 +214,19 @@
               <button class="icon-button" id="fitViewButton" type="button" title="适配当前视图" aria-label="适配当前视图">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5m13-5h5v5M8 21H3v-5m13 5h5v-5" /></svg>
               </button>
-            </div>
+              </div>
+              <div class="view-map-controls">
+                <label class="field-label" for="layerSelect">关卡分区</label>
+                <span class="select-wrap"><select id="layerSelect" disabled><option value="all">所有关概览</option></select><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 9 5 5 5-5" /></svg></span>
+                <div class="range-header"><label class="field-label" for="heightScale">高度夸张</label><output id="heightScaleValue" for="heightScale">1.0×</output></div>
+                <input id="heightScale" class="range" type="range" min="0.4" max="3" step="0.1" value="1" />
+                <div class="switch-list">
+                  <label class="switch-row"><span><strong>显示轨迹</strong></span><input id="trackToggle" type="checkbox" checked /><span class="switch-ui"></span></label>
+                  <label class="switch-row"><span><strong>玩家位置</strong></span><input id="markerToggle" type="checkbox" checked /><span class="switch-ui"></span></label>
+                </div>
+              </div>
+              </div>
+            </details>
           </div>
 
           <div class="camera-help" id="cameraHelp" role="status" hidden>
@@ -252,17 +277,7 @@
             <p class="map-fog-note" id="mapFogNote" hidden></p>
           </nav>
 
-          <div class="empty-state" id="emptyState">
-            <div class="empty-glyph" aria-hidden="true">
-              <span></span><span></span><span></span>
-            </div>
-            <h1>把一次攀登放回地图</h1>
-            <p>选择足迹总目录，或拖入 <code>PeakTrailHistory.ndjson</code>。页面会按本地日期拆分多天、多局，所有数据只在本机解析。</p>
-            <div class="empty-actions">
-              <label class="button button-primary" for="traceFolderInput">选择足迹总目录</label>
-              <label class="button button-ghost" for="traceInput">选择历史日志文件</label>
-            </div>
-          </div>
+          <div class="empty-state" id="emptyState" hidden></div>
 
           <div class="drop-overlay" id="dropOverlay" aria-hidden="true">
             <div>
@@ -291,7 +306,7 @@
         </section>
 
         <aside class="inspector" aria-label="回放信息与筛选">
-          <section class="inspector-section source-section">
+          <div class="app-compat-controls" hidden aria-hidden="true">
             <div class="section-heading">
               <div>
                 <span class="eyebrow">数据源</span>
@@ -343,11 +358,17 @@
                 </div>
               </div>
             </div>
-            <details class="developer-tools">
-              <summary>地图维护工具</summary>
-              <p>普通用户无需操作；仅在制作或排查地图包时使用。</p>
-              <label class="button button-secondary" for="mapInput">手动导入地图包</label>
-            </details>
+          </div>
+
+          <section class="inspector-section archive-section record-selector">
+            <div class="section-heading compact">
+              <div><span class="eyebrow">当前记录</span><h2>回放记录</h2></div>
+            </div>
+            <div class="record-selectors">
+              <label><span>日期</span><span class="select-wrap"><select id="dateSelect" disabled><option>尚未导入</option></select><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 9 5 5 5-5" /></svg></span></label>
+              <label><span>局次</span><span class="select-wrap"><select id="sessionSelect" disabled><option>尚未导入</option></select><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 9 5 5 5-5" /></svg></span></label>
+            </div>
+            <p class="archive-summary" id="archiveSummary">等待导入足迹目录</p>
           </section>
 
           <section class="inspector-section players-section">
@@ -363,82 +384,24 @@
             </div>
           </section>
 
-          <section class="inspector-section archive-section is-collapsed">
+          <section class="inspector-section replay-info-section is-collapsed">
             <div class="section-heading compact">
               <div>
-                <span class="eyebrow">足迹档案</span>
-                <h2>日期与局次</h2>
-              </div>
-            </div>
-            <label class="field-label" for="dateSelect">日期（浏览器本地时区）</label>
-            <div class="select-wrap">
-              <select id="dateSelect" disabled><option>尚未导入</option></select>
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 9 5 5 5-5" /></svg>
-            </div>
-            <label class="field-label archive-session-label" for="sessionSelect">局次</label>
-            <div class="select-wrap">
-              <select id="sessionSelect" disabled><option>尚未导入</option></select>
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 9 5 5 5-5" /></svg>
-            </div>
-            <p class="archive-summary" id="archiveSummary">等待导入足迹目录</p>
-          </section>
-
-          <section class="inspector-section controls-section is-collapsed">
-            <div class="section-heading compact">
-              <div>
-                <span class="eyebrow">显示</span>
-                <h2>地图视图</h2>
-              </div>
-            </div>
-
-            <label class="field-label" for="layerSelect">关卡分区</label>
-            <div class="select-wrap">
-              <select id="layerSelect" disabled>
-                <option value="all">所有关概览</option>
-              </select>
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 9 5 5 5-5" /></svg>
-            </div>
-            <p class="control-note">单关按地图空间边界裁剪足迹，不改变记录坐标或推断玩家分区；亮线可见，淡线被地形遮挡。轨迹记录的是人物中心，并非脚底。</p>
-
-            <div class="range-header">
-              <label class="field-label" for="heightScale">高度夸张</label>
-              <output id="heightScaleValue" for="heightScale">1.0×</output>
-            </div>
-            <input id="heightScale" class="range" type="range" min="0.4" max="3" step="0.1" value="1" />
-
-            <div class="switch-list">
-              <label class="switch-row">
-                <span><strong>显示轨迹</strong><small>播放到当前位置的路线</small></span>
-                <input id="trackToggle" type="checkbox" checked />
-                <span class="switch-ui"></span>
-              </label>
-              <label class="switch-row">
-                <span><strong>玩家位置</strong><small>当前坐标与朝向</small></span>
-                <input id="markerToggle" type="checkbox" checked />
-                <span class="switch-ui"></span>
-              </label>
-            </div>
-          </section>
-
-          <section class="inspector-section events-section is-collapsed">
-            <div class="section-heading compact">
-              <div>
-                <span class="eyebrow">关键节点</span>
-                <h2>事件</h2>
+                <span class="eyebrow">事件与世界</span>
+                <h2>本局信息</h2>
               </div>
               <span class="count-badge" id="eventCount">0</span>
             </div>
             <div class="event-list" id="eventList">
               <p class="inline-empty">死亡、复活、传送和分区变化会显示在这里。</p>
             </div>
-          </section>
-
-          <section class="inspector-section world-section is-collapsed">
-            <div class="section-heading compact"><div><span class="eyebrow">世界动态</span><h2>物体与危险</h2></div></div>
-            <label class="switch-row"><span><strong>显示世界与雾层</strong><small>无世界实录时显示地图基础雾</small></span><input id="worldToggle" type="checkbox" checked /><span class="switch-ui"></span></label>
-            <p class="control-note" id="worldTelemetryNote">等待导入世界记录</p>
-            <p class="world-summary" id="worldSummary"></p>
-            <div class="world-alerts" id="worldAlerts" role="status"></div>
+            <details class="world-details">
+              <summary>物体与危险</summary>
+              <label class="switch-row"><span><strong>显示世界与雾层</strong><small>无世界实录时显示地图基础雾</small></span><input id="worldToggle" type="checkbox" checked /><span class="switch-ui"></span></label>
+              <p class="control-note" id="worldTelemetryNote">等待导入世界记录</p>
+              <p class="world-summary" id="worldSummary"></p>
+              <div class="world-alerts" id="worldAlerts" role="status"></div>
+            </details>
           </section>
         </aside>
       </main>

@@ -122,6 +122,7 @@ export function createPlayerCard(participant, color, onVisibilityChange) {
   row.style.setProperty("--player-color", color);
   row.dataset.playerId = participant.id;
   row.dataset.playerName = participant.nickname || participant.id;
+  row.setAttribute("aria-expanded", "false");
 
   const header = element("header", "player-card-header");
   const colorBadge = element(
@@ -135,11 +136,14 @@ export function createPlayerCard(participant, color, onVisibilityChange) {
   head.decoding = "async";
   const headFallback = element("span", "player-head-fallback", colorBadge.textContent);
   colorBadge.replaceChildren(head, headFallback);
-  const identity = element("span", "player-identity");
+  const identity = element("button", "player-identity");
+  identity.type = "button";
+  identity.setAttribute("aria-label", `展开 ${participant.nickname || participant.id} 的生命、体力与手持信息`);
+  identity.setAttribute("aria-expanded", "false");
   const name = element("strong", null, participant.nickname || participant.id);
   const stableId = element(
     "small",
-    null,
+    "player-stable-id",
     [participant.platform, participant.id].filter(Boolean).join(" · "),
   );
   identity.append(name, stableId);
@@ -195,7 +199,7 @@ export function createPlayerCard(participant, color, onVisibilityChange) {
   const telemetryAuthority = element("small", "snapshot-authority");
   telemetryAuthority.dataset.role = "telemetry-authority";
   status.append(heldSummary, vitals, telemetryAuthority);
-  overview.append(appearance, status);
+  overview.append(status);
 
   const conditions = element("section", "player-conditions");
   const conditionHeading = element("div", "loadout-heading");
@@ -205,7 +209,8 @@ export function createPlayerCard(participant, color, onVisibilityChange) {
   const conditionList = element("div", "condition-list"); conditionList.dataset.role = "condition-list";
   const conditionNote = element("p", "condition-note"); conditionNote.dataset.role = "condition-note";
   const effects = element("div", "condition-effects"); effects.dataset.role = "condition-effects";
-  conditions.append(conditionHeading, conditionList, conditionNote, effects);
+  status.prepend(conditionHeading);
+  conditions.append(conditionList, conditionNote, effects);
 
   const loadout = element("section", "player-loadout");
   const loadoutHeader = element("div", "loadout-heading");
@@ -235,7 +240,10 @@ export function createPlayerCard(participant, color, onVisibilityChange) {
   const inventoryAuthority = element("small", "snapshot-authority inventory-authority");
   inventoryAuthority.dataset.role = "inventory-authority";
   loadout.append(loadoutHeader, baseSlots, backpack, inventoryAuthority);
-  row.append(header, overview, conditions, loadout);
+  const details = element("details", "player-details");
+  const detailsSummary = element("summary", null, "玩家详情");
+  details.append(detailsSummary, appearance, conditions, loadout);
+  row.append(header, overview, details);
   return row;
 }
 

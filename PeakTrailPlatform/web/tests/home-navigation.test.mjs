@@ -15,6 +15,7 @@ function appFunction(name) {
 const names = [
   "openHomeChapter", "enterModeFromGate", "resetSegmentNavigation", "populateSegmentControls",
   "syncSegmentToPlayback", "setSourceMode", "disconnectLive", "selectTraceSession", "syncMapForTrace", "openLiveStream",
+  "syncWorkspaceState",
 ];
 const now = Date.parse("2026-09-22T02:00:00.000Z");
 const todayId = `sha256-${"a".repeat(64)}`;
@@ -35,8 +36,12 @@ function makeMap(id = todayId, gameBuildId = build) {
 function node() {
   const classes = new Set();
   return {
-    hidden: false, value: "", textContent: "", children: [], attributes: {},
-    classList: { remove: (name) => classes.delete(name), toggle: (name, enabled) => enabled ? classes.add(name) : classes.delete(name) },
+    hidden: false, value: "", textContent: "", children: [], attributes: {}, dataset: {},
+    classList: {
+      remove: (name) => classes.delete(name),
+      toggle: (name, enabled) => enabled ? classes.add(name) : classes.delete(name),
+      contains: (name) => classes.has(name),
+    },
     setAttribute(name, value) { this.attributes[name] = value; },
     replaceChildren() { this.children = []; }, append(child) { this.children.push(child); },
   };
@@ -59,6 +64,7 @@ function fixture() {
     gameBuildId: map.gameBuildId, projectionVersion: 1, enabled: true, path: `./packs/${map.mapPackId}/map-pack.json`,
   })) };
   const state = {
+    workspaceMode: "replay",
     daily: { schemaVersion: 1, versionOkay: true, levelIndex: 465, mapCount: 21, mapSlot: 3, sceneName: "Level_3", fetchedAtUtc: "2026-09-21T17:01:00.000Z", nextChangeAtUtc: "2026-09-22T17:00:00.000Z" },
     mapCatalog: catalog, trace, traceCollection: archive, replayCollection: archive,
     mapPack: archivedMap, mapSourceKind: "archive", sourceLoadingCounts: { trace: 0, map: 0 }, manualMapLoads: 0,
@@ -67,7 +73,7 @@ function fixture() {
     segmentMapStatuses: new Map([["2", { status: "ready" }]]), segmentOptions: [], toastTimer: 77, playing: true,
     live: { es: null, code: null, trace: null, timer: 0, demoTimer: 0, pollTimer: 0, dirty: false, lastSeq: 0, reconnectAttempts: 0 },
   };
-  const elements = Object.fromEntries(["liveStateRow", "eventToast", "modeReplay", "modeLive", "replaySource", "liveSource", "modeChip", "liveUrl", "layerSelect"].map((key) => [key, node()]));
+  const elements = Object.fromEntries(["appShell", "liveStateRow", "eventToast", "modeReplay", "modeLive", "replaySource", "liveSource", "modeChip", "liveUrl", "layerSelect"].map((key) => [key, node()]));
   const calls = { renders: [], assets: [], urls: [], clearedIntervals: [], errors: [], loading: [], statuses: [], compatibility: [], archive: 0, dismissed: 0, daily: 0, liveRefreshes: 0, attached: 0 };
   const streams = [];
   class FakeEventSource {
@@ -258,6 +264,35 @@ test("replay entry restores the remembered archive session and loads its exact o
   assert.equal(f.calls.daily, 0);
   assert.equal(f.calls.compatibility.at(-1), false);
   assert.deepEqual(f.calls.errors, []);
+});
+
+test("replay entry without records clears a previously loaded daily map and exposes the import-first state", async () => {
+  const f = fixture();
+  f.state.trace = null;
+  f.state.traceCollection = null;
+  f.state.replayCollection = null;
+  f.state.mapPack = f.today;
+  f.state.mapSourceKind = "daily";
+  await f.api.enterModeFromGate("replay");
+  assert.equal(f.state.trace, null);
+  assert.equal(f.state.mapPack, null);
+  assert.equal(f.state.mapSourceKind, null);
+  assert.equal(f.state.workspaceMode, "replay");
+  assert.equal(f.elements.appShell.classList.contains("is-empty-replay"), true);
+  assert.equal(f.elements.appShell.classList.contains("has-trace"), false);
+  assert.equal(f.elements.appShell.dataset.replayState, "empty");
+  assert.equal(f.calls.daily, 0);
+  assert.equal(f.today.disposed, 1);
+  assert.deepEqual(f.calls.renders.at(-1), { trace: null, map: null, segment: 0 });
+});
+
+test("home chapter exploration is not mistaken for an empty replay", async () => {
+  const f = fixture();
+  await f.api.openHomeChapter(f.today, 2, f.view());
+  f.api.syncWorkspaceState();
+  assert.equal(f.state.workspaceMode, "explore");
+  assert.equal(f.elements.appShell.classList.contains("is-empty-replay"), false);
+  assert.equal(f.elements.appShell.dataset.replayState, "explore");
 });
 
 test("replay entry from a live demo restores the archive, falling back to its first session if none was remembered", async () => {
