@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta
       name="description"
-      content="PEAK Trail 多人足迹回放器。下载记录 Mod，回看每一次同行。本地导入不上传，实时分享需主动开启。"
+      content="PEAK Trail 多人足迹回放器。查看每日路线，导入本地记录，或观看主动开启的实时分享。"
     />
     <meta name="theme-color" content="#0b1010" />
     <title>PEAK Trail · 足迹回放</title>
@@ -28,7 +28,7 @@
               <path class="brand-path" d="M9 25c5-5 10-5 15 0" />
             </svg>
           </span>
-          <span><strong>PEAK TRAIL</strong><small>每一程，都有迹可循。</small></span>
+          <span><strong>PEAK TRAIL</strong><small>地图与足迹回放</small></span>
         </div>
         <nav class="home-actions" aria-label="足迹工具">
           <a class="home-nav-link" href="./downloads/recorder/0.7.1/PeakTrailRecorder.dll" download="PeakTrailRecorder.dll">下载 Mod <span aria-hidden="true">↓</span></a>
@@ -46,11 +46,9 @@
         </div>
         </header>
 
-        <section class="home-intro" aria-labelledby="homeTitle">
+        <section class="home-intro" aria-label="每日五段路线">
           <div>
-            <p class="home-eyebrow"><span></span> DAILY EXPEDITION <b id="homeStatus">正在同步轮换</b></p>
-            <h1 id="homeTitle">五段山野，<em>一次同行。</em></h1>
-            <p class="home-description" id="homeDescription">从海岸出发，把沿途的每一次攀登留在地图上。</p>
+            <p class="home-eyebrow"><span></span> DAILY EXPEDITION <strong class="home-route-summary">五段路线</strong><b id="homeStatus">正在同步轮换</b></p>
           </div>
           <div class="home-date-block">
             <time id="homeDate">—</time>
@@ -69,35 +67,35 @@
                 <button type="button" class="home-chapter-button" disabled>
                   <img class="home-survey" alt="" hidden /><span class="home-chapter-number">01 <i></i></span>
                   <span class="home-model-status">等待轮换确认</span>
-                  <span class="home-chapter-copy"><small class="home-biome-en">THE BEGINNING</small><strong class="home-biome-title">第一关</strong><span class="home-biome-detail">从海岸开始</span><span class="home-chapter-link">进入地图 <b aria-hidden="true">↗</b></span></span>
+                  <span class="home-chapter-copy"><small class="home-biome-en">SHORE</small><strong class="home-biome-title">第一关</strong><span class="home-biome-detail" hidden></span><span class="home-chapter-link">进入地图 <b aria-hidden="true">↗</b></span></span>
                 </button>
               </li>
               <li class="home-chapter" data-segment="1" data-theme="roots">
                 <button type="button" class="home-chapter-button" disabled>
                   <img class="home-survey" alt="" hidden /><span class="home-chapter-number">02 <i></i></span>
                   <span class="home-model-status">等待轮换确认</span>
-                  <span class="home-chapter-copy"><small class="home-biome-en">INTO THE WILD</small><strong class="home-biome-title">第二关</strong><span class="home-biome-detail">等待真实关卡数据</span><span class="home-chapter-link">进入地图 <b aria-hidden="true">↗</b></span></span>
+                  <span class="home-chapter-copy"><small class="home-biome-en">CHAPTER 2</small><strong class="home-biome-title">第二关</strong><span class="home-biome-detail" hidden></span><span class="home-chapter-link">进入地图 <b aria-hidden="true">↗</b></span></span>
                 </button>
               </li>
               <li class="home-chapter" data-segment="2" data-theme="alpine">
                 <button type="button" class="home-chapter-button" disabled>
                   <img class="home-survey" alt="" hidden /><span class="home-chapter-number">03 <i></i></span>
                   <span class="home-model-status">等待轮换确认</span>
-                  <span class="home-chapter-copy"><small class="home-biome-en">HIGHER GROUND</small><strong class="home-biome-title">第三关</strong><span class="home-biome-detail">等待真实关卡数据</span><span class="home-chapter-link">进入地图 <b aria-hidden="true">↗</b></span></span>
+                  <span class="home-chapter-copy"><small class="home-biome-en">CHAPTER 3</small><strong class="home-biome-title">第三关</strong><span class="home-biome-detail" hidden></span><span class="home-chapter-link">进入地图 <b aria-hidden="true">↗</b></span></span>
                 </button>
               </li>
               <li class="home-chapter" data-segment="3" data-theme="volcano">
                 <button type="button" class="home-chapter-button" disabled>
                   <img class="home-survey" alt="" hidden /><span class="home-chapter-number">04 <i></i></span>
                   <span class="home-model-status">等待轮换确认</span>
-                  <span class="home-chapter-copy"><small class="home-biome-en">THE FINAL ASCENT</small><strong class="home-biome-title">第四关</strong><span class="home-biome-detail">终章随真实路线确认</span><span class="home-chapter-link">进入地图 <b aria-hidden="true">↗</b></span></span>
+                  <span class="home-chapter-copy"><small class="home-biome-en">CHAPTER 4</small><strong class="home-biome-title">第四关</strong><span class="home-biome-detail" hidden></span><span class="home-chapter-link">进入地图 <b aria-hidden="true">↗</b></span></span>
                 </button>
               </li>
               <li class="home-chapter home-chapter-finale" id="homeFinale" data-segment="4" data-theme="unknown" hidden>
                 <button type="button" class="home-chapter-button" id="homeEndingExplore" disabled>
                   <img class="home-survey" id="homeEndingArt" alt="" hidden loading="lazy" decoding="async" /><span class="home-chapter-number">05 <i></i></span>
                   <span class="home-model-status" id="homeEndingStatus">等待路线确认</span>
-                  <span class="home-chapter-copy"><small class="home-biome-en" id="homeEndingEnglish">FINAL ASCENT</small><strong class="home-biome-title" id="homeEnding">终段待确认</strong><span class="home-biome-detail" id="homeEndingDescription">等待真实路线数据</span><span class="home-chapter-link">进入地图 <b aria-hidden="true">↗</b></span></span>
+                  <span class="home-chapter-copy"><small class="home-biome-en" id="homeEndingEnglish">FINAL ASCENT</small><strong class="home-biome-title" id="homeEnding">终段待确认</strong><span class="home-biome-detail" id="homeEndingDescription" hidden></span><span class="home-chapter-link">进入地图 <b aria-hidden="true">↗</b></span></span>
                 </button>
               </li>
             </ol>
@@ -106,16 +104,16 @@
           <section class="home-destinations" aria-labelledby="homeDestinationsTitle">
             <div class="home-destinations-heading">
               <span>TWO POSSIBLE ENDINGS</span>
-              <h2 id="homeDestinationsTitle">旅程的两种结局</h2>
+              <h2 id="homeDestinationsTitle">两种结局</h2>
               <span class="home-ending-choice">二选一终局</span>
-              <p>顶峰撤离，或前往天底。这里展示两种可能，不代表本局已经到达。</p>
+              <p>顶峰与天底为互斥结局。</p>
             </div>
             <div class="home-destination-list">
               <article class="home-destination" data-destination="peak">
                 <div class="home-destination-visual"><img id="home-peak-art" width="1024" height="1536" alt="顶峰终局 AI 主题插画，非地图实景" loading="lazy" decoding="async" /></div>
                 <div class="home-destination-copy">
                   <div class="home-destination-name"><small>PEAK</small><h3>顶峰</h3><span id="home-peak-outcome">从顶峰撤离</span></div>
-                  <p id="home-peak-description">鲜花与绿草铺满小山丘。从这里撤离，旅程便在顶峰结束，不再进入天底。</p>
+                  <p id="home-peak-description">顶峰结局，与天底互斥。</p>
                   <button type="button" id="home-peak-explore" disabled>等待顶峰所在分区确认</button>
                 </div>
               </article>
@@ -123,7 +121,7 @@
                 <div class="home-destination-visual"><img id="home-nadir-art" width="1024" height="1536" alt="天底终局 AI 主题插画，非地图实景" loading="lazy" decoding="async" /></div>
                 <div class="home-destination-copy">
                   <div class="home-destination-name"><small>NADIR</small><h3>天底</h3><span id="home-nadir-outcome">前往天底之门</span></div>
-                  <p id="home-nadir-description">银白的悬浮山体通往童子军之门。进入天底的旅程，即使路过顶峰，也不再计作顶峰结局。</p>
+                  <p id="home-nadir-description">天底是额外区域，与顶峰结局互斥。</p>
                   <button type="button" id="home-nadir-explore" disabled>等待天底地图资源</button>
                 </div>
               </article>
@@ -132,17 +130,12 @@
           </section>
         </section>
 
-        <section class="home-bottom" aria-label="回放说明">
-          <div><span class="home-coordinate" aria-hidden="true">↟</span><p><strong>山会变，足迹会留下。</strong><span>本地导入 · 多人同看 · 沿时间重走每一段路</span></p></div>
-          <button type="button" class="home-open-replay" id="homeReplayLink">打开足迹回放 <span aria-hidden="true">→</span></button>
-        </section>
-
         <section class="home-guide" id="homeGuide" aria-labelledby="homeGuideTitle">
           <div class="home-guide-heading">
             <div>
               <p class="home-eyebrow"><span></span> BEFORE THE ASCENT</p>
-              <h2 id="homeGuideTitle">下一次同行，<em>记得留下足迹。</em></h2>
-              <p class="home-guide-intro">在游戏电脑上装好一个 Mod，回来就能沿时间重走整段旅程。</p>
+              <h2 id="homeGuideTitle">安装与导入</h2>
+              <p class="home-guide-intro">在游戏电脑上安装 Mod，再导入记录目录。</p>
             </div>
             <div class="home-mod-download">
               <a class="home-download-button" href="./downloads/recorder/0.7.1/PeakTrailRecorder.dll" download="PeakTrailRecorder.dll" aria-label="下载 PeakTrailRecorder 0.7.1 DLL">下载足迹 Mod <span aria-hidden="true">↓</span></a>
@@ -209,8 +202,8 @@ ServerUrl = https://peak.mylus.cn</code></pre>
         <section class="home-source" id="homeSource" aria-labelledby="homeSourceTitle">
           <div>
             <p class="home-eyebrow"><span></span> BUILT IN THE OPEN</p>
-            <h2 id="homeSourceTitle">代码可审查，版本有来处。</h2>
-            <p>网页与 DLL 源码均公开在 GitHub。下载前可以查看实现、核对版本，也欢迎反馈问题。</p>
+            <h2 id="homeSourceTitle">源码与版本</h2>
+            <p>查看网站源码、DLL 源码和发布校验。</p>
           </div>
           <nav class="home-source-links" aria-label="项目源码与 DLL 版本">
             <a href="https://github.com/luyongyi/peak-trail" target="_blank" rel="noopener noreferrer"><span><small>GITHUB</small>项目仓库</span><b aria-hidden="true">↗</b></a>

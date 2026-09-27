@@ -242,8 +242,8 @@ test("daily map availability describes two mutually exclusive endings when both 
       assert.equal(field in destination, false, `daily availability cannot establish ${field}`);
     }
   }
-  assert.match(result.destinations[0].description, /不再进入天底/);
-  assert.match(result.destinations[1].description, /即使路过顶峰.*不再计作顶峰结局/);
+  assert.match(result.destinations[0].description, /顶峰区域.*PeakHandler/);
+  assert.match(result.destinations[1].description, /与顶峰结局互斥/);
   assert.equal(result.cards.length, 4);
 });
 

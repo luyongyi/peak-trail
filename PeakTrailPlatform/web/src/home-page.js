@@ -2,13 +2,13 @@ import { buildHomeDailyView } from "./home-daily.js";
 import { HOME_ART, HOME_ENDINGS } from "./home-art.js";
 
 const COPY = {
-  shore: ["SHORE", "海蜇与海胆，藏在潮水之间"],
-  roots: ["ROOTS", "巨蕈林间，遇见蘑菇小僵尸"],
-  tropics: ["TROPICS", "藤叶深处，小心真菌的毒雾"],
-  alpine: ["ALPINE", "冰松与间歇泉，守着风雪山脊"],
-  mesa: ["MESA", "仙人掌旁，攀过赤色台地"],
-  volcano: ["CALDERA", "神鹫掠过低平的熔岩荒原"],
-  swamp: ["GLOOM", "昏睡雾里，小幽灵若隐若现"],
+  shore: "SHORE",
+  roots: "ROOTS",
+  tropics: "TROPICS",
+  alpine: "ALPINE",
+  mesa: "MESA",
+  volcano: "CALDERA",
+  swamp: "GLOOM",
 };
 
 /** A separate daily presentation: importing a replay must never replace its map. */
@@ -98,9 +98,6 @@ export class HomePage {
     this.$('homeRouteLabel').textContent = view.sceneName ? `${view.isCurrent ? '本轮路线' : '上次确认'} / ${view.sceneName} · ${String(this.daily.levelIndex).padStart(3, '0')}` : '等待确认本轮路线';
     this.$('homeCountdown').textContent = view.isCurrent ? `${view.countdownLabel} 后轮换` : view.countdownLabel;
     this.$('homeCountdown').title = view.rotationLabel ? `接口报告的轮换时间：${view.rotationLabel}（北京时间）` : '';
-    this.$('homeDescription').textContent = view.freshness === 'stale'
-      ? '新一轮尚未同步，以下保留上次确认的地图，不代表今日关卡。'
-      : '从海岸出发，把沿途的每一次攀登留在地图上。';
     this.root.dataset.freshness = view.freshness;
     for (const card of view.cards) {
       const cell = this.cells[card.segment], button = this.buttons[card.segment];
@@ -108,8 +105,10 @@ export class HomePage {
       button.disabled = !card.available;
       button.setAttribute('aria-label', `${view.isCurrent ? '查看本轮' : '查看上次确认的'}第${card.segment + 1}关：${card.title}`);
       cell.querySelector('.home-biome-title').textContent = card.title;
-      cell.querySelector('.home-biome-en').textContent = COPY[card.biome]?.[0] || `CHAPTER ${card.ordinal}`;
-      cell.querySelector('.home-biome-detail').textContent = card.ending ? `${COPY[card.biome]?.[1] || ''} · 通往${card.ending.title}` : COPY[card.biome]?.[1] || '等待真实关卡数据';
+      cell.querySelector('.home-biome-en').textContent = COPY[card.biome] || `CHAPTER ${card.ordinal}`;
+      const detail = cell.querySelector('.home-biome-detail');
+      detail.textContent = card.ending ? `通往${card.ending.title}` : '';
+      detail.hidden = !detail.textContent;
       const img = cell.querySelector('img');
       const url = card.available ? HOME_ART[card.biome] : null;
       if (url && img.getAttribute('src') !== url) img.src = url;
@@ -128,7 +127,8 @@ export class HomePage {
     finaleButton.setAttribute('aria-label', finale && ending ? `${view.isCurrent ? '查看本轮' : '查看上次确认的'}第5关：${ending.title}` : '终段等待路线确认');
     this.$('homeEnding').textContent = ending?.title || '终段待确认';
     this.$('homeEndingEnglish').textContent = finale?.english || 'FINAL ASCENT';
-    this.$('homeEndingDescription').textContent = finale ? `${view.cards[3].title}之后 · ${finale.description}` : '等待真实路线数据';
+    this.$('homeEndingDescription').textContent = '';
+    this.$('homeEndingDescription').hidden = true;
     this.$('homeEndingStatus').textContent = finale ? '' : '等待路线确认';
     const finaleArt = this.$('homeEndingArt');
     if (finale && finaleArt.getAttribute('src') !== finale.art) finaleArt.src = finale.art;

@@ -101,14 +101,14 @@ function specialDestinations(mapPack, cards) {
     id: "peak", title: "顶峰", english: "PEAK", kind: "summit",
     exclusiveGroup: "run-ending", alternativeId: "nadir", outcomeLabel: "从顶峰撤离",
     segment: null, layerId: null, available: false, sharedLayer: false,
-    description: "鲜花与绿草铺满小山丘。从这里撤离，旅程便在顶峰结束，不再进入天底。",
+    description: "顶峰结局，与天底互斥。",
     actionLabel: "等待顶峰所在分区确认",
   };
   const nadir = {
     id: "nadir", title: "天底", english: "NADIR", kind: "nadir",
     exclusiveGroup: "run-ending", alternativeId: "peak", outcomeLabel: "前往天底之门",
     segment: null, layerId: null, available: false, sharedLayer: false,
-    description: "银白的悬浮山体通往童子军之门。进入天底的旅程，即使路过顶峰，也不再计作顶峰结局。",
+    description: "天底是额外区域，与顶峰结局互斥。",
     actionLabel: "等待天底地图资源",
   };
   if (!mapPack) return [summit, nadir];
@@ -133,7 +133,7 @@ function specialDestinations(mapPack, cards) {
   } else if (String(mapPack.gameBuildId) === "25306743" && finale && mapPack.mapPeak?.segment === finale.segment) {
     Object.assign(summit, { segment: finale.segment, layerId: finale.layerId,
       available: true, sharedLayer: true, viewIntent: "summit",
-      description: `顶峰位于${finale.title}之上；视图按游戏场景中唯一 PeakHandler 子树的真实碰撞边界定位。从这里撤离后不再进入天底。`,
+      description: `${finale.title}上方的顶峰区域；地图视图依据 PeakHandler 碰撞边界定位。`,
       actionLabel: "查看顶峰地图" });
   } else if (String(mapPack.gameBuildId) === "25306743" && finale) {
     // Verified MapHandler.JumpToSegmentLogic in this build maps enum Peak=5 to

@@ -2187,7 +2187,6 @@ document.addEventListener("visibilitychange", () => {
 elements.eventList.addEventListener("scroll", scheduleEventWindow, { passive: true });
 elements.modeReplay.addEventListener("click", () => setSourceMode("replay"));
 elements.gateReplay.addEventListener("click", () => enterModeFromGate("replay"));
-$("homeReplayLink").addEventListener("click", () => enterModeFromGate("replay"));
 elements.gateLive.addEventListener("click", () => {
   if (!gateRuns.length) {
     // 空卡不是死路：点开诊断（中继可达性/错误/检测时间），并立即重测。
