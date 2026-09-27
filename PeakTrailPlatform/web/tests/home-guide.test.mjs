@@ -3,13 +3,14 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+const guideHtml = await readFile(new URL("../guide.html", import.meta.url), "utf8");
 const css = await readFile(new URL("../home.css", import.meta.url), "utf8");
 const plugin = await readFile(new URL("../../../PeakTrailRecorder/src/PeakTrailRecorder/Plugin.cs", import.meta.url), "utf8");
 const project = await readFile(new URL("../../../PeakTrailRecorder/src/PeakTrailRecorder/PeakTrailRecorder.csproj", import.meta.url), "utf8");
 const release = JSON.parse(await readFile(new URL("../../data/recorder/release.json", import.meta.url), "utf8"));
 const version = plugin.match(/RecorderVersion = "([^"]+)"/)[1];
 const download = `./${release.downloadPath}`;
-const guide = html.match(/<section class="home-guide"[\s\S]*?<\/section>/)[0];
+const guide = guideHtml.match(/<section class="home-guide"[\s\S]*?<\/section>/)[0];
 
 test("homepage exposes a version-matched DLL download in navigation and the install guide", () => {
   assert.equal(release.version, version);
@@ -18,7 +19,9 @@ test("homepage exposes a version-matched DLL download in navigation and the inst
   assert.equal(release.artifactUrl, `https://github.com/luyongyi/peak-trail/releases/download/recorder-v${version}/PeakTrailRecorder.dll`);
   const nav = html.match(/<nav class="home-actions"[\s\S]*?<\/nav>/)[0];
   assert.ok(nav.includes(`href="${download}"`));
-  assert.ok(nav.includes('href="#homeGuide"'));
+  assert.ok(nav.includes('href="./guide.html"'));
+  assert.doesNotMatch(html, /<section class="home-guide"|id="homeGuide"/);
+  assert.ok(guideHtml.includes('href="./"'));
   assert.ok(guide.includes(`href="${download}"`));
   assert.ok(guide.includes(`v${version}`));
   assert.ok(guide.includes(`${release.size / 1024} KiB`));

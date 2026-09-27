@@ -104,6 +104,7 @@ await writeFile(resolve(outputDirectory, recorderRelease.downloadPath), recorder
 await writeFile(resolve(outputDirectory, "data", "recorder", "release.json"), JSON.stringify(recorderRelease, null, 2) + "\n");
 await Promise.all([
   cp(resolve(webDirectory, "index.html"), resolve(outputDirectory, "index.html")),
+  cp(resolve(webDirectory, "guide.html"), resolve(outputDirectory, "guide.html")),
   cp(resolve(webDirectory, "styles.css"), resolve(outputDirectory, "styles.css")),
   cp(resolve(webDirectory, "home.css"), resolve(outputDirectory, "home.css")),
   cp(resolve(webDirectory, "src"), resolve(outputDirectory, "src"), { recursive: true }),

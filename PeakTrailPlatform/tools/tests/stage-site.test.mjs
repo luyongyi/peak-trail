@@ -60,6 +60,7 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
     copyFile(resolve(platformSource, "web", "src", "map-peak.js"), resolve(platform, "web", "src", "map-peak.js")),
     copyFile(resolve(platformSource, "web", "src", "home-art.js"), resolve(platform, "web", "src", "home-art.js")),
     writeFile(resolve(platform, "web", "index.html"), "<!doctype html>"),
+    writeFile(resolve(platform, "web", "guide.html"), "<!doctype html><title>Install guide</title>"),
     writeFile(resolve(platform, "web", "styles.css"), "body{}"),
     writeFile(resolve(platform, "web", "home.css"), ".home-page{}"),
     writeFile(resolve(platform, "web", "src", "app.js"), "export {};"),
@@ -201,6 +202,7 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
   const options = { env: { ...process.env, PEAK_TRAIL_ASSET_ROOT: assets, PEAK_TRAIL_RECORDER_DLL: recorderPath } };
   await execFileAsync(process.execPath, [resolve(tools, "stage-site.mjs")], options);
   const staged = resolve(platform, "site-dist");
+  assert.equal(await readFile(resolve(staged, "guide.html"), "utf8"), "<!doctype html><title>Install guide</title>");
   assert.deepEqual(await readFile(resolve(staged, recorderRelease.downloadPath)), recorderBytes);
   assert.deepEqual(JSON.parse(await readFile(resolve(staged, "data", "recorder", "release.json"), "utf8")), recorderRelease);
   assert.deepEqual(await readdir(resolve(staged, "downloads", "recorder", "0.7.1")), ["PeakTrailRecorder.dll"]);

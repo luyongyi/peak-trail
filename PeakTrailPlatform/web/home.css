@@ -111,8 +111,8 @@
 .home-guide { scroll-margin-top: 28px; margin: 46px 0 48px; padding: 38px 0 0; border-top: 1px solid #a7b89c33; }
 .home-guide-heading { display: flex; align-items: center; justify-content: space-between; gap: 28px; }
 .home-guide .home-eyebrow { margin-bottom: 14px; }
-.home-guide h2 { margin: 0; font-size: clamp(23px, 2.2vw, 32px); font-weight: 450; letter-spacing: .025em; line-height: 1.5; }
-.home-guide h2 em { font-style: normal; color: #b7c19f; font-weight: 350; }
+.home-guide h1, .home-guide h2 { margin: 0; font-size: clamp(23px, 2.2vw, 32px); font-weight: 450; letter-spacing: .025em; line-height: 1.5; }
+.home-guide h1 em, .home-guide h2 em { font-style: normal; color: #b7c19f; font-weight: 350; }
 .home-guide-intro { margin: 12px 0 0; color: #8b9e90; font-size: 12px; line-height: 1.8; }
 .home-mod-download { flex-shrink: 0; display: flex; flex-direction: column; align-items: stretch; gap: 10px; min-width: 220px; text-align: center; }
 .home-download-button { display: flex; justify-content: space-between; align-items: center; gap: 42px; min-height: 48px; padding: 12px 20px; border: 1px solid #c6bf8c77; border-radius: 5px; background: #c0c19412; color: #e4dfb7; font-size: 13px; text-decoration: none; transition: background .18s, border-color .18s; }
@@ -171,8 +171,8 @@
   .home-actions { gap: 14px; }
   .home-replay { gap: 18px; padding-left: 12px; padding-right: 12px; }
   .home-guide-heading { align-items: flex-start; gap: 22px; }
-  .home-guide-heading h2 { font-size: 24px; }
-  .home-guide-heading h2 em { display: block; }
+  .home-guide-heading h1, .home-guide-heading h2 { font-size: 24px; }
+  .home-guide-heading h1 em, .home-guide-heading h2 em { display: block; }
   .home-mod-download { min-width: 205px; }
   .home-guide-steps { grid-template-columns: 1fr; }
   .home-guide-steps li, .home-guide-steps li:first-child, .home-guide-steps li:last-child { position: relative; border-left: 0; border-top: 1px solid #a7b89c22; padding: 23px 0 23px 44px; }
@@ -248,8 +248,8 @@
   .home-route-footer { padding: 12px 0; min-height: 48px; }
   .home-guide { margin: 30px 0; padding-top: 28px; scroll-margin-top: 18px; }
   .home-guide-heading { flex-direction: column; align-items: stretch; gap: 22px; }
-  .home-guide h2 { font-size: clamp(24px, 5vw, 30px); }
-  .home-guide h2 em { display: block; }
+  .home-guide h1, .home-guide h2 { font-size: clamp(24px, 5vw, 30px); }
+  .home-guide h1 em, .home-guide h2 em { display: block; }
   .home-guide-intro { font-size: 13px; }
   .home-mod-download { min-width: 0; gap: 8px; }
   .home-download-button { min-height: 50px; font-size: 14px; padding: 13px 18px; }
