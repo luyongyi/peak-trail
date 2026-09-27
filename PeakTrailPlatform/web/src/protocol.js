@@ -1753,13 +1753,7 @@ export function selectDailyMapPack(catalog, daily) {
   if (!/^[1-9]\d*$/.test(activeBuildId || "")) return null;
 
   const candidates = catalog.mapPacks.filter((entry) => {
-    if (!entry || typeof entry !== "object") return false;
-    const mapPackId = String(entry.mapPackId || "");
-    const expectedPath = `./packs/${mapPackId.toLowerCase()}/map-pack.json`;
-    if (!SUPPORTED_MAP_PACK_IDENTITY_VERSIONS.includes(entry.identityVersion)
-        || !MAP_PACK_ID_PATTERN.test(mapPackId)
-        || entry.path !== expectedPath
-        || !entry.sceneName) return false;
+    if (!validCatalogEntry(entry)) return false;
     if (String(entry.gameBuildId ?? "").trim() !== activeBuildId) return false;
     if (String(entry.sceneName) !== String(daily.sceneName)) return false;
     if (entry.mapSlot !== undefined && Number(entry.mapSlot) !== Number(daily.mapSlot)) return false;
@@ -1777,11 +1771,16 @@ export function selectDailyMapPack(catalog, daily) {
 function validCatalogEntry(entry) {
   if (!entry || typeof entry !== "object") return false;
   const mapPackId = String(entry.mapPackId || "");
+  const aliases = entry.supersedesMapPackIds;
+  const validAliases = aliases === undefined || (Array.isArray(aliases) && aliases.length > 0
+    && aliases.every((id) => MAP_PACK_ID_PATTERN.test(id) && id !== mapPackId)
+    && new Set(aliases).size === aliases.length);
   return SUPPORTED_MAP_PACK_IDENTITY_VERSIONS.includes(entry.identityVersion)
     && MAP_PACK_ID_PATTERN.test(mapPackId)
     && entry.path === `./packs/${mapPackId}/map-pack.json`
     && Boolean(entry.sceneName)
-    && entry.enabled !== false;
+    && entry.enabled !== false
+    && validAliases;
 }
 
 export function selectTraceMapPack(catalog, manifest) {
@@ -1793,7 +1792,15 @@ export function selectTraceMapPack(catalog, manifest) {
   const requestedPackId = asId(manifest.mapPackId);
   if (requestedPackId) {
     const exact = entries.find((entry) => String(entry.mapPackId) === requestedPackId);
-    return exact || null;
+    if (exact) return exact;
+    const aliases = entries.filter((entry) => entry.supersedesMapPackIds?.includes(requestedPackId)
+      && String(entry.sceneName) === String(manifest.sceneName)
+      && (!manifest.gameBuildId || String(entry.gameBuildId ?? "").trim() === String(manifest.gameBuildId).trim())
+      && (manifest.mapSlot === null || manifest.mapSlot === undefined || entry.mapSlot === undefined
+        || Number(entry.mapSlot) === Number(manifest.mapSlot))
+      && (manifest.projectionVersion === null || manifest.projectionVersion === undefined
+        || entry.projectionVersion === undefined || Number(entry.projectionVersion) === Number(manifest.projectionVersion)));
+    return aliases.length === 1 ? aliases[0] : null;
   }
 
   const buildId = asId(manifest.gameBuildId)?.trim();

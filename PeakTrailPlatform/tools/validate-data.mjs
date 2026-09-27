@@ -46,6 +46,19 @@ assert(mapPackIds.every((id) => /^sha256-[a-f0-9]{64}$/.test(id || "")), "maps/c
 assert(new Set(mapPackIds).size === mapPackIds.length, "maps/catalog.json contains duplicate mapPackId values");
 const mapPackPaths = catalog.mapPacks.map((pack) => pack?.path);
 assert(new Set(mapPackPaths).size === mapPackPaths.length, "maps/catalog.json contains duplicate paths");
+const supersededIds = [];
+for (const [index, pack] of catalog.mapPacks.entries()) {
+  if (pack.supersedesMapPackIds === undefined) continue;
+  assert(Array.isArray(pack.supersedesMapPackIds) && pack.supersedesMapPackIds.length > 0,
+    `maps/catalog.json entry ${index} has invalid supersedesMapPackIds`);
+  assert(pack.supersedesMapPackIds.every((id) => /^sha256-[a-f0-9]{64}$/.test(id) && id !== pack.mapPackId),
+    `maps/catalog.json entry ${index} has an invalid superseded map-pack id`);
+  assert(new Set(pack.supersedesMapPackIds).size === pack.supersedesMapPackIds.length,
+    `maps/catalog.json entry ${index} has duplicate supersedesMapPackIds`);
+  supersededIds.push(...pack.supersedesMapPackIds);
+}
+assert(new Set(supersededIds).size === supersededIds.length, "maps/catalog.json contains duplicate superseded map-pack ids");
+assert(supersededIds.every((id) => !mapPackIds.includes(id)), "maps/catalog.json superseded ids cannot also be current entries");
 if (catalog.mapPacks.length) {
   assert(activeBuildId, "maps/catalog.json must declare activeGameBuildId when map packs are present");
   assert(catalog.mapPacks.some((entry) => normalizeBuildId(entry?.gameBuildId) === activeBuildId), "maps/catalog.json activeGameBuildId has no map packs");

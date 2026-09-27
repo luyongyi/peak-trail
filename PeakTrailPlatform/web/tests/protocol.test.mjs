@@ -432,6 +432,31 @@ test("historical trace map selection prefers exact pack identity", () => {
   assert.equal(selectTraceMapPack(catalog, { ...manifest, mapPackId: `sha256-${"0".repeat(64)}` }), null);
 });
 
+test("historical trace selection accepts only an explicit compatible material-revision alias", () => {
+  const oldId = `sha256-${"a".repeat(64)}`;
+  const newId = `sha256-${"b".repeat(64)}`;
+  const replacement = { mapPackId: newId, identityVersion: 3, sceneName: "Level_7", mapSlot: 7,
+    gameBuildId: "19492001", projectionVersion: 1, supersedesMapPackIds: [oldId],
+    path: `./packs/${newId}/map-pack.json` };
+  const catalog = { schemaVersion: 1, activeGameBuildId: "19492001", mapPacks: [replacement] };
+  assert.equal(selectTraceMapPack(catalog, { ...manifest, mapPackId: oldId })?.mapPackId, newId);
+  assert.equal(selectTraceMapPack(catalog, { ...manifest, sceneName: "Level_8", mapPackId: oldId }), null);
+  assert.equal(selectTraceMapPack(catalog, { ...manifest, gameBuildId: "999", mapPackId: oldId }), null);
+  assert.equal(selectTraceMapPack(catalog, { ...manifest, mapPackId: `sha256-${"c".repeat(64)}` }), null);
+});
+
+test("malformed, self-referential, duplicate, or ambiguous aliases are never selected", () => {
+  const oldId = `sha256-${"a".repeat(64)}`;
+  const make = (letter, aliases) => { const id = `sha256-${letter.repeat(64)}`; return {
+    mapPackId: id, identityVersion: 3, sceneName: "Level_7", mapSlot: 7, gameBuildId: "19492001",
+    projectionVersion: 1, supersedesMapPackIds: aliases, path: `./packs/${id}/map-pack.json` }; };
+  for (const entry of [make("b", ["bad"]), make("b", [`sha256-${"b".repeat(64)}`]), make("b", [oldId, oldId])]) {
+    assert.equal(selectTraceMapPack({ schemaVersion: 1, mapPacks: [entry] }, { ...manifest, mapPackId: oldId }), null);
+  }
+  assert.equal(selectTraceMapPack({ schemaVersion: 1, mapPacks: [make("b", [oldId]), make("c", [oldId])] },
+    { ...manifest, mapPackId: oldId }), null);
+});
+
 test("browser QA fixtures load as a matching two-player replay", async () => {
   const fixture = new URL("./fixtures/", import.meta.url);
   const [mapJson, manifestJson, streamText] = await Promise.all([

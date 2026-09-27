@@ -1,9 +1,40 @@
 import unittest
 import numpy as np
 from build_maps import trs, raster, primitive_mesh
-from export_meshes import decompose_exact, stored_color_to_linear
+from export_meshes import FOLIAGE_TEXTURE_MAX_SIDE, decompose_exact, foliage_material_contract, source_base_property, stored_color_to_linear
 
 class GeometryTests(unittest.TestCase):
+    def test_foliage_delivery_texture_has_a_bounded_documented_size(self):
+        self.assertEqual(FOLIAGE_TEXTURE_MAX_SIDE,256)
+
+    def test_source_base_property_uses_authored_foliage_and_ice_color(self):
+        colors={'_Tint':object(),'_BaseColor':object(),'_Color':object()}
+        self.assertEqual(source_base_property('GD/FoliageGD',colors,{}),'_BaseColor')
+        self.assertEqual(source_base_property('W/Peak_Ice',colors,{}),'_BaseColor')
+
+    def test_source_base_property_preserves_other_shader_fallbacks(self):
+        colors={'_Tint':object(),'_BaseColor':object(),'_Color':object()}
+        self.assertEqual(source_base_property('W/Peak_Standard',colors,{}),'_Tint')
+        self.assertEqual(source_base_property('W/Peak_Rock',colors,{'_TopColorAmount':1}),'_BaseColor')
+        self.assertEqual(source_base_property('Unknown',{'_BaseColor':object()},{}),'_BaseColor')
+
+    def test_foliage_uses_shape_cutout_and_source_culling(self):
+        shape={'m_Texture':{'m_FileID':1,'m_PathID':42},'m_Scale':{'x':2,'y':3},'m_Offset':{'x':.1,'y':.2}}
+        contract=foliage_material_contract('GD/FoliageGD',{'_Shape':shape,'_Texture1':{}},{'_AlphaClip':.513,'_Cull':2})
+        self.assertIs(contract['texture'],shape)
+        self.assertEqual(contract['textureProperty'],'_Shape')
+        self.assertEqual(contract['alphaCutoff'],.513)
+        self.assertFalse(contract['doubleSided'])
+        self.assertTrue(foliage_material_contract('GD/FoliageGD',{'_Shape':shape},{'_Cull':0})['doubleSided'])
+        vine=foliage_material_contract('W/Vine',{'_Shape':shape},{'_AlphaClip':.478,'_Cull':2})
+        self.assertEqual(vine['alphaCutoff'],.478)
+        self.assertFalse(vine['doubleSided'])
+
+    def test_foliage_contract_never_guesses_for_other_shaders_or_missing_shape(self):
+        shape={'m_Texture':{'m_FileID':1,'m_PathID':42}}
+        self.assertIsNone(foliage_material_contract('Unknown/Foliage',{'_Shape':shape},{'_AlphaClip':.5}))
+        self.assertIsNone(foliage_material_contract('GD/FoliageGD',{'_Texture1':shape},{'_AlphaClip':.5}))
+
     def test_hdr_material_is_not_linearized_twice(self):
         value=np.array([.1415094,.1297805,.114142])
         np.testing.assert_array_equal(stored_color_to_linear(value,16),value)

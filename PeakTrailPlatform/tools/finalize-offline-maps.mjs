@@ -56,8 +56,9 @@ for (const { folder, manifest } of completed) {
   }
   manifest.mapPackId = computeMapPackId(manifest);
   await writeFile(resolve(folder, "map-pack.json"), JSON.stringify(manifest, null, 2) + "\n");
-  const registration = spawnSync(process.execPath,
-    [resolve(platform, "tools/register-map-pack.mjs"), folder, "--activate-build"], { stdio: "inherit" });
+  const registrationArgs = [resolve(platform, "tools/register-map-pack.mjs"), folder, "--activate-build"];
+  if (replace) registrationArgs.push("--replace-build");
+  const registration = spawnSync(process.execPath, registrationArgs, { stdio: "inherit" });
   if (registration.status !== 0) throw new Error(`Registration failed; original catalog retained at ${backupPath}`);
 }
 if (replace) {

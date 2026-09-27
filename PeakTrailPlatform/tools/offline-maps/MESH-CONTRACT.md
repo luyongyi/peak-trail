@@ -85,8 +85,13 @@ letting a large distant background mesh shrink the useful view.
 - Every compressed accessor is decoded and compared **byte for byte** with its
   original source buffer while exporting. The encoder uses `ATTRIBUTES` or
   `INDICES`, with filter `NONE`; no lossy quantization or vertex reorder runs.
-- Normals and positions are original float32 attributes. Texture images use the
-  existing source extraction's maximum 512-pixel side and are embedded in GLB.
+- Normals and positions are original float32 attributes. General texture images
+  use the existing source extraction's maximum 512-pixel side. Repeated
+  `GD/FoliageGD` / `W/Vine` `_Shape` cutouts use a 256-pixel maximum side with
+  Lanczos resampling; their source colour, alpha silhouette, authored cutoff,
+  UV transform and cull mode remain embedded in each GLB. This bounded delivery
+  resolution keeps all 21 six-layer packs inside the public site's 1 GB budget
+  without deleting vegetation or changing geometry.
 - Many repeated rocks and trees reference the same shared mesh. Non-sheared
   instances use `EXT_mesh_gpu_instancing`. Any affine transform that fails the
   strict reconstruction tolerance remains a regular node with full `matrix`.
@@ -155,6 +160,16 @@ shows warm tan. The viewer therefore zeroes `amount` for those shaders
 (`verifiableTopBlend` in `web/src/geometry-loader.js`). Prop albedo, alpha masks
 and vertex AO are still approximated from the layered foliage shader; see the
 known limitations in the material report.
+
+`GD/FoliageGD` and `W/Vine` do not use a standard Unity base-texture slot.
+Their `_Shape` texture supplies the visible card silhouette, and the saved
+`_AlphaClip` value is the shader's authored discard threshold. The exporter
+therefore binds `_Shape` as the glTF base-colour texture, emits `alphaMode:
+MASK` with that exact cutoff when the texture contains alpha, and maps the
+source `_Cull` value to `doubleSided`. Without this shader-specific contract,
+grass, leaf and vine cards become solid tinted rectangles. Vertex colours are
+not exported as albedo: these shaders use them as layer masks for `_Texture1`
+through `_Texture3`, whose full blend remains an acknowledged approximation.
 
 Color conversion is selected using the installed shader's property metadata.
 `sourceColors` records the shader name, selected base property, raw stored colors,

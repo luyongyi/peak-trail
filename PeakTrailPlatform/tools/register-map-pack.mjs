@@ -14,9 +14,11 @@ const heightEncoding = "float32-le-row-major-minz-minx";
 const argumentsList = process.argv.slice(2);
 const sourceArgument = argumentsList.find((value) => !value.startsWith("--"));
 const activateBuild = argumentsList.includes("--activate-build");
+const replaceBuild = argumentsList.includes("--replace-build");
 
-if (!sourceArgument || argumentsList.some((value) => value.startsWith("--") && value !== "--activate-build")) {
-  throw new Error("Usage: node PeakTrailPlatform/tools/register-map-pack.mjs <export-folder> [--activate-build]");
+if (!sourceArgument || argumentsList.some((value) => value.startsWith("--")
+    && !["--activate-build", "--replace-build"].includes(value))) {
+  throw new Error("Usage: node PeakTrailPlatform/tools/register-map-pack.mjs <export-folder> [--activate-build] [--replace-build]");
 }
 
 const sourceDirectory = resolve(sourceArgument);
@@ -59,22 +61,38 @@ async function registerUnderLock() {
   if (catalog.schemaVersion !== 1 || !Array.isArray(catalog.mapPacks)) {
     throw new Error("data/maps/catalog.json is not a schemaVersion 1 catalog");
   }
+  validateCatalogAliases(catalog.mapPacks);
 
   const expectedPath = `./packs/${directoryName}/map-pack.json`;
   const references = await verifyAssets(sourceDirectory);
   const existingEntry = catalog.mapPacks.find((entry) => entry?.mapPackId === manifest.mapPackId);
+  const replacedEntries = replaceBuild ? catalog.mapPacks.filter((entry) => entry?.mapPackId !== manifest.mapPackId
+    && String(entry?.gameBuildId ?? "").trim() === String(manifest.gameBuildId).trim()
+    && entry?.sceneName === manifest.sceneName && Number(entry?.mapSlot) === Number(manifest.mapSlot)) : [];
+  const inheritedAliases = [...new Set(replacedEntries.flatMap((entry) =>
+    [entry.mapPackId, ...(entry.supersedesMapPackIds || [])]))].sort();
   if (existingEntry) {
     if (existingEntry.path !== expectedPath) throw new Error(`Catalog path conflict for ${manifest.mapPackId}`);
     if (!await pathExists(destinationDirectory)) {
       throw new Error(`Catalog references a missing local map pack: ${localAssetHint(destinationDirectory)}`);
     }
     await verifyExistingPack(destinationDirectory);
+    let catalogChanged = false;
+    if (replaceBuild && replacedEntries.length) {
+      const aliases = [...new Set([...(existingEntry.supersedesMapPackIds || []), ...inheritedAliases])]
+        .filter((id) => id !== manifest.mapPackId).sort();
+      catalog.mapPacks = catalog.mapPacks.filter((entry) => !replacedEntries.includes(entry));
+      if (aliases.length) existingEntry.supersedesMapPackIds = aliases;
+      validateCatalogAliases(catalog.mapPacks);
+      catalogChanged = true;
+    }
     const buildId = String(manifest.gameBuildId).trim();
     if ((!catalog.activeGameBuildId || activateBuild)
         && String(catalog.activeGameBuildId ?? "").trim() !== buildId) {
       catalog.activeGameBuildId = buildId;
-      await writeCatalogAtomically(catalog);
+      catalogChanged = true;
     }
+    if (catalogChanged) await writeCatalogAtomically(catalog);
     console.log(`Map pack already registered: ${relative(platformDirectory, destinationDirectory)}`);
     console.log(`Active map build: ${catalog.activeGameBuildId}`);
     return;
@@ -105,6 +123,9 @@ async function registerUnderLock() {
 
   const buildId = String(manifest.gameBuildId).trim();
   if (!catalog.activeGameBuildId || activateBuild) catalog.activeGameBuildId = buildId;
+  if (replaceBuild && replacedEntries.length) {
+    catalog.mapPacks = catalog.mapPacks.filter((entry) => !replacedEntries.includes(entry));
+  }
   catalog.mapPacks.push({
     mapPackId: manifest.mapPackId,
     identityVersion: manifest.identityVersion,
@@ -116,7 +137,9 @@ async function registerUnderLock() {
     generatedAtUtc: manifest.generatedAtUtc,
     path: expectedPath,
     enabled: true,
+    ...(inheritedAliases.length ? { supersedesMapPackIds: inheritedAliases } : {}),
   });
+  validateCatalogAliases(catalog.mapPacks);
   catalog.mapPacks.sort((left, right) =>
     String(left.gameBuildId).localeCompare(String(right.gameBuildId), "en", { numeric: true })
     || Number(left.mapSlot) - Number(right.mapSlot)
@@ -212,6 +235,31 @@ function validateManifest(value) {
 
 function validBuildId(value) {
   return /^[1-9]\d*$/.test(String(value ?? "").trim());
+}
+
+function validateCatalogAliases(entries) {
+  const currentIds = new Set();
+  const aliasOwners = new Map();
+  for (const [index, entry] of entries.entries()) {
+    const id = entry?.mapPackId;
+    if (!/^sha256-[a-f0-9]{64}$/.test(id || "")) throw new Error(`Catalog entry ${index} has an invalid mapPackId`);
+    if (currentIds.has(id)) throw new Error(`Catalog contains duplicate mapPackId ${id}`);
+    currentIds.add(id);
+    const aliases = entry.supersedesMapPackIds;
+    if (aliases === undefined) continue;
+    if (!Array.isArray(aliases) || aliases.length === 0) throw new Error(`Catalog entry ${id} has invalid supersedesMapPackIds`);
+    if (new Set(aliases).size !== aliases.length) throw new Error(`Catalog entry ${id} has duplicate supersedesMapPackIds`);
+    for (const alias of aliases) {
+      if (!/^sha256-[a-f0-9]{64}$/.test(alias || "") || alias === id) {
+        throw new Error(`Catalog entry ${id} has an invalid superseded map-pack id`);
+      }
+      if (aliasOwners.has(alias)) throw new Error(`Catalog superseded map-pack id ${alias} has multiple owners`);
+      aliasOwners.set(alias, id);
+    }
+  }
+  for (const [alias, owner] of aliasOwners) {
+    if (currentIds.has(alias)) throw new Error(`Catalog superseded map-pack id ${alias} is also a current entry (${owner})`);
+  }
 }
 
 function assertSafeRelativePath(value, label) {

@@ -8,11 +8,27 @@ import argparse, collections, datetime, gc, hashlib, io, json, math, shutil, str
 from pathlib import Path
 import numpy as np
 from PIL import Image
-from build_maps import Scene, MeshHandler, PPtr, BIOMES, GEOMETRY_ROOT_FIELDS, game_info, pid, sha
+from build_maps import Scene, MeshHandler, PPtr, BIOMES, GEOMETRY_ROOT_FIELDS, game_info, pid, sha, vec
+
+FOLIAGE_TEXTURE_MAX_SIDE = 256
 
 def linear_color(values):
     values=np.maximum(0,np.asarray(values,dtype=np.float64))
     return np.where(values<=.04045,values/12.92,((values+.055)/1.055)**2.4)
+
+def source_base_property(shader_name,colors,floats):
+    """Select the shader's actual primary albedo colour property.
+
+    PEAK's layered foliage and ice shaders retain a generic ``_Tint`` value,
+    but their visible base colour is authored in ``_BaseColor``. In Alpine,
+    pine foliage is green and its snow layer is white while both share the
+    same blue-grey ``_Tint``. Other shader families retain the conservative
+    selection used by the existing material approximation.
+    """
+    if shader_name in ('GD/FoliageGD','W/Peak_Ice') and '_BaseColor' in colors:
+        return '_BaseColor'
+    candidates=('_BaseColor',) if '_TopColorAmount' in floats else ('_Tint','_BaseColor','_Color')
+    return next((name for name in candidates if name in colors),None)
 
 def material_color_metadata(scene,ptr,source):
     """Read the *actual shader* property flags, not unused saved properties.
@@ -34,13 +50,29 @@ def material_color_metadata(scene,ptr,source):
         scene.shader_color_properties[key]=(parsed['m_Name'],properties)
     shader_name,properties=scene.shader_color_properties[key]
     saved=source['m_SavedProperties']; colors=dict(saved.get('m_Colors',[])); floats=dict(saved.get('m_Floats',[]))
-    candidates=('_BaseColor',) if '_TopColorAmount' in floats else ('_Tint','_BaseColor','_Color')
-    base_property=next((name for name in candidates if name in colors),None)
+    base_property=source_base_property(shader_name,colors,floats)
     return {'baseProperty':base_property,'baseFlags':properties.get(base_property,0),'topFlags':properties.get('_TopColor',0),'shader':shader_name}
 
 def stored_color_to_linear(values,flags):
     # No brightness correction: choose a transfer function from source metadata.
     return np.maximum(0,np.asarray(values,dtype=np.float64)) if flags & (16|32) else linear_color(values)
+
+def foliage_material_contract(shader_name, textures, floats):
+    """Return the source-backed cutout contract for PEAK's foliage shader.
+
+    GD/FoliageGD and W/Vine do not expose their colour/shape texture under the
+    standard Unity names used by the generic exporter. Their `_Shape` texture
+    supplies both the visible colour and alpha silhouette, while `_AlphaClip`
+    is the authored discard threshold. Falling back to a white texture turns
+    every card into a solid tinted rectangle.
+    """
+    shape=textures.get('_Shape')
+    if shader_name not in ('GD/FoliageGD','W/Vine') or not shape or not pid(shape.get('m_Texture',{})):
+        return None
+    cutoff=floats.get('_AlphaClip',floats.get('_AlphaCutoff',.5))
+    cutoff=float(cutoff) if np.isfinite(cutoff) else .5
+    cull=float(floats.get('_Cull',2))
+    return {'textureProperty':'_Shape','texture':shape,'alphaCutoff':min(1,max(0,cutoff)),'doubleSided':cull==0}
 
 def quaternion(rotation):
     # A proper orthogonal matrix only; shear is never sent through this path.
@@ -119,16 +151,36 @@ class GlbBuilder:
             texture,tint,uvscale,uvoffset,use_vertex,top,settings=self.scene.material(ptr)
             source=self.scene.ptr(ptr).read_typetree() if pid(ptr) else {'m_Name':'Default'}
             color_metadata=material_color_metadata(self.scene,ptr,source)
+            foliage=None
+            if pid(ptr):
+                saved=source['m_SavedProperties']; colors=dict(saved.get('m_Colors',[])); textures=dict(saved.get('m_TexEnvs',[])); floats=dict(saved.get('m_Floats',[]))
+                if color_metadata['baseProperty'] in colors:
+                    tint=vec(colors[color_metadata['baseProperty']],'rgba')
+                foliage=foliage_material_contract(color_metadata['shader'],textures,floats)
+                if foliage:
+                    selected=foliage['texture']; tp=selected['m_Texture']; matptr=self.scene.ptr(ptr)
+                    texptr=PPtr(m_FileID=tp['m_FileID'],m_PathID=tp['m_PathID'],assetsfile=matptr.deref().assets_file)
+                    tk=(texptr.assetsfile.name,texptr.m_FileID,texptr.m_PathID)
+                    if tk not in self.scene.textures:
+                        image=texptr.read().image.convert('RGBA')
+                        # Cutout cards repeat across every chapter GLB.  A 256px
+                        # source-backed silhouette keeps the authored colour and
+                        # alpha edge while leaving enough headroom for the public
+                        # site's fixed 1 GB deployment budget.
+                        image.thumbnail((FOLIAGE_TEXTURE_MAX_SIDE,FOLIAGE_TEXTURE_MAX_SIDE),Image.Resampling.LANCZOS); self.scene.textures[tk]=np.asarray(image)
+                    texture=self.scene.textures[tk]; uvscale=vec(selected['m_Scale'],'xy'); uvoffset=vec(selected['m_Offset'],'xy')
             base=np.minimum(1,stored_color_to_linear(tint[:3],color_metadata['baseFlags'])); top_linear=stored_color_to_linear(top[:3],color_metadata['topFlags'])
-            material={'name':source['m_Name'],'doubleSided':True,'pbrMetallicRoughness':{'baseColorFactor':base.tolist()+[1.0],'metallicFactor':0.0,'roughnessFactor':.95},'extras':{'peakTerrain':{'colorSpace':'linear','baseColor':base.tolist(),'topColor':top_linear.tolist(),'topAlpha':float(top[3]),'tightness':[float(settings[0]),float(settings[1])],'amount':float(settings[2]),'formula':'smoothstep(tightness[0],tightness[1],max(worldNormal.y,0))*amount*topAlpha','sourceMaterial':source['m_Name'],'sourceUv':'Unity mesh UV0, converted v=1-v for glTF'}}}
+            material={'name':source['m_Name'],'doubleSided':foliage['doubleSided'] if foliage else True,'pbrMetallicRoughness':{'baseColorFactor':base.tolist()+[1.0],'metallicFactor':0.0,'roughnessFactor':.95},'extras':{'peakTerrain':{'colorSpace':'linear','baseColor':base.tolist(),'topColor':top_linear.tolist(),'topAlpha':float(top[3]),'tightness':[float(settings[0]),float(settings[1])],'amount':float(settings[2]),'formula':'smoothstep(tightness[0],tightness[1],max(worldNormal.y,0))*amount*topAlpha','sourceMaterial':source['m_Name'],'sourceUv':'Unity mesh UV0, converted v=1-v for glTF'}}}
             material['extras']['peakTerrain']['sourceColors']={**color_metadata,'baseStored':tint[:3].tolist(),'topStored':top[:3].tolist(),'conversion':'HDR/Gamma Color: already-linear stored value; ordinary Color: sRGB to linear'}
+            if foliage:
+                material['extras']['peakTerrain']['sourceCutout']={'textureProperty':foliage['textureProperty'],'alphaCutoff':foliage['alphaCutoff'],'cull':float(floats.get('_Cull',2))}
             if texture.shape[0]>1 or texture.shape[1]>1:
                 output=io.BytesIO(); Image.fromarray(texture).save(output,format='PNG',optimize=True); png=output.getvalue(); digest=hashlib.sha256(png).hexdigest()
                 if digest not in self.image_ids:
                     image_id=len(self.gltf['images']); self.gltf['images'].append({'bufferView':self.buffer_view(png),'mimeType':'image/png','name':digest})
                     texture_id=len(self.gltf['textures']); self.gltf['textures'].append({'source':image_id,'sampler':0}); self.image_ids[digest]=texture_id
                 material['pbrMetallicRoughness']['baseColorTexture']={'index':self.image_ids[digest]}
-                if np.any(texture[:,:,3]<200):material['alphaMode']='MASK'; material['alphaCutoff']=.4
+                if np.any(texture[:,:,3]<200):material['alphaMode']='MASK'; material['alphaCutoff']=foliage['alphaCutoff'] if foliage else .4
             self.material_ids[key]=(len(self.gltf['materials']),uvscale,uvoffset); self.gltf['materials'].append(material)
         return self.material_ids[key]
 

@@ -100,6 +100,33 @@ for (const [identityVersion, isGzip] of [[2, false], [3, false], [3, true]]) tes
   assert.equal(catalog.mapPacks[0].mapPackId, manifest.mapPackId);
   assert.equal(catalog.mapPacks[0].identityVersion, identityVersion);
 
+  const originalId = manifest.mapPackId;
+  const replacementTexture = Buffer.from("fixture texture material revision", "utf8");
+  await writeFile(resolve(exportDirectory, manifest.layers[0].texture), replacementTexture);
+  manifest.layers[0].textureSha256 = sha256(replacementTexture);
+  manifest.generatedAtUtc = "2026-09-16T00:00:00Z";
+  manifest.mapPackId = computeMapPackId(manifest);
+  await writeFile(resolve(exportDirectory, "map-pack.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  await execFileAsync(process.execPath, [localTool, exportDirectory, "--replace-build"], executionOptions);
+  let replacedCatalog = JSON.parse(await readFile(resolve(root, "data", "maps", "catalog.json"), "utf8"));
+  assert.equal(replacedCatalog.mapPacks.length, 1);
+  assert.equal(replacedCatalog.mapPacks[0].mapPackId, manifest.mapPackId);
+  assert.deepEqual(replacedCatalog.mapPacks[0].supersedesMapPackIds, [originalId]);
+
+  if (identityVersion === 3 && !isGzip) {
+    const firstReplacementId = manifest.mapPackId;
+    const secondReplacementTexture = Buffer.from("fixture texture second material revision", "utf8");
+    await writeFile(resolve(exportDirectory, manifest.layers[0].texture), secondReplacementTexture);
+    manifest.layers[0].textureSha256 = sha256(secondReplacementTexture);
+    manifest.generatedAtUtc = "2026-09-17T00:00:00Z";
+    manifest.mapPackId = computeMapPackId(manifest);
+    await writeFile(resolve(exportDirectory, "map-pack.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+    await execFileAsync(process.execPath, [localTool, exportDirectory, "--replace-build"], executionOptions);
+    replacedCatalog = JSON.parse(await readFile(resolve(root, "data", "maps", "catalog.json"), "utf8"));
+    assert.equal(replacedCatalog.mapPacks.length, 1);
+    assert.deepEqual(replacedCatalog.mapPacks[0].supersedesMapPackIds, [originalId, firstReplacementId].sort());
+  }
+
   if (identityVersion === 3) {
     const registered = resolve(assetRoot, "maps", "packs", manifest.mapPackId);
     assert.deepEqual(await readFile(resolve(registered, manifest.layers[0].geometry)), geometry);

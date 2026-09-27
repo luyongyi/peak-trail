@@ -48,7 +48,13 @@
             "type": "string",
             "pattern": "^\\./packs/sha256-[a-f0-9]{64}/map-pack\\.json$"
           },
-          "enabled": { "type": "boolean" }
+          "enabled": { "type": "boolean" },
+          "supersedesMapPackIds": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "type": "string", "pattern": "^sha256-[a-f0-9]{64}$" }
+          }
         }
       }
     }

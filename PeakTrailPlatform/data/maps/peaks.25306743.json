@@ -6,11 +6,11 @@
   "source": "Unique serialized PeakHandler GameObject subtree; static enabled source renderers only.",
   "maps": [
     {
-      "mapPackId": "sha256-3bfe40abb1bff46ea7ed0e34d4d566ae76bc1cf8526d4b6e71790fc2620c0175",
+      "mapPackId": "sha256-2d2ecc20558aef896b771ed52021163560aa61906583c56dff843a7e9b676994",
       "sceneName": "Level_0",
       "mapSlot": 0,
       "sourceSceneSha256": "34386c210e36448d1361479ee2c37dcb9a9a2016589e18bc4500f91a9a3d0986",
-      "geometrySha256": "4d066336bfc77750d71719247ceaf1530be91a000238c2b8e5493580569f494d",
+      "geometrySha256": "7df6201224e565368ac2c152b58f6d068affdf9b977e80c2fdfc4f25cba1f5a0",
       "segment": 4,
       "biome": "Volcano",
       "rootGameObject": 45412,
@@ -49,11 +49,11 @@
       }
     },
     {
-      "mapPackId": "sha256-e9827dfc50f17903b8e7af9b702db0f6b9e4755cbdc4fc7c79e535bc7ef4faad",
+      "mapPackId": "sha256-4f2c3523ad190421005f826a531ec68923db6f8ebc12aebc485d953bc499c381",
       "sceneName": "Level_1",
       "mapSlot": 1,
       "sourceSceneSha256": "3b567b731239b5038736f204581ad61b2acf9ddea7ef56e659d39f95f8e3e5cc",
-      "geometrySha256": "c9911635cfec76ea2c3a466f59d451db340cd34b92f30338724173ee5529ee22",
+      "geometrySha256": "b78f0010f2511591fa38d5ddfb8eb5c98731fbc5210436dfb2483e2d3d97cd85",
       "segment": 4,
       "biome": "Swamp",
       "rootGameObject": 221853,
@@ -92,11 +92,11 @@
       }
     },
     {
-      "mapPackId": "sha256-695061be5840770d667c15252a973e77210a409530bda7880c1806573dd4db58",
+      "mapPackId": "sha256-32d8b68ad27a86e953c012ffb2077bb29b97cb5c59ffd437cf521bcb85061ac4",
       "sceneName": "Level_2",
       "mapSlot": 2,
       "sourceSceneSha256": "a5834fe91965c86b7ea226c6a70273017e127cafd57508c88b209eb563f43539",
-      "geometrySha256": "1ac71aaee77fbae3e7627db43b6c8e4a0bab6076ae1b71461e16b762661d5725",
+      "geometrySha256": "a20e3773923560c8ce2563eb55922e6e36e2718a403d20937ba6b14b04bc53b0",
       "segment": 4,
       "biome": "Volcano",
       "rootGameObject": 45544,
@@ -135,11 +135,11 @@
       }
     },
     {
-      "mapPackId": "sha256-b6bfd311a2f18a42eafd734ee333ab991f96fbf76c2f2c972dfc34e747a78b35",
+      "mapPackId": "sha256-f8b8fd013b42ada23ba4d986ecbb5e40cd1ffac1f9804b65592ccdb2cbaedb8c",
       "sceneName": "Level_3",
       "mapSlot": 3,
       "sourceSceneSha256": "43c5f9044445cc905b519d9e430f55aa0fab07f59b5c767f0d7d886a57b765e4",
-      "geometrySha256": "76f70a40efc842907fe23124a7a42ae0686a08f6737757757126e5e1eb738447",
+      "geometrySha256": "0d98e32da999ae0e9efe3fd97c4f0955f45abaf6a20cf4cb4f06399262278fb0",
       "segment": 4,
       "biome": "Swamp",
       "rootGameObject": 236634,
@@ -178,11 +178,11 @@
       }
     },
     {
-      "mapPackId": "sha256-2e74f69a2828a0966e80c1bd349bdddc1b2c604f5492e212416e83f64bf83890",
+      "mapPackId": "sha256-2061d72429ea42cb27dbb9dd4f9f507e2827c5ebaa6a509804038ca8b7e49c31",
       "sceneName": "Level_4",
       "mapSlot": 4,
       "sourceSceneSha256": "ce32b18df46d47a20f685309132e33b0d0a12e5211d5f707dffca8472a3e4c36",
-      "geometrySha256": "b77eab820b57b1e5b14bacec43f47e5b7f2417c80361dd9a0848837366fc1a04",
+      "geometrySha256": "6ac9bfc4185a1c05fc7685216ca3deccba6a8fc3c96af86d9f6780df29ed16b1",
       "segment": 4,
       "biome": "Volcano",
       "rootGameObject": 41873,
@@ -221,11 +221,11 @@
       }
     },
     {
-      "mapPackId": "sha256-6b816514996091b536438fe38aeeff7776be6382be99bedcc6134d4503f919d7",
+      "mapPackId": "sha256-c5dd8b0dbf191cd7eaca76b0c650d7a146e9c9c459a554b4df9aa1f3c19c1154",
       "sceneName": "Level_5",
       "mapSlot": 5,
       "sourceSceneSha256": "c0873c086eba7f9aee20c4e683f5ade8a5b3e0e81634cae59aaee23804f9c3bf",
-      "geometrySha256": "db6bd95af02e17181d31d60c451d8ca12d2e224e5e9737535db2cad25be8b0f7",
+      "geometrySha256": "98493fe8b39032ad1ecef33f9cea94f2616e689a343021b5b4e052c60cc1fe72",
       "segment": 4,
       "biome": "Swamp",
       "rootGameObject": 225613,
@@ -264,11 +264,11 @@
       }
     },
     {
-      "mapPackId": "sha256-c5e3153763361ca8c67faa81ab092910a6c683fe1b51752df3c865f883e35ec8",
+      "mapPackId": "sha256-64d693fe760e96a68cca9578b9f4c07f4db9df2ef538e00aa97ceff896f648fd",
       "sceneName": "Level_6",
       "mapSlot": 6,
       "sourceSceneSha256": "9a94100adf0f821744c0c0613db7cb882188a945a967f5671fd91050d85c53c3",
-      "geometrySha256": "fb5be0118f91aef833601d9e768bef15b3bc5715c38dca4f1b86c6c9798268cf",
+      "geometrySha256": "b7cc8be602c82955a854db8df6b370404fc7d6ee578e68e629e557932c829834",
       "segment": 4,
       "biome": "Volcano",
       "rootGameObject": 45515,
@@ -307,11 +307,11 @@
       }
     },
     {
-      "mapPackId": "sha256-7ff0a922deb8564b4882ae66a7563266f72382d8b30ae33e374d2e80089edddf",
+      "mapPackId": "sha256-da846c6d112fa26ea7e58aef4d26c8b992d99645594bfd11a7a04de8f3d823f6",
       "sceneName": "Level_7",
       "mapSlot": 7,
       "sourceSceneSha256": "a4f763d3b9a2bb028ee0d4fe447d5daad04583b82180c989aca7fdfa5e37b0e5",
-      "geometrySha256": "748c9b779ebf4b3136b6d8c8075ed1252da8040e6841ec4fd11eec60682057c8",
+      "geometrySha256": "f3afadbab424a95bce43ed0a4c8ca2069bb5336543380932b05891d6e4734fd0",
       "segment": 4,
       "biome": "Swamp",
       "rootGameObject": 210444,
@@ -350,11 +350,11 @@
       }
     },
     {
-      "mapPackId": "sha256-4670b2c86b6d7327b91a91b70a65b1b17e80799f42d0615d86edd71599fb91e2",
+      "mapPackId": "sha256-d22410d7c09d6c01653165729e119a81141a69d0137c1432e37d58797c6bc3fa",
       "sceneName": "Level_8",
       "mapSlot": 8,
       "sourceSceneSha256": "8ee8ca14bdedbc92755caeb11cb7821e54232489be479cb7f92b45a4d7219793",
-      "geometrySha256": "d7823b00b2d0bef2148821c4ce60cf0fae3b2bae189d0250b814783c9fdea337",
+      "geometrySha256": "41c679432bcfbfadbc44858e3fe4831ce22a0f240289dbb183f25c6db3a4e1ee",
       "segment": 4,
       "biome": "Volcano",
       "rootGameObject": 41081,
@@ -393,11 +393,11 @@
       }
     },
     {
-      "mapPackId": "sha256-c262b4919f04de612f91bae02ef35de5f061a59422b38c390294f15ff33f297f",
+      "mapPackId": "sha256-c4e739c36aa165e7964f6841d32d3a8e2a4f585ac1329df5a2030b1cb01d0e3e",
       "sceneName": "Level_9",
       "mapSlot": 9,
       "sourceSceneSha256": "7e170a94955ff9a42a9fac292c9e6a6786fefbc2fc4f5018bf616529b988a00b",
-      "geometrySha256": "30ccce8d41b106907a5833c5b297b6345375d74f98d9b9aa01b6e9c9dc80724b",
+      "geometrySha256": "139ff818557b7440caa888ed71326122df9492a17079cfbe0b60977fc3a9304e",
       "segment": 4,
       "biome": "Swamp",
       "rootGameObject": 242981,
@@ -436,11 +436,11 @@
       }
     },
     {
-      "mapPackId": "sha256-8eaa8e664df5251276018fc72b1c4bb4e48ae1e882f95cff392f139eb06d366d",
+      "mapPackId": "sha256-185d7ebbd6fdcf6eb92b53c446348d3e5c6312d5e7e9746a600aaaa6b4584cd5",
       "sceneName": "Level_10",
       "mapSlot": 10,
       "sourceSceneSha256": "01c16189deb03ed37f938bea1c086913d2ae41bd05e00e35128d8891ef498547",
-      "geometrySha256": "c64b3a643515624b71909bf4d60277fbc1f4e98e8242c30fc745ffb4b48df10f",
+      "geometrySha256": "e3bd03acfd2267331378d585982e861503594a2698eee130e5f9ad4cf6cc88ea",
       "segment": 4,
       "biome": "Volcano",
       "rootGameObject": 41880,
@@ -479,11 +479,11 @@
       }
     },
     {
-      "mapPackId": "sha256-f17aae9a4d774c82af1a9a5a0df07387ec7c8962da0fb3de6cc001991310bd96",
+      "mapPackId": "sha256-c248b962b45c69da16cdf569311035cf4215692b1c501dc1227c9d371c0289c0",
       "sceneName": "Level_11",
       "mapSlot": 11,
       "sourceSceneSha256": "73d0155bf386ab6e12f7fced90f86291cd7f750d691fe8cd5c978b3435aced9c",
-      "geometrySha256": "12df433978ccba09d0737b41bd6d335d0684cebc04f77201688bd052c7f5c24b",
+      "geometrySha256": "3e9a2a3127f6bf6d6c4d14e51ac8ac0b39755c4021692dd9d340c3f90ce3d069",
       "segment": 4,
       "biome": "Swamp",
       "rootGameObject": 245977,
@@ -522,11 +522,11 @@
       }
     },
     {
-      "mapPackId": "sha256-9c64f3771cdcf67565276e4a1590ca37bbb5e43e4f8218282611a84a5833f977",
+      "mapPackId": "sha256-992e311cd7f52f15d2bba1355a945098ff7a23e00341936358e1f6467ca24446",
       "sceneName": "Level_12",
       "mapSlot": 12,
       "sourceSceneSha256": "9c5f18037b9f34a8c77b7948aac478fa9b0171377b0c2240f35b55cbebbe0035",
-      "geometrySha256": "4b0c5eaf427ac0f5dd7500413e20ca3f5c2619aaca9d9b59a4ab3b9ebcfdaf11",
+      "geometrySha256": "33d0431184b07ee1a23f6005b96f133b666bd1cfc0b4c4915e16de9a7019c6c0",
       "segment": 4,
       "biome": "Volcano",
       "rootGameObject": 40770,
@@ -565,11 +565,11 @@
       }
     },
     {
-      "mapPackId": "sha256-3fd6afc96b5eb0c26c0ca0cee44161a54c3fb3cecd458a602e70694abaeb33be",
+      "mapPackId": "sha256-20720ef02c7cdda5f4d00a0395b137366721a9f24d5a125679bfb3d94e9dcfd1",
       "sceneName": "Level_13",
       "mapSlot": 13,
       "sourceSceneSha256": "9c313cf76dfe8fe02714978ce4fba9c05ba0ab2ebafd042cccf0f861283cf1a1",
-      "geometrySha256": "c20692b2d926275308a3089cdd915472229faff47626bb979fc06cc0fc377126",
+      "geometrySha256": "505b5b651ff7a8da1672488dbcd578053c993eedb01a119cadc91c60636d4820",
       "segment": 4,
       "biome": "Swamp",
       "rootGameObject": 247537,
@@ -608,11 +608,11 @@
       }
     },
     {
-      "mapPackId": "sha256-57d291da1c4950bd48a6b9f547c67fc1132bc2d9b714e439fa9ca3db04db8ee5",
+      "mapPackId": "sha256-d5a232aedfed7add1f32b3ebc5d7160f85de795a67364ed885411f3fb4ea7658",
       "sceneName": "Level_14",
       "mapSlot": 14,
       "sourceSceneSha256": "f56a57072bf72306385793bcf8358d6e4f255eee3c40694626a4de24778c05aa",
-      "geometrySha256": "7fdbfb125bf5c09d86eb1a3027a9f53a0279eb8ff33e2707caf5878e01fcd20f",
+      "geometrySha256": "b6eae6b2c46b065bda1603f2d90015c2107515df02243689cb95cb6bf483fe8f",
       "segment": 4,
       "biome": "Volcano",
       "rootGameObject": 40612,
@@ -651,11 +651,11 @@
       }
     },
     {
-      "mapPackId": "sha256-56a243e8deb0cf19bf01c15e5e31df48932ae4d9c0d8bed71b296c3782d7138f",
+      "mapPackId": "sha256-88117dc9fa5c7c25588caa32a3a4f896d05b873f2eb54656f0a53588bb2495c1",
       "sceneName": "Level_15",
       "mapSlot": 15,
       "sourceSceneSha256": "1e6f62552105a58919ab6fe698588abd43ba03fbdfc7e3bac28dde449553db99",
-      "geometrySha256": "130bddc2ba2af97c4181cdb4113591971bf2a5c755a7370572c4803b5fba4025",
+      "geometrySha256": "c09417682f101c9433c27fdd480a1a8a1f3af9e590fb155fa31ae9a1ef6d3591",
       "segment": 4,
       "biome": "Swamp",
       "rootGameObject": 219564,
@@ -694,11 +694,11 @@
       }
     },
     {
-      "mapPackId": "sha256-eb6172a2e8cfd5ba2c0dde889462d8b42c9aec66da499048b3ad2dd20eb8e3ca",
+      "mapPackId": "sha256-3c81188b35028233716b53f31444e6b1bd9c6d4aab5bd41522851c01e88ce5e3",
       "sceneName": "Level_16",
       "mapSlot": 16,
       "sourceSceneSha256": "c1436492973c170d26d6d161f87ac1d02999b4733ced9ed4576d3a2397a07e28",
-      "geometrySha256": "b83b304261c6a76e8a1caf4f38051c6a626dd723e0e4657748c88c9474da30eb",
+      "geometrySha256": "75db2f0309e13e005482a2ae48bb56c0fd2d0d37631a459f55a47ffd3190c717",
       "segment": 4,
       "biome": "Volcano",
       "rootGameObject": 45408,
@@ -737,11 +737,11 @@
       }
     },
     {
-      "mapPackId": "sha256-37eb6e7d089da03e1eb2e717ff2439dbf2ee8bd0b4a889e725b07b53530a3921",
+      "mapPackId": "sha256-5797e1c3cc733ff896f2ca568c429172f0ae55aaf0722082a83bb7dda1a4b9e4",
       "sceneName": "Level_17",
       "mapSlot": 17,
       "sourceSceneSha256": "2339f2aebeac9646323fe800c4ab11f363f9db58bafbc6edea3e14b7b54c81c1",
-      "geometrySha256": "a6e842a2f174fdfd2f461c568b749a903ab5467226bc2d4bcc2436075a10e852",
+      "geometrySha256": "bba4799df5b2d9fa70a3743c5914d989a760f9037425d56a785f28129c7a4ba5",
       "segment": 4,
       "biome": "Swamp",
       "rootGameObject": 222383,
@@ -780,11 +780,11 @@
       }
     },
     {
-      "mapPackId": "sha256-e1e270e778bfed9c8ff55aa60ac8d5130eee7b817ab1495c580614c4eae9e5a8",
+      "mapPackId": "sha256-fd5b7dd6b6247e81731e90ad84df22cf499985c9b3e3b562c4b7009798108243",
       "sceneName": "Level_18",
       "mapSlot": 18,
       "sourceSceneSha256": "02a25e5118dd4d687223d69a857967ab2b1f0e2a4703eab1e4b13f62196fe2db",
-      "geometrySha256": "78bd185d7ae305850e5847d914b56604c44edac6badf76c48690b8b6d9ff7f89",
+      "geometrySha256": "290ee638a71dec735f2b7acb640552075a09b4100bb441f4f88b7a177899b6bb",
       "segment": 4,
       "biome": "Volcano",
       "rootGameObject": 41809,
@@ -823,11 +823,11 @@
       }
     },
     {
-      "mapPackId": "sha256-25a5bdf427bac0e1aa9e385b744d886c6186a8778bc0582c6b78cdf8fa322050",
+      "mapPackId": "sha256-af0a11420787848dea2aced3a40d582a8962c323aeee196d1d79e33137f07179",
       "sceneName": "Level_19",
       "mapSlot": 19,
       "sourceSceneSha256": "6dd483f4883c13b2faaaf7a197126e8610c8a64c748a4ada4464c781f41b9a39",
-      "geometrySha256": "d067b76a2b8badd74251b90554debef569fd1c2547fbeb57d187f0ceee4500a3",
+      "geometrySha256": "3527859c355f17809be1528ed127d84a97fb2bbfff66f90a046d1d9a8df374b5",
       "segment": 4,
       "biome": "Swamp",
       "rootGameObject": 197581,
@@ -866,11 +866,11 @@
       }
     },
     {
-      "mapPackId": "sha256-5828be29072b7daedd736c3b27fd13ad4d27c737e8187063cafb8887db012c9b",
+      "mapPackId": "sha256-b3152870e5a850b6119c6dc481c28439d6ee8a8fd4d9020eade4055ca9292db0",
       "sceneName": "Level_20",
       "mapSlot": 20,
       "sourceSceneSha256": "f91fe50ad49132569a88910f15276e197e589248d749c59ddbe2c2e2f822f006",
-      "geometrySha256": "4a22bafb0c1e8cd9ba2d8a79d6bc1d747f409afb3c282c2bfed66d9075ab5670",
+      "geometrySha256": "9dae6612584a170fd8f9e265ee3c1d8a0301ad232d9633414d22ac3ad538e161",
       "segment": 4,
       "biome": "Volcano",
       "rootGameObject": 45704,
