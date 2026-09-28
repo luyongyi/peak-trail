@@ -180,6 +180,12 @@ as sRGB incorrectly darkens the rock sidewalls. This follows the storage behavio
 documented by [Unity 6 Material.SetColor](https://docs.unity3d.com/jp/current/ScriptReference/Material.SetColor.html)
 and [ShaderPropertyFlags](https://github.com/Unity-Technologies/UnityCsReference/blob/master/Runtime/Export/Shaders/ShaderProperties.cs).
 
+One source-backed foliage exception is deliberately material-specific:
+`M_Foliage_Palmtree 5` uses its green `_Tint` as the visible leaf colour. Its
+orange `_BaseColor` is a layer input, unlike the visible `_BaseColor` used by
+pine and snow foliage. Applying the general foliage rule to this material makes
+the coconut leaves orange in both Shore and Tropics.
+
 PEAK-specific material masks, animated water, wind, special fog and lighting
 still require game-specific shader work. Geometry fidelity should not be
 described as full shader fidelity. Moving game objects and runtime-spawned loot

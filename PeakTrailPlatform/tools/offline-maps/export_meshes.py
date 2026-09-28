@@ -16,15 +16,18 @@ def linear_color(values):
     values=np.maximum(0,np.asarray(values,dtype=np.float64))
     return np.where(values<=.04045,values/12.92,((values+.055)/1.055)**2.4)
 
-def source_base_property(shader_name,colors,floats):
+def source_base_property(material_name,shader_name,colors,floats):
     """Select the shader's actual primary albedo colour property.
 
-    PEAK's layered foliage and ice shaders retain a generic ``_Tint`` value,
-    but their visible base colour is authored in ``_BaseColor``. In Alpine,
-    pine foliage is green and its snow layer is white while both share the
-    same blue-grey ``_Tint``. Other shader families retain the conservative
-    selection used by the existing material approximation.
+    Most of PEAK's layered foliage and ice materials retain a generic ``_Tint``
+    value, while their visible base colour is authored in ``_BaseColor``. The
+    palm-leaf material is the source-backed exception: its orange
+    ``_BaseColor`` is a layer input and its visible green is stored in
+    ``_Tint``. Other shader families retain the conservative selection used by
+    the existing material approximation.
     """
+    if shader_name=='GD/FoliageGD' and material_name=='M_Foliage_Palmtree 5' and '_Tint' in colors:
+        return '_Tint'
     if shader_name in ('GD/FoliageGD','W/Peak_Ice') and '_BaseColor' in colors:
         return '_BaseColor'
     candidates=('_BaseColor',) if '_TopColorAmount' in floats else ('_Tint','_BaseColor','_Color')
@@ -50,7 +53,7 @@ def material_color_metadata(scene,ptr,source):
         scene.shader_color_properties[key]=(parsed['m_Name'],properties)
     shader_name,properties=scene.shader_color_properties[key]
     saved=source['m_SavedProperties']; colors=dict(saved.get('m_Colors',[])); floats=dict(saved.get('m_Floats',[]))
-    base_property=source_base_property(shader_name,colors,floats)
+    base_property=source_base_property(source.get('m_Name',''),shader_name,colors,floats)
     return {'baseProperty':base_property,'baseFlags':properties.get(base_property,0),'topFlags':properties.get('_TopColor',0),'shader':shader_name}
 
 def stored_color_to_linear(values,flags):

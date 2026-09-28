@@ -9,14 +9,19 @@ class GeometryTests(unittest.TestCase):
 
     def test_source_base_property_uses_authored_foliage_and_ice_color(self):
         colors={'_Tint':object(),'_BaseColor':object(),'_Color':object()}
-        self.assertEqual(source_base_property('GD/FoliageGD',colors,{}),'_BaseColor')
-        self.assertEqual(source_base_property('W/Peak_Ice',colors,{}),'_BaseColor')
+        self.assertEqual(source_base_property('M_Foliage_Pine','GD/FoliageGD',colors,{}),'_BaseColor')
+        self.assertEqual(source_base_property('M_Ice','W/Peak_Ice',colors,{}),'_BaseColor')
+
+    def test_source_base_property_uses_palm_leaf_tint(self):
+        colors={'_Tint':object(),'_BaseColor':object(),'_Color':object()}
+        self.assertEqual(source_base_property('M_Foliage_Palmtree 5','GD/FoliageGD',colors,{}),'_Tint')
+        self.assertEqual(source_base_property('M_Foliage Generic','GD/FoliageGD',colors,{}),'_BaseColor')
 
     def test_source_base_property_preserves_other_shader_fallbacks(self):
         colors={'_Tint':object(),'_BaseColor':object(),'_Color':object()}
-        self.assertEqual(source_base_property('W/Peak_Standard',colors,{}),'_Tint')
-        self.assertEqual(source_base_property('W/Peak_Rock',colors,{'_TopColorAmount':1}),'_BaseColor')
-        self.assertEqual(source_base_property('Unknown',{'_BaseColor':object()},{}),'_BaseColor')
+        self.assertEqual(source_base_property('Material','W/Peak_Standard',colors,{}),'_Tint')
+        self.assertEqual(source_base_property('Material','W/Peak_Rock',colors,{'_TopColorAmount':1}),'_BaseColor')
+        self.assertEqual(source_base_property('Material','Unknown',{'_BaseColor':object()},{}),'_BaseColor')
 
     def test_foliage_uses_shape_cutout_and_source_culling(self):
         shape={'m_Texture':{'m_FileID':1,'m_PathID':42},'m_Scale':{'x':2,'y':3},'m_Offset':{'x':.1,'y':.2}}
