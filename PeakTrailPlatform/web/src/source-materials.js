@@ -24,6 +24,14 @@ const effects = {
   AntiSphereInterior: {kind: 'antisphere', shader: 'AntiSphere', asset: 'resources.assets', pathId: 14,
     property: null, flags: null, rgba: [1, 1, 1, 1], depthWrite: true,
     power: 0.25, softInverse: 0.5, borderLight: 1},
+  // Jelly does not declare the white _BaseColor left in its saved material.
+  // Its actual shader blends these authored purple colors with two masks and
+  // refracted scene color. Color.a controls that refraction mix, not opacity.
+  Jelly: {kind: 'jellyfish', shader: 'Jelly', pathId: 30, property: '_Color', flags: 0,
+    rgba: [0.6933333277702332, 0.4470587968826294, 0.7450980544090271, 0.1568627506494522],
+    secondaryRgba: [0.7364031076431274, 0.3686273992061615, 0.7529411911964417, 0.3764705955982208],
+    textureRgba: [0.01567428931593895, 0, 0.6352200508117676, 1],
+    depthWrite: true, cull: 2},
   // _Tint is a neutral shader multiplier, not these mushrooms' albedo. The
   // original exporter selected it and made every hazardous variant grey.
   // Preserve the source HDR base without inventing emission or an alpha layer.
@@ -75,11 +83,19 @@ export function getSourceEffectMaterial(buildId, materialName, shader) {
       opacityProperty: effect.opacity === undefined ? null : {_Opacity: effect.opacity},
       alphaShape: effect.kind === 'antisphere' ? {_Alpha: 1, _Power: effect.power,
         _SoftInverse: effect.softInverse, _BorderLight: effect.borderLight} : null,
+      colorLayers: effect.kind === 'jellyfish' ? {
+        secondary: {property: '_Color2', flags: 0, rgba: [...effect.secondaryRgba]},
+        texture: {property: '_Texture2Color', flags: 0, rgba: [...effect.textureRgba]},
+        formula: 'lerp(_Texture2Color.rgb, lerp(_Color, _Color2, smoothstep(_Remap.x, _Remap.y, _Texture.r)).rgb, _Texture2.r)',
+        alphaUse: '_Color.a and _Color2.a blend the tinted surface with refracted scene color; they are not output opacity',
+      } : null,
+      cull: effect.cull ?? null,
       pass: opaque ? {srcBlend: 1, dstBlend: 0, zWrite: 1}
         : {srcBlend: 5, dstBlend: 10, zWrite: effect.depthWrite ? 1 : 0},
       approximation: lava ? 'HDR base emitted without flow/noise/edge shader'
         : effect.kind === 'water' ? 'Primary water color without depth/refraction/foam; alpha fixed to 1'
           : effect.kind === 'antisphere' ? 'Transparent Fresnel shell from source alpha-shape controls; animated top texture and scene-depth fade are not reproduced'
+          : effect.kind === 'jellyfish' ? 'Source primary purple color; two texture-driven color layers, vertex tint, refraction and scene-depth alpha are not reproduced; alpha fixed to 1'
           : opaque ? 'Source opaque HDR base albedo; multilayer texture masks and hue variation are not reproduced'
             : 'Source fog color and opacity without depth/edge glow',
     },

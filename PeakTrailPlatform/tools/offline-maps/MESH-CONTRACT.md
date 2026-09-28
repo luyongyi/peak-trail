@@ -166,7 +166,7 @@ Their `_Shape` texture supplies the visible card silhouette, and the saved
 `_AlphaClip` value is the shader's authored discard threshold. The exporter
 therefore binds `_Shape` as the glTF base-colour texture, emits `alphaMode:
 MASK` with that exact cutoff when the texture contains alpha, and maps the
-source `_Cull` value to `doubleSided`. Without this shader-specific contract,
+actual shader pass culling to `doubleSided`. Without this shader-specific contract,
 grass, leaf and vine cards become solid tinted rectangles. Vertex colours are
 not exported as albedo: these shaders use them as layer masks for `_Texture1`
 through `_Texture3`, whose full blend remains an acknowledged approximation.
@@ -185,6 +185,29 @@ One source-backed foliage exception is deliberately material-specific:
 orange `_BaseColor` is a layer input, unlike the visible `_BaseColor` used by
 pine and snow foliage. Applying the general foliage rule to this material makes
 the coconut leaves orange in both Shore and Tropics.
+
+The cutout contract also uses compiled shader parameters rather than obsolete
+saved material fields. Both `GD/FoliageGD` and `W/Vine` have fixed `Cull Off`
+in all five passes, do not declare `_Cull`, and contain no `_Shape_ST` parameter.
+Palm's saved `_Cull=2` and `_Shape` scale `[12,12]` are therefore not applied.
+The exporter preserves raw UV0 (with the usual glTF V flip), the source texture
+wrap modes, and double-sided cutouts. New `sourceCutout` metadata records
+`cullSource: shader-pass` and `uvTransform: mesh-uv0`.
+
+The viewer also repairs already published build 25306743 packs without changing
+their geometry or identity: legacy cutouts become double-sided, and the exact
+palm material's baked UV is recovered using `u=u'/12`, `v=(v'+11)/12` on a cloned
+texture with the original Clamp wrap. Corrected exports skip this UV repair.
+The reproducible pass/parameter/texture evidence is in
+`source-palm-material.25306743.json`, extracted by `extract_palm_material.py`.
+
+Shore's flat jellyfish uses material/shader `Jelly`, distinct from `M_Urchin`.
+Its saved white `_BaseColor` is not declared by that shader; the exporter and
+exact-build viewer adapter use the declared purple `_Color` (ordinary sRGB).
+`_Color2` and `_Texture2Color` are retained in source evidence; texture mixing,
+refraction and intersection fading remain approximations. Source color alpha
+controls refraction mixing, not final opacity, so the adapter preserves the
+source alpha-blend/depth-write pass with an explicitly opaque color fallback.
 
 PEAK-specific material masks, animated water, wind, special fog and lighting
 still require game-specific shader work. Geometry fidelity should not be

@@ -1,0 +1,2190 @@
+{
+  "gameBuildId": 25306743,
+  "note": "Direct installed-game shader/material evidence. Saved _Cull and _Shape scale/offset are not proof of runtime use. Both compiled shaders have fixed Cull Off and no _Shape_ST parameter in any pass or decoded program blob. Their _Shape cutout uses mesh UV rather than the saved texture transform. The palm has zero UV wind/world offset.",
+  "materials": [
+    {
+      "name": "M_Foliage_Palmtree 5",
+      "shader": "GD/FoliageGD",
+      "sourceFile": "sharedassets1.assets",
+      "pathId": 16,
+      "colors": {
+        "_BaseColor": {
+          "rgba": [
+            1.0,
+            0.414046049118042,
+            0.1415092945098877,
+            0.2235294133424759
+          ],
+          "flags": 16
+        },
+        "_Tint": {
+          "rgba": [
+            0.10453008860349655,
+            0.27358490228652954,
+            0.16030074656009674,
+            1.0
+          ],
+          "flags": 16
+        }
+      },
+      "floats": {
+        "_AlphaClip": {
+          "value": 0.5,
+          "shaderDeclared": true
+        },
+        "_Cull": {
+          "value": 2.0,
+          "shaderDeclared": false
+        },
+        "_FlipLightOnbackFaces": {
+          "value": 0.0,
+          "shaderDeclared": true
+        },
+        "_TextureInfluence": {
+          "value": 1.0,
+          "shaderDeclared": true
+        },
+        "_UVWindAmount": {
+          "value": 0.0,
+          "shaderDeclared": true
+        },
+        "_UVWorldOffset": {
+          "value": 0.0,
+          "shaderDeclared": true
+        },
+        "_UseSimpleMask": {
+          "value": 1.0,
+          "shaderDeclared": true
+        },
+        "_VertexAOAmount": {
+          "value": 0.0,
+          "shaderDeclared": true
+        }
+      },
+      "shapeTexture": {
+        "property": "_Shape",
+        "savedScale": [
+          12.0,
+          12.0
+        ],
+        "savedOffset": [
+          0.0,
+          0.0
+        ],
+        "name": "T_Foliage",
+        "sourceFile": "resources.assets",
+        "pathId": 912,
+        "width": 512,
+        "height": 512,
+        "textureSettings": {
+          "m_FilterMode": 1,
+          "m_Aniso": 1,
+          "m_MipBias": 0.0,
+          "m_WrapU": 1,
+          "m_WrapV": 1,
+          "m_WrapW": 1
+        },
+        "rgbaSha256": "6a7d8f8ca09afbc7ce1c49c6c7a47036b1261f87aa63809d78b4d4b90d9b9bc2",
+        "alphaMinimum": 0,
+        "alphaMaximum": 255,
+        "alphaCoverageAtHalf": 0.20517730712890625
+      }
+    }
+  ],
+  "shaders": [
+    {
+      "name": "GD/FoliageGD",
+      "sourceFile": "globalgamemanagers.assets",
+      "pathId": 213,
+      "declaredProperties": [
+        {
+          "name": "_DisableEdgeHilghlight",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_SpecularPower",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_AddSpecular",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_NoShadowSpec",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_UVWindAmount",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_Interactable",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_INTERACTABLE",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_VertexWindAmount",
+          "type": 1,
+          "flags": 0
+        },
+        {
+          "name": "_VertexAOAmount",
+          "type": 3,
+          "flags": 0
+        },
+        {
+          "name": "_VertexOffsetMaskAmount",
+          "type": 3,
+          "flags": 0
+        },
+        {
+          "name": "_Shape",
+          "type": 4,
+          "flags": 0
+        },
+        {
+          "name": "_TextureInfluence",
+          "type": 3,
+          "flags": 0
+        },
+        {
+          "name": "_UVWorldOffset",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_UseSimpleMask",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_AlphaClip",
+          "type": 3,
+          "flags": 0
+        },
+        {
+          "name": "_Tint",
+          "type": 0,
+          "flags": 16
+        },
+        {
+          "name": "_BaseColor",
+          "type": 0,
+          "flags": 16
+        },
+        {
+          "name": "_BaseSmooth",
+          "type": 3,
+          "flags": 0
+        },
+        {
+          "name": "_Color1",
+          "type": 0,
+          "flags": 16
+        },
+        {
+          "name": "_Smooth1",
+          "type": 3,
+          "flags": 0
+        },
+        {
+          "name": "_Height1",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_Texture1",
+          "type": 4,
+          "flags": 0
+        },
+        {
+          "name": "_Triplanar1",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_UV1",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_Remap1",
+          "type": 1,
+          "flags": 0
+        },
+        {
+          "name": "_Color2",
+          "type": 0,
+          "flags": 16
+        },
+        {
+          "name": "_Smooth2",
+          "type": 3,
+          "flags": 0
+        },
+        {
+          "name": "_Height2",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_Texture2",
+          "type": 4,
+          "flags": 0
+        },
+        {
+          "name": "_Triplanar2",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_UV2",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_Remap2",
+          "type": 1,
+          "flags": 0
+        },
+        {
+          "name": "_Color3",
+          "type": 0,
+          "flags": 16
+        },
+        {
+          "name": "_Smooth3",
+          "type": 3,
+          "flags": 0
+        },
+        {
+          "name": "_Height3",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_Texture3",
+          "type": 4,
+          "flags": 0
+        },
+        {
+          "name": "_Triplanar3",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_UV3",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_Flip2",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_Flip1",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_FlipLightOnbackFaces",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_UseCloseDither",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_UsePlayerSquish",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_Flip3",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_Remap3",
+          "type": 1,
+          "flags": 0
+        },
+        {
+          "name": "_HueShiftStr",
+          "type": 3,
+          "flags": 0
+        },
+        {
+          "name": "_HueShifts",
+          "type": 1,
+          "flags": 0
+        },
+        {
+          "name": "_QueueOffset",
+          "type": 2,
+          "flags": 1
+        },
+        {
+          "name": "_QueueControl",
+          "type": 2,
+          "flags": 1
+        },
+        {
+          "name": "unity_Lightmaps",
+          "type": 4,
+          "flags": 5
+        },
+        {
+          "name": "unity_LightmapsInd",
+          "type": 4,
+          "flags": 5
+        },
+        {
+          "name": "unity_ShadowMasks",
+          "type": 4,
+          "flags": 5
+        },
+        {
+          "name": "_AlphaClip",
+          "type": 2,
+          "flags": 1
+        }
+      ],
+      "passes": [
+        {
+          "subShaderIndex": 0,
+          "passIndex": 0,
+          "name": "Forward",
+          "culling": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "zWrite": {
+            "val": 1.0,
+            "name": "<noninit>"
+          },
+          "zTest": {
+            "val": 4.0,
+            "name": "<noninit>"
+          },
+          "rtBlend0": {
+            "srcBlend": {
+              "val": 1.0,
+              "name": "<noninit>"
+            },
+            "destBlend": {
+              "val": 0.0,
+              "name": "<noninit>"
+            },
+            "srcBlendAlpha": {
+              "val": 1.0,
+              "name": "<noninit>"
+            },
+            "destBlendAlpha": {
+              "val": 0.0,
+              "name": "<noninit>"
+            },
+            "blendOp": {
+              "val": 0.0,
+              "name": "<noninit>"
+            },
+            "blendOpAlpha": {
+              "val": 0.0,
+              "name": "<noninit>"
+            },
+            "colMask": {
+              "val": 15.0,
+              "name": "<noninit>"
+            }
+          },
+          "compiledParameterNames": [
+            "$Globals",
+            "LightShadows",
+            "UnityPerMaterial",
+            "_AddSpecular",
+            "_AlphaClip",
+            "_AlphaToMaskAvailable",
+            "_BaseColor",
+            "_BaseSmooth",
+            "_Color1",
+            "_Color2",
+            "_Color3",
+            "_DisableEdgeHilghlight",
+            "_Flip1",
+            "_Flip2",
+            "_Flip3",
+            "_FlipLightOnbackFaces",
+            "_GlobalMipBias",
+            "_Height1",
+            "_Height2",
+            "_Height3",
+            "_HueShiftStr",
+            "_HueShifts",
+            "_LightMap",
+            "_MainLightColor",
+            "_MainLightPosition",
+            "_MainLightShadowParams",
+            "_MainLightWorldToShadow",
+            "_NoShadowSpec",
+            "_Remap1",
+            "_Remap2",
+            "_Remap3",
+            "_ScaledScreenParams",
+            "_Shape",
+            "_Smooth1",
+            "_Smooth2",
+            "_Smooth3",
+            "_SpecularPower",
+            "_Texture1",
+            "_Texture2",
+            "_Texture3",
+            "_TextureInfluence",
+            "_Tint",
+            "_UV1",
+            "_UV2",
+            "_UV3",
+            "_UVWindAmount",
+            "_UseCloseDither",
+            "_UsePlayerSquish",
+            "_VertexAOAmount",
+            "_VertexOffsetMaskAmount",
+            "_VertexWindAmount"
+          ],
+          "commonParameters": {
+            "progVertex": {
+              "textures": [],
+              "constantBuffers": [
+                {
+                  "name": "UnityPerMaterial",
+                  "vectorParameters": [
+                    "_VertexWindAmount",
+                    "_UsePlayerSquish",
+                    "_VertexOffsetMaskAmount"
+                  ]
+                }
+              ]
+            },
+            "progFragment": {
+              "textures": [
+                "_LightMap",
+                "_Texture1",
+                "_Texture2",
+                "_Texture3",
+                "_Shape"
+              ],
+              "constantBuffers": [
+                {
+                  "name": "$Globals",
+                  "vectorParameters": [
+                    "_ScaledScreenParams",
+                    "_GlobalMipBias",
+                    "_AlphaToMaskAvailable",
+                    "_MainLightPosition",
+                    "_MainLightColor"
+                  ]
+                },
+                {
+                  "name": "LightShadows",
+                  "vectorParameters": [
+                    "_MainLightShadowParams"
+                  ]
+                },
+                {
+                  "name": "UnityPerMaterial",
+                  "vectorParameters": [
+                    "_HueShifts",
+                    "_Tint",
+                    "_BaseColor",
+                    "_Color1",
+                    "_Color3",
+                    "_Color2",
+                    "_Remap1",
+                    "_Remap3",
+                    "_Remap2",
+                    "_Height2",
+                    "_Height3",
+                    "_SpecularPower",
+                    "_UVWindAmount",
+                    "_AddSpecular",
+                    "_TextureInfluence",
+                    "_VertexAOAmount",
+                    "_HueShiftStr",
+                    "_NoShadowSpec",
+                    "_Height1",
+                    "_UV3",
+                    "_DisableEdgeHilghlight",
+                    "_Flip3",
+                    "_Smooth3",
+                    "_UV2",
+                    "_Flip2",
+                    "_Smooth2",
+                    "_UV1",
+                    "_AlphaClip",
+                    "_Flip1",
+                    "_Smooth1",
+                    "_BaseSmooth",
+                    "_FlipLightOnbackFaces",
+                    "_UseCloseDither"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "subShaderIndex": 0,
+          "passIndex": 1,
+          "name": "ShadowCaster",
+          "culling": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "zWrite": {
+            "val": 1.0,
+            "name": "<noninit>"
+          },
+          "zTest": {
+            "val": 4.0,
+            "name": "<noninit>"
+          },
+          "rtBlend0": {
+            "srcBlend": {
+              "val": 1.0,
+              "name": "<noninit>"
+            },
+            "destBlend": {
+              "val": 0.0,
+              "name": "<noninit>"
+            },
+            "srcBlendAlpha": {
+              "val": 1.0,
+              "name": "<noninit>"
+            },
+            "destBlendAlpha": {
+              "val": 0.0,
+              "name": "<noninit>"
+            },
+            "blendOp": {
+              "val": 0.0,
+              "name": "<noninit>"
+            },
+            "blendOpAlpha": {
+              "val": 0.0,
+              "name": "<noninit>"
+            },
+            "colMask": {
+              "val": 0.0,
+              "name": "<noninit>"
+            }
+          },
+          "compiledParameterNames": [
+            "$Globals",
+            "UnityPerMaterial",
+            "_AlphaClip",
+            "_AlphaToMaskAvailable",
+            "_LightMap",
+            "_ProjectionParams",
+            "_ScaleBiasRt",
+            "_ScaledScreenParams",
+            "_Shape",
+            "_Texture1",
+            "_TimeParameters",
+            "_UVWindAmount",
+            "_UseCloseDither",
+            "_UsePlayerSquish",
+            "_VertexOffsetMaskAmount",
+            "_VertexWindAmount",
+            "_WorldSpaceCameraPos"
+          ],
+          "commonParameters": {
+            "progVertex": {
+              "textures": [],
+              "constantBuffers": [
+                {
+                  "name": "UnityPerMaterial",
+                  "vectorParameters": [
+                    "_VertexWindAmount",
+                    "_UsePlayerSquish",
+                    "_VertexOffsetMaskAmount"
+                  ]
+                }
+              ]
+            },
+            "progFragment": {
+              "textures": [
+                "_LightMap",
+                "_Texture1",
+                "_Shape"
+              ],
+              "constantBuffers": [
+                {
+                  "name": "$Globals",
+                  "vectorParameters": [
+                    "_ScaledScreenParams",
+                    "_AlphaToMaskAvailable",
+                    "_TimeParameters",
+                    "_WorldSpaceCameraPos",
+                    "_ProjectionParams",
+                    "_ScaleBiasRt"
+                  ]
+                },
+                {
+                  "name": "UnityPerMaterial",
+                  "vectorParameters": [
+                    "_UVWindAmount",
+                    "_UseCloseDither",
+                    "_AlphaClip"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "subShaderIndex": 0,
+          "passIndex": 2,
+          "name": "DepthOnly",
+          "culling": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "zWrite": {
+            "val": 1.0,
+            "name": "<noninit>"
+          },
+          "zTest": {
+            "val": 4.0,
+            "name": "<noninit>"
+          },
+          "rtBlend0": {
+            "srcBlend": {
+              "val": 1.0,
+              "name": "<noninit>"
+            },
+            "destBlend": {
+              "val": 0.0,
+              "name": "<noninit>"
+            },
+            "srcBlendAlpha": {
+              "val": 1.0,
+              "name": "<noninit>"
+            },
+            "destBlendAlpha": {
+              "val": 0.0,
+              "name": "<noninit>"
+            },
+            "blendOp": {
+              "val": 0.0,
+              "name": "<noninit>"
+            },
+            "blendOpAlpha": {
+              "val": 0.0,
+              "name": "<noninit>"
+            },
+            "colMask": {
+              "val": 0.0,
+              "name": "<noninit>"
+            }
+          },
+          "compiledParameterNames": [
+            "$Globals",
+            "UnityPerMaterial",
+            "_AlphaClip",
+            "_AlphaToMaskAvailable",
+            "_LightMap",
+            "_ProjectionParams",
+            "_ScaleBiasRt",
+            "_ScaledScreenParams",
+            "_Shape",
+            "_Texture1",
+            "_TimeParameters",
+            "_UVWindAmount",
+            "_UseCloseDither",
+            "_UsePlayerSquish",
+            "_VertexOffsetMaskAmount",
+            "_VertexWindAmount",
+            "_WorldSpaceCameraPos"
+          ],
+          "commonParameters": {
+            "progVertex": {
+              "textures": [],
+              "constantBuffers": [
+                {
+                  "name": "UnityPerMaterial",
+                  "vectorParameters": [
+                    "_VertexWindAmount",
+                    "_UsePlayerSquish",
+                    "_VertexOffsetMaskAmount"
+                  ]
+                }
+              ]
+            },
+            "progFragment": {
+              "textures": [
+                "_LightMap",
+                "_Texture1",
+                "_Shape"
+              ],
+              "constantBuffers": [
+                {
+                  "name": "$Globals",
+                  "vectorParameters": [
+                    "_ScaledScreenParams",
+                    "_AlphaToMaskAvailable",
+                    "_TimeParameters",
+                    "_WorldSpaceCameraPos",
+                    "_ProjectionParams",
+                    "_ScaleBiasRt"
+                  ]
+                },
+                {
+                  "name": "UnityPerMaterial",
+                  "vectorParameters": [
+                    "_UVWindAmount",
+                    "_UseCloseDither",
+                    "_AlphaClip"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "subShaderIndex": 0,
+          "passIndex": 3,
+          "name": "DepthNormals",
+          "culling": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "zWrite": {
+            "val": 1.0,
+            "name": "<noninit>"
+          },
+          "zTest": {
+            "val": 4.0,
+            "name": "<noninit>"
+          },
+          "rtBlend0": {
+            "srcBlend": {
+              "val": 1.0,
+              "name": "<noninit>"
+            },
+            "destBlend": {
+              "val": 0.0,
+              "name": "<noninit>"
+            },
+            "srcBlendAlpha": {
+              "val": 1.0,
+              "name": "<noninit>"
+            },
+            "destBlendAlpha": {
+              "val": 0.0,
+              "name": "<noninit>"
+            },
+            "blendOp": {
+              "val": 0.0,
+              "name": "<noninit>"
+            },
+            "blendOpAlpha": {
+              "val": 0.0,
+              "name": "<noninit>"
+            },
+            "colMask": {
+              "val": 15.0,
+              "name": "<noninit>"
+            }
+          },
+          "compiledParameterNames": [
+            "$Globals",
+            "UnityPerMaterial",
+            "_AlphaClip",
+            "_LightMap",
+            "_ProjectionParams",
+            "_ScaleBiasRt",
+            "_ScaledScreenParams",
+            "_Shape",
+            "_Texture1",
+            "_TimeParameters",
+            "_UVWindAmount",
+            "_UseCloseDither",
+            "_UsePlayerSquish",
+            "_VertexOffsetMaskAmount",
+            "_VertexWindAmount",
+            "_WorldSpaceCameraPos"
+          ],
+          "commonParameters": {
+            "progVertex": {
+              "textures": [],
+              "constantBuffers": [
+                {
+                  "name": "UnityPerMaterial",
+                  "vectorParameters": [
+                    "_VertexWindAmount",
+                    "_UsePlayerSquish",
+                    "_VertexOffsetMaskAmount"
+                  ]
+                }
+              ]
+            },
+            "progFragment": {
+              "textures": [
+                "_LightMap",
+                "_Texture1",
+                "_Shape"
+              ],
+              "constantBuffers": [
+                {
+                  "name": "$Globals",
+                  "vectorParameters": [
+                    "_ScaledScreenParams",
+                    "_TimeParameters",
+                    "_WorldSpaceCameraPos",
+                    "_ProjectionParams",
+                    "_ScaleBiasRt"
+                  ]
+                },
+                {
+                  "name": "UnityPerMaterial",
+                  "vectorParameters": [
+                    "_UVWindAmount",
+                    "_UseCloseDither",
+                    "_AlphaClip"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "subShaderIndex": 0,
+          "passIndex": 4,
+          "name": "MotionVectors",
+          "culling": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "zWrite": {
+            "val": 1.0,
+            "name": "<noninit>"
+          },
+          "zTest": {
+            "val": 4.0,
+            "name": "<noninit>"
+          },
+          "rtBlend0": {
+            "srcBlend": {
+              "val": 1.0,
+              "name": "<noninit>"
+            },
+            "destBlend": {
+              "val": 0.0,
+              "name": "<noninit>"
+            },
+            "srcBlendAlpha": {
+              "val": 1.0,
+              "name": "<noninit>"
+            },
+            "destBlendAlpha": {
+              "val": 0.0,
+              "name": "<noninit>"
+            },
+            "blendOp": {
+              "val": 0.0,
+              "name": "<noninit>"
+            },
+            "blendOpAlpha": {
+              "val": 0.0,
+              "name": "<noninit>"
+            },
+            "colMask": {
+              "val": 12.0,
+              "name": "<noninit>"
+            }
+          },
+          "compiledParameterNames": [
+            "$Globals",
+            "UnityPerMaterial",
+            "_AlphaClip",
+            "_LightMap",
+            "_ProjectionParams",
+            "_ScaleBiasRt",
+            "_ScaledScreenParams",
+            "_Shape",
+            "_Texture1",
+            "_TimeParameters",
+            "_UVWindAmount",
+            "_UseCloseDither",
+            "_UsePlayerSquish",
+            "_VertexOffsetMaskAmount",
+            "_VertexWindAmount",
+            "_WorldSpaceCameraPos"
+          ],
+          "commonParameters": {
+            "progVertex": {
+              "textures": [],
+              "constantBuffers": [
+                {
+                  "name": "UnityPerMaterial",
+                  "vectorParameters": [
+                    "_VertexWindAmount",
+                    "_UsePlayerSquish",
+                    "_VertexOffsetMaskAmount"
+                  ]
+                }
+              ]
+            },
+            "progFragment": {
+              "textures": [
+                "_LightMap",
+                "_Texture1",
+                "_Shape"
+              ],
+              "constantBuffers": [
+                {
+                  "name": "$Globals",
+                  "vectorParameters": [
+                    "_ScaledScreenParams",
+                    "_TimeParameters",
+                    "_WorldSpaceCameraPos",
+                    "_ProjectionParams",
+                    "_ScaleBiasRt"
+                  ]
+                },
+                {
+                  "name": "UnityPerMaterial",
+                  "vectorParameters": [
+                    "_UVWindAmount",
+                    "_UseCloseDither",
+                    "_AlphaClip"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "compiledBlobs": [
+        {
+          "platform": 4,
+          "segment": 0,
+          "decodedBytes": 13216,
+          "decodedSha256": "78187174fb71076e0680bf928497c83e27a397a82d17c51a739f2719085880a8",
+          "shapeOccurrences": 0,
+          "shapeSTOccurrences": 0
+        },
+        {
+          "platform": 4,
+          "segment": 1,
+          "decodedBytes": 8356944,
+          "decodedSha256": "f39e8ba527aecc54d5718521905398854640bddcb23333dbd7c82d8ec743aabb",
+          "shapeOccurrences": 0,
+          "shapeSTOccurrences": 0
+        },
+        {
+          "platform": 4,
+          "segment": 2,
+          "decodedBytes": 8381952,
+          "decodedSha256": "4338ac75eea586eeb40af7ebe516f30ca8dd11fe23c01e3f8380dae192f658ca",
+          "shapeOccurrences": 0,
+          "shapeSTOccurrences": 0
+        },
+        {
+          "platform": 4,
+          "segment": 3,
+          "decodedBytes": 2746384,
+          "decodedSha256": "a73dae5cd3cd3dbc15520e5457ca272683407451e04ff7dc2faa63ad2b5b6a0a",
+          "shapeOccurrences": 0,
+          "shapeSTOccurrences": 0
+        },
+        {
+          "platform": 18,
+          "segment": 0,
+          "decodedBytes": 16804,
+          "decodedSha256": "f47245bbbf1b3a5482e898f1747b5f1452e404c11a7e6e6194272dc94d9694bf",
+          "shapeOccurrences": 0,
+          "shapeSTOccurrences": 0
+        },
+        {
+          "platform": 18,
+          "segment": 1,
+          "decodedBytes": 16749528,
+          "decodedSha256": "55151f66260225b54ca089e2ddde4b5ba9d4737552aa106862bca4d2f10221c0",
+          "shapeOccurrences": 672,
+          "shapeSTOccurrences": 0
+        },
+        {
+          "platform": 18,
+          "segment": 2,
+          "decodedBytes": 13726608,
+          "decodedSha256": "4af07278c09327a59a674a341f0871928c2c8ce52ddea83e82152feb9a42523b",
+          "shapeOccurrences": 28,
+          "shapeSTOccurrences": 0
+        }
+      ]
+    },
+    {
+      "name": "W/Vine",
+      "sourceFile": "globalgamemanagers.assets",
+      "pathId": 192,
+      "declaredProperties": [
+        {
+          "name": "_SpecularPower",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_AddSpecular",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_NoShadowSpec",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_UVWindAmount",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_Interactable",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_INTERACTABLE",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_Shape",
+          "type": 4,
+          "flags": 0
+        },
+        {
+          "name": "_UVWorldOffset",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_UseSimpleMask",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_AlphaClip",
+          "type": 3,
+          "flags": 0
+        },
+        {
+          "name": "_Tint",
+          "type": 0,
+          "flags": 16
+        },
+        {
+          "name": "_BaseColor",
+          "type": 0,
+          "flags": 16
+        },
+        {
+          "name": "_BaseSmooth",
+          "type": 3,
+          "flags": 0
+        },
+        {
+          "name": "_Color1",
+          "type": 0,
+          "flags": 16
+        },
+        {
+          "name": "_Smooth1",
+          "type": 3,
+          "flags": 0
+        },
+        {
+          "name": "_Height1",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_Texture1",
+          "type": 4,
+          "flags": 0
+        },
+        {
+          "name": "_Triplanar1",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_UV1",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_Remap1",
+          "type": 1,
+          "flags": 0
+        },
+        {
+          "name": "_Color2",
+          "type": 0,
+          "flags": 16
+        },
+        {
+          "name": "_Smooth2",
+          "type": 3,
+          "flags": 0
+        },
+        {
+          "name": "_Height2",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_Texture2",
+          "type": 4,
+          "flags": 0
+        },
+        {
+          "name": "_Triplanar2",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_UV2",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_Remap2",
+          "type": 1,
+          "flags": 0
+        },
+        {
+          "name": "_Color3",
+          "type": 0,
+          "flags": 16
+        },
+        {
+          "name": "_Smooth3",
+          "type": 3,
+          "flags": 0
+        },
+        {
+          "name": "_Height3",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_Texture3",
+          "type": 4,
+          "flags": 0
+        },
+        {
+          "name": "_Triplanar3",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_UV3",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_Flip2",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_Hang",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_Flip1",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_Flip3",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_Remap3",
+          "type": 1,
+          "flags": 0
+        },
+        {
+          "name": "_BreakPoint",
+          "type": 3,
+          "flags": 0
+        },
+        {
+          "name": "_HueShiftStr",
+          "type": 3,
+          "flags": 0
+        },
+        {
+          "name": "_BreakAmount",
+          "type": 3,
+          "flags": 0
+        },
+        {
+          "name": "_LengthScale",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_HueShifts",
+          "type": 1,
+          "flags": 0
+        },
+        {
+          "name": "_JitterTexture",
+          "type": 4,
+          "flags": 0
+        },
+        {
+          "name": "_JitterScale",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_JitterAmount",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_JitterDirection",
+          "type": 1,
+          "flags": 0
+        },
+        {
+          "name": "_JitterSpeed",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_SwayAmount",
+          "type": 2,
+          "flags": 0
+        },
+        {
+          "name": "_QueueOffset",
+          "type": 2,
+          "flags": 1
+        },
+        {
+          "name": "_QueueControl",
+          "type": 2,
+          "flags": 1
+        },
+        {
+          "name": "unity_Lightmaps",
+          "type": 4,
+          "flags": 5
+        },
+        {
+          "name": "unity_LightmapsInd",
+          "type": 4,
+          "flags": 5
+        },
+        {
+          "name": "unity_ShadowMasks",
+          "type": 4,
+          "flags": 5
+        },
+        {
+          "name": "_AlphaClip",
+          "type": 2,
+          "flags": 1
+        }
+      ],
+      "passes": [
+        {
+          "subShaderIndex": 0,
+          "passIndex": 0,
+          "name": "Forward",
+          "culling": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "zWrite": {
+            "val": 1.0,
+            "name": "<noninit>"
+          },
+          "zTest": {
+            "val": 4.0,
+            "name": "<noninit>"
+          },
+          "rtBlend0": {
+            "srcBlend": {
+              "val": 1.0,
+              "name": "<noninit>"
+            },
+            "destBlend": {
+              "val": 0.0,
+              "name": "<noninit>"
+            },
+            "srcBlendAlpha": {
+              "val": 1.0,
+              "name": "<noninit>"
+            },
+            "destBlendAlpha": {
+              "val": 0.0,
+              "name": "<noninit>"
+            },
+            "blendOp": {
+              "val": 0.0,
+              "name": "<noninit>"
+            },
+            "blendOpAlpha": {
+              "val": 0.0,
+              "name": "<noninit>"
+            },
+            "colMask": {
+              "val": 15.0,
+              "name": "<noninit>"
+            }
+          },
+          "compiledParameterNames": [
+            "$Globals",
+            "LightShadows",
+            "UnityPerMaterial",
+            "_AddSpecular",
+            "_AlphaClip",
+            "_AlphaToMaskAvailable",
+            "_BaseColor",
+            "_BaseSmooth",
+            "_BreakAmount",
+            "_BreakPoint",
+            "_Color1",
+            "_Color2",
+            "_Color3",
+            "_Flip1",
+            "_Flip2",
+            "_Flip3",
+            "_GlobalMipBias",
+            "_Hang",
+            "_Height1",
+            "_Height2",
+            "_Height3",
+            "_HueShiftStr",
+            "_HueShifts",
+            "_JitterAmount",
+            "_JitterDirection",
+            "_JitterScale",
+            "_JitterSpeed",
+            "_LengthScale",
+            "_LightMap",
+            "_MainLightColor",
+            "_MainLightPosition",
+            "_MainLightShadowParams",
+            "_MainLightWorldToShadow",
+            "_NoShadowSpec",
+            "_Remap1",
+            "_Remap2",
+            "_Remap3",
+            "_ScaledScreenParams",
+            "_Shape",
+            "_Smooth1",
+            "_Smooth2",
+            "_Smooth3",
+            "_SpecularPower",
+            "_SwayAmount",
+            "_Texture1",
+            "_Texture2",
+            "_Texture3",
+            "_Tint",
+            "_UV1",
+            "_UV2",
+            "_UV3",
+            "_UVWindAmount"
+          ],
+          "commonParameters": {
+            "progVertex": {
+              "textures": [],
+              "constantBuffers": [
+                {
+                  "name": "UnityPerMaterial",
+                  "vectorParameters": [
+                    "_Tint",
+                    "_BaseColor",
+                    "_Color1",
+                    "_Color3",
+                    "_HueShifts",
+                    "_Color2",
+                    "_JitterDirection",
+                    "_Remap3",
+                    "_Remap1",
+                    "_Remap2",
+                    "_LengthScale",
+                    "_SwayAmount",
+                    "_BreakPoint",
+                    "_Flip3",
+                    "_HueShiftStr",
+                    "_UV3",
+                    "_UV2",
+                    "_Flip2",
+                    "_UV1",
+                    "_BreakAmount",
+                    "_Flip1",
+                    "_JitterAmount",
+                    "_JitterScale",
+                    "_JitterSpeed",
+                    "_Hang"
+                  ]
+                }
+              ]
+            },
+            "progFragment": {
+              "textures": [
+                "_LightMap",
+                "_Texture1",
+                "_Texture2",
+                "_Texture3",
+                "_Shape"
+              ],
+              "constantBuffers": [
+                {
+                  "name": "$Globals",
+                  "vectorParameters": [
+                    "_ScaledScreenParams",
+                    "_GlobalMipBias",
+                    "_AlphaToMaskAvailable",
+                    "_MainLightPosition",
+                    "_MainLightColor"
+                  ]
+                },
+                {
+                  "name": "LightShadows",
+                  "vectorParameters": [
+                    "_MainLightShadowParams"
+                  ]
+                },
+                {
+                  "name": "UnityPerMaterial",
+                  "vectorParameters": [
+                    "_Tint",
+                    "_BaseColor",
+                    "_Color1",
+                    "_Color3",
+                    "_HueShifts",
+                    "_Color2",
+                    "_Remap3",
+                    "_Remap1",
+                    "_Remap2",
+                    "_LengthScale",
+                    "_BaseSmooth",
+                    "_Smooth1",
+                    "_Smooth3",
+                    "_Height1",
+                    "_Height2",
+                    "_Height3",
+                    "_SpecularPower",
+                    "_NoShadowSpec",
+                    "_AddSpecular",
+                    "_Smooth2",
+                    "_Flip3",
+                    "_HueShiftStr",
+                    "_UV3",
+                    "_UVWindAmount",
+                    "_UV2",
+                    "_Flip2",
+                    "_UV1",
+                    "_AlphaClip",
+                    "_Flip1",
+                    "_BreakAmount"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "subShaderIndex": 0,
+          "passIndex": 1,
+          "name": "ShadowCaster",
+          "culling": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "zWrite": {
+            "val": 1.0,
+            "name": "<noninit>"
+          },
+          "zTest": {
+            "val": 4.0,
+            "name": "<noninit>"
+          },
+          "rtBlend0": {
+            "srcBlend": {
+              "val": 1.0,
+              "name": "<noninit>"
+            },
+            "destBlend": {
+              "val": 0.0,
+              "name": "<noninit>"
+            },
+            "srcBlendAlpha": {
+              "val": 1.0,
+              "name": "<noninit>"
+            },
+            "destBlendAlpha": {
+              "val": 0.0,
+              "name": "<noninit>"
+            },
+            "blendOp": {
+              "val": 0.0,
+              "name": "<noninit>"
+            },
+            "blendOpAlpha": {
+              "val": 0.0,
+              "name": "<noninit>"
+            },
+            "colMask": {
+              "val": 0.0,
+              "name": "<noninit>"
+            }
+          },
+          "compiledParameterNames": [
+            "$Globals",
+            "UnityPerMaterial",
+            "_AlphaClip",
+            "_AlphaToMaskAvailable",
+            "_BaseColor",
+            "_BreakAmount",
+            "_BreakPoint",
+            "_Color1",
+            "_Color2",
+            "_Color3",
+            "_Flip1",
+            "_Flip2",
+            "_Flip3",
+            "_Hang",
+            "_HueShiftStr",
+            "_HueShifts",
+            "_JitterAmount",
+            "_JitterDirection",
+            "_JitterScale",
+            "_JitterSpeed",
+            "_LengthScale",
+            "_Remap1",
+            "_Remap2",
+            "_Remap3",
+            "_Shape",
+            "_SwayAmount",
+            "_Texture1",
+            "_Texture2",
+            "_Texture3",
+            "_TimeParameters",
+            "_Tint",
+            "_UV1",
+            "_UV2",
+            "_UV3",
+            "_UVWindAmount"
+          ],
+          "commonParameters": {
+            "progVertex": {
+              "textures": [],
+              "constantBuffers": [
+                {
+                  "name": "UnityPerMaterial",
+                  "vectorParameters": [
+                    "_Tint",
+                    "_BaseColor",
+                    "_Color1",
+                    "_Color3",
+                    "_HueShifts",
+                    "_Color2",
+                    "_JitterDirection",
+                    "_Remap3",
+                    "_Remap1",
+                    "_Remap2",
+                    "_LengthScale",
+                    "_SwayAmount",
+                    "_BreakPoint",
+                    "_Flip3",
+                    "_HueShiftStr",
+                    "_UV3",
+                    "_UV2",
+                    "_Flip2",
+                    "_UV1",
+                    "_BreakAmount",
+                    "_Flip1",
+                    "_JitterAmount",
+                    "_JitterScale",
+                    "_JitterSpeed",
+                    "_Hang"
+                  ]
+                }
+              ]
+            },
+            "progFragment": {
+              "textures": [
+                "_Shape",
+                "_Texture1",
+                "_Texture2",
+                "_Texture3"
+              ],
+              "constantBuffers": [
+                {
+                  "name": "$Globals",
+                  "vectorParameters": [
+                    "_AlphaToMaskAvailable",
+                    "_TimeParameters"
+                  ]
+                },
+                {
+                  "name": "UnityPerMaterial",
+                  "vectorParameters": [
+                    "_Tint",
+                    "_BaseColor",
+                    "_Color1",
+                    "_Color3",
+                    "_HueShifts",
+                    "_Color2",
+                    "_Remap3",
+                    "_Remap1",
+                    "_Remap2",
+                    "_LengthScale",
+                    "_Flip3",
+                    "_HueShiftStr",
+                    "_UV3",
+                    "_UVWindAmount",
+                    "_UV2",
+                    "_Flip2",
+                    "_UV1",
+                    "_AlphaClip",
+                    "_Flip1",
+                    "_BreakAmount"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "subShaderIndex": 0,
+          "passIndex": 2,
+          "name": "DepthOnly",
+          "culling": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "zWrite": {
+            "val": 1.0,
+            "name": "<noninit>"
+          },
+          "zTest": {
+            "val": 4.0,
+            "name": "<noninit>"
+          },
+          "rtBlend0": {
+            "srcBlend": {
+              "val": 1.0,
+              "name": "<noninit>"
+            },
+            "destBlend": {
+              "val": 0.0,
+              "name": "<noninit>"
+            },
+            "srcBlendAlpha": {
+              "val": 1.0,
+              "name": "<noninit>"
+            },
+            "destBlendAlpha": {
+              "val": 0.0,
+              "name": "<noninit>"
+            },
+            "blendOp": {
+              "val": 0.0,
+              "name": "<noninit>"
+            },
+            "blendOpAlpha": {
+              "val": 0.0,
+              "name": "<noninit>"
+            },
+            "colMask": {
+              "val": 0.0,
+              "name": "<noninit>"
+            }
+          },
+          "compiledParameterNames": [
+            "$Globals",
+            "UnityPerMaterial",
+            "_AlphaClip",
+            "_AlphaToMaskAvailable",
+            "_BaseColor",
+            "_BreakAmount",
+            "_BreakPoint",
+            "_Color1",
+            "_Color2",
+            "_Color3",
+            "_Flip1",
+            "_Flip2",
+            "_Flip3",
+            "_Hang",
+            "_HueShiftStr",
+            "_HueShifts",
+            "_JitterAmount",
+            "_JitterDirection",
+            "_JitterScale",
+            "_JitterSpeed",
+            "_LengthScale",
+            "_Remap1",
+            "_Remap2",
+            "_Remap3",
+            "_Shape",
+            "_SwayAmount",
+            "_Texture1",
+            "_Texture2",
+            "_Texture3",
+            "_TimeParameters",
+            "_Tint",
+            "_UV1",
+            "_UV2",
+            "_UV3",
+            "_UVWindAmount"
+          ],
+          "commonParameters": {
+            "progVertex": {
+              "textures": [],
+              "constantBuffers": [
+                {
+                  "name": "UnityPerMaterial",
+                  "vectorParameters": [
+                    "_Tint",
+                    "_BaseColor",
+                    "_Color1",
+                    "_Color3",
+                    "_HueShifts",
+                    "_Color2",
+                    "_JitterDirection",
+                    "_Remap3",
+                    "_Remap1",
+                    "_Remap2",
+                    "_LengthScale",
+                    "_SwayAmount",
+                    "_BreakPoint",
+                    "_Flip3",
+                    "_HueShiftStr",
+                    "_UV3",
+                    "_UV2",
+                    "_Flip2",
+                    "_UV1",
+                    "_BreakAmount",
+                    "_Flip1",
+                    "_JitterAmount",
+                    "_JitterScale",
+                    "_JitterSpeed",
+                    "_Hang"
+                  ]
+                }
+              ]
+            },
+            "progFragment": {
+              "textures": [
+                "_Shape",
+                "_Texture1",
+                "_Texture2",
+                "_Texture3"
+              ],
+              "constantBuffers": [
+                {
+                  "name": "$Globals",
+                  "vectorParameters": [
+                    "_AlphaToMaskAvailable",
+                    "_TimeParameters"
+                  ]
+                },
+                {
+                  "name": "UnityPerMaterial",
+                  "vectorParameters": [
+                    "_Tint",
+                    "_BaseColor",
+                    "_Color1",
+                    "_Color3",
+                    "_HueShifts",
+                    "_Color2",
+                    "_Remap3",
+                    "_Remap1",
+                    "_Remap2",
+                    "_LengthScale",
+                    "_Flip3",
+                    "_HueShiftStr",
+                    "_UV3",
+                    "_UVWindAmount",
+                    "_UV2",
+                    "_Flip2",
+                    "_UV1",
+                    "_AlphaClip",
+                    "_Flip1",
+                    "_BreakAmount"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "subShaderIndex": 0,
+          "passIndex": 3,
+          "name": "DepthNormals",
+          "culling": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "zWrite": {
+            "val": 1.0,
+            "name": "<noninit>"
+          },
+          "zTest": {
+            "val": 4.0,
+            "name": "<noninit>"
+          },
+          "rtBlend0": {
+            "srcBlend": {
+              "val": 1.0,
+              "name": "<noninit>"
+            },
+            "destBlend": {
+              "val": 0.0,
+              "name": "<noninit>"
+            },
+            "srcBlendAlpha": {
+              "val": 1.0,
+              "name": "<noninit>"
+            },
+            "destBlendAlpha": {
+              "val": 0.0,
+              "name": "<noninit>"
+            },
+            "blendOp": {
+              "val": 0.0,
+              "name": "<noninit>"
+            },
+            "blendOpAlpha": {
+              "val": 0.0,
+              "name": "<noninit>"
+            },
+            "colMask": {
+              "val": 15.0,
+              "name": "<noninit>"
+            }
+          },
+          "compiledParameterNames": [
+            "$Globals",
+            "UnityPerMaterial",
+            "_AlphaClip",
+            "_BaseColor",
+            "_BreakAmount",
+            "_BreakPoint",
+            "_Color1",
+            "_Color2",
+            "_Color3",
+            "_Flip1",
+            "_Flip2",
+            "_Flip3",
+            "_Hang",
+            "_HueShiftStr",
+            "_HueShifts",
+            "_JitterAmount",
+            "_JitterDirection",
+            "_JitterScale",
+            "_JitterSpeed",
+            "_LengthScale",
+            "_Remap1",
+            "_Remap2",
+            "_Remap3",
+            "_Shape",
+            "_SwayAmount",
+            "_Texture1",
+            "_Texture2",
+            "_Texture3",
+            "_TimeParameters",
+            "_Tint",
+            "_UV1",
+            "_UV2",
+            "_UV3",
+            "_UVWindAmount"
+          ],
+          "commonParameters": {
+            "progVertex": {
+              "textures": [],
+              "constantBuffers": [
+                {
+                  "name": "UnityPerMaterial",
+                  "vectorParameters": [
+                    "_Tint",
+                    "_BaseColor",
+                    "_Color1",
+                    "_Color3",
+                    "_HueShifts",
+                    "_Color2",
+                    "_JitterDirection",
+                    "_Remap3",
+                    "_Remap1",
+                    "_Remap2",
+                    "_LengthScale",
+                    "_SwayAmount",
+                    "_BreakPoint",
+                    "_Flip3",
+                    "_HueShiftStr",
+                    "_UV3",
+                    "_UV2",
+                    "_Flip2",
+                    "_UV1",
+                    "_BreakAmount",
+                    "_Flip1",
+                    "_JitterAmount",
+                    "_JitterScale",
+                    "_JitterSpeed",
+                    "_Hang"
+                  ]
+                }
+              ]
+            },
+            "progFragment": {
+              "textures": [
+                "_Shape",
+                "_Texture1",
+                "_Texture2",
+                "_Texture3"
+              ],
+              "constantBuffers": [
+                {
+                  "name": "$Globals",
+                  "vectorParameters": [
+                    "_TimeParameters"
+                  ]
+                },
+                {
+                  "name": "UnityPerMaterial",
+                  "vectorParameters": [
+                    "_Tint",
+                    "_BaseColor",
+                    "_Color1",
+                    "_Color3",
+                    "_HueShifts",
+                    "_Color2",
+                    "_Remap3",
+                    "_Remap1",
+                    "_Remap2",
+                    "_LengthScale",
+                    "_Flip3",
+                    "_HueShiftStr",
+                    "_UV3",
+                    "_UVWindAmount",
+                    "_UV2",
+                    "_Flip2",
+                    "_UV1",
+                    "_AlphaClip",
+                    "_Flip1",
+                    "_BreakAmount"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "subShaderIndex": 0,
+          "passIndex": 4,
+          "name": "MotionVectors",
+          "culling": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "zWrite": {
+            "val": 1.0,
+            "name": "<noninit>"
+          },
+          "zTest": {
+            "val": 4.0,
+            "name": "<noninit>"
+          },
+          "rtBlend0": {
+            "srcBlend": {
+              "val": 1.0,
+              "name": "<noninit>"
+            },
+            "destBlend": {
+              "val": 0.0,
+              "name": "<noninit>"
+            },
+            "srcBlendAlpha": {
+              "val": 1.0,
+              "name": "<noninit>"
+            },
+            "destBlendAlpha": {
+              "val": 0.0,
+              "name": "<noninit>"
+            },
+            "blendOp": {
+              "val": 0.0,
+              "name": "<noninit>"
+            },
+            "blendOpAlpha": {
+              "val": 0.0,
+              "name": "<noninit>"
+            },
+            "colMask": {
+              "val": 12.0,
+              "name": "<noninit>"
+            }
+          },
+          "compiledParameterNames": [
+            "$Globals",
+            "UnityPerMaterial",
+            "_AlphaClip",
+            "_BaseColor",
+            "_BreakAmount",
+            "_BreakPoint",
+            "_Color1",
+            "_Color2",
+            "_Color3",
+            "_Flip1",
+            "_Flip2",
+            "_Flip3",
+            "_Hang",
+            "_HueShiftStr",
+            "_HueShifts",
+            "_JitterAmount",
+            "_JitterDirection",
+            "_JitterScale",
+            "_JitterSpeed",
+            "_LengthScale",
+            "_Remap1",
+            "_Remap2",
+            "_Remap3",
+            "_Shape",
+            "_SwayAmount",
+            "_Texture1",
+            "_Texture2",
+            "_Texture3",
+            "_TimeParameters",
+            "_Tint",
+            "_UV1",
+            "_UV2",
+            "_UV3",
+            "_UVWindAmount"
+          ],
+          "commonParameters": {
+            "progVertex": {
+              "textures": [],
+              "constantBuffers": [
+                {
+                  "name": "UnityPerMaterial",
+                  "vectorParameters": [
+                    "_Tint",
+                    "_BaseColor",
+                    "_Color1",
+                    "_Color3",
+                    "_HueShifts",
+                    "_Color2",
+                    "_JitterDirection",
+                    "_Remap3",
+                    "_Remap1",
+                    "_Remap2",
+                    "_LengthScale",
+                    "_SwayAmount",
+                    "_BreakPoint",
+                    "_Flip3",
+                    "_HueShiftStr",
+                    "_UV3",
+                    "_UV2",
+                    "_Flip2",
+                    "_UV1",
+                    "_BreakAmount",
+                    "_Flip1",
+                    "_JitterAmount",
+                    "_JitterScale",
+                    "_JitterSpeed",
+                    "_Hang"
+                  ]
+                }
+              ]
+            },
+            "progFragment": {
+              "textures": [
+                "_Shape",
+                "_Texture1",
+                "_Texture2",
+                "_Texture3"
+              ],
+              "constantBuffers": [
+                {
+                  "name": "$Globals",
+                  "vectorParameters": [
+                    "_TimeParameters"
+                  ]
+                },
+                {
+                  "name": "UnityPerMaterial",
+                  "vectorParameters": [
+                    "_Tint",
+                    "_BaseColor",
+                    "_Color1",
+                    "_Color3",
+                    "_HueShifts",
+                    "_Color2",
+                    "_Remap3",
+                    "_Remap1",
+                    "_Remap2",
+                    "_LengthScale",
+                    "_Flip3",
+                    "_HueShiftStr",
+                    "_UV3",
+                    "_UVWindAmount",
+                    "_UV2",
+                    "_Flip2",
+                    "_UV1",
+                    "_AlphaClip",
+                    "_Flip1",
+                    "_BreakAmount"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "compiledBlobs": [
+        {
+          "platform": 4,
+          "segment": 0,
+          "decodedBytes": 2049084,
+          "decodedSha256": "3ee443af44cd3b430012cf6630aa7debfb374593f8efa8d083f2c787416f1f4b",
+          "shapeOccurrences": 0,
+          "shapeSTOccurrences": 0
+        },
+        {
+          "platform": 18,
+          "segment": 0,
+          "decodedBytes": 3099892,
+          "decodedSha256": "18ea9b7c4d8f9bb07852cb895bc49b4144214e32fdd0016e873e1af7eac79d0a",
+          "shapeOccurrences": 84,
+          "shapeSTOccurrences": 0
+        }
+      ]
+    }
+  ]
+}

@@ -197,6 +197,53 @@ function effectFixture(name, shader) {
   return { scene, material, geometry };
 }
 
+test("legacy palm cards recover UV0 and source double-sided cutouts without changing shared textures", () => {
+  const { batchStaticMeshes } = compile();
+  const fixture = effectFixture("M_Foliage_Palmtree 5", "GD/FoliageGD");
+  const original = new THREE.Texture(); original.flipY = false;
+  original.wrapS = original.wrapT = THREE.RepeatWrapping;
+  fixture.material.map = original; fixture.material.alphaTest = 0.5;
+  fixture.material.userData.peakTerrain.sourceCutout = { textureProperty: "_Shape", cull: 2, alphaCutoff: 0.5 };
+  const root = batchStaticMeshes(fixture.scene, "25306743");
+  assert.equal(fixture.material.side, THREE.DoubleSide);
+  assert.equal(fixture.material.alphaTest, 0.5);
+  assert.notEqual(fixture.material.map, original);
+  assert.deepEqual(original.repeat.toArray(), [1, 1]);
+  const corrected = fixture.material.map; corrected.updateMatrix();
+  for (const [u, v] of [[0, 0], [1, 1], [0.17, 0.83], [0.91, 0.23]]) {
+    const recovered = corrected.transformUv(new THREE.Vector2(12 * u, 1 - 12 * v));
+    assert.ok(Math.abs(recovered.x - u) < 1e-6);
+    assert.ok(Math.abs(recovered.y - (1 - v)) < 1e-6);
+  }
+  assert.equal(corrected.wrapS, THREE.ClampToEdgeWrapping);
+  assert.equal(corrected.wrapT, THREE.ClampToEdgeWrapping);
+  // Reusing the material during batching must not divide its UVs twice.
+  const scene = new THREE.Group(); scene.add(new THREE.Mesh(fixture.geometry, fixture.material));
+  const second = batchStaticMeshes(scene, "25306743");
+  assert.equal(fixture.material.map, corrected);
+  fixture.geometry.dispose(); fixture.material.dispose(); original.dispose(); corrected.dispose();
+  for (const mesh of [...root.children, ...second.children]) mesh.dispose();
+});
+
+test("corrected exports and unrelated materials do not receive legacy palm UV repair", () => {
+  const { batchStaticMeshes } = compile();
+  for (const [build, name, shader, cutout] of [
+    ["other", "M_Foliage_Palmtree 5", "GD/FoliageGD", { textureProperty: "_Shape" }],
+    ["25306743", "M_Foliage_Palmtree 5", "Other/Foliage", { textureProperty: "_Shape" }],
+    ["25306743", "M_Foliage_Palmtree 5", "GD/FoliageGD", undefined],
+    ["25306743", "M_Foliage_Pine", "GD/FoliageGD", { textureProperty: "_Shape" }],
+    ["25306743", "M_Foliage_Palmtree 5", "GD/FoliageGD", { textureProperty: "_Shape", cullSource: "shader-pass", uvTransform: "mesh-uv0" }],
+  ]) {
+    const fixture = effectFixture(name, shader); const map = new THREE.Texture(); fixture.material.map = map;
+    fixture.material.userData.peakTerrain.sourceCutout = cutout;
+    const root = batchStaticMeshes(fixture.scene, build);
+    assert.equal(fixture.material.map, map);
+    assert.deepEqual(map.repeat.toArray(), [1, 1]);
+    assert.equal(fixture.material.userData.peakSourceCutout, undefined);
+    fixture.geometry.dispose(); fixture.material.dispose(); map.dispose(); root.children[0].dispose();
+  }
+});
+
 test("exact-build lava, water and fog source colors bypass the white generic terrain blend", () => {
   const { batchStaticMeshes } = compile();
   const cases = [["M_Lava", "Lava"], ["M_Water_forest", "GD/Water-GD"], ["FogSurface", "GD/FogSurface"]];
@@ -230,6 +277,32 @@ test("source effect adaptation never guesses across build, name or shader mismat
     assert.equal(material.userData.peakSourceEffect, undefined);
     assert.equal(material.customProgramCacheKey(), "peak-terrain-affine-normals-v1");
     geometry.dispose(); material.dispose(); root.children.forEach((mesh) => mesh.dispose());
+  }
+});
+
+test("Jelly loads with its purple source color and original pass without altering sea urchins", () => {
+  const { batchStaticMeshes } = compile();
+  for (const name of ["Jelly", "M_Urchin"]) {
+    const fixture = effectFixture(name, name === "Jelly" ? "Jelly" : "W/Peak_Standard");
+    fixture.material.side = THREE.DoubleSide;
+    const root = batchStaticMeshes(fixture.scene, "25306743");
+    if (name === "Jelly") {
+      assert.deepEqual(fixture.material.color.toArray(), getSourceEffectMaterial("25306743", "Jelly", "Jelly").baseColor);
+      assert.ok(fixture.material.color.b > fixture.material.color.g);
+      assert.ok(fixture.material.color.r > fixture.material.color.g);
+      assert.equal(fixture.material.side, THREE.FrontSide);
+      assert.equal(fixture.material.transparent, true);
+      assert.equal(fixture.material.depthWrite, true);
+      assert.equal(fixture.material.opacity, 1, "refraction mixing alpha is not surface opacity");
+      const shader = { uniforms: {}, vertexShader: THREE.ShaderLib.standard.vertexShader, fragmentShader: THREE.ShaderLib.standard.fragmentShader };
+      fixture.material.onBeforeCompile(shader, {});
+      assert.doesNotMatch(shader.fragmentShader, /peakBase|peakTop/);
+    } else {
+      assert.equal(fixture.material.userData.peakSourceEffect, undefined);
+      assert.equal(fixture.material.side, THREE.DoubleSide);
+      assert.equal(fixture.material.transparent, false);
+    }
+    fixture.geometry.dispose(); fixture.material.dispose(); root.children[0].dispose();
   }
 });
 

@@ -28,6 +28,10 @@ def source_base_property(material_name,shader_name,colors,floats):
     """
     if shader_name=='GD/FoliageGD' and material_name=='M_Foliage_Palmtree 5' and '_Tint' in colors:
         return '_Tint'
+    # Jelly retains a white _BaseColor from a previous shader in saved data.
+    # Its current shader declares _Color / _Color2, not _BaseColor.
+    if shader_name=='Jelly' and '_Color' in colors:
+        return '_Color'
     if shader_name in ('GD/FoliageGD','W/Peak_Ice') and '_BaseColor' in colors:
         return '_BaseColor'
     candidates=('_BaseColor',) if '_TopColorAmount' in floats else ('_Tint','_BaseColor','_Color')
@@ -50,17 +54,22 @@ def material_color_metadata(scene,ptr,source):
     if key not in scene.shader_color_properties:
         parsed=shader.read_typetree()['m_ParsedForm']
         properties={p['m_Name']:int(p['m_Flags']) for p in parsed['m_PropInfo']['m_Props']}
-        scene.shader_color_properties[key]=(parsed['m_Name'],properties)
-    shader_name,properties=scene.shader_color_properties[key]
+        culling=parsed['m_SubShaders'][0]['m_Passes'][0]['m_State']['culling']
+        scene.shader_color_properties[key]=(parsed['m_Name'],properties,culling)
+    shader_name,properties,culling=scene.shader_color_properties[key]
     saved=source['m_SavedProperties']; colors=dict(saved.get('m_Colors',[])); floats=dict(saved.get('m_Floats',[]))
     base_property=source_base_property(source.get('m_Name',''),shader_name,colors,floats)
-    return {'baseProperty':base_property,'baseFlags':properties.get(base_property,0),'topFlags':properties.get('_TopColor',0),'shader':shader_name}
+    # Only a pass referencing a declared property can use that saved value.
+    # GD/FoliageGD hardcodes Cull Off, despite a stale saved _Cull=2.
+    cull_name=culling.get('name')
+    shader_cull=float(floats.get(cull_name,culling['val'])) if cull_name in properties else float(culling['val'])
+    return {'baseProperty':base_property,'baseFlags':properties.get(base_property,0),'topFlags':properties.get('_TopColor',0),'shader':shader_name,'cull':shader_cull}
 
 def stored_color_to_linear(values,flags):
     # No brightness correction: choose a transfer function from source metadata.
     return np.maximum(0,np.asarray(values,dtype=np.float64)) if flags & (16|32) else linear_color(values)
 
-def foliage_material_contract(shader_name, textures, floats):
+def foliage_material_contract(shader_name, textures, floats, shader_cull):
     """Return the source-backed cutout contract for PEAK's foliage shader.
 
     GD/FoliageGD and W/Vine do not expose their colour/shape texture under the
@@ -74,8 +83,7 @@ def foliage_material_contract(shader_name, textures, floats):
         return None
     cutoff=floats.get('_AlphaClip',floats.get('_AlphaCutoff',.5))
     cutoff=float(cutoff) if np.isfinite(cutoff) else .5
-    cull=float(floats.get('_Cull',2))
-    return {'textureProperty':'_Shape','texture':shape,'alphaCutoff':min(1,max(0,cutoff)),'doubleSided':cull==0}
+    return {'textureProperty':'_Shape','texture':shape,'alphaCutoff':min(1,max(0,cutoff)),'doubleSided':shader_cull==0}
 
 def quaternion(rotation):
     # A proper orthogonal matrix only; shear is never sent through this path.
@@ -155,34 +163,46 @@ class GlbBuilder:
             source=self.scene.ptr(ptr).read_typetree() if pid(ptr) else {'m_Name':'Default'}
             color_metadata=material_color_metadata(self.scene,ptr,source)
             foliage=None
+            sampler_id=0
             if pid(ptr):
                 saved=source['m_SavedProperties']; colors=dict(saved.get('m_Colors',[])); textures=dict(saved.get('m_TexEnvs',[])); floats=dict(saved.get('m_Floats',[]))
                 if color_metadata['baseProperty'] in colors:
                     tint=vec(colors[color_metadata['baseProperty']],'rgba')
-                foliage=foliage_material_contract(color_metadata['shader'],textures,floats)
+                foliage=foliage_material_contract(color_metadata['shader'],textures,floats,color_metadata['cull'])
                 if foliage:
                     selected=foliage['texture']; tp=selected['m_Texture']; matptr=self.scene.ptr(ptr)
                     texptr=PPtr(m_FileID=tp['m_FileID'],m_PathID=tp['m_PathID'],assetsfile=matptr.deref().assets_file)
+                    texture_source=texptr.read()
+                    wrap={0:10497,1:33071,2:33648}
+                    sampler={**self.gltf['samplers'][0],
+                        'wrapS':wrap.get(texture_source.m_TextureSettings.m_WrapU,33071),
+                        'wrapT':wrap.get(texture_source.m_TextureSettings.m_WrapV,33071)}
+                    if sampler not in self.gltf['samplers']:self.gltf['samplers'].append(sampler)
+                    sampler_id=self.gltf['samplers'].index(sampler)
                     tk=(texptr.assetsfile.name,texptr.m_FileID,texptr.m_PathID)
                     if tk not in self.scene.textures:
-                        image=texptr.read().image.convert('RGBA')
+                        image=texture_source.image.convert('RGBA')
                         # Cutout cards repeat across every chapter GLB.  A 256px
                         # source-backed silhouette keeps the authored colour and
                         # alpha edge while leaving enough headroom for the public
                         # site's fixed 1 GB deployment budget.
                         image.thumbnail((FOLIAGE_TEXTURE_MAX_SIDE,FOLIAGE_TEXTURE_MAX_SIDE),Image.Resampling.LANCZOS); self.scene.textures[tk]=np.asarray(image)
-                    texture=self.scene.textures[tk]; uvscale=vec(selected['m_Scale'],'xy'); uvoffset=vec(selected['m_Offset'],'xy')
+                    # Both compiled shaders sample UV0 directly: _Shape_ST is
+                    # absent from their parameters. Palm's saved 12x scale is
+                    # obsolete and would tile the leaf silhouette 144 times.
+                    texture=self.scene.textures[tk]; uvscale=np.ones(2); uvoffset=np.zeros(2)
             base=np.minimum(1,stored_color_to_linear(tint[:3],color_metadata['baseFlags'])); top_linear=stored_color_to_linear(top[:3],color_metadata['topFlags'])
             material={'name':source['m_Name'],'doubleSided':foliage['doubleSided'] if foliage else True,'pbrMetallicRoughness':{'baseColorFactor':base.tolist()+[1.0],'metallicFactor':0.0,'roughnessFactor':.95},'extras':{'peakTerrain':{'colorSpace':'linear','baseColor':base.tolist(),'topColor':top_linear.tolist(),'topAlpha':float(top[3]),'tightness':[float(settings[0]),float(settings[1])],'amount':float(settings[2]),'formula':'smoothstep(tightness[0],tightness[1],max(worldNormal.y,0))*amount*topAlpha','sourceMaterial':source['m_Name'],'sourceUv':'Unity mesh UV0, converted v=1-v for glTF'}}}
             material['extras']['peakTerrain']['sourceColors']={**color_metadata,'baseStored':tint[:3].tolist(),'topStored':top[:3].tolist(),'conversion':'HDR/Gamma Color: already-linear stored value; ordinary Color: sRGB to linear'}
             if foliage:
-                material['extras']['peakTerrain']['sourceCutout']={'textureProperty':foliage['textureProperty'],'alphaCutoff':foliage['alphaCutoff'],'cull':float(floats.get('_Cull',2))}
+                material['extras']['peakTerrain']['sourceCutout']={'textureProperty':foliage['textureProperty'],'alphaCutoff':foliage['alphaCutoff'],'cull':color_metadata['cull'],'cullSource':'shader-pass','uvTransform':'mesh-uv0'}
             if texture.shape[0]>1 or texture.shape[1]>1:
                 output=io.BytesIO(); Image.fromarray(texture).save(output,format='PNG',optimize=True); png=output.getvalue(); digest=hashlib.sha256(png).hexdigest()
-                if digest not in self.image_ids:
+                texture_key=(digest,sampler_id)
+                if texture_key not in self.image_ids:
                     image_id=len(self.gltf['images']); self.gltf['images'].append({'bufferView':self.buffer_view(png),'mimeType':'image/png','name':digest})
-                    texture_id=len(self.gltf['textures']); self.gltf['textures'].append({'source':image_id,'sampler':0}); self.image_ids[digest]=texture_id
-                material['pbrMetallicRoughness']['baseColorTexture']={'index':self.image_ids[digest]}
+                    texture_id=len(self.gltf['textures']); self.gltf['textures'].append({'source':image_id,'sampler':sampler_id}); self.image_ids[texture_key]=texture_id
+                material['pbrMetallicRoughness']['baseColorTexture']={'index':self.image_ids[texture_key]}
                 if np.any(texture[:,:,3]<200):material['alphaMode']='MASK'; material['alphaCutoff']=foliage['alphaCutoff'] if foliage else .4
             self.material_ids[key]=(len(self.gltf['materials']),uvscale,uvoffset); self.gltf['materials'].append(material)
         return self.material_ids[key]

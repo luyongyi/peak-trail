@@ -34,6 +34,7 @@ function applySourceEffectMaterial(material, gameBuildId) {
   material.transparent = effect.transparent;
   material.depthWrite = effect.depthWrite;
   material.alphaTest = 0;
+  if (effect.source.cull === 2) material.side = THREE.FrontSide;
   material.userData.peakSourceEffect = effect;
   if (effect.kind === "antisphere") {
     // Unity's AntiSphere Forward pass is alpha-blended. Its output alpha comes
@@ -92,6 +93,31 @@ function applyTerrainMaterial(material) {
       "#include <color_fragment>\ndiffuseColor.rgb *= mix(peakBase, peakTop, smoothstep(peakRamp.x, peakRamp.y, vPeakUp) * peakAmount * peakTopAlpha);");
   };
   material.customProgramCacheKey = () => "peak-terrain-original-mesh-v1";
+  material.needsUpdate = true;
+}
+
+function applySourceCutoutMaterial(material, gameBuildId) {
+  const terrain = material.userData?.peakTerrain;
+  const cutout = terrain?.sourceCutout;
+  if (String(gameBuildId) !== "25306743" || cutout?.textureProperty !== "_Shape"
+      || !["GD/FoliageGD", "W/Vine"].includes(terrain.sourceColors?.shader)) return;
+  // These compiled passes are Cull Off. Old packs copied an undeclared,
+  // obsolete saved _Cull=2 instead. Keep their original alpha-test silhouette.
+  // Evidence: tools/offline-maps/source-palm-material.25306743.json.
+  if (cutout.cullSource !== "shader-pass") material.side = THREE.DoubleSide;
+  if (terrain.sourceMaterial === "M_Foliage_Palmtree 5" && material.map
+      && cutout.uvTransform !== "mesh-uv0" && !material.userData.peakSourceCutout) {
+    // Old packs baked u'=12*u, v'=1-12*v. The shader has no _Shape_ST
+    // parameter, so recover glTF UV0: u=u'/12, v=(v'+11)/12.
+    // Clone the texture to avoid changing another material sharing its image.
+    const map = material.map.clone();
+    map.repeat.set(1 / 12, 1 / 12);
+    map.offset.set(0, 11 / 12);
+    map.wrapS = map.wrapT = THREE.ClampToEdgeWrapping;
+    map.needsUpdate = true;
+    material.map = map;
+    material.userData.peakSourceCutout = { buildId: "25306743", recoveredUv: "mesh-uv0" };
+  }
   material.needsUpdate = true;
 }
 
@@ -176,6 +202,7 @@ function batchStaticMeshes(scene, gameBuildId, shadowOnlyNodes = new Set(), asso
     const mineBounds = mine ? indexedBounds(object.geometry) : null;
     for (const material of materials) {
       if (!prepared.has(material)) {
+        applySourceCutoutMaterial(material, gameBuildId);
         if (!applySourceEffectMaterial(material, gameBuildId)) applyTerrainMaterial(material);
         useExactInstanceNormals(material);
         prepared.add(material);

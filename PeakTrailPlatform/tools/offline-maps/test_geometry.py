@@ -23,22 +23,27 @@ class GeometryTests(unittest.TestCase):
         self.assertEqual(source_base_property('Material','W/Peak_Rock',colors,{'_TopColorAmount':1}),'_BaseColor')
         self.assertEqual(source_base_property('Material','Unknown',{'_BaseColor':object()},{}),'_BaseColor')
 
+    def test_jelly_ignores_white_property_left_from_previous_shader(self):
+        colors={'_BaseColor':[1,1,1,1],'_Color':[.6933333,.4470588,.7450981,.1568628],'_Color2':object()}
+        self.assertEqual(source_base_property('Jelly','Jelly',colors,{}),'_Color')
+        self.assertEqual(source_base_property('M_Urchin','W/Peak_Standard',colors,{}),'_BaseColor')
+
     def test_foliage_uses_shape_cutout_and_source_culling(self):
         shape={'m_Texture':{'m_FileID':1,'m_PathID':42},'m_Scale':{'x':2,'y':3},'m_Offset':{'x':.1,'y':.2}}
-        contract=foliage_material_contract('GD/FoliageGD',{'_Shape':shape,'_Texture1':{}},{'_AlphaClip':.513,'_Cull':2})
+        contract=foliage_material_contract('GD/FoliageGD',{'_Shape':shape,'_Texture1':{}},{'_AlphaClip':.513,'_Cull':2},0)
         self.assertIs(contract['texture'],shape)
         self.assertEqual(contract['textureProperty'],'_Shape')
         self.assertEqual(contract['alphaCutoff'],.513)
-        self.assertFalse(contract['doubleSided'])
-        self.assertTrue(foliage_material_contract('GD/FoliageGD',{'_Shape':shape},{'_Cull':0})['doubleSided'])
-        vine=foliage_material_contract('W/Vine',{'_Shape':shape},{'_AlphaClip':.478,'_Cull':2})
+        self.assertTrue(contract['doubleSided'],'shader Cull Off overrides obsolete saved _Cull=2')
+        self.assertFalse(foliage_material_contract('GD/FoliageGD',{'_Shape':shape},{'_Cull':0},2)['doubleSided'])
+        vine=foliage_material_contract('W/Vine',{'_Shape':shape},{'_AlphaClip':.478,'_Cull':2},2)
         self.assertEqual(vine['alphaCutoff'],.478)
         self.assertFalse(vine['doubleSided'])
 
     def test_foliage_contract_never_guesses_for_other_shaders_or_missing_shape(self):
         shape={'m_Texture':{'m_FileID':1,'m_PathID':42}}
-        self.assertIsNone(foliage_material_contract('Unknown/Foliage',{'_Shape':shape},{'_AlphaClip':.5}))
-        self.assertIsNone(foliage_material_contract('GD/FoliageGD',{'_Texture1':shape},{'_AlphaClip':.5}))
+        self.assertIsNone(foliage_material_contract('Unknown/Foliage',{'_Shape':shape},{'_AlphaClip':.5},0))
+        self.assertIsNone(foliage_material_contract('GD/FoliageGD',{'_Texture1':shape},{'_AlphaClip':.5},0))
 
     def test_hdr_material_is_not_linearized_twice(self):
         value=np.array([.1415094,.1297805,.114142])

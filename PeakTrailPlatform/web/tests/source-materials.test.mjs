@@ -29,7 +29,38 @@ test("all effect lookup entries reproduce their exact-build raw Unity source evi
     assert.equal(effect.source.pass.zWrite, source.passState.zWrite.val);
     if (effect.kind === "fog") assert.equal(effect.opacity, source.floats._Opacity);
   }
-  assert.equal(checked, 14);
+  assert.equal(checked, 15);
+});
+
+test("Shore jellyfish restores shader-declared purple and does not confuse the urchin or color alpha", () => {
+  const source = evidence.materials.find((material) => material.name === "Jelly");
+  const jelly = getSourceEffectMaterial("25306743", "Jelly", "Jelly");
+  assert.equal(jelly.kind, "jellyfish");
+  assert.equal(jelly.source.colorProperty, "_Color");
+  assert.ok(!Object.hasOwn(source.shaderProperties, "_BaseColor"), "the stale white property is not declared by Jelly");
+  assert.deepEqual(source.unusedSavedColors._BaseColor, [1, 1, 1, 1]);
+  assert.deepEqual(jelly.baseColor, source.colors._Color.rgba.slice(0, 3).map(linear));
+  assert.ok(jelly.baseColor[2] > jelly.baseColor[1] && jelly.baseColor[0] > jelly.baseColor[1]);
+  assert.deepEqual(jelly.emissive, [0, 0, 0]);
+  assert.equal(jelly.transparent, true);
+  assert.equal(jelly.depthWrite, true);
+  assert.equal(jelly.opacity, 1, "color alpha controls source refraction, not output opacity");
+  assert.equal(jelly.source.cull, source.passState.culling.val);
+  assert.equal(jelly.source.pass.srcBlend, source.passState.rtBlend0.srcBlend.val);
+  assert.equal(jelly.source.pass.dstBlend, source.passState.rtBlend0.destBlend.val);
+  assert.equal(source.forwardTags.QUEUE, "Transparent");
+  for (const layer of Object.values(jelly.source.colorLayers).filter((value) => value?.property)) {
+    assert.deepEqual(layer.rgba, source.colors[layer.property].rgba);
+    assert.equal(layer.flags, source.colors[layer.property].flags);
+  }
+  assert.equal(jelly.source.colorLayers.formula, source.colorComputation.surface);
+  assert.match(jelly.source.approximation, /refraction.*not reproduced/);
+  assert.equal(getSourceEffectMaterial("25306743", "M_Urchin", "GD/FoliageGD"), null);
+  assert.equal(getSourceEffectMaterial("25306743", "Jelly", "other"), null);
+  assert.equal(getSourceEffectMaterial("25306744", "Jelly", "Jelly"), null);
+  assert.equal(getSourceEffectMaterial("25306743", "Jelly (Instance)", "Jelly"), null);
+  jelly.source.colorLayers.secondary.rgba[0] = 100;
+  assert.notEqual(getSourceEffectMaterial("25306743", "Jelly", "Jelly").source.colorLayers.secondary.rgba[0], 100);
 });
 
 test("Void AntiSphere shells use exact transparent source evidence instead of opaque white PBR", () => {

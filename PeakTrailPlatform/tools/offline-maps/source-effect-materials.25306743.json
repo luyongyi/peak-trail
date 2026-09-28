@@ -167,6 +167,247 @@
       }
     },
     {
+      "name": "Jelly",
+      "shader": "Jelly",
+      "sourceFile": "sharedassets4.assets",
+      "pathId": 30,
+      "colors": {
+        "_Color": {
+          "rgba": [
+            0.6933333277702332,
+            0.4470587968826294,
+            0.7450980544090271,
+            0.1568627506494522
+          ],
+          "flags": 0
+        },
+        "_Color2": {
+          "rgba": [
+            0.7364031076431274,
+            0.3686273992061615,
+            0.7529411911964417,
+            0.3764705955982208
+          ],
+          "flags": 0
+        },
+        "_Texture2Color": {
+          "rgba": [
+            0.01567428931593895,
+            0.0,
+            0.6352200508117676,
+            1.0
+          ],
+          "flags": 0
+        }
+      },
+      "floats": {
+        "_AlphaClip": 0.0,
+        "_INVERT_TEX_2": 0.0,
+        "_Metalic": 0.0,
+        "_Outline": 0.7699999809265137,
+        "_QueueControl": 0.0,
+        "_QueueOffset": 0.0,
+        "_Texture2Scale": 1.2799999713897705,
+        "_VertexColor": 0.7360000014305115,
+        "_Zoom": -0.20000000298023224
+      },
+      "passState": {
+        "rtBlend0": {
+          "srcBlend": {
+            "val": 5.0,
+            "name": "<noninit>"
+          },
+          "destBlend": {
+            "val": 10.0,
+            "name": "<noninit>"
+          },
+          "srcBlendAlpha": {
+            "val": 1.0,
+            "name": "<noninit>"
+          },
+          "destBlendAlpha": {
+            "val": 10.0,
+            "name": "<noninit>"
+          },
+          "blendOp": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "blendOpAlpha": {
+            "val": 0.0,
+            "name": "<noninit>"
+          },
+          "colMask": {
+            "val": 15.0,
+            "name": "<noninit>"
+          }
+        },
+        "zTest": {
+          "val": 4.0,
+          "name": "<noninit>"
+        },
+        "zWrite": {
+          "val": 1.0,
+          "name": "<noninit>"
+        },
+        "culling": {
+          "val": 2.0,
+          "name": "<noninit>"
+        }
+      },
+      "shaderProperties": {
+        "_Zoom": {
+          "type": 2,
+          "flags": 0
+        },
+        "_Metalic": {
+          "type": 3,
+          "flags": 0
+        },
+        "_Outline": {
+          "type": 2,
+          "flags": 0
+        },
+        "_Texture2Scale": {
+          "type": 2,
+          "flags": 0
+        },
+        "_INVERT_TEX_2": {
+          "type": 2,
+          "flags": 0
+        },
+        "_VertexColor": {
+          "type": 3,
+          "flags": 0
+        },
+        "_Texture2Color": {
+          "type": 0,
+          "flags": 0
+        },
+        "_Texture2": {
+          "type": 4,
+          "flags": 0
+        },
+        "_Texture": {
+          "type": 4,
+          "flags": 0
+        },
+        "_Remap": {
+          "type": 1,
+          "flags": 0
+        },
+        "_Color": {
+          "type": 0,
+          "flags": 0
+        },
+        "_Color2": {
+          "type": 0,
+          "flags": 0
+        },
+        "_QueueOffset": {
+          "type": 2,
+          "flags": 1
+        },
+        "_QueueControl": {
+          "type": 2,
+          "flags": 1
+        },
+        "unity_Lightmaps": {
+          "type": 4,
+          "flags": 5
+        },
+        "unity_LightmapsInd": {
+          "type": 4,
+          "flags": 5
+        },
+        "unity_ShadowMasks": {
+          "type": 4,
+          "flags": 5
+        },
+        "_AlphaClip": {
+          "type": 2,
+          "flags": 1
+        }
+      },
+      "unusedSavedColors": {
+        "_BaseColor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "_EmissionColor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "_SpecColor": [
+          0.19999995827674866,
+          0.19999995827674866,
+          0.19999995827674866,
+          1.0
+        ]
+      },
+      "forwardTags": {
+        "AlwaysRenderMotionVectors": "False",
+        "LIGHTMODE": "UniversalForwardOnly",
+        "QUEUE": "Transparent",
+        "RenderPipeline": "UniversalPipeline",
+        "RenderType": "Transparent",
+        "UniversalMaterialType": "Unlit"
+      },
+      "shaderCompressedBytecodeSha256": "9f8e9c003146ae3f406a2157a1d3f79dbf2b5fcda6b3c7d01b5e11ca6f83baba",
+      "forwardMaterialOffsets": {
+        "_Texture2Color": 0,
+        "_Color": 16,
+        "_Color2": 32,
+        "_Remap": 48,
+        "_Zoom": 56,
+        "_Texture2Scale": 60,
+        "_VertexColor": 64,
+        "_Metalic": 72
+      },
+      "textures": {
+        "_Texture": {
+          "name": "A_Texture 72",
+          "sourceFile": "resources.assets",
+          "pathId": 733,
+          "width": 1024,
+          "height": 1024,
+          "scale": {
+            "x": 1.0,
+            "y": 1.0
+          },
+          "offset": {
+            "x": 0.0,
+            "y": 0.0
+          }
+        },
+        "_Texture2": {
+          "name": "A_Crack (2)",
+          "sourceFile": "resources.assets",
+          "pathId": 706,
+          "width": 1024,
+          "height": 1024,
+          "scale": {
+            "x": 1.0,
+            "y": 1.0
+          },
+          "offset": {
+            "x": 0.0,
+            "y": 0.0
+          }
+        }
+      },
+      "colorComputation": {
+        "evidence": "Direct3D11 Forward pixel bytecode disassembly; UnityPerMaterial offsets map _Texture2Color, _Color, _Color2 and _Remap to cb3[0..3]",
+        "surface": "lerp(_Texture2Color.rgb, lerp(_Color, _Color2, smoothstep(_Remap.x, _Remap.y, _Texture.r)).rgb, _Texture2.r)",
+        "alpha": "_Color.a and _Color2.a blend the tinted surface with refracted scene color; output alpha instead uses scene-depth intersection and vertex color",
+        "fallback": "Use declared primary _Color for the static color-only approximation; do not use undeclared saved _BaseColor or reinterpret color alpha as opacity"
+      }
+    },
+    {
       "name": "M_Lava",
       "shader": "Lava",
       "sourceFile": "sharedassets4.assets",
