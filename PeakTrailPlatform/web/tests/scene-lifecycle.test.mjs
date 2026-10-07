@@ -436,6 +436,33 @@ test("failed enclosure loads dispose their base model and do not show a deceptiv
   assert.equal(scene.geometryLoads.size, 0);
 });
 
+test("chapter ready waits for its background landmark and context stays outside terrain", async () => {
+  const { scene, requests } = fixture();
+  let completeContext;
+  const contextPromise = new Promise(resolve => { completeContext = resolve; });
+  let selection;
+  scene.enclosureContext = { setSelection(pack, layer, options) { selection = { pack, layer, options }; return contextPromise; } };
+  const pending = scene.ensureGeometryLayers();
+  const terrain = model(); requests[0].resolve(terrain); await flush();
+  assert.equal(selection.layer.segment, 0);
+  assert.equal(selection.options.includeContext, true);
+  assert.equal(selection.options.isCurrent(), true);
+  assert.equal(scene.statuses.some(([status]) => status === "ready"), false);
+  assert.deepEqual(scene.terrainRoot.children[0].children, [terrain]);
+  completeContext(true); await pending;
+  assert.equal(scene.statuses.at(-1)[0], "ready");
+});
+
+test("background landmark expands camera framing without changing route clipping bounds", () => {
+  const { scene } = fixture();
+  scene.mapPack.layers[0] = { ...scene.mapPack.layers[0], minX: -50, minY: 600, minZ: 1600, maxX: 50, maxY: 908, maxZ: 1900 };
+  scene.enclosureContext = { bounds: { min: [-100, 805, 1800], max: [100, 1226, 2300] } };
+  const original = JSON.stringify(scene.mapPack.layers);
+  assert.deepEqual(scene.cameraFitBounds(), { min: [-100, 600, 1600], max: [100, 1226, 2300] });
+  assert.deepEqual(scene.viewBounds(), { min: [-50, 600, 1600], max: [50, 908, 1900] });
+  assert.equal(JSON.stringify(scene.mapPack.layers), original);
+});
+
 test("an old map load cannot borrow a new map's enclosure metadata", async () => {
   const { scene, requests } = fixture();
   scene.mapPack.mapEnclosures = { enclosures: [{ segment: 0, objectId: 'old-shell' }] };

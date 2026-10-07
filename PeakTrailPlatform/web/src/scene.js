@@ -17,6 +17,20 @@ import { FollowTerrainQuery } from "./follow-terrain.js";
 import { SourceWaterRenderer } from "./source-water-renderer.js";
 import { nadirCameraBounds } from "./nadir-camera-bounds.js";
 import { CommunityRouteOverlay } from "./community-route-overlay.js";
+import { EnclosureContextRenderer } from "./enclosure-context-renderer.js";
+
+function collectWaterDepthEntries(root, heightScale) {
+  const entries = [];
+  root.traverse((mesh) => {
+    if (!mesh.isMesh) return;
+    for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+      if (!material?.userData?.peakWaterDepth) continue;
+      material.uniforms.heightScale.value = heightScale;
+      entries.push({ group: mesh, depthMaterial: material });
+    }
+  });
+  return entries;
+}
 
 const PLAYER_COLORS = [
   "#efb74e",
@@ -219,6 +233,8 @@ export class TrailScene {
       onModeChange: (mode) => this.canvas.dispatchEvent(new CustomEvent("cameramodechange", { detail: { mode, help: REPLAY_CAMERA_HELP } })) });
     this.worldRenderer = new WorldRenderer(canvas);
     this.sourceWater = new SourceWaterRenderer();
+    this.enclosureContext = new EnclosureContextRenderer({ THREE, loadGeometry: loadGameGeometry, disposeObject });
+    this.waterDepthEntries = [];
     this.fogDepthPass = new FogDepthPass(THREE);
     this.gameAssetPack = null;
     this.lastFrameTime = null;
@@ -232,6 +248,7 @@ export class TrailScene {
     this.communityOverlay = new CommunityRouteOverlay();
     this.worldRoot.add(this.gridRoot, this.sourceWater.root, this.terrainRoot, this.trailRoot, this.worldRenderer.root);
     this.worldRoot.add(this.communityOverlay.root);
+    this.worldRoot.add(this.enclosureContext.root);
     // PEAK's world is Unity left-handed; three is right-handed. Rendering the raw
     // coordinates unchanged mirrors every horizontal view (a game-right landmark
     // appears game-left). Negating Z of the whole rendered world is the standard
@@ -277,7 +294,8 @@ export class TrailScene {
     else this.controls.update();
     this.updateCameraMarkerVisibility();
     this.fogDepthPass.render({ renderer: this.renderer, scene: this.scene, camera: this.camera,
-      fogEntries: this.worldRenderer.entries.values(), hiddenRoots: [this.trailRoot, this.gridRoot, this.communityOverlay?.root].filter(Boolean) });
+      fogEntries: this.worldRenderer.entries.values(), depthEntries: this.waterDepthEntries,
+      hiddenRoots: [this.trailRoot, this.gridRoot, this.communityOverlay?.root].filter(Boolean) });
     this.renderer.render(this.scene, this.camera);
     this.updatePlayerLabelPositions();
     this.worldRenderer.projectLabels(this.camera, this.viewportWidth, this.viewportHeight, true);
@@ -323,6 +341,8 @@ export class TrailScene {
     this.geometryLoads.clear();
     this.followTerrain?.setRoots([]);
     this.followTerrainDirty = true;
+    this.enclosureContext?.clear();
+    this.waterDepthEntries = [];
     disposeObject(this.terrainRoot);
     disposeObject(this.trailRoot);
     this.playerObjects.clear();
@@ -555,6 +575,11 @@ export class TrailScene {
         }
         if (!group.userData.loaded) throw new Error(`第 ${layer.segment} 关真实网格未能就绪`);
       }
+      if (!isCurrent()) return;
+      await this.enclosureContext?.setSelection(this.mapPack, this.selectedLayer(), {
+        includeContext: selected !== null, origin: this.origin,
+        signal: this.geometryAbort.signal, isCurrent,
+      });
       if (!isCurrent()) return;
       // A single-chapter view keeps only that chapter's GPU resources resident.
       if (selected !== null) {
@@ -1274,6 +1299,8 @@ export class TrailScene {
     if (this.communityOverlay) this.communityOverlay.root.scale.y = this.heightScale;
     this.worldRenderer.root.scale.y = this.heightScale;
     if (this.sourceWater) this.sourceWater.root.scale.y = this.heightScale;
+    if (this.enclosureContext) this.enclosureContext.root.scale.y = this.heightScale;
+    for (const entry of this.waterDepthEntries || []) entry.depthMaterial.uniforms.heightScale.value = this.heightScale;
   }
 
   setTrackVisibility(visible) {
@@ -1299,6 +1326,7 @@ export class TrailScene {
     this.communityOverlay?.clear();
     this.activeSegment = next;
     ++this.geometrySelectionToken;
+    this.enclosureContext?.clear();
     this.applyLayerVisibility();
     if (this.trace) this.buildTracks();
     this.setTime(this.currentTime);
@@ -1310,7 +1338,7 @@ export class TrailScene {
     void this.ensureGeometryLayers().then(() => {
       if (this.followTargetId != null || selected !== this.activeSegment || buildRevision !== this.buildToken
           || selectionRevision !== this.geometrySelectionToken || cameraRevision !== this.cameraSelectionRevision) return;
-      if (this.summitCameraBounds() || this.nadirGeometryBounds()) this.fitView();
+      if (this.summitCameraBounds() || this.nadirGeometryBounds() || this.enclosureContext?.bounds) this.fitView();
       else if (isInteriorLayer(this.selectedLayer(), this.mapPack?.route)) this.enterInteriorView(false);
     });
   }
@@ -1332,6 +1360,8 @@ export class TrailScene {
         ? !isVoid
         : mesh.userData.segment === this.activeSegment;
     }
+    // Rebuild only on geometry/selection changes; no per-frame scene traversal.
+    this.waterDepthEntries = collectWaterDepthEntries(this.terrainRoot, this.heightScale);
   }
 
   getPlayerColor(playerId) {
@@ -1389,7 +1419,17 @@ export class TrailScene {
     return group.userData.nadirCameraBounds;
   }
 
-  cameraFitBounds() { return this.summitCameraBounds() || this.nadirGeometryBounds() || this.viewBounds(); }
+  cameraFitBounds() {
+    const bounds = this.summitCameraBounds() || this.nadirGeometryBounds() || this.viewBounds();
+    const context = this.useMap && this.enclosureContext?.bounds;
+    if (!context) return bounds;
+    // Camera framing includes the exit landmark. Player/trail clipping still
+    // uses viewBounds and the recorded chapter's original source coordinates.
+    return {
+      min: bounds.min.map((value, axis) => Math.min(value, context.min[axis])),
+      max: bounds.max.map((value, axis) => Math.max(value, context.max[axis])),
+    };
+  }
 
   enterInteriorView(focus = true) {
     this.setFollowTarget(null);
@@ -1513,6 +1553,8 @@ export class TrailScene {
     this.worldRenderer.dispose();
     this.communityOverlay?.dispose();
     this.sourceWater?.dispose();
+    this.enclosureContext?.dispose();
+    this.waterDepthEntries = [];
     this.fogDepthPass.dispose();
     this.controls.dispose();
     this.geometryAbort?.abort();

@@ -11,7 +11,13 @@ const effects = {
   M_Water_Onsen: {kind: 'water', shader: 'GD/Water-GD', pathId: 101, property: '_WaterColorPrimary', flags: 0,
     rgba: [0.08410467207431793, 0.3338019847869873, 0.3962264060974121, 0], depth: 4},
   M_Water_swamp: {kind: 'water', shader: 'GD/Water-GD', pathId: 107, property: '_WaterColorPrimary', flags: 0,
-    rgba: [0.7053561806678772, 0.7452830076217651, 0.28475427627563477, 0], depth: 15.960000038146973},
+    rgba: [0.7053561806678772, 0.7452830076217651, 0.28475427627563477, 0], depth: 15.960000038146973,
+    // The depth shader multiplies its mixed surface by this independent tint.
+    // Omitting it turns the whole swamp into an unnaturally bright yellow plate.
+    waterDepth: {
+      shallow: [0.14728191494941711, 0.06274504214525223, 0.20784303545951843, 0],
+      tint: [0.36078423261642456, 0.5154326558113098, 0.6235294342041016, 0], flags: 0,
+    }},
   'M_Void Water': {kind: 'water', shader: 'GD/Water-GD', pathId: 99, property: '_WaterColorPrimary', flags: 0,
     rgba: [0, 0, 0, 0], depth: 0},
   'FogSurface void': {kind: 'fog', shader: 'GD/FogSurface', pathId: 20, property: '_Color', flags: 0,
@@ -103,6 +109,17 @@ export function getSourceEffectMaterial(buildId, materialName, shader) {
       tintProperty: tintRgb ? {property: '_Tint', storedColor: [...effect.tint],
         propertyFlags: effect.tintFlags, sourceColorLinear: [...tintRgb]} : null,
       depthProperty: effect.depth === undefined ? null : {_Depth: effect.depth},
+      waterDepth: effect.waterDepth ? {
+        primaryLinear: [...primaryRgb],
+        shallowLinear: effect.waterDepth.shallow.slice(0, 3).map(linearComponent),
+        tintLinear: effect.waterDepth.tint.slice(0, 3).map(linearComponent),
+        depth: effect.depth,
+        shallowStored: [...effect.waterDepth.shallow], tintStored: [...effect.waterDepth.tint],
+        propertyFlags: effect.waterDepth.flags,
+        shaderEvidenceBuildId: 25739797, crossBuildShaderIdentityVerified: false,
+        formula: 'smoothstep(0, 1, min(10 * min(abs(sceneEyeDepth - surfaceEyeDepth) / _Depth, 1), 1))',
+        approximation: 'Shallow replaces the missing refracted scene colour; primary branch without noise, secondary colour, foam or waves; native alpha is not reconstructed',
+      } : null,
       opacityProperty: effect.opacity === undefined ? null : {_Opacity: effect.opacity},
       alphaShape: effect.kind === 'antisphere' ? {_Alpha: 1, _Power: effect.power,
         _SoftInverse: effect.softInverse, _BorderLight: effect.borderLight} : null,
@@ -116,6 +133,7 @@ export function getSourceEffectMaterial(buildId, materialName, shader) {
       pass: opaque ? {srcBlend: 1, dstBlend: 0, zWrite: 1}
         : {srcBlend: 5, dstBlend: 10, zWrite: effect.depthWrite ? 1 : 0},
       approximation: lava ? 'HDR base emitted without flow/noise/edge shader'
+        : effect.waterDepth ? 'Source primary/shallow depth mix multiplied by WaterTint; refraction, secondary noise and foam are not reproduced; alpha fixed to 1'
         : effect.kind === 'water' ? 'Primary water color without depth/refraction/foam; alpha fixed to 1'
           : effect.kind === 'antisphere' ? 'Transparent Fresnel shell from source alpha-shape controls; animated top texture and scene-depth fade are not reproduced'
           : effect.kind === 'jellyfish' ? 'Source primary purple color; two texture-driven color layers, vertex tint, refraction and scene-depth alpha are not reproduced; alpha fixed to 1'

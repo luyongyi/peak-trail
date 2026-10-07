@@ -37,6 +37,32 @@ export function enclosureGeometryReference(entry) {
   return `../../enclosures/${entry.geometry}`;
 }
 
+/** The adjacent Citadel is a source-authored landmark at the Swamp exit.
+ * Include its exterior only for the audited single-chapter view. Its segment,
+ * coordinates and identity stay unchanged; it does not assign players or
+ * routes to the next chapter. Overview loads each shell with its own chapter. */
+export function chapterEnclosures(mapPack, layer, { includeContext = false } = {}) {
+  if (!Number.isInteger(layer?.segment)
+      || !mapPack?.layers?.some(entry => entry.segment === layer.segment)) return [];
+  const enclosures = normalizeMapEnclosures(mapPack.mapEnclosures, mapPack)?.enclosures || [];
+  const own = enclosures.filter(entry => entry.segment === layer.segment);
+  const route = mapPack.route;
+  if (!includeContext || mapPack.identityVersion !== 3 || String(mapPack.gameBuildId) !== '25306743'
+      || route?.authority !== 'serialized-map-handler' || route.branch !== 'swamp-temple'
+      || layer.segment !== 3 || String(layer.biome).toLowerCase() !== 'swamp') return own;
+  const current = route.segments?.find(entry => entry.index === 3);
+  const next = route.segments?.find(entry => entry.index === 4);
+  const terminal = mapPack.layers.find(entry => entry.segment === 4);
+  if (current?.stageId !== 'swamp' || current.name !== 'Swamp_Segment'
+      || next?.stageId !== 'temple' || next.name !== 'Temple_Segment'
+      || String(current.biome).toLowerCase() !== 'swamp'
+      || String(next.biome).toLowerCase() !== 'swamp'
+      || String(terminal?.biome).toLowerCase() !== 'swamp') return own;
+  const ids = new Set(own.map(entry => entry.objectId));
+  return [...own, ...enclosures.filter(entry => entry.segment === 4
+    && entry.sourceRootName === 'Gloom Temple' && !ids.has(entry.objectId))];
+}
+
 /** Select a chapter only when source coordinates disambiguate it. In overview,
  * shared progression is not evidence of an individual player's current room. */
 export function followLayerAtPosition(mapPack, selectedSegment, unityPosition) {

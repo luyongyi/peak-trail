@@ -134,3 +134,18 @@ test("HDR lava remains unclamped while water shader alpha is not misread as invi
   water.baseColor[0] = 100;
   assert.notEqual(getSourceEffectMaterial("25306743", "M_Water_forest", "GD/Water-GD").baseColor[0], 100);
 });
+
+test("swamp depth inputs retain independent source tint and shallow colours", () => {
+  const source = evidence.materials.find(material => material.name === "M_Water_swamp");
+  const parameters = getSourceEffectMaterial("25306743", source.name, source.shader).source.waterDepth;
+  for (const [field, property] of [["primaryLinear", "_WaterColorPrimary"], ["shallowLinear", "_WaterColorShallow"], ["tintLinear", "_WaterTint"]]) {
+    assert.equal(source.colors[property].flags, parameters.propertyFlags);
+    assert.deepEqual(parameters[field], source.colors[property].rgba.slice(0, 3).map(linear));
+  }
+  assert.deepEqual(parameters.tintStored, source.colors._WaterTint.rgba);
+  assert.equal(parameters.depth, source.floats._Depth);
+  assert.equal(parameters.shaderEvidenceBuildId, 25739797);
+  assert.equal(parameters.crossBuildShaderIdentityVerified, false);
+  assert.match(parameters.approximation, /native alpha is not reconstructed/);
+  assert.equal(getSourceEffectMaterial("25306743", "M_Water_forest", source.shader).source.waterDepth, null);
+});

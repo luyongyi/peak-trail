@@ -4,6 +4,7 @@ import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { decodeGeometryBytes, GEOMETRY_FORMATS } from "./geometry-bytes.js";
 import { positiveInstanceTransform } from "./geometry-matrices.js";
 import { getSourceEffectMaterial } from "./source-materials.js";
+import { applySourceWaterDepth } from "./source-water-material.js";
 import { isExplosiveMineMaterial, recordedHiddenMineIndices } from "./mine-visibility.js";
 import { sha256Hex } from "./sha256.js";
 import { isProjectionProxyMaterial, shadowOnlyNodeIndices } from "./source-render-policy.js";
@@ -46,6 +47,7 @@ function applySourceEffectMaterial(material, gameBuildId) {
   material.alphaTest = 0;
   if (effect.source.cull === 2) material.side = THREE.FrontSide;
   material.userData.peakSourceEffect = effect;
+  applySourceWaterDepth(material, effect);
   if (effect.kind === "antisphere") {
     // Unity's AntiSphere Forward pass is alpha-blended. Its output alpha comes
     // from view/depth/noise controls, not _BaseColor.a. Preserve the real two
@@ -158,7 +160,7 @@ function useExactInstanceNormals(material) {
       "#include <defaultnormal_vertex>\n#ifdef USE_INSTANCING\ntransformedNormal = normalMatrix * transpose(inverse(mat3(instanceMatrix))) * objectNormal;\n#ifdef FLIP_SIDED\ntransformedNormal = -transformedNormal;\n#endif\n#endif");
   };
   material.customProgramCacheKey = () => material.userData?.peakSourceEffect
-    ? `peak-source-effect-${material.userData.peakSourceEffect.kind}-affine-normals-v1`
+    ? `peak-source-effect-${material.userData.peakSourceEffect.kind}${material.userData.peakWaterDepth ? '-swamp-depth-v1' : ''}-affine-normals-v1`
     : material.userData?.peakTerrain
       ? material.userData.peakTerrain.sourceColors?.shader === "W/Peak_Rock"
         ? "peak-terrain-rock-base-map-affine-normals-v2" : "peak-terrain-affine-normals-v1"

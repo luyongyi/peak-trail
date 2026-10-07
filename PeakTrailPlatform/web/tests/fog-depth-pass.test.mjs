@@ -158,3 +158,33 @@ test("Map.values iterator is consumed once and matrix uniforms are reused betwee
   assert.equal(fog.fogMaterial.uniforms.depthResolution.value, resolution);
   assert.equal(matrix.elements[12], 1);
 });
+
+test("water and fog share one opaque-depth render, excluding both sampled surfaces", () => {
+  const { pass, options, scene, renderer, fog } = fixture();
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.MeshStandardMaterial());
+  water.material.uniforms = {};
+  scene.add(water);
+  const previous = renderer.render;
+  renderer.render = function () { previous.call(this); assert.equal(water.visible, false); };
+  options.depthEntries = [{ group: water, depthMaterial: water.material }];
+  assert.equal(pass.render(options), true);
+  assert.equal(renderer.calls, 1, "depth sampling must not add a second render for water");
+  assert.equal(water.visible, true);
+  assert.equal(water.material.uniforms.sceneDepth.value, fog.fogMaterial.uniforms.sceneDepth.value);
+  assert.equal(water.material.uniforms.hasSceneDepth.value, true);
+  water.visible = false;
+  pass.render(options);
+  assert.equal(water.material.uniforms.hasSceneDepth.value, false);
+  assert.equal(water.material.uniforms.sceneDepth.value, null);
+  water.geometry.dispose(); water.material.dispose(); pass.dispose();
+});
+
+test("water alone receives scene depth without requiring a fog volume", () => {
+  const { pass, options, fog, renderer } = fixture();
+  options.fogEntries = [];
+  options.depthEntries = [{ group: fog.group, depthMaterial: fog.fogMaterial }];
+  assert.equal(pass.render(options), true);
+  assert.equal(renderer.calls, 1);
+  assert.equal(fog.fogMaterial.uniforms.hasSceneDepth.value, true);
+  pass.dispose();
+});

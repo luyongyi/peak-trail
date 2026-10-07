@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { normalizeMapEnclosures, enclosureGeometryReference, followLayerAtPosition } from '../src/map-enclosures.js';
+import { normalizeMapEnclosures, enclosureGeometryReference, chapterEnclosures, followLayerAtPosition } from '../src/map-enclosures.js';
 
 const fixture = () => {
   const pack = { mapPackId: `sha256-${'a'.repeat(64)}`, gameBuildId: '25306743', sceneName: 'Level_17', mapSlot: 17,
@@ -52,4 +52,78 @@ test('overview identifies only spatially unambiguous chapters, never the shared 
   assert.equal(followLayerAtPosition(pack, null, [1000, 300, 0]), null);
   assert.equal(followLayerAtPosition(pack, 4, [0, 210, 0]).segment, 4);
   assert.equal(followLayerAtPosition(pack, 9, [0, 300, 0]), null);
+});
+
+function contextualFixture() {
+  const { pack, evidence } = fixture();
+  pack.identityVersion = 3;
+  pack.layers = [{ segment: 3, biome: 'Swamp' }, { segment: 4, biome: 'Swamp' }];
+  pack.route = { authority: 'serialized-map-handler', branch: 'swamp-temple', segments: [
+    { index: 3, biome: 'Swamp', stageId: 'swamp', name: 'Swamp_Segment' },
+    { index: 4, biome: 'Swamp', stageId: 'temple', name: 'Temple_Segment' },
+  ] };
+  pack.mapEnclosures = evidence;
+  evidence.enclosures[0].geometryUrl = '/data/maps/enclosures/citadel.glb.gz';
+  return pack;
+}
+
+test('single-chapter Swamp reuses the exact adjacent Citadel exterior without rewriting stage or coordinates', () => {
+  const pack = contextualFixture(), before = JSON.stringify(pack);
+  const result = chapterEnclosures(pack, pack.layers[0], { includeContext: true });
+  assert.equal(result.length, 1);
+  assert.deepEqual(result[0], pack.mapEnclosures.enclosures[0]);
+  assert.equal(result[0].segment, 4);
+  assert.equal(result[0].geometryUrl, '/data/maps/enclosures/citadel.glb.gz');
+  result[0].interiorReference[0] = 999;
+  result[0].meshBounds.max[1] = 999;
+  assert.equal(JSON.stringify(pack), before);
+});
+
+test('overview and the Citadel chapter keep one native shell, with no contextual duplication', () => {
+  const pack = contextualFixture();
+  assert.deepEqual(chapterEnclosures(pack, pack.layers[0]), []);
+  for (const includeContext of [false, true]) {
+    const result = chapterEnclosures(pack, pack.layers[1], { includeContext });
+    assert.equal(result.length, 1);
+    assert.equal(new Set(result.map(entry => entry.objectId)).size, result.length);
+  }
+  const overview = pack.layers.flatMap(layer => chapterEnclosures(pack, layer));
+  assert.equal(overview.length, 1);
+});
+
+test('contextual exterior is restricted to the audited source build, branch, roots and adjacent stages', () => {
+  const mutations = [
+    pack => pack.gameBuildId = pack.mapEnclosures.gameBuildId = '25739797',
+    pack => pack.identityVersion = 2,
+    pack => pack.route.authority = 'guessed-calendar',
+    pack => pack.route.branch = 'volcano-kiln',
+    pack => pack.route.branch = 'unknown',
+    pack => pack.route.segments[0].stageId = 'caldera',
+    pack => pack.route.segments[1].stageId = 'kiln',
+    pack => pack.route.segments[0].name = 'Caldera_Segment',
+    pack => pack.route.segments[1].name = 'Volcano_Segment',
+    pack => pack.route.segments[0].biome = 'Volcano',
+    pack => pack.route.segments[1].biome = 'Volcano',
+    pack => pack.route.segments[1].index = 5,
+    pack => pack.layers[0].biome = 'Volcano',
+    pack => pack.layers[1].biome = 'Volcano',
+    pack => pack.layers.pop(),
+    pack => pack.mapEnclosures.enclosures[0].sourceRootName = 'VolcanoModel',
+    pack => pack.mapEnclosures.sourceSceneSha256 = 'd'.repeat(64),
+    pack => pack.mapEnclosures.mapPackId = `sha256-${'d'.repeat(64)}`,
+  ];
+  for (const mutate of mutations) {
+    const pack = contextualFixture(); mutate(pack);
+    assert.deepEqual(chapterEnclosures(pack, pack.layers[0], { includeContext: true }), [], mutate.toString());
+  }
+  assert.deepEqual(chapterEnclosures(contextualFixture(), { segment: 9, biome: 'Swamp' }, { includeContext: true }), []);
+  assert.deepEqual(chapterEnclosures(null, null, { includeContext: true }), []);
+});
+
+test('native shells remain supported outside the contextual build while malformed duplicate sidecars fail closed', () => {
+  const pack = contextualFixture();
+  pack.gameBuildId = pack.mapEnclosures.gameBuildId = '25739797';
+  assert.equal(chapterEnclosures(pack, pack.layers[1], { includeContext: true }).length, 1);
+  pack.mapEnclosures.enclosures.push({ ...pack.mapEnclosures.enclosures[0] });
+  assert.deepEqual(chapterEnclosures(pack, pack.layers[1], { includeContext: true }), []);
 });

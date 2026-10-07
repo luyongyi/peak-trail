@@ -15,10 +15,13 @@ import { isProjectionProxyMaterial, shadowOnlyNodeIndices } from "../src/source-
 // ports so the loader and batching contracts run without a WebGL canvas.
 const source = (await readFile(new URL("../src/geometry-loader.js", import.meta.url), "utf8"))
   .replace(/^import .*;\r?\n/gm, "").replace(/^export (?=(?:async )?function )/gm, "");
+const waterSource = (await readFile(new URL("../src/source-water-material.js", import.meta.url), "utf8"))
+  .replace(/^import .*;\r?\n/gm, "").replace(/^export (?=function )/gm, "");
+const applySourceWaterDepth = new Function("THREE", `${waterSource}\nreturn applySourceWaterDepth;`)(THREE);
 const compile = (ports = {}) => new Function(
-  "THREE", "GLTFLoader", "MeshoptDecoder", "decodeGeometryBytes", "GEOMETRY_FORMATS", "positiveInstanceTransform", "getSourceEffectMaterial", "isExplosiveMineMaterial", "recordedHiddenMineIndices", "sha256Hex", "fetch", "crypto", "isProjectionProxyMaterial", "shadowOnlyNodeIndices",
+  "THREE", "GLTFLoader", "MeshoptDecoder", "decodeGeometryBytes", "GEOMETRY_FORMATS", "positiveInstanceTransform", "getSourceEffectMaterial", "isExplosiveMineMaterial", "recordedHiddenMineIndices", "sha256Hex", "fetch", "crypto", "isProjectionProxyMaterial", "shadowOnlyNodeIndices", "applySourceWaterDepth",
   `${source}\nreturn { loadGameGeometry, batchStaticMeshes, updateRecordedMineVisibility, updateMapFogSurfaceVisibility, verifiableTopBlend };`,
-)(THREE, ports.GLTFLoader, {}, ports.decode || decodeGeometryBytes, GEOMETRY_FORMATS, positiveInstanceTransform, getSourceEffectMaterial, isExplosiveMineMaterial, recordedHiddenMineIndices, sha256Hex, ports.fetch, ports.crypto || webcrypto, isProjectionProxyMaterial, ports.shadowOnlyNodeIndices || shadowOnlyNodeIndices);
+)(THREE, ports.GLTFLoader, {}, ports.decode || decodeGeometryBytes, GEOMETRY_FORMATS, positiveInstanceTransform, getSourceEffectMaterial, isExplosiveMineMaterial, recordedHiddenMineIndices, sha256Hex, ports.fetch, ports.crypto || webcrypto, isProjectionProxyMaterial, ports.shadowOnlyNodeIndices || shadowOnlyNodeIndices, applySourceWaterDepth);
 
 test("audited shadow-only affine/GPU panels are omitted, same-name solid props remain", () => {
   const { batchStaticMeshes } = compile();
@@ -323,6 +326,27 @@ test("source effect adaptation never guesses across build, name or shader mismat
     assert.equal(material.customProgramCacheKey(), "peak-terrain-affine-normals-v1");
     geometry.dispose(); material.dispose(); root.children.forEach((mesh) => mesh.dispose());
   }
+});
+
+test("swamp depth hook survives affine batching and cannot share ordinary water's shader program", () => {
+  const sourceScene = new THREE.Group();
+  const materials = ["M_Water_swamp", "M_Water_forest"].map(name => {
+    const material = new THREE.MeshStandardMaterial(); material.name = name;
+    material.userData.peakTerrain = { sourceMaterial: name, sourceColors: { shader: "GD/Water-GD" } };
+    sourceScene.add(new THREE.Mesh(new THREE.PlaneGeometry(), material));
+    return material;
+  });
+  compile().batchStaticMeshes(sourceScene, "25306743");
+  const [swamp, forest] = materials;
+  const shader = { uniforms: {}, vertexShader: THREE.ShaderLib.standard.vertexShader, fragmentShader: THREE.ShaderLib.standard.fragmentShader };
+  swamp.onBeforeCompile(shader, {});
+  assert.equal(shader.uniforms.sceneDepth, swamp.uniforms.sceneDepth);
+  assert.match(shader.fragmentShader, /peakWaterTint/);
+  assert.match(shader.vertexShader, /transpose\(inverse\(mat3\(instanceMatrix\)\)\)/);
+  assert.notEqual(swamp.customProgramCacheKey(), forest.customProgramCacheKey());
+  assert.ok(swamp.color.r < .05, "missing final tint must not restore the bright yellow primary");
+  assert.equal(forest.userData.peakWaterDepth, undefined);
+  sourceScene.children.forEach(mesh => { mesh.geometry.dispose(); mesh.material.dispose(); });
 });
 
 test("fungal correction requires the archived neutral Tint and never recolours pale bell submeshes", () => {

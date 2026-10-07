@@ -14,7 +14,7 @@ function copyUniform(material, name, value) {
   else uniform(material, name, value.clone());
 }
 
-/** Scene-depth input for analytic fog. Does not own the scene or fog materials. */
+/** Shared opaque depth for fog and audited water. Does not own their materials. */
 export class FogDepthPass {
   constructor(THREE) {
     this.THREE = THREE;
@@ -63,13 +63,16 @@ export class FogDepthPass {
     return visible;
   }
 
-  render({ renderer, scene, camera, fogEntries = [], hiddenRoots = [] }) {
+  render({ renderer, scene, camera, fogEntries = [], depthEntries = [], hiddenRoots = [] }) {
     this.disableMaterials();
     if (this.disposed) return false;
-    const entries = [...fogEntries].filter((entry) => entry?.group && entry.fogMaterial);
+    const entries = [...fogEntries, ...depthEntries].filter((entry) => entry?.group
+      && (entry.fogMaterial || entry.depthMaterial)).map((entry) => ({
+        group: entry.group, material: entry.fogMaterial || entry.depthMaterial,
+      }));
     for (const entry of entries) {
-      uniform(entry.fogMaterial, "hasSceneDepth", false);
-      uniform(entry.fogMaterial, "sceneDepth", null);
+      uniform(entry.material, "hasSceneDepth", false);
+      uniform(entry.material, "sceneDepth", null);
     }
     if (!entries.length) return false;
     // Frustum tests must see the same current transforms as the real render.
@@ -109,7 +112,7 @@ export class FogDepthPass {
       renderer.setRenderTarget(previousTarget, cubeFace, mipLevel);
     }
     for (const entry of visible) {
-      const material = entry.fogMaterial;
+      const material = entry.material;
       uniform(material, "hasSceneDepth", true);
       uniform(material, "sceneDepth", target.depthTexture);
       copyUniform(material, "depthResolution", this.size);

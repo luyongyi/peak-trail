@@ -1,0 +1,132 @@
+{
+  "mapBuildId": 25306743,
+  "material": "M_Water_swamp",
+  "shader": "GD/Water-GD",
+  "asset": "sharedassets4.assets",
+  "pathId": 107,
+  "storedColourEvidence": "source-effect-materials.25306743.json",
+  "colors": {
+    "_WaterColorPrimary": {
+      "rgba": [
+        0.7053561806678772,
+        0.7452830076217651,
+        0.28475427627563477,
+        0.0
+      ],
+      "flags": 0,
+      "linearRgb": [
+        0.4556538982382203,
+        0.5152034070991174,
+        0.06591586153836426
+      ]
+    },
+    "_WaterColorSecodary": {
+      "rgba": [
+        0.34540069103240967,
+        0.058823443949222565,
+        0.3686273694038391,
+        0.0
+      ],
+      "flags": 0,
+      "linearRgb": [
+        0.09776460746716514,
+        0.004776944872623835,
+        0.11193237610620467
+      ]
+    },
+    "_WaterColorShallow": {
+      "rgba": [
+        0.14728191494941711,
+        0.06274504214525223,
+        0.20784303545951843,
+        0.0
+      ],
+      "flags": 0,
+      "linearRgb": [
+        0.018988516315235345,
+        0.005181510799103405,
+        0.03560128178411852
+      ]
+    },
+    "_WaterTint": {
+      "rgba": [
+        0.36078423261642456,
+        0.5154326558113098,
+        0.6235294342041016,
+        0.0
+      ],
+      "flags": 0,
+      "linearRgb": [
+        0.10702305287223476,
+        0.22860441226828587,
+        0.34670408387276264
+      ]
+    },
+    "_WaterTintPreFoam": {
+      "rgba": [
+        1.0,
+        1.0,
+        1.0,
+        0.0
+      ],
+      "flags": 0,
+      "linearRgb": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    }
+  },
+  "parameters": {
+    "_Depth": 15.960000038146973,
+    "_SeaNoiseAmount": 4.650000095367432,
+    "_UseRadialMask": 0.0,
+    "_FoamDepth": 8.739999771118164
+  },
+  "passState": {
+    "srcBlend": 5,
+    "dstBlend": 10,
+    "zWrite": 0,
+    "cull": 0
+  },
+  "bytecodeEvidence": {
+    "auditedShaderBuildId": 25739797,
+    "shaderExport": "GD_Water-GD.json from installed data.unity3d, exported 2026-10-07",
+    "materialValuesMatchArchivedBuild": 25306743,
+    "selectedFragmentIndex": 28,
+    "selectedVertexIndex": 4,
+    "fragmentDxbcSha256": "24cd0c9381971373f0bdd4e7f0c90f77e0744143208c5f7201d4ddec34ff1e95",
+    "crossBuildShaderIdentityVerified": false,
+    "UnityPerMaterialOffsets": {
+      "_WaterColorSecodary": 0,
+      "_WaterTint": 32,
+      "_WaterTintPreFoam": 48,
+      "_WaterColorShallow": 80,
+      "_WaterColorPrimary": 96,
+      "_Depth": 228
+    }
+  },
+  "nativeColourFormula": {
+    "normalizedDepth": "min(abs(sceneLinearEyeDepth - surfaceLinearEyeDepth) / _Depth, 1)",
+    "depthWeight": "smoothstep(0, 1, min(10 * normalizedDepth, 1))",
+    "waterColour": "lerp(_WaterColorPrimary.rgb, _WaterColorSecodary.rgb, seaNoiseTextureProduct * _SeaNoiseAmount)",
+    "shallowColour": "refractedSceneColour + _WaterColorShallow.rgb",
+    "colourSequence": "lerp(shallowColour, waterColour, depthWeight) -> source lighting -> _WaterTintPreFoam -> foam/crud -> _WaterTint",
+    "finalTintEvidence": "mul r3.xyz, r3.xyzx, cb3[2].xyzx"
+  },
+  "nativeAlpha": "Vertex COLOR.r times near-clip fade, optional radial mask and global AntiSphere/fog-field mask. Primary/Shallow/Tint.a and normalizedDepth are not the output opacity. Vertex stage o4.z is linear eye depth, not world height.",
+  "webApproximation": {
+    "scope": "Exact M_Water_swamp / GD/Water-GD in map build 25306743 only",
+    "shaderFeatures": "Source primary/shallow colours and final tint; scene depth uses the source depth weight",
+    "shallowApproximation": "Uses source Shallow alone because the existing pass has depth but no opaque scene-colour texture",
+    "omitted": "Secondary noise texture, refraction scene colour, foam/crud, native lighting and vertex alpha are not reproduced",
+    "opacity": 1,
+    "fallback": "Primary linear RGB multiplied by WaterTint linear RGB, not an invented colour/opacity"
+  },
+  "fogCheck": {
+    "scene": "Level_17",
+    "segment3": "GLB has M_Water_swamp but no FogSurface; blue rectangle cannot be asserted to be duplicated static FogSurface",
+    "segment4": "GLB has a single-material FogSurface mesh; exact map-baseline metadata associates fog to segment4",
+    "blueRockTop": "M_SwampRock_Swampy has source TopColor [.177020311,.228631660,.962264180] sRGB, independent of water"
+  }
+}
