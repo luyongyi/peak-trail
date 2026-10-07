@@ -25,6 +25,16 @@ function applySourceEffectMaterial(material, gameBuildId) {
   const terrain = material.userData?.peakTerrain;
   const effect = getSourceEffectMaterial(gameBuildId, terrain?.sourceMaterial || material.name, terrain?.sourceColors?.shader);
   if (!effect || !material.color || !material.emissive) return false;
+  if (effect.kind === "fungus") {
+    // Correct only legacy packs that exported the verified neutral _Tint as
+    // albedo. A newly authored primary colour must not be multiplied twice.
+    const source = terrain?.sourceColors;
+    const tint = effect.source.tintProperty;
+    if (source?.baseProperty !== "_Tint" || source.baseFlags !== tint.propertyFlags
+        || !Array.isArray(source.baseStored) || source.baseStored.length !== 3
+        || !source.baseStored.every((value, i) => Number.isFinite(value)
+          && Math.abs(value - tint.storedColor[i]) < 1e-7)) return false;
+  }
   // These exact-build source colors approximate only the static effect surface,
   // not Unity's animated lava, depth-based water or volumetric fog shaders.
   material.color.fromArray(effect.baseColor);

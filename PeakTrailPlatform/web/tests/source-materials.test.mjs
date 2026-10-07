@@ -4,6 +4,7 @@ import test from "node:test";
 import { getSourceEffectMaterial } from "../src/source-materials.js";
 
 const evidence = JSON.parse(await readFile(new URL("../../tools/offline-maps/source-effect-materials.25306743.json", import.meta.url), "utf8"));
+const fungalEvidence = JSON.parse(await readFile(new URL("../../tools/offline-maps/source-fungal-colors-evidence.json", import.meta.url), "utf8"));
 const linear = (v) => v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
 
 test("all effect lookup entries reproduce their exact-build raw Unity source evidence", () => {
@@ -88,6 +89,32 @@ test("Roots explosive mushroom uses source orange HDR albedo, not neutral tint o
   assert.equal(mine.opacity, 1);
   assert.match(mine.source.approximation, /multilayer.*not reproduced/);
   assert.notDeepEqual(mine.baseColor, getSourceEffectMaterial("25306743", "M_SporeShroomPoison", "W/Peak_Standard").baseColor);
+});
+
+test("ordinary, Evil and Glow caps retain distinct source albedo and the real Tint multiplier", () => {
+  for (const source of fungalEvidence.materialColors) {
+    const effect = getSourceEffectMaterial("25306743", source.name, source.shader);
+    assert.equal(effect.kind, "fungus");
+    assert.deepEqual(effect.baseColor, source.baseTimesTintLinearRgb);
+    assert.deepEqual(effect.source.storedColor, source.primary.storedRgba);
+    assert.deepEqual(effect.source.tintProperty.storedColor, source.tint.storedRgba);
+    assert.equal(effect.source.propertyFlags, 16);
+    assert.equal(effect.source.tintProperty.propertyFlags, 16);
+    assert.deepEqual(effect.emissive, [0, 0, 0]);
+    assert.equal(effect.transparent, false);
+    assert.equal(effect.opacity, 1, "layer-colour alpha is not surface transparency");
+    assert.equal(effect.depthWrite, true);
+    assert.equal(effect.source.mapBuildId, 25306743);
+    assert.equal(effect.source.buildId, source.published25306743Evidence.primaryStoredRgbaMatchesInstalledExactly
+      ? 25306743 : 25739797, "cross-build primary evidence stays explicit");
+    assert.equal(getSourceEffectMaterial("25739797", source.name, source.shader), null);
+    assert.equal(getSourceEffectMaterial("25306743", source.name, "unknown"), null);
+  }
+  const ordinary = getSourceEffectMaterial("25306743", "M_Mushroom_tree", "W/Peak_Standard");
+  const evil = getSourceEffectMaterial("25306743", "M_Mushroom_tree_evil", "W/Peak_Standard");
+  assert.notDeepEqual(ordinary.baseColor, evil.baseColor);
+  assert.equal(getSourceEffectMaterial("25306743", "M_MushroomBase", "W/Peak_Standard"), null,
+    "pale bell shells and stalks must not receive red cap colour");
 });
 
 test("source effects require exact build, material name and shader", () => {

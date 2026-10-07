@@ -43,6 +43,24 @@ const effects = {
     rgba: [0.14036913216114044, 0.10980391502380371, 0.35686275362968445, 1]},
   M_SporeShroomSpores: {kind: 'hazard', shader: 'W/Peak_Standard', pathId: 147, property: '_BaseColor', flags: 16,
     rgba: [0.24045296013355255, 0.40566039085388184, 0.10906906425952911, 1]},
+  // Giant cap colours use _BaseColor multiplied by the independent _Tint.
+  // The pale bell's outer shell uses M_MushroomBase, so it keeps its colour.
+  // Audit: tools/offline-maps/source-fungal-colors-evidence.json. The normal
+  // cap is also verified against archived 25306743 source properties. Evil
+  // and Glow primary colours were read from 25739797; their published _Tint
+  // inputs match, while full shader/layer identity across builds is unclaimed.
+  M_Mushroom_tree: {kind: 'fungus', shader: 'W/Peak_Standard', asset: 'sharedassets3.assets', pathId: 69,
+    property: '_BaseColor', flags: 16, evidenceBuildId: 25306743,
+    rgba: [0.5377358198165894, 0.04819329082965851, 0.06242681294679642, 1],
+    tint: [0.4842766523361206, 0.4842766523361206, 0.4842766523361206, 1], tintFlags: 16},
+  M_Mushroom_tree_evil: {kind: 'fungus', shader: 'W/Peak_Standard', pathId: 142,
+    property: '_BaseColor', flags: 16, evidenceBuildId: 25739797,
+    rgba: [0.27358490228652954, 0.08130117505788803, 0.14009465277194977, 1],
+    tint: [0.4842766523361206, 0.4842766523361206, 0.4842766523361206, 1], tintFlags: 16},
+  'Glow Shroom': {kind: 'fungus', shader: 'W/Peak_Standard', pathId: 26,
+    property: '_BaseColor', flags: 16, evidenceBuildId: 25739797,
+    rgba: [0.18783606588840485, 0, 0.3207547068595886, 1],
+    tint: [0.7490195631980896, 0.7490195631980896, 0.7490195631980896, 1], tintFlags: 16},
 };
 
 function linearComponent(value) {
@@ -53,9 +71,11 @@ export function getSourceEffectMaterial(buildId, materialName, shader) {
   if (String(buildId) !== '25306743' || !Object.hasOwn(effects, materialName)) return null;
   const effect = effects[materialName];
   if (effect.shader !== shader) return null;
-  const rgb = effect.rgba.slice(0, 3).map(v => effect.flags & 16 ? v : linearComponent(v));
+  const primaryRgb = effect.rgba.slice(0, 3).map(v => effect.flags & 16 ? v : linearComponent(v));
+  const tintRgb = effect.tint?.slice(0, 3).map(v => effect.tintFlags & 16 ? v : linearComponent(v));
+  const rgb = tintRgb ? primaryRgb.map((v, i) => v * tintRgb[i]) : primaryRgb;
   const lava = effect.kind === 'lava';
-  const opaque = effect.kind === 'hazard';
+  const opaque = effect.kind === 'hazard' || effect.kind === 'fungus';
   return {
     kind: effect.kind,
     // Lava uses the source HDR value only as emission; zero diffuse prevents
@@ -70,7 +90,8 @@ export function getSourceEffectMaterial(buildId, materialName, shader) {
     // color-only fallback, not a purported source opacity or arbitrary tint.
     opacity: effect.opacity ?? 1,
     source: {
-      buildId: 25306743,
+      buildId: effect.evidenceBuildId ?? 25306743,
+      mapBuildId: 25306743,
       asset: effect.asset || 'sharedassets4.assets',
       pathId: effect.pathId,
       shader: effect.shader,
@@ -78,7 +99,9 @@ export function getSourceEffectMaterial(buildId, materialName, shader) {
       colorProperty: effect.property,
       storedColor: effect.property ? [...effect.rgba] : null,
       propertyFlags: effect.flags,
-      sourceColorLinear: effect.property ? [...rgb] : null,
+      sourceColorLinear: effect.property ? [...primaryRgb] : null,
+      tintProperty: tintRgb ? {property: '_Tint', storedColor: [...effect.tint],
+        propertyFlags: effect.tintFlags, sourceColorLinear: [...tintRgb]} : null,
       depthProperty: effect.depth === undefined ? null : {_Depth: effect.depth},
       opacityProperty: effect.opacity === undefined ? null : {_Opacity: effect.opacity},
       alphaShape: effect.kind === 'antisphere' ? {_Alpha: 1, _Power: effect.power,
@@ -96,6 +119,7 @@ export function getSourceEffectMaterial(buildId, materialName, shader) {
         : effect.kind === 'water' ? 'Primary water color without depth/refraction/foam; alpha fixed to 1'
           : effect.kind === 'antisphere' ? 'Transparent Fresnel shell from source alpha-shape controls; animated top texture and scene-depth fade are not reproduced'
           : effect.kind === 'jellyfish' ? 'Source primary purple color; two texture-driven color layers, vertex tint, refraction and scene-depth alpha are not reproduced; alpha fixed to 1'
+          : effect.kind === 'fungus' ? 'Source base albedo multiplied by _Tint; texture-driven colour layers, vertex AO and game lighting are not reproduced'
           : opaque ? 'Source opaque HDR base albedo; multilayer texture masks and hue variation are not reproduced'
             : 'Source fog color and opacity without depth/edge glow',
     },

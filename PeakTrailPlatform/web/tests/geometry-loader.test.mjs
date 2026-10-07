@@ -325,6 +325,41 @@ test("source effect adaptation never guesses across build, name or shader mismat
   }
 });
 
+test("fungal correction requires the archived neutral Tint and never recolours pale bell submeshes", () => {
+  const { batchStaticMeshes } = compile();
+  const normal = effectFixture("M_Mushroom_tree", "W/Peak_Standard");
+  const pale = effectFixture("M_MushroomBase", "W/Peak_Standard");
+  const source = normal.material.userData.peakTerrain.sourceColors;
+  Object.assign(source, { baseProperty: "_Tint", baseFlags: 16,
+    baseStored: [0.4842766523361206, 0.4842766523361206, 0.4842766523361206] });
+  const scene = new THREE.Group();
+  // One original object can have both a pale outer shell and a cap-coloured rim.
+  normal.geometry.addGroup(0, 6, 0); normal.geometry.addGroup(6, 6, 1);
+  scene.add(new THREE.Mesh(normal.geometry, [pale.material, normal.material]));
+  const batch = batchStaticMeshes(scene, "25306743");
+  assert.deepEqual(batch.children[0].material, [pale.material, normal.material]);
+  assert.equal(pale.material.userData.peakSourceEffect, undefined);
+  assert.equal(normal.material.userData.peakSourceEffect.kind, "fungus");
+  assert.deepEqual(normal.material.color.toArray(), getSourceEffectMaterial("25306743", "M_Mushroom_tree", "W/Peak_Standard").baseColor);
+  const shader = { uniforms: {}, vertexShader: THREE.ShaderLib.standard.vertexShader,
+    fragmentShader: THREE.ShaderLib.standard.fragmentShader };
+  normal.material.onBeforeCompile(shader, {});
+  assert.doesNotMatch(shader.fragmentShader, /peakBase|peakTop/, "obsolete saved top colour cannot repaint caps white");
+  for (const altered of [
+    { baseStored: [0.1, 0.2, 0.3] }, { baseFlags: 0 }, { baseStored: [NaN, 0.4842766523361206, 0.4842766523361206] },
+    { baseProperty: "_BaseColor" },
+  ]) {
+    const fixture = effectFixture("M_Mushroom_tree", "W/Peak_Standard");
+    Object.assign(fixture.material.userData.peakTerrain.sourceColors, source, altered);
+    const root = batchStaticMeshes(fixture.scene, "25306743");
+    assert.equal(fixture.material.userData.peakSourceEffect, undefined,
+      "changed source or newly exported primary colours must not be overwritten");
+    fixture.geometry.dispose(); fixture.material.dispose(); root.children.forEach((mesh) => mesh.dispose());
+  }
+  normal.geometry.dispose(); pale.geometry.dispose(); normal.material.dispose(); pale.material.dispose();
+  batch.children.forEach((mesh) => mesh.dispose());
+});
+
 test("Jelly loads with its purple source color and original pass without altering sea urchins", () => {
   const { batchStaticMeshes } = compile();
   for (const name of ["Jelly", "M_Urchin"]) {

@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 from build_maps import trs, raster, primitive_mesh
-from export_meshes import FOLIAGE_TEXTURE_MAX_SIDE, decompose_exact, foliage_material_contract, source_base_property, stored_color_to_linear
+from export_meshes import FOLIAGE_TEXTURE_MAX_SIDE, decompose_exact, foliage_material_contract, source_base_property, stored_color_to_linear, fungal_albedo_color
 
 class GeometryTests(unittest.TestCase):
     def test_foliage_delivery_texture_has_a_bounded_documented_size(self):
@@ -22,6 +22,17 @@ class GeometryTests(unittest.TestCase):
         self.assertEqual(source_base_property('Material','W/Peak_Standard',colors,{}),'_Tint')
         self.assertEqual(source_base_property('Material','W/Peak_Rock',colors,{'_TopColorAmount':1}),'_BaseColor')
         self.assertEqual(source_base_property('Material','Unknown',{'_BaseColor':object()},{}),'_BaseColor')
+
+    def test_fungal_albedo_uses_primary_times_tint_without_repainting_pale_shells(self):
+        colors={'_Tint':object(),'_BaseColor':object()}
+        base=np.array([.5377358198165894,.04819329082965851,.06242681294679642])
+        tint=np.array([.4842766523361206]*3+[1])
+        for name in ('M_Mushroom_tree','M_Mushroom_tree_evil','Glow Shroom'):
+            self.assertEqual(source_base_property(name,'W/Peak_Standard',colors,{}),'_BaseColor')
+            np.testing.assert_allclose(fungal_albedo_color(name,'W/Peak_Standard',base,tint,16),
+                [.26041290266199724,.023338885548048083,.03023184798988776],rtol=0,atol=1e-15)
+        for name,shader in [('M_MushroomBase','W/Peak_Standard'),('M_Mushroom_tree','Unknown')]:
+            self.assertIs(fungal_albedo_color(name,shader,base,tint,16),base)
 
     def test_jelly_ignores_white_property_left_from_previous_shader(self):
         colors={'_BaseColor':[1,1,1,1],'_Color':[.6933333,.4470588,.7450981,.1568628],'_Color2':object()}

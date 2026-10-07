@@ -11,6 +11,10 @@ from PIL import Image
 from build_maps import Scene, MeshHandler, PPtr, BIOMES, GEOMETRY_ROOT_FIELDS, game_info, pid, sha, vec
 
 FOLIAGE_TEXTURE_MAX_SIDE = 256
+FUNGAL_BASE_TINT_MATERIALS = {'M_Mushroom_tree', 'M_Mushroom_tree_evil', 'Glow Shroom'}
+
+def uses_fungal_base_tint(material_name, shader_name):
+    return shader_name == 'W/Peak_Standard' and material_name in FUNGAL_BASE_TINT_MATERIALS
 
 def linear_color(values):
     values=np.maximum(0,np.asarray(values,dtype=np.float64))
@@ -33,6 +37,8 @@ def source_base_property(material_name,shader_name,colors,floats):
     if shader_name=='Jelly' and '_Color' in colors:
         return '_Color'
     if shader_name in ('GD/FoliageGD','W/Peak_Ice') and '_BaseColor' in colors:
+        return '_BaseColor'
+    if uses_fungal_base_tint(material_name, shader_name) and '_BaseColor' in colors:
         return '_BaseColor'
     candidates=('_BaseColor',) if '_TopColorAmount' in floats else ('_Tint','_BaseColor','_Color')
     return next((name for name in candidates if name in colors),None)
@@ -63,11 +69,17 @@ def material_color_metadata(scene,ptr,source):
     # GD/FoliageGD hardcodes Cull Off, despite a stale saved _Cull=2.
     cull_name=culling.get('name')
     shader_cull=float(floats.get(cull_name,culling['val'])) if cull_name in properties else float(culling['val'])
-    return {'baseProperty':base_property,'baseFlags':properties.get(base_property,0),'topFlags':properties.get('_TopColor',0),'shader':shader_name,'cull':shader_cull}
+    return {'baseProperty':base_property,'baseFlags':properties.get(base_property,0),'topFlags':properties.get('_TopColor',0),'tintFlags':properties.get('_Tint',0),'shader':shader_name,'cull':shader_cull}
 
 def stored_color_to_linear(values,flags):
     # No brightness correction: choose a transfer function from source metadata.
     return np.maximum(0,np.asarray(values,dtype=np.float64)) if flags & (16|32) else linear_color(values)
+
+def fungal_albedo_color(material_name, shader_name, base, tint, tint_flags):
+    """Named fungal albedo uses primary * Tint, without treating layer alpha as opacity."""
+    if not uses_fungal_base_tint(material_name, shader_name):
+        return base
+    return base * stored_color_to_linear(tint[:3], tint_flags)
 
 def foliage_material_contract(shader_name, textures, floats, shader_cull):
     """Return the source-backed cutout contract for PEAK's foliage shader.
@@ -192,8 +204,17 @@ class GlbBuilder:
                     # obsolete and would tile the leaf silhouette 144 times.
                     texture=self.scene.textures[tk]; uvscale=np.ones(2); uvoffset=np.zeros(2)
             base=np.minimum(1,stored_color_to_linear(tint[:3],color_metadata['baseFlags'])); top_linear=stored_color_to_linear(top[:3],color_metadata['topFlags'])
+            fungal_tint=None
+            if (uses_fungal_base_tint(source['m_Name'], color_metadata['shader'])
+                    and color_metadata['baseProperty']=='_BaseColor' and '_Tint' in colors):
+                fungal_tint=vec(colors['_Tint'],'rgba')
+                base=fungal_albedo_color(source['m_Name'],color_metadata['shader'],base,fungal_tint,color_metadata['tintFlags'])
+                # W/Peak_Standard does not declare the saved legacy top fields.
+                settings=np.array([0.,1.,0.])
             material={'name':source['m_Name'],'doubleSided':foliage['doubleSided'] if foliage else True,'pbrMetallicRoughness':{'baseColorFactor':base.tolist()+[1.0],'metallicFactor':0.0,'roughnessFactor':.95},'extras':{'peakTerrain':{'colorSpace':'linear','baseColor':base.tolist(),'topColor':top_linear.tolist(),'topAlpha':float(top[3]),'tightness':[float(settings[0]),float(settings[1])],'amount':float(settings[2]),'formula':'smoothstep(tightness[0],tightness[1],max(worldNormal.y,0))*amount*topAlpha','sourceMaterial':source['m_Name'],'sourceUv':'Unity mesh UV0, converted v=1-v for glTF'}}}
             material['extras']['peakTerrain']['sourceColors']={**color_metadata,'baseStored':tint[:3].tolist(),'topStored':top[:3].tolist(),'conversion':'HDR/Gamma Color: already-linear stored value; ordinary Color: sRGB to linear'}
+            if fungal_tint is not None:
+                material['extras']['peakTerrain']['sourceTint']={'property':'_Tint','flags':color_metadata['tintFlags'],'stored':fungal_tint.tolist(),'formula':'_BaseColor.rgb * _Tint.rgb; layered masks and vertex AO remain approximated'}
             if foliage:
                 material['extras']['peakTerrain']['sourceCutout']={'textureProperty':foliage['textureProperty'],'alphaCutoff':foliage['alphaCutoff'],'cull':color_metadata['cull'],'cullSource':'shader-pass','uvTransform':'mesh-uv0'}
             if texture.shape[0]>1 or texture.shape[1]>1:
