@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
-  "fetchedAtUtc": "2026-09-27T20:07:47.608Z",
-  "nextChangeAtUtc": "2026-09-28T16:59:59.608Z",
-  "source": "https://peaklogin3.azurewebsites.net/api/VersionCheck?version=2.4",
-  "apiVersion": "2.4",
+  "fetchedAtUtc": "2026-10-07T21:57:46.081Z",
+  "nextChangeAtUtc": "2026-10-08T16:59:59.081Z",
+  "source": "https://peaklogin3.azurewebsites.net/api/VersionCheck?version=2.6",
+  "apiVersion": "2.6",
   "versionOkay": true,
-  "levelIndex": 470,
+  "levelIndex": 480,
   "mapCount": 21,
-  "mapSlot": 8,
-  "sceneName": "Level_8",
-  "secondsRemaining": 75132,
-  "message": "if you had your bookworm badge deleted last week, SORRY ABOUT THAT!!!<br><br> check the patch notes for instructions on getting it back^^^"
+  "mapSlot": 18,
+  "sceneName": "Level_18",
+  "secondsRemaining": 68533,
+  "message": "bing bong is a father of two"
 }
