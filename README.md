@@ -1,14 +1,16 @@
 # PEAK Trail
 
-一个 Mod 记录多人足迹，静态网页按日期、局次与关卡回放。这个独立目录只管理 PEAK Trail，
-不包含原下载目录中的其他 Mod、模板测试或工具项目。
+每日 3D 地图与玩家线路网站。当前提供 **PEAK 回忆录 Mod 0.8.0 实验版**：
+在游戏内录制、回看旅程，手动分享精简轨迹；审核通过的完整关卡路线可在网页地图中查看。
+回忆录独立维护于 [peak-memories](https://github.com/luyongyi/peak-memories)，本站 0.8.0 下载已公开为 GitHub 实验版 Release。
+本目录管理网站、地图库和旧足迹日志兼容工具；网页不直接播放回忆录的 `.peakrun` 或 `.peakreplay`。
 
 ## 目录与 Git 边界
 
 ```text
 PeakTrail/
 ├── .git/                    本地 Git 仓库
-├── PeakTrailRecorder/       唯一需要安装的 Mod 源码
+├── PeakTrailRecorder/       旧足迹／直播 Mod 源码，保留旧日志与维护工具兼容
 ├── PeakMapExporter/         编入 Recorder 的地图导出实现与测试
 ├── PeakTrailPlatform/       网页、协议、构建工具和地图索引
 ├── .github/workflows/       代码检查；每日更新与服务器部署带独立开关
@@ -37,9 +39,24 @@ PeakTrail/
 底部「玩家 / 地图」可直接切换查看位置；手机横屏使用单行顶栏和时间轴，为地图留出空间。
 iPad 竖屏（744–1100 CSS px）首页两列、回放上下分区；横屏和桌面保留四列首页、地图加侧栏。
 触屏环绕视角使用单指转向、双指缩放和平移；进入关内后可按住屏幕方向键移动与升降。
-DLL 仍只安装在 Windows 游戏电脑上；手机/iPad 观看无需安装，将日志传到设备后用「历史日志文件」导入。
+回忆录 DLL 只安装在 Windows 游戏电脑上，录像在游戏里观看。手机/iPad 可直接看网页地图与公开线路；
+已有旧足迹日志仍可传到设备后用「导入旧日志」打开。
 
-双击根目录的 `Start-Viewer.cmd`，或在这里运行：
+### 在地图里看大家的线路
+
+从首页点击 **进入地图**，默认只显示铺满视图的地图。点击顶部「返回」旁的「路线与热力」，展开侧栏后选择「仅地图」「大家的路线」或「热力图」。
+再次点击该按钮可收起侧栏并关闭图层。选择具体关卡后，可以按难度、高度层筛选；路线模式可单独显示或隐藏每位玩家的路径。
+热力按已审核、完整通过当前关卡的个人路线统计，每条路线在同一空间格只计一次。
+「所有关概览」只看整座山，需选择具体关卡才显示线路统计。
+
+分享来源是独立 [Peak Memories](https://github.com/luyongyi/peak-memories) Mod 的完整录像库「上传轨迹」：
+先在本地提取最多 10 Hz 的坐标、姓名和必要地图信息，确认后发送，不上传原始录像或 120 秒回忆片段。
+待审核、未完整通关或未匹配当前地图版本/分支的数据不会叠到地图；不同记录组分别选择。
+本地日志回放继续只在浏览器中解析。直播入口、演示和轮询默认隐藏。
+操作与验证边界见 [地图内线路图层](PeakTrailPlatform/docs/community-map-layer.md)；正式上传服务仍需按管理员部署步骤启用。
+
+网站默认核对已公开的 v0.8.0 Release、精确源码 tag 与下载文件哈希。本地预览直接运行以下命令，
+不提供本机 DLL 覆盖；游戏资源仍从独立的 `PEAK_TRAIL_ASSET_ROOT` 读取：
 
 ```powershell
 node PeakTrailPlatform/tools/serve-site.mjs --open
@@ -50,10 +67,36 @@ node PeakTrailPlatform/tools/validate-data.mjs
 dotnet build PeakTrailRecorder/PeakTrailRecorder.slnx -c Release -p:DeployModFiles=false
 ```
 
+也可运行 `.\Start-Viewer.cmd`。若此前设置了 `PEAK_TRAIL_MEMORIES_DLL`，先取消该开发覆盖变量；
+已发布构建始终从公开 Release 核验，不能以本地文件代替。
+
 当前验证环境为 Node.js 24、.NET 10 SDK（另有 .NET 8 runtime 运行测试）、Python 3.12。
 离线工具环境可用 `PeakTrailPlatform/tools/offline-maps/setup-env.ps1` 重建。
-构建 Mod 仍需本机已安装 PEAK/BepInEx；游戏 DLL 不复制进源码仓库。
-新目录构建不会自动覆盖游戏里的插件。
+上面的 Recorder 构建命令只用于保留的旧日志／地图维护工具。新回忆录的构建见独立
+[开发说明](https://github.com/luyongyi/peak-memories/blob/main/docs/development.md)。
+构建 Mod 仍需本机已安装 PEAK/BepInEx；游戏 DLL 不复制进源码仓库，构建不会自动覆盖插件。
+
+### 回忆录 Mod 0.8.0 实验版
+
+关闭游戏，将本站的 `PeakReplayLab.dll` 放入 `BepInEx/plugins/`。升级只替换同名 DLL；
+如装过旧足迹／直播 Mod，移走 `PeakTrailRecorder.dll`，保留旧日志、录像及配置，不同时运行两套。
+当前下载为 26.3 MiB 已发布实验版，游戏内显示、性能和多人录制仍待实测。
+
+片段缓存与完整录制可以同时使用：
+
+- **完整录制独立开关**：主菜单「回忆录 → 录制方式」开启后，进岛自动写入 `.peakrun`；
+  F4 开启／关闭，关闭时封存录像，设置会保留。返回主菜单后等封存完成。
+  文件位于 `BepInEx/PeakReplayLab/Recordings/`。
+- **最近 120 秒片段**：完整录制开着或关着，都能用 F6 随时保存最近最多 120 秒为 `.peakreplay`。
+  切换完整录制不清空缓存，未保存的缓存退出后丢弃。
+  文件位于 `BepInEx/PeakReplayLab/Memories/`。
+
+从游戏主菜单回忆录选择录像回放；底部拉手可展开控制台，H 收起／展开，观看时不再录制。
+完整录像详情的「上传轨迹」先筛出最多 10 Hz 坐标、昵称和必要地图信息，确认后上传；
+原始录像不发送，120 秒片段与未完成文件不支持投稿。
+新录像格式为 Schema 14，继续读取 10–13；异常 `.partial` 不冒充完整可播放录像。
+配置位于 `BepInEx/config/cn.mylus.peakreplaylab.cfg`，升级时保留。
+详细安装和验收见 [快速验收](PeakTrailPlatform/QUICKSTART.zh-CN.md)。
 
 ## 本局分支与玩家头像
 
@@ -90,27 +133,24 @@ Recorder 0.5.0 在日志中记录运行时真正选择的路线，网页优先�
 
 代码仓库为 [luyongyi/peak-trail](https://github.com/luyongyi/peak-trail)，GitHub 代码检查不需要大型资源。
 服务器发布采用独立部署密钥、严格主机指纹验证和原子版本切换。站点为 `https://peak.mylus.cn`，
-网页与直播 `/api/` 使用同一 HTTPS 域名；直播进程只监听服务器回环地址，不直接开放 8787。
-按个人使用需求保留四位房号，不增加登录口令。服务器资源与部署权限验证完成后才启用
-`PEAK_SERVER_ENABLED`，Pages 保持关闭。
+网页与路线 `/api/` 使用同一 HTTPS 域名；后台进程只监听服务器回环地址，不直接开放 8787。
+实时追踪代码保留，网页入口和轮询默认隐藏；历史轨迹接口的私有持久存储须由管理员单独启用。
+服务器资源与部署权限验证完成后才启用 `PEAK_SERVER_ENABLED`，Pages 保持关闭。
 准备脚本不等于服务器已经上线；实际启用状态以 Actions 配置与运行结果为准。
 首次配置、资源边界与剩余操作见 [服务器部署说明](PeakTrailPlatform/deploy/README.md)。
 
-Recorder 0.7.1 的默认直播地址为 `https://peak.mylus.cn`。已经生成过 BepInEx 配置的玩家
-还需将 `[Live]` 下的 `ServerUrl` 改为该地址；更新 DLL 不会覆盖已有配置。直播开启时
-只推送运行中的局次，本地足迹继续保存，旧日志不会被自动上传。更换 DLL 前先退出游戏。
-
-首页提供 GitHub 仓库、与下载 DLL 精确对应的源码、Release 页面、同站 DLL 下载、GitHub 备用下载和三步安装教程（BepInEx 5 Windows x64 →
-放入 DLL → 导入本地足迹），另有可选直播设置与排障说明。发行二进制仅作为
-GitHub Release 附件保存，网站发布时按版本 manifest 的 SHA-256 校验后同步；
-不提交 DLL、游戏依赖或个人配置到 Git。后续升级流程见
-[Recorder 发布说明](PeakTrailRecorder/releases/README.md)。
+首页提供回忆录 Mod 下载和三步安装教程（BepInEx 5 Windows x64 → 放入 DLL → 游戏内录制与回放）。
+源码链接指向 `peak-memories` 与网站仓库，并提供真实的
+[v0.8.0 发布页](https://github.com/luyongyi/peak-memories/releases/tag/v0.8.0) 和 GitHub 备用下载。
+网站打包核对公开 Release、精确源码 tag、build-manifest 及实际 DLL 的 SHA-256；
+不提交 DLL、游戏依赖或个人配置到 Git。
+后续回忆录发布流程见 [发布说明](https://github.com/luyongyi/peak-memories/blob/main/docs/releases.md)。
 
 ## 日志与旧目录
 
-`local/recordings` 是迁移时的副本，不是对正在写入文件的目录链接。游戏中已安装的 Recorder
-仍按原配置向 `PEAK/BepInEx/PeakTrailRecordings` 写日志；本次没有修改游戏配置或移动游戏文件。
-可继续直接选择游戏里的总目录回放，新产生的日志不会被 Git 跟踪。
+`local/recordings` 是迁移时的旧足迹日志副本，不是对正在写入文件的目录链接。
+旧 `PEAK/BepInEx/PeakTrailRecordings` 文件继续可从网页「导入旧日志」查看；卸载旧 Recorder
+无需删除这些文件。新回忆录使用 `PeakReplayLab/Recordings` 与 `Memories`，在游戏内回放。
 
 原 `BepInExTemplate-main` 目录完整保留。今后的 PEAK Trail 开发以此独立目录为准。
 详细使用说明见 [快速验收](PeakTrailPlatform/QUICKSTART.zh-CN.md)。

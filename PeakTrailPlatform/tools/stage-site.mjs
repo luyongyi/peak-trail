@@ -9,7 +9,7 @@ import { normalizeMapEnclosures } from "../web/src/map-enclosures.js";
 import { normalizeMapPeak } from "../web/src/map-peak.js";
 import { createHash } from "node:crypto";
 import { HOME_ART_FILES } from "../web/src/home-art.js";
-import { loadRecorderArtifact, readRecorderRelease } from "./lib/recorder-release.mjs";
+import { checkSiteBudget, checkSiteDownloadReferences, loadSiteArtifact, readSiteRelease, siteReleaseOptions, readSiteStagingProfile } from "./lib/site-release.mjs";
 
 const toolDirectory = dirname(fileURLToPath(import.meta.url));
 const platformDirectory = resolve(toolDirectory, "..");
@@ -20,11 +20,13 @@ const schemaDirectory = resolve(platformDirectory, "schema");
 const bundledHomeArtDirectory = resolve(dataDirectory, "home-art");
 const outputDirectory = resolve(platformDirectory, "site-dist");
 const { gameAssetsDirectory, mapPacksDirectory, mapEnclosuresDirectory, homeArtDirectory } = localAssetPaths;
-// Pin and verify the public DLL before replacing a previously staged site.
-const recorderRelease = await readRecorderRelease(resolve(dataDirectory, "recorder", "release.json"));
-const recorderBytes = await loadRecorderArtifact(recorderRelease, {
-  localPath: process.env.PEAK_TRAIL_RECORDER_DLL,
-});
+export async function stageSite({ preview = false, argv = process.argv.slice(2), env = process.env } = {}) {
+const profile = await readSiteStagingProfile(resolve(toolDirectory, "site-build-profile.json"), argv, { preview });
+// Verify the one selected DLL before replacing a previously staged site.
+const downloadOptions = siteReleaseOptions(argv, env);
+const downloadRelease = await readSiteRelease(dataDirectory, downloadOptions.product);
+const downloadBytes = await loadSiteArtifact(downloadRelease, { ...downloadOptions, preview });
+checkSiteDownloadReferences(await Promise.all(["index.html", "guide.html"].map(name => readFile(resolve(webDirectory, name), "utf8"))), downloadRelease);
 // Only allowlisted illustrations are public; never copy a local folder wholesale.
 const homeArtSources = new Map();
 for (const file of HOME_ART_FILES) {
@@ -98,13 +100,14 @@ await rm(outputDirectory, { recursive: true, force: true });
 await mkdir(outputDirectory, { recursive: true });
 await mkdir(resolve(outputDirectory, "data", "maps"), { recursive: true });
 await mkdir(resolve(outputDirectory, "schema"), { recursive: true });
-await mkdir(dirname(resolve(outputDirectory, recorderRelease.downloadPath)), { recursive: true });
-await mkdir(resolve(outputDirectory, "data", "recorder"), { recursive: true });
-await writeFile(resolve(outputDirectory, recorderRelease.downloadPath), recorderBytes);
-await writeFile(resolve(outputDirectory, "data", "recorder", "release.json"), JSON.stringify(recorderRelease, null, 2) + "\n");
+await mkdir(dirname(resolve(outputDirectory, downloadRelease.downloadPath)), { recursive: true });
+await mkdir(resolve(outputDirectory, "data", downloadOptions.product), { recursive: true });
+await writeFile(resolve(outputDirectory, downloadRelease.downloadPath), downloadBytes);
+await writeFile(resolve(outputDirectory, "data", downloadOptions.product, "release.json"), JSON.stringify(downloadRelease, null, 2) + "\n");
 await Promise.all([
   cp(resolve(webDirectory, "index.html"), resolve(outputDirectory, "index.html")),
   cp(resolve(webDirectory, "guide.html"), resolve(outputDirectory, "guide.html")),
+  cp(resolve(webDirectory, "routes.html"), resolve(outputDirectory, "routes.html")),
   cp(resolve(webDirectory, "styles.css"), resolve(outputDirectory, "styles.css")),
   cp(resolve(webDirectory, "home.css"), resolve(outputDirectory, "home.css")),
   cp(resolve(webDirectory, "src"), resolve(outputDirectory, "src"), { recursive: true }),
@@ -158,11 +161,14 @@ async function measure(directory) {
   }
 }
 await measure(outputDirectory);
-if (totalBytes > 1_000_000_000) {
-  throw new Error(`Staged site is ${totalBytes} bytes, above the conservative GitHub Pages 1 GB budget. Reduce published pack versions without altering geometry.`);
-}
-console.log(`Staged GitHub Pages site at ${outputDirectory}`);
+checkSiteBudget(totalBytes, { preview, profile });
+console.log(`Staged ${preview ? "local preview (not a public release; GitHub Pages budget not applied)" : `${profile} public site`} at ${outputDirectory}`);
 console.log(`${fileCount} files, ${(totalBytes / 1_000_000).toFixed(1)} MB; ${catalog.mapPacks.length} map packs. No private recordings are staged.`);
+return { outputDirectory, release: downloadRelease, product: downloadOptions.product, preview, profile, fileCount, totalBytes };
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url))
+  await stageSite({ preview: process.argv.includes("--preview") });
 
 async function readMapPackAllowlist(directory, expectedMapPackId) {
   const manifestPath = resolve(directory, "map-pack.json");

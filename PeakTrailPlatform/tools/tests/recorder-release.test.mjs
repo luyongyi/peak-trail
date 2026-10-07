@@ -126,16 +126,17 @@ test("static HTML verification exempts only the manifest-pinned generated downlo
   await Promise.all(["web/tools", "web/src", "tools/lib", "data/recorder"].map(path => mkdir(resolve(platform, path), { recursive: true })));
   await Promise.all([
     copyFile(resolve(source, "web/tools/verify.mjs"), resolve(platform, "web/tools/verify.mjs")),
-    copyFile(resolve(source, "tools/lib/recorder-release.mjs"), resolve(platform, "tools/lib/recorder-release.mjs")),
+    ...["recorder-release", "memories-release", "site-release"].map(name => copyFile(resolve(source, `tools/lib/${name}.mjs`), resolve(platform, `tools/lib/${name}.mjs`))),
     writeFile(resolve(platform, "data/recorder/release.json"), JSON.stringify(release)),
-    ...["app", "protocol", "scene"].map(name => writeFile(resolve(platform, `web/src/${name}.js`), "export {};")),
+    ...["app", "protocol", "scene", "community-map-panel", "community-routes"].map(name => writeFile(resolve(platform, `web/src/${name}.js`), "export {};")),
   ]);
   const html = path => `<script type="importmap">{}</script><a href="./${path}" download>Download</a>`;
   await writeFile(resolve(platform, "web/index.html"), html(release.downloadPath));
-  await execFileAsync(process.execPath, [resolve(platform, "web/tools/verify.mjs")]);
+  const verification = [resolve(platform, "web/tools/verify.mjs"), "--download-product", "recorder"];
+  await execFileAsync(process.execPath, verification);
   await writeFile(resolve(platform, "web/index.html"), html("downloads/recorder/0.7.1/Other.dll"));
-  await assert.rejects(execFileAsync(process.execPath, [resolve(platform, "web/tools/verify.mjs")]), /缺少本地静态资源/);
+  await assert.rejects(execFileAsync(process.execPath, verification), /缺少本地静态资源/);
   await writeFile(resolve(platform, "web/index.html"), html(release.downloadPath));
   await writeFile(resolve(platform, "data/recorder/release.json"), JSON.stringify({ ...release, downloadPath: "../private.dll" }));
-  await assert.rejects(execFileAsync(process.execPath, [resolve(platform, "web/tools/verify.mjs")]), /Invalid pinned recorder/);
+  await assert.rejects(execFileAsync(process.execPath, verification), /Invalid pinned recorder/);
 });

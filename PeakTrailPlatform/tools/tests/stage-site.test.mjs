@@ -41,6 +41,7 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
     mkdir(resolve(platform, "data", "home-art"), { recursive: true }),
     mkdir(resolve(platform, "data", "maps"), { recursive: true }),
     mkdir(resolve(platform, "data", "recorder"), { recursive: true }),
+    mkdir(resolve(platform, "data", "memories"), { recursive: true }),
     mkdir(resolve(platform, "schema"), { recursive: true }),
     mkdir(pack, { recursive: true }),
     mkdir(secondPack, { recursive: true }),
@@ -54,13 +55,16 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
     copyFile(resolve(platformSource, "tools", "lib", "game-assets.mjs"), resolve(tools, "lib", "game-assets.mjs")),
     copyFile(resolve(platformSource, "tools", "lib", "local-paths.mjs"), resolve(tools, "lib", "local-paths.mjs")),
     copyFile(resolve(platformSource, "tools", "lib", "recorder-release.mjs"), resolve(tools, "lib", "recorder-release.mjs")),
+    copyFile(resolve(platformSource, "tools", "lib", "memories-release.mjs"), resolve(tools, "lib", "memories-release.mjs")),
+    copyFile(resolve(platformSource, "tools", "lib", "site-release.mjs"), resolve(tools, "lib", "site-release.mjs")),
     copyFile(resolve(platformSource, "web", "src", "map-fog.js"), resolve(platform, "web", "src", "map-fog.js")),
     copyFile(resolve(platformSource, "web", "src", "map-water.js"), resolve(platform, "web", "src", "map-water.js")),
     copyFile(resolve(platformSource, "web", "src", "map-enclosures.js"), resolve(platform, "web", "src", "map-enclosures.js")),
     copyFile(resolve(platformSource, "web", "src", "map-peak.js"), resolve(platform, "web", "src", "map-peak.js")),
     copyFile(resolve(platformSource, "web", "src", "home-art.js"), resolve(platform, "web", "src", "home-art.js")),
-    writeFile(resolve(platform, "web", "index.html"), "<!doctype html>"),
+    writeFile(resolve(platform, "web", "index.html"), '<!doctype html><a href="./downloads/recorder/0.7.1/PeakTrailRecorder.dll" download>Download</a>'),
     writeFile(resolve(platform, "web", "guide.html"), "<!doctype html><title>Install guide</title>"),
+    writeFile(resolve(platform, "web", "routes.html"), "<!doctype html><title>Map redirect</title>"),
     writeFile(resolve(platform, "web", "styles.css"), "body{}"),
     writeFile(resolve(platform, "web", "home.css"), ".home-page{}"),
     writeFile(resolve(platform, "web", "src", "app.js"), "export {};"),
@@ -199,7 +203,7 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
   await writeFile(resolve(repository, "local", "Assembly-CSharp.dll"), "game assembly must not publish");
   await writeFile(resolve(repository, "local", "PeakTrailRecorder.cfg"), "private configuration must not publish");
   await writeFile(resolve(platform, "data", "recorder", "release.json"), JSON.stringify(recorderRelease));
-  const options = { env: { ...process.env, PEAK_TRAIL_ASSET_ROOT: assets, PEAK_TRAIL_RECORDER_DLL: recorderPath } };
+  const options = { env: { ...process.env, PEAK_TRAIL_ASSET_ROOT: assets, PEAK_TRAIL_DOWNLOAD_PRODUCT: "recorder", PEAK_TRAIL_RECORDER_DLL: recorderPath } };
   await execFileAsync(process.execPath, [resolve(tools, "stage-site.mjs")], options);
   const staged = resolve(platform, "site-dist");
   assert.equal(await readFile(resolve(staged, "guide.html"), "utf8"), "<!doctype html><title>Install guide</title>");
@@ -242,6 +246,44 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
     await assert.rejects(access(resolve(staged, 'data', 'maps', 'packs', id, enclosureFilename)), 'shared geometry must not be duplicated inside each pack');
   }
   assert.equal(await readFile(resolve(secondPack, 'map-pack.json'), 'utf8'), secondManifestBytes);
+
+  const memoriesBytes = Buffer.from("MZ pinned memories staging fixture");
+  const memoriesPath = resolve(repository, "local", "PeakReplayLab.dll");
+  const memoriesRelease = { schemaVersion: 1, product: "peak-memories", version: "0.8.0", filename: "PeakReplayLab.dll",
+    fileVersion: "0.8.0.0", informationalVersion: `0.8.0+${"f".repeat(40)}`, channel: "development", releaseStatus: "unreleased",
+    sourceDirty: true, repositoryUrl: "https://github.com/luyongyi/peak-memories", size: memoriesBytes.length, sha256: sha256(memoriesBytes),
+    downloadPath: "downloads/memories/0.8.0/PeakReplayLab.dll" };
+  await writeFile(memoriesPath, memoriesBytes);
+  await writeFile(resolve(repository, "local", "private.peakrun"), "private memoir");
+  await writeFile(resolve(platform, "data", "memories", "release.json"), JSON.stringify({ ...memoriesRelease, privatePath: memoriesPath }));
+  const memoriesOptions = { env: { ...options.env, PEAK_TRAIL_DOWNLOAD_PRODUCT: "", PEAK_TRAIL_MEMORIES_DLL: memoriesPath } };
+  await writeFile(resolve(staged, "preflight-marker.txt"), "keep on failure");
+  await assert.rejects(execFileAsync(process.execPath, [resolve(tools, "stage-site.mjs")], memoriesOptions), /unpublished development build/);
+  assert.equal(await readFile(resolve(staged, "preflight-marker.txt"), "utf8"), "keep on failure");
+  const previewArgs = [resolve(tools, "stage-site.mjs"), "--preview", "--memories-dll", memoriesPath];
+  await assert.rejects(execFileAsync(process.execPath, [...previewArgs, "--profile", "server"], memoriesOptions), /Server staging cannot use --preview/);
+  assert.equal(await readFile(resolve(staged, "preflight-marker.txt"), "utf8"), "keep on failure");
+  await assert.rejects(execFileAsync(process.execPath, previewArgs, memoriesOptions), /does not match selected/);
+  assert.equal(await readFile(resolve(staged, "preflight-marker.txt"), "utf8"), "keep on failure");
+  await writeFile(resolve(platform, "web", "index.html"), `<!doctype html><a href="./${memoriesRelease.downloadPath}" download>Download</a>`);
+  await assert.rejects(execFileAsync(process.execPath, [resolve(tools, "stage-site.mjs")], options), /does not match selected/);
+  assert.equal(await readFile(resolve(staged, "preflight-marker.txt"), "utf8"), "keep on failure");
+  assert.match((await execFileAsync(process.execPath, previewArgs, memoriesOptions)).stdout, /local preview.*not a public release/);
+  assert.deepEqual(await readFile(resolve(staged, memoriesRelease.downloadPath)), memoriesBytes);
+  assert.deepEqual(JSON.parse(await readFile(resolve(staged, "data", "memories", "release.json"), "utf8")), memoriesRelease);
+  assert.deepEqual(await readdir(resolve(staged, "downloads", "memories", "0.8.0")), ["PeakReplayLab.dll"]);
+  await assert.rejects(access(resolve(staged, "downloads", "recorder")), { code: "ENOENT" });
+  await assert.rejects(access(resolve(staged, "data", "recorder")), { code: "ENOENT" });
+  await assert.rejects(access(resolve(staged, "private.peakrun")), { code: "ENOENT" });
+  await assert.rejects(access(resolve(staged, "Assembly-CSharp.dll")), { code: "ENOENT" });
+  await writeFile(resolve(staged, "preflight-marker.txt"), "keep on failure");
+  const wrongMemories = Buffer.from(memoriesBytes); wrongMemories[3] ^= 1;
+  await writeFile(memoriesPath, wrongMemories);
+  await assert.rejects(execFileAsync(process.execPath, previewArgs, memoriesOptions), /Memories DLL SHA-256 mismatch/);
+  assert.equal(await readFile(resolve(staged, "preflight-marker.txt"), "utf8"), "keep on failure");
+  assert.deepEqual(await readFile(resolve(staged, memoriesRelease.downloadPath)), memoriesBytes);
+  await writeFile(resolve(platform, "web", "index.html"), `<!doctype html><a href="./${recorderRelease.downloadPath}" download>Download</a>`);
+  await execFileAsync(process.execPath, [resolve(tools, "stage-site.mjs")], options);
 
   await writeFile(resolve(staged, "preflight-marker.txt"), "keep on failure");
   const wrongRecorder = Buffer.from(recorderBytes); wrongRecorder[3] ^= 1;

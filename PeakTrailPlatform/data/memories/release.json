@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "product": "peak-memories",
+  "version": "0.8.0",
+  "filename": "PeakReplayLab.dll",
+  "fileVersion": "0.8.0.0",
+  "informationalVersion": "0.8.0+7c1555992ad00bd5bb741dd133b0e47609ebcaa8",
+  "channel": "release",
+  "releaseStatus": "published",
+  "sourceDirty": false,
+  "repositoryUrl": "https://github.com/luyongyi/peak-memories",
+  "sourceRevision": "7c1555992ad00bd5bb741dd133b0e47609ebcaa8",
+  "tag": "v0.8.0",
+  "releaseUrl": "https://github.com/luyongyi/peak-memories/releases/tag/v0.8.0",
+  "artifactUrl": "https://github.com/luyongyi/peak-memories/releases/download/v0.8.0/PeakReplayLab.dll",
+  "sha256": "908074d4c5c6c43c4f5c41cbfd832eb7576f64afb0e6bc56601b4181b815344e",
+  "size": 27560448,
+  "downloadPath": "downloads/memories/0.8.0/PeakReplayLab.dll"
+}

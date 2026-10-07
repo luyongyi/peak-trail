@@ -14,6 +14,7 @@
 .home-nav-link:hover { color: #f0e2b3; }
 .home-nav-link span { color: #c3b787; }
 .home-live { display: flex; align-items: center; gap: 9px; color: #b3c0b7; background: transparent; border: 0; padding: 10px 0; }
+.home-live[hidden], .home-footer details[hidden] { display: none; }
 .home-live i { width: 5px; height: 5px; border-radius: 50%; background: #829289; }
 .home-live.has-runs i { background: #bdd88a; box-shadow: 0 0 10px #bdd88a55; }
 .home-live-count { font-size: 10px; color: #798b81; font-variant-numeric: tabular-nums; }
@@ -124,7 +125,7 @@
 .home-guide p a { color: #c9cba4; text-underline-offset: 3px; }
 .home-guide p a:hover { color: #ece3b8; }
 .home-guide code { font-family: "Cascadia Code", Consolas, monospace; font-size: .93em; overflow-wrap: anywhere; color: #bdcbb5; }
-.home-guide-path { display: block; font-size: 11px !important; margin-top: 12px; padding: 10px 12px; border-left: 2px solid #b3be9b55; background: #a7b89c07; line-height: 1.8; }
+.home-guide-path { display: block; max-width: 100%; white-space: normal; overflow-wrap: anywhere; font-size: 11px !important; margin-top: 12px; padding: 10px 12px; border-left: 2px solid #b3be9b55; background: #a7b89c07; line-height: 1.8; }
 .home-guide-note { display: flex; align-items: center; gap: 13px; padding: 15px 0; }
 .home-guide-note > span { color: #a7b795; font-size: 19px; }
 .home-guide-note p { font-size: 11px; line-height: 1.8; color: #809b8b; margin: 0; }

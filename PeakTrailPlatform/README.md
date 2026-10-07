@@ -1,13 +1,31 @@
 # PEAK Trail Platform
 
-PEAK Trail Platform is a local-first route recorder and 2.5D replay system.
+PEAK Trail Platform provides daily 3D maps and approved community paths. Its
+current player download is the published Peak Memories 0.8.0 experimental prerelease
+of `PeakReplayLab.dll` from the separately maintained
+[peak-memories repository](https://github.com/luyongyi/peak-memories). Recording
+and replay take place inside PEAK. The web retains old NDJSON trace import but
+does not play `.peakrun` or `.peakreplay` files.
 The daily map check is only a resolver for the landing page; saved runs always
 identify the scene that was actually loaded by the game.
 
+Community paths and heatmaps are a layer of the existing **进入地图** view, not
+a separate collection page. The map starts full-width with its sidebar hidden.
+Open **路线与热力** beside **返回** in the top bar, then choose **大家的路线**
+or **热力图** for the current chapter, with difficulty, real altitude bands and
+individual path visibility controls. Approved complete personal chapter routes
+come from a manual lightweight export in the separate Peak Memories mod. The
+raw recording stays local, and short memory clips are not upload candidates.
+There is no live polling in this view. See
+[the integrated map layer](docs/community-map-layer.md) and
+[the trajectory API](server/trajectory-README.md). The first server installation
+requires an administrator to enable its private storage and service configuration;
+until then uploads return `503 storage-unconfigured` without affecting local recordings.
+
 ## Components
 
-- `../PeakTrailRecorder`: the only player-installed BepInEx DLL. It records trails and
-  also contains the maintainer-only `F8` capture command.
+- `../PeakTrailRecorder`: preserved source for old NDJSON trace compatibility and
+  the maintainer-only `F8` map capture command; it is not the current player download.
 - `../PeakMapExporter`: canonical source/test project for the map-pack implementation;
   it is compiled into the recorder and is not a second end-user plugin.
 - `web`: static replay application suitable for GitHub Pages.
@@ -37,8 +55,8 @@ identify the scene that was actually loaded by the game.
 5. The current game build has 21 baked daily scene slots. They should be
    exported once per PEAK build; the daily Action only selects
    `LevelIndex % 21`. It does not regenerate geometry every day.
-6. The recorder uses the network platform user ID and nickname supplied by the
-   game. These are intentionally stable rather than random, so trace files are
+6. Legacy recorder traces use the network platform user ID and nickname supplied
+   by the game. These are intentionally stable rather than random, so trace files are
    personally identifying and should not be uploaded without the players'
    agreement.
 
@@ -114,8 +132,9 @@ prove capture coverage or frame cost in every modded lobby.
 4. Export all 21 slots for the current Steam build and publish the compact map
    packs only after the distribution policy has been confirmed.
 5. Enable the scheduled daily resolver and GitHub Pages deployment.
-6. Add route comparison, heat maps and redacted sharing after multiplayer
-   runtime checks are complete.
+6. Validate the integrated community route/heatmap layer with approved complete
+   multiplayer chapter recordings, then enable the private upload service using
+   the administrator deployment procedure.
 
 ## Daily resolver
 
@@ -127,12 +146,22 @@ node PeakTrailPlatform/tools/update-daily.mjs
 
 Optional environment variables:
 
-- `PEAK_API_VERSION` (default `2.4`)
+- `PEAK_API_VERSION` (default `2.6`, from installed PEAK `2.6.b`'s native
+  `BuildVersion.ToMatchmaking()`). After a game update, verify the new native
+  major/minor version and update this shared resolver default, or set the
+  repository variable of the same name for the scheduled updater.
 - `PEAK_MAP_COUNT` (default `21`)
 - `PEAK_DAILY_ENDPOINT` (defaults to the official version-check endpoint)
 
 The endpoint is queried by Node/GitHub Actions because it does not expose CORS
 headers for direct browser access.
+
+The live server and local `tools/serve-site.mjs` preview both expose the read-only
+`/api/daily` endpoint. The preview queries the official API directly, so hiding
+live tracking or leaving its relay stopped does not stop daily-map updates.
+Both use a ten-minute cache, coalesce concurrent requests, and recheck after
+01:00 Asia/Shanghai. Failed API validation never renews the bundled static
+snapshot; that fallback remains explicitly labelled as the last confirmed map.
 
 ## Registering map packs
 

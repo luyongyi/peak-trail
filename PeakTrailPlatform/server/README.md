@@ -1,5 +1,7 @@
 # PeakTrail live relay（v1）
 
+历史回忆录轨迹收集现有独立持久化接口，见 [trajectory-v1 运行、上传、审核与查询](trajectory-README.md)。直播实现保留，Web 默认隐藏入口。
+
 零依赖 Node 服务器：接收游戏内 PeakTrailRecorder 的实时推送，按"同一局合并为一条流"去重，
 并向浏览器观众开放 SSE 实时流。**v1 信任模型：4 位 run 码是唯一凭证**，适合测试与受控部署；
 公网开放前请阅读下文"安全边界"。

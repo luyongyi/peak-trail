@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createDailyRefreshClock, createDailySourceReader, dailyObservationIsFresh,
-  latestDailyBoundary, nextDailyBoundary } from "../src/daily-refresh.js";
+  dailySourceUrls, latestDailyBoundary, nextDailyBoundary } from "../src/daily-refresh.js";
 import { buildHomeDailyView } from "../src/home-daily.js";
 
 const START = Date.parse("2026-09-24T16:59:50Z");
@@ -15,6 +15,33 @@ function daily(slot = 4, deadline = START + 10_000) {
 }
 const response = data => ({ ok: true, json: async () => data });
 const freshness = (data, now) => buildHomeDailyView({ daily: data, now }).freshness;
+
+test("daily sources prefer the same-origin API without relying on live tracking or port 8787", () => {
+  const location = { protocol: "http:", origin: "http://127.0.0.1:4173" };
+  assert.deepEqual(dailySourceUrls({ location }), ["http://127.0.0.1:4173/api/daily", STATIC]);
+  assert.deepEqual(dailySourceUrls({ location, relayUrl: "http://127.0.0.1:8787/" }),
+    ["http://127.0.0.1:4173/api/daily", "http://127.0.0.1:8787/api/daily", STATIC]);
+  assert.deepEqual(dailySourceUrls({ location: { protocol: "https:", origin: "https://peak.example" },
+    relayUrl: "https://peak.example" }), [API, STATIC]);
+  assert.deepEqual(dailySourceUrls({ location: { protocol: "file:", origin: "null" } }), [STATIC]);
+});
+
+test("a working preview daily API replaces expired Level_8 even with the live relay stopped", async () => {
+  const now = Date.parse("2026-10-07T06:10:00Z");
+  const current = { ...daily(17), levelIndex: 479, fetchedAtUtc: new Date(now).toISOString(),
+    nextChangeAtUtc: "2026-10-07T17:00:00Z" };
+  const old = { ...daily(8), fetchedAtUtc: "2026-09-27T20:07:47Z", nextChangeAtUtc: "2026-09-28T17:00:00Z" };
+  const calls = [];
+  const sources = () => dailySourceUrls({ location: { protocol: "http:", origin: "http://127.0.0.1:4173" },
+    relayUrl: "http://127.0.0.1:8787" });
+  const reader = createDailySourceReader({ sources, freshness, now: () => now,
+    fetchImpl: async url => { calls.push(url); return response(url.endsWith(":4173/api/daily") ? current : old); } });
+  const result = await reader.read();
+  assert.equal(result.sceneName, "Level_17");
+  assert.equal(freshness(result, now), "current");
+  assert.deepEqual(calls, ["http://127.0.0.1:4173/api/daily"]);
+  assert.equal(freshness(old, now), "stale", "old fallback dates are never renewed");
+});
 
 test("the refresh boundary is the most recent reached 01:00 in Asia/Shanghai", () => {
   const before = Date.parse("2026-09-24T16:59:59.999Z");

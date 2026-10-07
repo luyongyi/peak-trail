@@ -3,9 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="description" content="PEAK Trail 足迹 Mod 安装与记录导入教程。" />
+    <meta name="description" content="PEAK 回忆录 Mod 安装教程：游戏内录制与回放，分享精简轨迹，在地图中查看大家的路线与热力。" />
     <meta name="theme-color" content="#0b1010" />
-    <title>安装教程 · PEAK Trail</title>
+    <title>回忆录 Mod 安装教程 · PEAK Trail</title>
     <link rel="stylesheet" href="./styles.css" />
     <link rel="stylesheet" href="./home.css" />
   </head>
@@ -20,11 +20,11 @@
                 <path class="brand-path" d="M9 25c5-5 10-5 15 0" />
               </svg>
             </span>
-            <span><strong>PEAK TRAIL</strong><small>地图与足迹回放</small></span>
+          <span><strong>PEAK TRAIL</strong><small>回忆录与路线地图</small></span>
           </div>
           <nav class="home-actions" aria-label="教程导航">
             <a class="home-nav-link" href="./">返回首页</a>
-            <a class="home-nav-link" href="./downloads/recorder/0.7.1/PeakTrailRecorder.dll" download="PeakTrailRecorder.dll">下载 Mod <span aria-hidden="true">↓</span></a>
+            <a class="home-nav-link" href="./downloads/memories/0.8.0/PeakReplayLab.dll" download="PeakReplayLab.dll">下载回忆录 Mod <span aria-hidden="true">↓</span></a>
           </nav>
         </header>
 
@@ -32,13 +32,15 @@
           <div class="home-guide-heading">
             <div>
               <p class="home-eyebrow"><span></span> BEFORE THE ASCENT</p>
-              <h1 id="homeGuideTitle">安装与导入</h1>
-              <p class="home-guide-intro">在游戏电脑上安装 Mod，再导入记录目录。</p>
+              <h1 id="homeGuideTitle">把旅程留在回忆录里</h1>
+              <p class="home-guide-intro">在游戏中录下、回看，也可以分享大家走过的路线。</p>
             </div>
             <div class="home-mod-download">
-              <a class="home-download-button" href="./downloads/recorder/0.7.1/PeakTrailRecorder.dll" download="PeakTrailRecorder.dll" aria-label="下载 PeakTrailRecorder 0.7.1 DLL">下载足迹 Mod <span aria-hidden="true">↓</span></a>
-              <span>v0.7.1 · 208 KiB · Windows 电脑</span>
-              <a class="home-release-link" href="https://github.com/luyongyi/peak-trail/releases/download/recorder-v0.7.1/PeakTrailRecorder.dll" target="_blank" rel="noopener noreferrer">GitHub 备用下载 ↗</a>
+              <a class="home-download-button" href="./downloads/memories/0.8.0/PeakReplayLab.dll" download="PeakReplayLab.dll" aria-label="下载回忆录 Mod 0.8.0 已发布实验版">下载回忆录 Mod <span aria-hidden="true">↓</span></a>
+              <span>v0.8.0 · 26.3 MiB · Windows 电脑</span>
+              <span>实验版 · GitHub 已发布</span>
+              <a class="home-release-link" href="https://github.com/luyongyi/peak-memories/releases/tag/v0.8.0" target="_blank" rel="noopener noreferrer">查看本版发布 ↗</a>
+              <a class="home-release-link" href="https://github.com/luyongyi/peak-memories/releases/download/v0.8.0/PeakReplayLab.dll" target="_blank" rel="noopener noreferrer">GitHub 备用下载 ↗</a>
             </div>
           </div>
           <ol class="home-guide-steps">
@@ -51,48 +53,42 @@
             <li>
               <span class="home-step-number" aria-hidden="true">02</span>
               <h3>放入一个 DLL</h3>
-              <p>下载上方的 <code>PeakTrailRecorder.dll</code>，放进游戏目录下的：</p>
+              <p>下载上方的 <code>PeakReplayLab.dll</code>，放进游戏目录下的：</p>
               <code class="home-guide-path">BepInEx/plugins/</code>
-              <p>升级时替换旧的同名 DLL，不要同时保留两份。无需另外下载地图，也不用再安装第二个足迹 Mod。</p>
+              <p>关闭游戏后替换旧的同名 DLL，不要同时保留两份。如果装过旧足迹／直播 Mod，请移走 <code>PeakTrailRecorder.dll</code>；保留旧日志、录像和配置即可。</p>
             </li>
             <li>
               <span class="home-step-number" aria-hidden="true">03</span>
-              <h3>开一局，再回来看看</h3>
-              <p>进岛后自动记录本机已同步的队伍足迹，无需游戏内开关；停留在机场不记录。文件保存在：</p>
-              <code class="home-guide-path">BepInEx/PeakTrailRecordings/</code>
-              <p>打开「我的足迹」，导入这个总目录，或选择其中的 <code>PeakTrailHistory.ndjson</code>。按日期、局次切换，拖动时间线回看。</p>
+              <h3>随时留片段，也能录整局</h3>
+              <p>进入关卡后自动缓存最近最多 120 秒，按 <strong>F6</strong> 随时保存片段。完整录制开着或关着，都能保存；没有按保存键的缓存不会在退出时自动保存。</p>
+              <code class="home-guide-path">BepInEx/PeakReplayLab/Memories/*.peakreplay</code>
+              <p>想录整局，在主菜单「回忆录 → 录制方式」选择「开启完整录制」，进岛自动记录完整录像；也可按 <strong>F4</strong> 独立开启或关闭。关闭时封存当前录像，最近 120 秒缓存仍保留。</p>
+              <code class="home-guide-path">BepInEx/PeakReplayLab/Recordings/*.peakrun</code>
+              <p>两者可以同时使用，完整录制设置会保留。在游戏主菜单的回忆录中选录像观看；回放底部拉手可展开控制台，按 <strong>H</strong> 收起或展开。观看回放时不再采集，录像保留在本机。</p>
             </li>
           </ol>
-          <div class="home-guide-note"><span aria-hidden="true">↟</span><p>已验证 PEAK 2.4.c / BepInEx 5.4.23.3。Mod 只装在 Windows 游戏电脑上，观看者无需安装；一人可记录本机已同步的队伍信息，并非全知视角。手机、iPad 和桌面都能观看；手机和 iPad 回放需先把日志文件传到设备，再选择「历史日志文件」。</p></div>
+          <div class="home-guide-note"><span aria-hidden="true">↟</span><p>这是 0.8.0 实验版，游戏内显示、性能和多人录制仍待实测。Mod 只装在 Windows 游戏电脑上，使用已安装的游戏资源回放；能记录本机已同步的队友信息。网站用于看地图与公开路线，不直接播放 <code>.peakrun</code> 或 <code>.peakreplay</code>。</p></div>
           <div class="home-guide-faq">
             <details>
-              <summary><span>想让朋友实时观看？<small>可选 · 默认关闭</small></span><b aria-hidden="true">＋</b></summary>
-              <div class="home-faq-body home-live-guide">
-                <div>
-                  <p>装好 DLL 后先启动并退出游戏，打开 <code>BepInEx/config/PeakTrailRecorder.cfg</code>，仅修改对应配置项，再启动游戏。</p>
-                  <p>进入对局后，朋友可在本网站的「现场观测」中选择正在进行的对局。改回 <code>[Live] Enabled = false</code> 并重启游戏即可关闭直播；本地记录可继续保留。</p>
-                  <p class="home-sharing-note"><strong>开启前请征得同局玩家同意。</strong>直播会上传昵称、稳定玩家 ID、位置与游戏状态，能访问本网站的人可观看。仅导入本地日志不会上传文件。</p>
-                </div>
-                <pre aria-label="开启可选直播的配置示例"><code>[Recording]
-Enabled = true
-
-[Live]
-Enabled = true
-ServerUrl = https://peak.mylus.cn</code></pre>
+              <summary><span>怎么把路线分享给大家？<small>可选 · 主动上传</small></span><b aria-hidden="true">＋</b></summary>
+              <div class="home-faq-body">
+                <p>在游戏的「回忆录 → 完整录像 → 详情」选择「上传轨迹」。先在本地筛出最多 <strong>10 Hz</strong> 的坐标、昵称和必要地图信息，预览并确认后发送；不上传原始录像。120 秒片段、录制中和异常中断的文件不支持上传。</p>
+                <p>上传默认待审核，完整走完的个人关卡路线才会公开。网站首页点击「进入地图」，再点顶部「返回」旁的「路线与热力」，选择「大家的路线」或「热力图」。默认只看地图，侧栏收起；可按难度、高度层筛选，也可单独隐藏玩家路径。</p>
+                <p class="home-sharing-note">分享前请征得同局玩家同意。轨迹包含昵称和行程，审核后其他人可以查看；仅在本机录制、回放或导入旧日志不会上传。上传服务尚未启用时会提示失败，本地录像仍保留。</p>
               </div>
             </details>
             <details>
-              <summary><span>没找到日志，或安装后没有反应？</span><b aria-hidden="true">＋</b></summary>
+              <summary><span>没找到录像，或安装后没有反应？</span><b aria-hidden="true">＋</b></summary>
               <div class="home-faq-body">
-                <p>记录在实际对局开始后生成，只停留在主菜单还不会有足迹。确认 DLL 在 <code>BepInEx/plugins/</code> 中，而不是留在下载目录或压缩包里。</p>
-                <p>若 <code>BepInEx/config/PeakTrailRecorder.cfg</code> 没有生成，先检查 BepInEx 是否正常加载；可查看 <code>BepInEx/LogOutput.log</code> 中的报错。已有配置时，确认 <code>[Recording]</code> 下的 <code>Enabled = true</code>。若自行修改过 <code>OutputDirectory</code>，请在设置的目录找日志。</p>
+                <p>确认 <code>PeakReplayLab.dll</code> 在 <code>BepInEx/plugins/</code> 中，主菜单出现「回忆录」。片段需要按 F6 保存，完整录像要等封存完成；录制中的 <code>.partial</code> 暂不可播放。</p>
+                <p>回忆录底部的「打开文件夹」可打开当前分类。若没有入口，先检查 BepInEx 是否正常加载，再查看 <code>BepInEx/LogOutput.log</code> 的报错。配置位于 <code>BepInEx/config/cn.mylus.peakreplaylab.cfg</code>，升级时保留；反馈时保留相关录像和日志。</p>
               </div>
             </details>
             <details>
               <summary><span>已有记录怎么保留？如何卸载？</span><b aria-hidden="true">＋</b></summary>
               <div class="home-faq-body">
-                <p>升级只需在关闭游戏后替换 DLL，保留原配置和足迹目录。旧记录可直接导入，不需要重新进游戏录制。卸载时关闭游戏，移走 <code>PeakTrailRecorder.dll</code> 即可；已保存的足迹不会因此删除。</p>
-                <p>日志含昵称、玩家 ID 与行程，分享给别人前请征得参与者同意。</p>
+                <p>升级只替换 <code>PeakReplayLab.dll</code>，保留 <code>BepInEx/PeakReplayLab/</code> 下的录像和原配置；卸载时关闭游戏并移走这个 DLL，已保存文件不会因此删除。</p>
+                <p>旧足迹 Mod 的日志可继续从首页「导入旧日志」打开，保留原来的 <code>PeakTrailRecordings</code> 目录即可；新回忆录录像在游戏里观看，两种文件格式不同。</p>
               </div>
             </details>
           </div>
@@ -102,16 +98,16 @@ ServerUrl = https://peak.mylus.cn</code></pre>
           <div>
             <p class="home-eyebrow"><span></span> BUILT IN THE OPEN</p>
             <h2 id="homeSourceTitle">源码与版本</h2>
-            <p>查看网站源码、DLL 源码和发布校验。</p>
+            <p>查看回忆录 Mod 与网站源码。当前下载为已公开发布的 0.8.0 实验版，源码与附件以本版发布记录为准。</p>
           </div>
           <nav class="home-source-links" aria-label="项目源码与 DLL 版本">
-            <a href="https://github.com/luyongyi/peak-trail" target="_blank" rel="noopener noreferrer"><span><small>GITHUB</small>项目仓库</span><b aria-hidden="true">↗</b></a>
-            <a href="https://github.com/luyongyi/peak-trail/tree/8cae7236e6eef0f8d6705837273082e73ae7f270/PeakTrailRecorder" target="_blank" rel="noopener noreferrer"><span><small>DLL v0.7.1</small>对应源码</span><b aria-hidden="true">↗</b></a>
-            <a href="https://github.com/luyongyi/peak-trail/releases/tag/recorder-v0.7.1" target="_blank" rel="noopener noreferrer"><span><small>RELEASE v0.7.1</small>发布与校验</span><b aria-hidden="true">↗</b></a>
+            <a href="https://github.com/luyongyi/peak-memories" target="_blank" rel="noopener noreferrer"><span><small>MEMORIES MOD</small>回忆录源码</span><b aria-hidden="true">↗</b></a>
+            <a href="https://github.com/luyongyi/peak-trail" target="_blank" rel="noopener noreferrer"><span><small>WEB</small>网站源码</span><b aria-hidden="true">↗</b></a>
+            <a href="https://github.com/luyongyi/peak-memories/releases" target="_blank" rel="noopener noreferrer"><span><small>RELEASES</small>发布记录</span><b aria-hidden="true">↗</b></a>
           </nav>
         </section>
 
-        <footer class="home-footer"><span>非官方粉丝工具 · 与 Landfall / Aggro Crab 无关联</span><span>本地导入不上传 · 直播需主动开启</span></footer>
+        <footer class="home-footer"><span>非官方粉丝工具 · 与 Landfall / Aggro Crab 无关联</span><span>录像留在本机 · 分享轨迹需主动确认</span></footer>
       </div>
     </main>
   </body>

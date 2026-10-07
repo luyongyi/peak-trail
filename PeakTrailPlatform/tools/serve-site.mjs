@@ -5,15 +5,27 @@ import { dirname, extname, isAbsolute, relative, resolve, sep } from "node:path"
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import { cacheControlFor } from "./lib/serve-headers.mjs";
+import { proxyRouteRead, routeApiBase } from "./lib/route-proxy.mjs";
+import { createDailyApi } from "./lib/daily-api.mjs";
+import { stageSite } from "./stage-site.mjs";
+import { optionValue } from "./lib/site-release.mjs";
 
-await import("./stage-site.mjs");
+// This server is explicitly a local preview; it never turns a dirty DLL into a
+// published release or silently relaxes the standalone public staging policy.
+const previewArgs = process.argv.slice(2);
+if (!optionValue(previewArgs, "--profile")) previewArgs.push("--profile", "pages");
+const staged = await stageSite({ preview: true, argv: previewArgs });
 const root = await realpath(resolve(dirname(fileURLToPath(import.meta.url)), "../site-dist"));
+const routeApiFlag = process.argv.indexOf("--route-api");
+const routeApi = routeApiBase(routeApiFlag >= 0 ? process.argv[routeApiFlag + 1] : undefined);
+const dailyApi = createDailyApi();
 const mime = {
   ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8", ".json": "application/json; charset=utf-8",
   ".png": "image/png", ".svg": "image/svg+xml", ".f32": "application/octet-stream",
   ".webp": "image/webp", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
   ".glb": "model/gltf-binary", ".gltf": "model/gltf+json", ".bin": "application/octet-stream",
+  ".dll": "application/octet-stream",
 };
 function withinRoot(path) {
   const rel = relative(root, path);
@@ -21,6 +33,8 @@ function withinRoot(path) {
 }
 
 const server = createServer(async (request, response) => {
+  if (await dailyApi.handle(request, response)) return;
+  if (await proxyRouteRead(request, response, routeApi)) return;
   if (!["GET", "HEAD"].includes(request.method)) {
     response.writeHead(405, { Allow: "GET, HEAD" }).end();
     return;
@@ -45,6 +59,7 @@ const server = createServer(async (request, response) => {
       "Content-Length": info.size,
       "Cache-Control": cacheControlFor(pathname),
       "X-Content-Type-Options": "nosniff",
+      ...(pathname === `/${staged.release.downloadPath}` ? { "Content-Disposition": `attachment; filename="${staged.release.filename}"` } : {}),
     });
     if (request.method === "HEAD") response.end();
     else createReadStream(target).on("error", () => response.destroy()).pipe(response);
@@ -69,6 +84,8 @@ await new Promise((done, reject) => {
   server.listen(listenPort, listenHost, done);
 });
 const url = `http://127.0.0.1:${server.address().port}/`;
+const stopDailyPrewarm = dailyApi.startPrewarm();
+server.once("close", stopDailyPrewarm);
 console.log(`PEAK Trail is ready: ${url}`);
 console.log("Keep this window open while using the viewer. Press Ctrl+C to stop.");
 if (process.argv.includes("--open")) {

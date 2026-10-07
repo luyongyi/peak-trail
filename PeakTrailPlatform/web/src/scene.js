@@ -16,6 +16,7 @@ import { followLayerAtPosition } from "./map-enclosures.js";
 import { FollowTerrainQuery } from "./follow-terrain.js";
 import { SourceWaterRenderer } from "./source-water-renderer.js";
 import { nadirCameraBounds } from "./nadir-camera-bounds.js";
+import { CommunityRouteOverlay } from "./community-route-overlay.js";
 
 const PLAYER_COLORS = [
   "#efb74e",
@@ -228,7 +229,9 @@ export class TrailScene {
     this.terrainRoot = new THREE.Group();
     this.trailRoot = new THREE.Group();
     this.gridRoot = new THREE.Group();
+    this.communityOverlay = new CommunityRouteOverlay();
     this.worldRoot.add(this.gridRoot, this.sourceWater.root, this.terrainRoot, this.trailRoot, this.worldRenderer.root);
+    this.worldRoot.add(this.communityOverlay.root);
     // PEAK's world is Unity left-handed; three is right-handed. Rendering the raw
     // coordinates unchanged mirrors every horizontal view (a game-right landmark
     // appears game-left). Negating Z of the whole rendered world is the standard
@@ -263,6 +266,7 @@ export class TrailScene {
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height, false);
+    this.communityOverlay?.setViewport(width, height);
   }
 
   animate(timestamp) {
@@ -273,7 +277,7 @@ export class TrailScene {
     else this.controls.update();
     this.updateCameraMarkerVisibility();
     this.fogDepthPass.render({ renderer: this.renderer, scene: this.scene, camera: this.camera,
-      fogEntries: this.worldRenderer.entries.values(), hiddenRoots: [this.trailRoot, this.gridRoot] });
+      fogEntries: this.worldRenderer.entries.values(), hiddenRoots: [this.trailRoot, this.gridRoot, this.communityOverlay?.root].filter(Boolean) });
     this.renderer.render(this.scene, this.camera);
     this.updatePlayerLabelPositions();
     this.worldRenderer.projectLabels(this.camera, this.viewportWidth, this.viewportHeight, true);
@@ -281,6 +285,7 @@ export class TrailScene {
   }
 
   async setData({ mapPack, trace, useMap, activeSegment, viewIntent = null }) {
+    this.communityOverlay?.clear();
     if (this.trace !== trace) this.setFollowTarget(null);
     const cameraRevision = this.cameraSelectionRevision;
     if (this.trace !== trace) this.playerPortraits.clear();
@@ -1229,6 +1234,32 @@ export class TrailScene {
     this.setTime(this.currentTime);
   }
 
+  setCommunityOverlay(input = { mode: "off" }) {
+    if (!input || input.mode === "off" || input.stageIndex === null || input.stageIndex === undefined) {
+      this.communityOverlay?.clear();
+      return true;
+    }
+    if (!this.useMap || !this.mapPack?.mapPackId || input.mapPackId !== this.mapPack.mapPackId
+        || !Number.isInteger(input.stageIndex) || input.stageIndex < 0
+        || !this.mapPack.layers?.some(layer => layer.segment === input.stageIndex)
+        || this.activeSegment !== null && input.stageIndex !== this.activeSegment) {
+      this.communityOverlay?.clear();
+      return false;
+    }
+    try {
+      if (!this.communityOverlay) {
+        this.communityOverlay = new CommunityRouteOverlay();
+        this.worldRoot.add(this.communityOverlay.root);
+      }
+      this.communityOverlay.setViewport(this.viewportWidth, this.viewportHeight);
+      this.communityOverlay.setData(input, this.origin, this.heightScale);
+      return true;
+    } catch {
+      this.communityOverlay?.clear();
+      return false;
+    }
+  }
+
   setHeightScale(value) {
     this.heightScale = THREE.MathUtils.clamp(Number(value) || 1, 0.2, 5);
     this.applyHeightScale();
@@ -1240,6 +1271,7 @@ export class TrailScene {
     this.followRig?.reset();
     this.terrainRoot.scale.y = this.heightScale;
     this.trailRoot.scale.y = this.heightScale;
+    if (this.communityOverlay) this.communityOverlay.root.scale.y = this.heightScale;
     this.worldRenderer.root.scale.y = this.heightScale;
     if (this.sourceWater) this.sourceWater.root.scale.y = this.heightScale;
   }
@@ -1264,6 +1296,7 @@ export class TrailScene {
   setActiveSegment(segment) {
     const next = segment === null || segment === "all" ? null : Number(segment);
     if (next === this.activeSegment) return;
+    this.communityOverlay?.clear();
     this.activeSegment = next;
     ++this.geometrySelectionToken;
     this.applyLayerVisibility();
@@ -1478,6 +1511,7 @@ export class TrailScene {
     this.followListeners = [];
     this.freeCamera.dispose();
     this.worldRenderer.dispose();
+    this.communityOverlay?.dispose();
     this.sourceWater?.dispose();
     this.fogDepthPass.dispose();
     this.controls.dispose();

@@ -29,7 +29,9 @@ jobs:
       - name: Resolve current PEAK map
         run: node PeakTrailPlatform/tools/update-daily.mjs
         env:
-          PEAK_API_VERSION: "2.4"
+          # Empty uses the resolver's shared current-game default. Set the repo
+          # variable after a verified game update; never hardcode a second default.
+          PEAK_API_VERSION: ${{ vars.PEAK_API_VERSION }}
           PEAK_MAP_COUNT: "21"
       - name: Validate viewer and data
         run: |
@@ -97,7 +99,7 @@ jobs:
           node --test PeakTrailPlatform/tools/tests/*.test.mjs
           node PeakTrailPlatform/tools/validate-data.mjs
       - name: Stage static site
-        run: node PeakTrailPlatform/tools/stage-site.mjs
+        run: node PeakTrailPlatform/tools/stage-site.mjs --profile pages
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:

@@ -29,6 +29,8 @@
 # Private recordings are never source code. Only five synthetic test fixtures
 # are explicitly allowed; do not put real sessions in the fixtures folder.
 *.ndjson
+*.peakreplay
+*.peakrun
 *.partial
 *.log
 !PeakTrailPlatform/web/tests/fixtures/stream.ndjson

@@ -23,4 +23,6 @@ test("cache policy: content-addressed packs are immutable, mutable data stays fr
   assert.equal(cacheControlFor("/data/maps/catalog.json"), "no-store");
   assert.equal(cacheControlFor("/data/daily/current.json"), "no-store");
   assert.equal(cacheControlFor("/data/game-assets/25306743/catalog.json"), "no-store");
+  assert.equal(cacheControlFor("/downloads/memories/0.8.0/PeakReplayLab.dll"), "no-store");
+  assert.equal(cacheControlFor("/data/memories/release.json"), "no-store");
 });

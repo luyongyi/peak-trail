@@ -27,7 +27,18 @@ export function dailyObservationIsFresh(daily, now = Date.now()) {
     && fetched <= current && fetched >= boundary && deadline > current;
 }
 
-/** Prefer the live source, but never turn a skipped retry into a new cooldown. */
+/** Daily rotation is independent of whether the live-tracking UI/relay is enabled. */
+export function dailySourceUrls({ location, relayUrl = "", snapshotUrl = "./data/daily/current.json" } = {}) {
+  const sources = [];
+  if (["http:", "https:"].includes(location?.protocol) && location?.origin) {
+    sources.push(`${location.origin}/api/daily`);
+  }
+  if (relayUrl) sources.push(`${String(relayUrl).replace(/\/$/, "")}/api/daily`);
+  sources.push(snapshotUrl);
+  return [...new Set(sources)];
+}
+
+/** Prefer a current API observation, but never turn a skipped retry into a new cooldown. */
 export function createDailySourceReader({
   sources, freshness, fetchImpl = globalThis.fetch, now = Date.now,
   retryMs = 30_000, timeoutMs = 5000,

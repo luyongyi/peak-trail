@@ -1,0 +1,4 @@
+b73d7eb51184e71ef88c8156d69aa7d68a7376668f3fcffff6dbd24f9d4b8784  live-start.sh
+952f901b09177c3b9fe2cabf2cb392f61a17bac506191556ee37455ca4e4e82a  peak-trail-live.service
+be9dd4076c9f091bd5ff8d9ddfa3bdb883cecf4fe7909f6736613fe49a42a233  enable-trajectory-service.sh
+5e39fb3c3d1598d01c0151d25db208e3dd271137c0f8c386f6157ea436caf70a  enable-trajectory-service-once.sh

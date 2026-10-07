@@ -19,10 +19,11 @@
 //   GET  /                             status page, /watch/:code raw live tail
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
+import { createTrajectoryApi } from "./trajectory-api.mjs";
 import { appendFileSync, mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { deriveRunCode, isValidRunCode, normalizeRunId, runCodeMatches } from "./run-code.mjs";
-import { cachedDailyIsFresh, resolveDaily } from "./peak-daily.mjs";
+import { createDailyCache, resolveDaily } from "./peak-daily.mjs";
 
 const MAX_RUNS = 200;
 const MAX_RECORDS_PER_RUN = 20_000;      // ~10 minutes of a 6-player session in memory
@@ -45,47 +46,17 @@ function htmlEscape(value) {
 }
 
 export function createLiveServer(options = {}) {
+  const trajectories = createTrajectoryApi({ root: options.trajectoryDir, catalogPath: options.catalogPath, trustedProxy: options.trustedProxy });
   const persistenceDir = options.persistenceDir ? resolve(options.persistenceDir) : null;
   if (persistenceDir) mkdirSync(persistenceDir, { recursive: true });
   const dailyResolver = options.dailyResolver ?? resolveDaily;
   const dailyNow = options.dailyNow ?? Date.now;
   const pingIntervalMs = Math.max(100, Number(options.pingIntervalMs) || 15_000);
-  // The relay owns the daily rotation now (no GitHub Action dependency): it
-  // proxies PEAK's login API with a short cache so every viewer sees fresh data.
-  const DAILY_CACHE_MS = 10 * 60_000;
-  let dailyCache = { at: 0, data: null, error: null };
-  let dailyRefresh = null;
-
-  function dailyPayload() {
-    if (dailyCache.data && dailyNow() - dailyCache.at < DAILY_CACHE_MS
-      && cachedDailyIsFresh(dailyCache.data, dailyNow())) return Promise.resolve(dailyCache.data);
-    // Coalesce concurrent cold requests: every viewer booting during a refresh
-    // awaits the same in-flight fetch instead of each hitting PEAK's login API
-    // (a cold cache otherwise stalls every first page open for the full upstream
-    // round-trip).
-    if (!dailyRefresh) {
-      dailyRefresh = (async () => {
-        const data = await dailyResolver();
-        // Even if upstream briefly returns the previous rotation at the boundary,
-        // its expired deadline prevents this response becoming a fresh 10m cache.
-        dailyCache = { at: dailyNow(), data, error: null };
-        return data;
-      })().finally(() => { dailyRefresh = null; });
-    }
-    return dailyRefresh;
-  }
-
-  // CLI-only: keep the cache warm in the background so the first viewer after
-  // a relay start never pays the upstream round-trip on the critical boot path.
-  // Tests build the server directly and must stay offline, so this is never
-  // started by createLiveServer itself.
-  function startDailyPrewarm() {
-    const warm = () => { dailyPayload().catch(() => {}); };
-    warm();
-    const timer = setInterval(warm, Math.floor(DAILY_CACHE_MS / 2));
-    timer.unref?.();
-    return () => clearInterval(timer);
-  }
+  // This read-only resolver is shared with the preview and scheduled updater;
+  // daily rotation remains available while the live-tracking UI is hidden.
+  const dailyCache = createDailyCache({ resolver: dailyResolver, now: dailyNow });
+  const dailyPayload = dailyCache.read;
+  const startDailyPrewarm = dailyCache.startPrewarm;
 
   const runs = new Map();       // code -> run
   const codeByRunId = new Map();
@@ -377,6 +348,7 @@ export function createLiveServer(options = {}) {
   }
 
   async function handle(req, res) {
+    if (await trajectories.handle(req, res)) return;
     const url = new URL(req.url, "http://localhost");
     const path = url.pathname;
     const method = req.method ?? "GET";
@@ -558,6 +530,7 @@ function upsert(playerId, player) {
       } else res.end();
     });
   });
+  server.once("close", trajectories.close);
   return { server, runs, codeByRunId, startDailyPrewarm };
 }
 
@@ -569,7 +542,8 @@ export function startCli(argv = process.argv.slice(2)) {
   const port = Number(flag("port", 8787));
   const host = flag("host", "127.0.0.1");
   const dir = flag("dir", null);
-  const { server, startDailyPrewarm } = createLiveServer({ persistenceDir: dir });
+  const trajectoryDir = flag("routes-dir", process.env.PEAK_TRAJECTORY_DIR ?? null);
+  const { server, startDailyPrewarm } = createLiveServer({ persistenceDir: dir, trajectoryDir, trustedProxy: argv.includes("--trusted-proxy") });
   startDailyPrewarm();
   server.listen(port, host, () => {
     console.log(`PeakTrail live relay on http://${host}:${port}/ (code-confirmed runs, multi-producer dedupe)`);

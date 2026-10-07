@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta
       name="description"
-      content="PEAK Trail 多人足迹回放器。查看每日路线，导入本地记录，或观看主动开启的实时分享。"
+      content="PEAK 每日地图与玩家线路。下载回忆录 Mod，在游戏内录制和回放，主动分享精简轨迹。"
     />
     <meta name="theme-color" content="#0b1010" />
-    <title>PEAK Trail · 足迹回放</title>
+    <title>PEAK Trail · 地图与回忆录</title>
     <link
       rel="icon"
       type="image/svg+xml"
@@ -28,16 +28,16 @@
               <path class="brand-path" d="M9 25c5-5 10-5 15 0" />
             </svg>
           </span>
-          <span><strong>PEAK TRAIL</strong><small>地图与足迹回放</small></span>
+          <span><strong>PEAK TRAIL</strong><small>每日地图与玩家线路</small></span>
         </div>
-        <nav class="home-actions" aria-label="足迹工具">
-          <a class="home-nav-link" href="./downloads/recorder/0.7.1/PeakTrailRecorder.dll" download="PeakTrailRecorder.dll">下载 Mod <span aria-hidden="true">↓</span></a>
+        <nav class="home-actions" aria-label="回忆录与地图工具">
+          <a class="home-nav-link" href="./downloads/memories/0.8.0/PeakReplayLab.dll" download="PeakReplayLab.dll" aria-label="下载回忆录 Mod 0.8.0 已发布实验版">下载回忆录 Mod <span aria-hidden="true">↓</span></a>
           <a class="home-nav-link" href="./guide.html">安装教程</a>
-          <button class="home-live is-empty" id="gateLive" type="button" aria-controls="gateLiveList" aria-expanded="false">
+          <button class="home-live is-empty" id="gateLive" type="button" aria-controls="gateLiveList" aria-expanded="false" hidden>
             <i aria-hidden="true"></i><span>现场观测</span><span class="home-live-count" id="homeLiveCount">—</span>
           </button>
           <button class="home-replay" id="gateReplay" type="button">
-            我的足迹<span aria-hidden="true">↗</span>
+            导入旧日志<span aria-hidden="true">↗</span>
           </button>
         </nav>
         <div class="home-live-popover" id="homeLivePopover" hidden>
@@ -125,11 +125,11 @@
             </div>
           </section>
         </section>
-        <footer class="home-footer"><span>非官方粉丝工具 · 与 Landfall / Aggro Crab 无关联</span><details><summary>开发工具</summary><button class="gate-debug" id="gateDebug" type="button">演示直播（非真实对局）</button></details><span>本地导入不上传 · 直播需主动开启</span></footer>
+        <footer class="home-footer"><span>非官方粉丝工具 · 与 Landfall / Aggro Crab 无关联</span><details hidden><summary>开发工具</summary><button class="gate-debug" id="gateDebug" type="button">演示直播（非真实对局）</button></details><span>本地导入不上传 · 回忆录可主动上传精简轨迹</span></footer>
       </div>
     </div>
 
-    <div class="app-shell">
+    <div class="app-shell" id="appShell">
       <header class="topbar">
         <a class="brand" href="./" aria-label="PEAK Trail 首页">
           <span class="brand-mark" aria-hidden="true">
@@ -172,6 +172,7 @@
               <label for="traceInput">历史日志文件</label>
             </div>
           </details>
+          <button class="button button-ghost" id="communityToggle" type="button" aria-expanded="false" aria-controls="communityPanel" hidden>路线与热力</button>
           <button class="button button-ghost" id="backToGate" type="button" title="返回模式选择">返回</button>
         </div>
       </header>
@@ -188,7 +189,7 @@
       </section>
 
       <main class="workspace">
-        <section class="viewport-panel" aria-label="2.5D 地图回放视图">
+        <section class="viewport-panel" aria-label="地图浏览与足迹回放视图">
           <canvas id="sceneCanvas"></canvas>
 
           <div class="viewport-fade" aria-hidden="true"></div>
@@ -201,12 +202,13 @@
               </div>
               <span class="analysis-overlay-note"><i class="trail-key-visible"></i>可见轨迹 <i class="trail-key-occluded"></i>遮挡轨迹 · 淡色透视</span>
             </div>
+            <div class="viewport-layer-actions">
             <details class="view-menu">
               <summary class="camera-text-button">视角 ▾</summary>
               <div class="view-menu-pop">
               <div class="camera-actions" aria-label="视角控制">
               <button class="camera-text-button" id="interiorViewButton" type="button" title="移到已记录玩家中心（非眼位）；没有记录时寻找真实模型内部地板">进入关内</button>
-              <button class="camera-text-button" id="cinematicButton" type="button" title="沿路径自动跟随当前玩家，每 60 秒轮换；点击玩家卡 ◎ 可锁定">自动跟随</button>
+              <button class="camera-text-button replay-only-camera" id="cinematicButton" type="button" title="沿路径自动跟随当前玩家，每 60 秒轮换；点击玩家卡 ◎ 可锁定">自动跟随</button>
               <button class="camera-text-button" id="freeCameraButton" type="button" aria-pressed="false">自由相机<span class="camera-help-desktop"> WASD</span></button>
               <button class="icon-button" id="topViewButton" type="button" title="俯视视角" aria-label="俯视视角">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 7l8 4 8-4-8-4Zm-8 9 8 4 8-4M4 17l8 4 8-4" /></svg>
@@ -220,13 +222,14 @@
                 <span class="select-wrap"><select id="layerSelect" disabled><option value="all">所有关概览</option></select><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 9 5 5 5-5" /></svg></span>
                 <div class="range-header"><label class="field-label" for="heightScale">高度夸张</label><output id="heightScaleValue" for="heightScale">1.0×</output></div>
                 <input id="heightScale" class="range" type="range" min="0.4" max="3" step="0.1" value="1" />
-                <div class="switch-list">
+                <div class="switch-list replay-only-controls">
                   <label class="switch-row"><span><strong>显示轨迹</strong></span><input id="trackToggle" type="checkbox" checked /><span class="switch-ui"></span></label>
                   <label class="switch-row"><span><strong>玩家位置</strong></span><input id="markerToggle" type="checkbox" checked /><span class="switch-ui"></span></label>
                 </div>
               </div>
               </div>
             </details>
+            </div>
           </div>
 
           <div class="camera-help" id="cameraHelp" role="status" hidden>
@@ -266,7 +269,7 @@
               </button>
             </div>
             <div class="segment-navigation-meta">
-              <button class="segment-mode-button is-active" id="followSegmentButton" type="button" aria-pressed="true">
+              <button class="segment-mode-button is-active replay-only-controls" id="followSegmentButton" type="button" aria-pressed="true">
                 跟随进度
               </button>
               <span class="segment-load-status" id="segmentLoadStatus" role="status">底图按关加载</span>
@@ -289,7 +292,7 @@
 
           <div class="scene-meta" id="sceneMeta">
             <div><span>场景</span><strong id="sceneName">—</strong></div>
-            <div><span>足迹</span><strong id="sampleCount">0</strong></div>
+            <div class="replay-only-meta"><span>足迹</span><strong id="sampleCount">0</strong></div>
             <div><span>海拔</span><strong id="altitudeRange">—</strong></div>
           </div>
 
@@ -305,7 +308,27 @@
           </div>
         </section>
 
-        <aside class="inspector" aria-label="回放信息与筛选">
+        <aside class="inspector" aria-label="地图线路与回放筛选">
+          <section class="inspector-section community-section" id="communityPanel" aria-label="大家的路线与热力设置" hidden>
+            <div class="section-heading compact"><div><span class="eyebrow">走过这张地图的人</span><h2>大家的路线</h2></div><button type="button" class="community-refresh" id="communityRefresh">刷新</button></div>
+            <label class="community-layer-control" id="communityLayerControl" hidden>
+              <span>线路图层</span>
+              <select id="communityMode" aria-label="线路图层">
+                <option value="off">仅地图</option>
+                <option value="routes">大家的路线</option>
+                <option value="heatmap">热力图</option>
+              </select>
+            </label>
+            <p class="community-status" id="communityStatus" role="status" aria-live="polite">切换线路图层，查看大家走过的路线。</p>
+            <div class="community-filters" id="communityFilters" hidden>
+              <label id="communityGroupField">地图记录<select id="communityGroup" aria-label="地图记录组"></select></label>
+              <label>难度<select id="communityDifficulty" aria-label="路线难度"><option value="">全部难度</option></select></label>
+              <label>高度层<select id="communityHeight" aria-label="路线高度层"><option value="">全部高度</option></select></label>
+            </div>
+            <p class="community-legend" id="communityLegend" hidden></p>
+            <div class="community-players" id="communityPlayers"></div>
+            <p class="community-upload-note">路线来自回忆录上传的完整录像。只展示审核通过、完整走完当前关卡的记录。</p>
+          </section>
           <div class="app-compat-controls" hidden aria-hidden="true">
             <div class="section-heading">
               <div>
@@ -320,7 +343,7 @@
 
             <div class="source-tabs" role="tablist" aria-label="数据源类型">
               <button id="modeReplay" class="source-tab is-active" type="button" role="tab" aria-selected="true">回放</button>
-              <button id="modeLive" class="source-tab" type="button" role="tab" aria-selected="false">直播</button>
+              <button id="modeLive" class="source-tab" type="button" role="tab" aria-selected="false" hidden>直播</button>
             </div>
 
             <div id="replaySource">

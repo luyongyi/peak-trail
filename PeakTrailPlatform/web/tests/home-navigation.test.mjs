@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { buildHomeDailyView } from "../src/home-daily.js";
 import { assessCompatibility, isDailyMapFresh, ProtocolError, selectTraceMapPack } from "../src/protocol.js";
+import { FEATURES } from "../src/features.js";
 
 // Exercise the actual application transitions without starting the page, network,
 // animation loop, or WebGL. Only DOM/IO boundaries are replaced with small ports.
@@ -46,7 +47,7 @@ function node() {
     replaceChildren() { this.children = []; }, append(child) { this.children.push(child); },
   };
 }
-function fixture() {
+function fixture({ liveVisible = true } = {}) {
   const today = makeMap();
   // A historical game build with the SAME slot must not be laid on today's map.
   const archivedMap = makeMap(archiveId, "24000000");
@@ -84,6 +85,7 @@ function fixture() {
   }
   let api;
   const ports = {
+    FEATURES: { liveVisible },
     state, elements, $: (id) => elements[id], document: { createElement: node }, URL, EventSource: FakeEventSource,
     buildHomeDailyView: (input) => buildHomeDailyView({ ...input, now }),
     assessCompatibility, selectTraceMapPack, ProtocolError,
@@ -97,6 +99,7 @@ function fixture() {
     clearTimeout() {}, clearInterval: (id) => calls.clearedIntervals.push(id),
     setInterval: () => 901, setTimeout: () => 902,
     syncWakeLock() {}, defaultRelayUrl: () => "https://relay.invalid",
+    syncCommunityContext() {},
     refreshLiveRuns: () => { calls.liveRefreshes++; },
     dismissGate: () => { calls.dismissed++; },
     syncGameAssetsForTrace: (selected, revision) => calls.assets.push({ trace: selected, revision }),
@@ -119,6 +122,36 @@ function fixture() {
   const view = (map = today) => buildHomeDailyView({ daily: state.daily, catalog, mapPack: map, now });
   return { api, state, elements, calls, streams, today, archivedMap, trace, archive, view };
 }
+
+test("hidden live mode does not enter a live workspace, poll the relay, or create an SSE connection", async () => {
+  const f = fixture({ liveVisible: FEATURES.liveVisible });
+  await f.api.enterModeFromGate("live");
+  f.api.setSourceMode("live");
+  f.api.openLiveStream("https://relay.invalid", "ROOM");
+  assert.equal(f.state.workspaceMode, "replay");
+  assert.equal(f.elements.liveSource.hidden, true);
+  assert.equal(f.calls.dismissed, 0);
+  assert.equal(f.calls.liveRefreshes, 0);
+  assert.equal(f.state.live.pollTimer, 0);
+  assert.equal(f.streams.length, 0);
+});
+
+test("all live IO entry points return before network or timer work with the default feature setting", async () => {
+  const names = ["refreshGateRuns", "refreshLiveRuns", "enterLive", "startDemoLive", "connectLiveRun", "openLiveStream"];
+  let requests = 0, streams = 0, timers = 0;
+  const api = new Function("FEATURES", "fetch", "EventSource", "setInterval",
+    `${names.map(appFunction).join("\n")}\nreturn {${names.join(",")}};`)(FEATURES,
+      () => { requests++; }, class { constructor() { streams++; } }, () => { timers++; });
+  await api.refreshGateRuns();
+  await api.refreshLiveRuns();
+  api.enterLive("ROOM");
+  api.startDemoLive();
+  await api.connectLiveRun("https://relay.invalid", "ROOM");
+  api.openLiveStream("https://relay.invalid", "ROOM");
+  assert.equal(requests, 0);
+  assert.equal(streams, 0);
+  assert.equal(timers, 0);
+});
 
 test("opening a home chapter retains the local archive but removes old-build tracks before rendering", async () => {
   const f = fixture();

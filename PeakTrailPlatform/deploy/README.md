@@ -1,5 +1,7 @@
 # Static deployment receiver
 
+历史轨迹接口的两阶段 owner 安装、精确源码提交要求与当前权限阻塞，见 [trajectory-enablement.md](trajectory-enablement.md)。该步骤与静态发布分开，未由本地开发自动执行。
+
 This is a deployment template, not proof that a server has been configured. It does
 not open ports, change SSH, install packages, run sudo, or publish live recordings.
 
@@ -50,6 +52,20 @@ installations, private keys, and `.env` files must never enter the public assets
 The existing validation/staging scripts use `PEAK_TRAIL_ASSET_ROOT` to read the
 separately provisioned assets; missing or mismatched assets fail before publishing.
 The static site does not offer any upload API. Browser log import remains local.
+
+Historical memoir uploads use the new Node `/api/route-uploads` API described in
+`server/trajectory-README.md`; the static file server itself still accepts no uploads.
+The service template now provisions private `/var/lib/peak-trail-routes` with
+`StateDirectory`, `0700` permissions and explicit `ReadWritePaths`; the root-owned
+launcher supplies `--routes-dir` and `--trusted-proxy`. These revised templates
+must be reviewed and installed by the administrator before enabling collection.
+Updating Git or deploying site files alone does not update the installed launcher
+or systemd unit. The revised unit budgets 768 MiB for one serial worker, bounded
+queued requests and decoded buffers; verify available memory on the host.
+Keep this private data outside `site-dist`, shared public assets and deployment
+releases. Existing live records remain in memory. Trajectory uploads persist
+independently and start pending; only the SSH administration CLI can approve,
+hide or reject them. A site rollback does not alter stored uploads or moderation.
 
 Use a new CI-only Ed25519 key, distinct from the owner's local-login key. Keep the
 CI private key in the GitHub production environment secret, never in Git. Pin the
@@ -160,6 +176,16 @@ account. Install the root-owned `live-start.sh` under `/srv/peak-trail`; it reso
 the current release before launching Node from `/opt/peak-trail/node/bin/node`.
 There are no external npm dependencies. No `--dir` is supplied: incoming live
 records are held in relay memory, not written as recording files on the server.
+
+The browser now hides live tracking and its polling by default. Community routes
+and heatmaps are selected inside the existing **进入地图** view through **线路图层**.
+Its manually uploaded historical trajectories use a separate private
+`--routes-dir`, not the live relay's recording option or the static site tree.
+Administrator installation of `/var/lib/peak-trail-routes`, the writable systemd
+path and the updated launcher is required before enabling this API; follow
+[the staged enablement procedure](trajectory-enablement.md). Posts remain pending
+until moderation. Unmatched builds or native branches never overlay old map
+geometry; there is no standalone route-collection page to publish.
 
 The owner explicitly chose the original four-character room flow without added
 login/password. `/api/` and `/watch/` are reverse proxied over HTTPS, including

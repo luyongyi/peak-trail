@@ -46,6 +46,7 @@ function fixture(branch = "swamp-temple") {
     segmentAtTime: () => state.segmentTimeline[0]?.segment ?? null,
     selectedSegmentStatus: () => ({ status: "ready", text: "已就绪" }),
     updateSceneMeta() {}, markSegmentTransition() {}, updateWorldTelemetry() {}, clearTimeout() {}, setTimeout() {},
+    syncCommunityContext() {},
   };
   const labels = source.match(/const SEGMENT_NAMES_ZH = new Map\(\[[^]*?\]\);/)[0];
   const api = new Function(...Object.keys(ports), `${labels}\nlet segmentNavLastName = null, segmentNavFlashTimer = 0;\n${names.map(appFunction).join("\n")}\nreturn { ${names.join(",")} };`)(...Object.values(ports));

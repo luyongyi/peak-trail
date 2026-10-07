@@ -25,8 +25,10 @@ import { createWakeLock } from "./wake-lock.js";
 import { HomePage } from "./home-page.js";
 import { buildHomeDailyView } from "./home-daily.js";
 import { defaultLiveRelay } from "./live-endpoint.js";
-import { createDailyRefreshClock, createDailySourceReader } from "./daily-refresh.js";
+import { createDailyRefreshClock, createDailySourceReader, dailySourceUrls } from "./daily-refresh.js";
 import { bindCameraTouchControls } from "./camera-touch.js";
+import { FEATURES, shouldPollLive } from "./features.js";
+import { createCommunityMapPanel } from "./community-map-panel.js";
 
 const $ = (id) => document.getElementById(id);
 const elements = {
@@ -526,6 +528,7 @@ function chooseSegment(segment, mode = "manual") {
     }
     updateWorldTelemetry();
   }
+  syncCommunityContext();
 }
 
 function syncSegmentToPlayback() {
@@ -577,6 +580,11 @@ function syncGameAssetsForTrace(trace, selectionRevision) {
 }
 
 let viewer;
+const communityMapPanel = createCommunityMapPanel({
+  getContext: () => ({ enabled: state.workspaceMode === "explore", mapPack: state.mapPack, stageIndex: state.selectedSegment }),
+  getScene: () => viewer,
+});
+function syncCommunityContext(options) { communityMapPanel.sync(options); }
 async function initializeViewer() {
   try {
     // File selection and replay controls must work even when the 3D dependency is slow
@@ -698,6 +706,7 @@ function defaultRelayUrl() {
 }
 
 function setSourceMode(mode) {
+  if (mode === "live" && !FEATURES.liveVisible) mode = "replay";
   const live = mode === "live";
   elements.modeReplay?.classList.toggle("is-active", !live);
   elements.modeLive?.classList.toggle("is-active", live);
@@ -728,7 +737,7 @@ function showGate() {
   document.body.classList.add("gate-open");
   document.querySelector('.app-shell').inert = true;
   homePage.setVisible(true);
-  void refreshGateRuns();
+  if (FEATURES.liveVisible) void refreshGateRuns();
 }
 
 function dismissGate() {
@@ -740,6 +749,7 @@ function dismissGate() {
 
 let gateRuns = [];
 async function refreshGateRuns() {
+  if (!FEATURES.liveVisible) return;
   const base = elements.liveUrl.value.trim().replace(/\/+$/, "") || defaultRelayUrl();
   if (base) state.live.baseUrl = base;
   try {
@@ -862,6 +872,7 @@ function syncWakeLockChip() {
 }
 
 function enterLive(code) {
+  if (!FEATURES.liveVisible) return;
   const base = state.live.baseUrl || defaultRelayUrl();
   state.workspaceMode = "live";
   syncWorkspaceState();
@@ -871,6 +882,7 @@ function enterLive(code) {
 }
 
 async function enterModeFromGate(mode) {
+  if (mode === "live" && !FEATURES.liveVisible) return;
   state.workspaceMode = mode;
   syncWorkspaceState();
   dismissGate();
@@ -950,6 +962,9 @@ async function openHomeChapter(map, segment, presentedView, intent = null) {
   updateTraceUI();
   updateMapUI();
   updateCompatibilityUI(false);
+  // Switch map controls before awaiting streamed geometry, so replay panels
+  // never flash while entering a map and early layer choices are retained.
+  syncWorkspaceState();
   dismissGate();
   await renderData();
   if (revision !== state.traceSelectionRevision) return;
@@ -1029,6 +1044,7 @@ function demoEmit(trace, tMs) {
 }
 
 function startDemoLive() {
+  if (!FEATURES.liveVisible) return;
   disconnectLive(true);
   const manifest = {
     schemaVersion: 1,
@@ -1090,6 +1106,7 @@ function startDemoLive() {
 }
 
 async function refreshLiveRuns() {
+  if (!FEATURES.liveVisible) return;
   const base = elements.liveUrl.value.trim().replace(/\/+$/, "");
   if (!base) return;
   state.live.baseUrl = base;
@@ -1140,6 +1157,7 @@ function renderLiveRuns(base, runs) {
 }
 
 async function connectLiveRun(base, code) {
+  if (!FEATURES.liveVisible) return;
   disconnectLive(true);
   state.live.baseUrl = base;
   state.live.code = code;
@@ -1157,6 +1175,7 @@ async function connectLiveRun(base, code) {
  * the stall watchdog) call this without resetting the trace: the relay replays
  * only the records after our Last-Event-ID cursor. */
 function openLiveStream(base, code) {
+  if (!FEATURES.liveVisible) return;
   const es = new EventSource(`${base}/api/runs/${code}/stream`);
   state.live.es = es;
   syncWakeLock();
@@ -1520,6 +1539,7 @@ async function renderDataNow() {
   }
   updateEmptyState();
   updateSceneMeta();
+  syncCommunityContext({ restore: true });
 }
 
 function updateEmptyState() {
@@ -1535,6 +1555,8 @@ function syncWorkspaceState() {
   shell.classList.toggle("has-trace", Boolean(state.trace));
   shell.dataset.workspaceMode = state.workspaceMode;
   shell.dataset.replayState = replayEmpty ? "empty" : state.trace ? "ready" : "explore";
+  if (state.workspaceMode === "explore") elements.modeChip.textContent = "地图";
+  syncCommunityContext();
 }
 
 function updateMapUI() {
@@ -1577,7 +1599,8 @@ function updateCompatibilityUI(showMismatchDetail = false) {
   state.compatibility = result;
   elements.compatibilityPill.classList.remove("is-neutral", "is-good", "is-error");
   elements.compatibilityPill.classList.add(`is-${result.status}`);
-  elements.compatibilityText.textContent = result.message;
+  elements.compatibilityText.textContent = state.workspaceMode === "explore" && state.mapPack
+    ? "地图浏览" : result.message;
   if (showMismatchDetail && result.status === "error" && result.reasons.length) {
     showError("地图与足迹不匹配", `${result.reasons.join("；")}。轨迹仍可在无底图模式回放。`, 12000);
   }
@@ -1915,15 +1938,9 @@ function updateRangeFill(input) {
   input.style.background = `linear-gradient(90deg, var(--accent) ${percent}%, rgba(255, 255, 255, 0.11) ${percent}%)`;
 }
 
-/** Daily-rotation sources, best first: the relay proxies PEAK's login API with no
- * GitHub Action dependency; the static snapshot backs Pages deployments and
- * relay outages. A down relay is skipped for a while instead of timing out. */
+/** Daily rotation stays available independently of the hidden live feature. */
 function dailySources() {
-  const list = [];
-  const backend = defaultRelayUrl();
-  if (backend && !list.includes(`${backend}/api/daily`)) list.push(`${backend}/api/daily`);
-  list.push("./data/daily/current.json");
-  return [...new Set(list)];
+  return dailySourceUrls({ location, relayUrl: defaultRelayUrl() });
 }
 
 const dailyReader = createDailySourceReader({
@@ -2226,6 +2243,7 @@ elements.eventList.addEventListener("scroll", scheduleEventWindow, { passive: tr
 elements.modeReplay?.addEventListener("click", () => void enterModeFromGate("replay"));
 elements.gateReplay.addEventListener("click", () => enterModeFromGate("replay"));
 elements.gateLive.addEventListener("click", () => {
+  if (!FEATURES.liveVisible) return;
   if (!gateRuns.length) {
     // 空卡不是死路：点开诊断（中继可达性/错误/检测时间），并立即重测。
     elements.gateLive.classList.toggle("gate-diag-open");
@@ -2247,17 +2265,18 @@ elements.backToGate.addEventListener("click", () => {
   showGate();
 });
 elements.gateDebug.addEventListener("click", () => {
+  if (!FEATURES.liveVisible) return;
   state.workspaceMode = "live";
   syncWorkspaceState();
   dismissGate();
   setSourceMode("live");
   startDemoLive();
 });
-setInterval(() => {
-  if (gateOpen()) void refreshGateRuns();
+if (FEATURES.liveVisible) setInterval(() => {
+  if (shouldPollLive({ pageOpen: gateOpen() })) void refreshGateRuns();
 }, 5000);
 // 侧栏手风琴：标题点击折叠/展开
-document.querySelectorAll(".inspector-section .section-heading").forEach((heading) => {
+document.querySelectorAll(".inspector-section:not(.community-section) .section-heading").forEach((heading) => {
   heading.addEventListener("click", () => heading.closest(".inspector-section")?.classList.toggle("is-collapsed"));
 });
 // 玩家卡默认极简：点击卡片展开完整细节（按钮/开关除外）
@@ -2490,6 +2509,7 @@ window.addEventListener("drop", async (event) => {
 window.addEventListener("beforeunload", () => {
   window.removeEventListener("scroll", updatePhonePanelButton, true);
   disposeCameraTouch();
+  communityMapPanel.dispose();
   homePage.dispose();
   dailyClock.dispose();
   state.mapPack?.disposeAssets?.();
@@ -2522,6 +2542,9 @@ async function bootstrapMapFromQuery() {
 }
 
 async function bootstrap() {
+  elements.gateLive.hidden = !FEATURES.liveVisible;
+  elements.modeLive.hidden = !FEATURES.liveVisible;
+  elements.gateDebug.closest("details").hidden = !FEATURES.liveVisible;
   showGate();
   updateCompatibilityUI();
   updateRangeFill(elements.heightScale);

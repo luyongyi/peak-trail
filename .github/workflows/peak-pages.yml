@@ -44,7 +44,7 @@ jobs:
           node --test PeakTrailPlatform/tools/tests/*.test.mjs
           node PeakTrailPlatform/tools/validate-data.mjs
       - name: Stage static site
-        run: node PeakTrailPlatform/tools/stage-site.mjs
+        run: node PeakTrailPlatform/tools/stage-site.mjs --profile pages
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:
