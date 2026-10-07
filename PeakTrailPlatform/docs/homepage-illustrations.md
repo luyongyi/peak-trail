@@ -20,7 +20,7 @@
 - 当前支持手机、iPad 和桌面布局；手机 320–743 CSS px，360 px 起两列，更窄时单列。
 - iPad 竖屏（744–1100 CSS px）两列，横屏与桌面四列；大型 Pro 竖屏也采用两列。
 - 手机保留日期与每日四关，导航和操作至少 44 px；安装教程、终章插画、源码与发布链接纵向排列。
-- 七个主主题：海岸、森蕈、雨林、雪山、台地、火山、雾沼。
+- 七个主主题：海岸、森蕈、雨林、雪山、方山、火山、雾沼。
 - 两个终章：熔炉（火山内部）、城塞（高塔内部），共九张 1024×1536 PNG。
 - 内置 image_gen 生成，海岸图作风格参考；完整提示词在 `home-art-prompts.json`。
 - 原图复制到仓库总目录内的 `local/assets/home-art`；Git 忽略，需独立备份。
@@ -64,7 +64,7 @@
 | 森蕈 | 巨型斑点蘑菇林、可爱化的橙色蘑菇僵尸、绿色孢子菌及橙色爆炸菌 | Level_0 Roots Segment 的 Mushroom tree / MushroomZombieSpawner / Forest_SporeFungus / Jungle_SporeMushroomExplo |
 | 雨林 | 深青绿色团块毒菌、毒雾、尖叶植物；不放僵尸 | Level_1 Jungle_Segment 的 Jungle_SporeMushroom / Jungle_SharpPlant |
 | 雪山 | 冰松与岩石间歇泉 | Level_17 Snow_Segment 的 Ice_Pine / Geysers/Geyser |
-| 台地 | 高枝仙人掌、圆形刺球 | Level_16 Desert_Segment 的 Tall Cactus / Cactus Ball Big |
+| 方山 | 高枝仙人掌、圆形刺球 | Level_16 Desert_Segment 的 Tall Cactus / Cactus Ball Big |
 | 火山 | 低平熔岩荒原、神鹫与鸟巢 | Level_16 Caldera_Segment 的 Condor / BirdNest；不是白头鹰 |
 | 雾沼 | 低平湿地、贴地昏睡雾、圆润笑脸小幽灵 | Level_17 Swamp_Segment 的 GhostBallSpawner，以及独立 SleepyFog/StatusFieldGloom；ghost 原贴图 |
 | 城塞 | 围合高塔内部、壁板箭孔、横穿通路的箭道 | Level_17 Temple_Segment 的 ArrowShooter；Gloom Temple/Temple_Model 围墙 |

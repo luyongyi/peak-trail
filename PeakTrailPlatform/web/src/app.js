@@ -205,7 +205,7 @@ const SEGMENT_NAMES_ZH = new Map([
   ["roots", "森蕈"],
   ["tropics", "雨林"],
   ["alpine", "雪山"],
-  ["mesa", "台地"],
+  ["mesa", "方山"],
   ["volcano", "火山"],
   ["swamp", "沼泽"],
 ]);

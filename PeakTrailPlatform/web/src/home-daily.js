@@ -7,7 +7,7 @@ const BIOMES = {
   roots: { title: "森蕈", theme: "roots" },
   tropics: { title: "雨林", theme: "tropics" },
   alpine: { title: "雪山", theme: "alpine" },
-  mesa: { title: "台地", theme: "mesa" },
+  mesa: { title: "方山", theme: "mesa" },
   volcano: { title: "火山", theme: "volcano" },
   swamp: { title: "雾沼", theme: "swamp" },
 };
