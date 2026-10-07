@@ -1693,11 +1693,12 @@ function updateWorldTelemetry() {
   elements.worldTelemetryNote.textContent = state.trace ? worldTelemetryNote(state.trace.worldTimeline, state.currentTime) : "等待导入世界记录";
   const world = viewer?.worldRenderer;
   const fog = world?.fogState;
-  elements.mapFogNote.hidden = !fog?.count;
-  elements.mapFogNote.textContent = fog?.mode === "map-baseline" ? "地图基础雾 · 初始配置，非本局实录" : "本局实录雾 · 随时间线回放";
-  elements.mapFogNote.title = fog?.note || "";
+  const showFogNote = Boolean(fog?.count && fog.mode !== "map-baseline");
+  elements.mapFogNote.hidden = !showFogNote;
+  elements.mapFogNote.textContent = showFogNote ? "本局实录雾 · 随时间线回放" : "";
+  elements.mapFogNote.title = showFogNote ? fog.note || "" : "";
   const objects = world?.objects || [];
-  elements.worldSummary.textContent = [state.trace?.worldTimeline?.captured ? `此刻记录 ${objects.length} 个世界对象 · 采样状态，不预测中间运动` : "", fog?.count ? fog.note : ""].filter(Boolean).join("\n");
+  elements.worldSummary.textContent = [state.trace?.worldTimeline?.captured ? `此刻记录 ${objects.length} 个世界对象 · 采样状态，不预测中间运动` : "", showFogNote ? fog.note : ""].filter(Boolean).join("\n");
   const alerts = (world?.alerts || []).sort((a, b) => a.distance - b.distance).slice(0, 8);
   const key = JSON.stringify(alerts.map((alert) => [alert.object.objectId, Math.round(alert.distance), alert.active]));
   if (elements.worldAlerts.dataset.key === key) return;

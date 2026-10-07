@@ -213,7 +213,14 @@ test("old logs display exact source baseline fog without recording fake world st
   assert.equal(renderer.fogState.mode, 'map-baseline'); assert.equal(renderer.fogState.count, 1);
   assert.equal(renderer.entries.size, 1); assert.equal(trace.worldTimeline, undefined);
   const entry = [...renderer.entries.values()][0];
-  assert.equal(entry.object.topY, 784); assert.match(entry.text.textContent, /地图基础雾/);
+  assert.equal(entry.object.topY, 784);
+  assert.equal(entry.text.textContent, ''); assert.equal(entry.label.title, '');
+  const camera = new THREE.PerspectiveCamera(60, 800 / 600, .1, 2000);
+  camera.position.copy(entry.group.position).add(new THREE.Vector3(0, 20, 60));
+  camera.lookAt(entry.group.position); camera.updateMatrixWorld(true);
+  renderer.projectLabels(camera, 800, 600);
+  assert.equal(entry.label.hidden, true, 'camera projection must not bring the hidden baseline label back');
+  assert.equal(entry.group.visible, true, 'hiding the description must preserve the rendered fog');
   nearly(entry.group.scale.toArray(), entry.object.size.map((n) => n / 2));
   assert.equal(entry.fogMaterial.uniforms.replayTime.value, 0);
   assert.equal(entry.fogMaterial.uniforms.safeCount.value, 0);

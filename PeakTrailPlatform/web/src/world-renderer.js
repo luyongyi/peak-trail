@@ -205,12 +205,12 @@ export class WorldRenderer {
       const distance = entry.warning ? ` · ${Math.round(entry.warning.distance)}m` : '';
       const name = ['item', 'placed_object'].includes(object.kind) ? entry.asset.name : LABELS[object.kind];
       entry.text.textContent = object.authority === 'map-baseline'
-        ? `地图基础雾 · 初始雾顶 ${object.topY.toFixed(1)}m`
+        ? ''
         : `${name}${distance}${enemy ? entry.warning?.active ? ' · 已激活' : ' · 预警' : ''}${object.statusEnabled === false ? ' · 昏睡关闭' : ''}`;
       entry.label.classList.toggle('is-danger', Boolean(entry.warning?.active));
       entry.label.dataset.kind = object.kind;
       entry.label.title = `${object.prefabName} · ${object.activity} · ${object.source}${entry.asset.modelUrl ? '' : ' · 图标/范围示意'}`;
-      if (object.authority === 'map-baseline') entry.label.title = this.fogState.note;
+      if (object.authority === 'map-baseline') entry.label.title = '';
     }
     for (const [id, entry] of this.entries) {
       if (alive.has(id)) continue;
@@ -254,6 +254,7 @@ export class WorldRenderer {
       entry.label.hidden = true;
       if (!entry.group.visible || !this.enabled || count >= 36) continue;
       const object = entry.object;
+      if (object.authority === 'map-baseline') continue;
       const renderedZ = mirrorZ ? -(object.pos[2] - this.origin.z) : object.pos[2] - this.origin.z;
       point.set(object.pos[0] - this.origin.x, (object.pos[1] - this.origin.y + (object.kind.includes('zombie') ? 2 : 0.6)) * this.heightScale, renderedZ).project(camera);
       if (point.z < -1 || point.z > 1 || Math.abs(point.x) > 0.98 || Math.abs(point.y) > 0.92) continue;
