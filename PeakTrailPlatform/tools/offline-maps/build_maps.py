@@ -3,7 +3,7 @@
 The installed game is read only. No Unity code or network game is executed.
 """
 from __future__ import annotations
-import argparse, collections, datetime, gc, hashlib, json, math, re, subprocess, time
+import argparse, collections, datetime, gc, hashlib, json, math, os, re, subprocess, time
 from pathlib import Path
 import numpy as np
 from PIL import Image
@@ -16,6 +16,14 @@ from route_metadata import BIOMES, resolved_segments, route_metadata
 
 FIELDS = ('_segmentParent','_segmentCampfire','wallNext','wallPrevious')
 GEOMETRY_ROOT_FIELDS = ('_segmentParent','_segmentCampfire')
+
+def game_data(game):
+    """Explicit private unpacked data may replace the newer UnityFS container."""
+    value=os.environ.get('PEAK_TRAIL_GAME_DATA')
+    directory=Path(value).resolve() if value else game/'PEAK_Data'
+    if not (directory/'globalgamemanagers').is_file():
+        raise ValueError('PEAK data is bundled; unpack data.unity3d privately with unpack_game_data.py and set PEAK_TRAIL_GAME_DATA to the extracted directory')
+    return directory
 
 def pid(ptr):
     return ptr.get('m_PathID',0)
@@ -115,7 +123,7 @@ class Scene:
                 try: scripts[key]=mb.m_Script.read().m_ClassName
                 except Exception: scripts[key]='?'
             name=scripts[key]
-            if name in ('MapHandler','VoidBiome'):
+            if name in ('MapHandler','VoidBiome','MountainProgressHandler'):
                 self.env.typetree_generator=self.gen
                 self.special[name]=obj.read_typetree()
                 self.env.typetree_generator=None
@@ -274,7 +282,7 @@ def render_instances(scene,instances,extent,resolution,color):
 def sha(path): return hashlib.sha256(path.read_bytes()).hexdigest()
 
 def game_info(game):
-    env=UnityPy.load(str(game/'PEAK_Data'/'globalgamemanagers'))
+    env=UnityPy.load(str(game_data(game)/'globalgamemanagers'))
     build=next(o.read_typetree(check_read=False) for o in env.objects if o.type.name=='BuildSettings')
     player=next(o.read_typetree(check_read=False) for o in env.objects if o.type.name=='PlayerSettings')
     scenes={Path(s).stem:i for i,s in enumerate(build['scenes']) if re.fullmatch(r'Level_\d+',Path(s).stem)}
@@ -284,8 +292,8 @@ def game_info(game):
 
 def build_one(game,slot,out,res,hres):
     started=time.time(); mapping,version,build_id=game_info(game); name=f'Level_{slot}'; scene_file=f'level{mapping[name]}'
-    scene=Scene(game/'PEAK_Data'/scene_file,game); dest=out/str(build_id)/name; dest.mkdir(parents=True,exist_ok=True)
-    manifest={'schemaVersion':1,'identityVersion':2,'mapPackId':'','generatedAtUtc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'gameVersion':version,'gameBuildId':build_id,'sceneName':name,'mapSlot':slot,'projectionVersion':1,'coordinateSpace':'unity-world-meters','textureUv':'u=(x-minX)/(maxX-minX);v=(z-minZ)/(maxZ-minZ)','imageOrigin':'bottom-left-in-uv;viewer-flips-for-top-left-images','layers':[], 'source':{'kind':'offline-unity-scene','sceneFile':scene_file,'sceneSha256':sha(game/'PEAK_Data'/scene_file),'unityVersion':scene.file.unity_version,'renderer':'Mesh UV/base texture; terrain _BaseColor/_TopColor with slope; prop _Tint; orthographic albedo survey rasterizer','heightSource':'highest non-trigger MeshCollider/BoxCollider/SphereCollider/CapsuleCollider surface, excluding fog wall roots','transformSource':'full serialized parent-chain TRS; static-batch root when present','limitations':['Custom game shader lighting and material-layer masks are approximated; this is an albedo survey render, not a game screenshot.','Moving props and spawned items are not baked. Sphere/capsule colliders use 16-sided tessellation.','Top-surface height field cannot preserve stacked caves/overhangs.','Void has a very large static collision plane and consequently coarser horizontal sample spacing.']}}
+    scene=Scene(game_data(game)/scene_file,game); dest=out/str(build_id)/name; dest.mkdir(parents=True,exist_ok=True)
+    manifest={'schemaVersion':1,'identityVersion':2,'mapPackId':'','generatedAtUtc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'gameVersion':version,'gameBuildId':build_id,'sceneName':name,'mapSlot':slot,'projectionVersion':1,'coordinateSpace':'unity-world-meters','textureUv':'u=(x-minX)/(maxX-minX);v=(z-minZ)/(maxZ-minZ)','imageOrigin':'bottom-left-in-uv;viewer-flips-for-top-left-images','layers':[], 'source':{'kind':'offline-unity-scene','sceneFile':scene_file,'sceneSha256':sha(game_data(game)/scene_file),'unityVersion':scene.file.unity_version,'renderer':'Mesh UV/base texture; terrain _BaseColor/_TopColor with slope; prop _Tint; orthographic albedo survey rasterizer','heightSource':'highest non-trigger MeshCollider/BoxCollider/SphereCollider/CapsuleCollider surface, excluding fog wall roots','transformSource':'full serialized parent-chain TRS; static-batch root when present','limitations':['Custom game shader lighting and material-layer masks are approximated; this is an albedo survey render, not a game screenshot.','Moving props and spawned items are not baked. Sphere/capsule colliders use 16-sided tessellation.','Top-surface height field cannot preserve stacked caves/overhangs.','Void has a very large static collision plane and consequently coarser horizontal sample spacing.']}}
     print(name,scene_file,'loaded',flush=True)
     manifest['route']=scene.route()
     for index,segment in scene.layers():

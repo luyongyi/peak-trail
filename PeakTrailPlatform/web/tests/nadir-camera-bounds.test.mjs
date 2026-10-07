@@ -8,6 +8,7 @@ const terrain = { bounds: { min: [-50, 710, 150], max: [80, 1015, 600] }, materi
 test("only the verified 5km Void water plane is omitted from camera extents", () => {
   const original = structuredClone([floor, terrain]);
   assert.deepEqual(nadirCameraBounds({ biome: "Void" }, "25306743", [floor, terrain]), terrain.bounds);
+  assert.deepEqual(nadirCameraBounds({ biome: "Void" }, "25739797", [floor, terrain]), terrain.bounds);
   assert.deepEqual([floor, terrain], original);
   const smallWater = { ...floor, bounds: { min: [-70, 740, 120], max: [90, 740, 650] } };
   assert.deepEqual(nadirCameraBounds({ biome: "Void" }, "25306743", [floor, terrain, smallWater]),

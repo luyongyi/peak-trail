@@ -11,7 +11,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from build_maps import Scene, bounds_for, game_info, pid
+from build_maps import Scene, bounds_for, game_data, game_info, pid
 
 
 def sha(path: Path) -> str:
@@ -52,7 +52,7 @@ def direct_peak_gate(scene: Scene, root: int) -> int:
     return matches[0] if matches else 0
 
 
-def export_peak(game: Path, catalog_path: Path, packs_path: Path, output: Path) -> None:
+def export_peak(game: Path, catalog_path: Path, packs_path: Path, output: Path, scene_factory=Scene) -> None:
     mapping, version, build = game_info(game)
     catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
     maps = []
@@ -62,7 +62,7 @@ def export_peak(game: Path, catalog_path: Path, packs_path: Path, output: Path) 
         map_pack_id = catalog_entry["mapPackId"]
         manifest = json.loads((packs_path / map_pack_id / "map-pack.json").read_text(encoding="utf-8"))
         scene_name = manifest["sceneName"]
-        scene_path = game / "PEAK_Data" / f"level{mapping[scene_name]}"
+        scene_path = game_data(game) / f"level{mapping[scene_name]}"
         source_hash = sha(scene_path)
         if source_hash != manifest.get("source", {}).get("sceneSha256"):
             raise ValueError(f"{scene_name}: installed source scene does not match canonical pack")
@@ -70,7 +70,7 @@ def export_peak(game: Path, catalog_path: Path, packs_path: Path, output: Path) 
         if len(terminal) != 1 or not terminal[0].get("geometrySha256"):
             raise ValueError(f"{scene_name}: expected one original-mesh terminal layer")
 
-        scene = Scene(scene_path, game)
+        scene = scene_factory(scene_path, game)
         root, handler = peak_handler_root(scene)
         gate = direct_peak_gate(scene, root)
         instances, colliders, stats = scene.collect({

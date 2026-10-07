@@ -9,10 +9,10 @@ import gc
 import json
 from pathlib import Path
 
-from build_maps import Scene, game_info, sha
+from build_maps import Scene, game_data, game_info, sha
 
 
-def export_routes(game, catalog_path, packs_path, output):
+def export_routes(game, catalog_path, packs_path, output, scene_factory=Scene):
     mapping, version, build_id = game_info(game)
     catalog = json.loads(catalog_path.read_text(encoding='utf-8'))
     result = {
@@ -29,11 +29,11 @@ def export_routes(game, catalog_path, packs_path, output):
         manifest = json.loads((packs_path / entry['mapPackId'] / 'map-pack.json').read_text(encoding='utf-8'))
         if manifest['mapPackId'] != entry['mapPackId'] or manifest['sceneName'] != name:
             raise ValueError(f'Catalog and canonical manifest disagree: {name}')
-        scene_path = game / 'PEAK_Data' / f'level{mapping[name]}'
+        scene_path = game_data(game) / f'level{mapping[name]}'
         scene_hash = sha(scene_path)
         if manifest['source']['sceneSha256'] != scene_hash:
             raise ValueError(f'{name} installed scene differs from the existing map pack; rebuild instead of assigning new labels.')
-        scene = Scene(scene_path, game)
+        scene = scene_factory(scene_path, game)
         route = scene.route()
         # This sidecar can label only geometry the pack actually contains.
         # Never use it to disguise an incorrect pack or swap in the other branch.

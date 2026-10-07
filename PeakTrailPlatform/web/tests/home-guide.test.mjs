@@ -11,7 +11,7 @@ const guide = guideHtml.match(/<section class="home-guide"[\s\S]*?<\/section>/)[
 
 test("the homepage and guide download the memories DLL advertised by the exact manifest", () => {
   assert.equal(release.product, "peak-memories");
-  assert.equal(release.version, "0.8.0");
+  assert.match(release.version, /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/);
   assert.equal(release.filename, "PeakReplayLab.dll");
   assert.equal(release.downloadPath, `downloads/memories/${release.version}/PeakReplayLab.dll`);
   const nav = html.match(/<nav class="home-actions"[\s\S]*?<\/nav>/)[0];

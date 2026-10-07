@@ -4,6 +4,7 @@ import { communityGroupLabel, communityMapIdentity, mapRouteStages, matchesCommu
 import { createCommunityRoutes } from "../src/community-routes.js";
 
 const hash = character => character.repeat(64);
+const alignment = () => ({ status: "verified", id: hash("9"), method: "identity", landmarkCount: 3, maxErrorCm: 0 });
 function map(overrides = {}) {
   return { mapPackId: `sha256-${hash("a")}`, gameBuildId: "25306743", sceneName: "Level_8", route: {
     branch: "volcano-kiln", segments: ["Shore", "Roots", "Alpine", "Volcano", "Volcano"].map((biome, index) => ({ index, biome })) },
@@ -11,19 +12,21 @@ function map(overrides = {}) {
 }
 function group(overrides = {}) {
   const route = ["Shore", "Roots", "Alpine", "Volcano", "Kiln"];
-  return { id: hash("b"), mapCompatibility: "matched", mapPackId: map().mapPackId,
+  return { id: hash("b"), mapCompatibility: "matched", mapPackId: map().mapPackId, mapAlignment: alignment(),
     map: { buildId: "25306743", scene: "Level_8", levelIndex: 81, layoutKey: hash("c"), route,
       stages: route.map((name, index) => ({ index, name, enterZCm: index * 1000, exitZCm: (index + 1) * 1000 })) },
     stageSummaries: route.map((name, index) => ({ index, name, routeCount: 2 })),
     difficulties: [{ key: "a:0;c:false;m:false", label: "登山 0" }, { key: "a:3;c:false;m:false", label: "登山 3" }], ...overrides };
 }
 function routeBody(chosen = group(), stageIndex = 0, overrides = {}) {
-  return { groupId: chosen.id, stageIndex, mapCompatibility: "matched", mapPackId: chosen.mapPackId, totalRouteCount: 2, truncated: false,
+  return { groupId: chosen.id, stageIndex, mapCompatibility: "matched", mapPackId: chosen.mapPackId, mapAlignment: chosen.mapAlignment,
+    coordinateSpace: "canonical-map-world-cm", totalRouteCount: 2, truncated: false,
     routes: [{ id: "first", playerKey: hash("1"), name: "同名登山者", points: [[0, 100, 100, 100], [100, 200, 300, 200]], breaks: [] },
       { id: "second", playerKey: hash("2"), name: "同名登山者", points: [[0, 500, -100, 100], [100, 600, 100, 200]], breaks: [] }], ...overrides };
 }
 function heatBody(chosen = group(), stageIndex = 0, overrides = {}) {
-  return { groupId: chosen.id, stageIndex, mapCompatibility: "matched", mapPackId: chosen.mapPackId, routeCount: 2,
+  return { groupId: chosen.id, stageIndex, mapCompatibility: "matched", mapPackId: chosen.mapPackId, mapAlignment: chosen.mapAlignment,
+    coordinateSpace: "canonical-map-world-cm", routeCount: 2,
     cellSizeCm: 200, heightBandCm: 200, cells: [[0, 0, 0, 1], [1, 1, 1, 1], [2, -1, 0, 1]], ...overrides };
 }
 function response(value, status = 200) { return new Response(JSON.stringify(value), { status, headers: { "Content-Type": "application/json" } }); }
@@ -47,14 +50,30 @@ test("community identity requires a verified map build, scene, pack and canonica
     assert.equal(communityMapIdentity(changed), null);
   }
   assert.equal(matchesCommunityGroup(group(), map()), true);
+  assert.equal(matchesCommunityGroup(group({ mapAlignment: { ...alignment(), method: "legacy-layout-key" } }), map()), true,
+    "a source-proven older recording can still overlay the original model");
 });
 
 test("the same Level_N cannot overlay an old build, a different map pack or waiting-map data", () => {
   const original = group();
   const changed = [group({ map: { ...original.map, buildId: "25739797" } }), group({ mapPackId: `sha256-${hash("f")}` }),
     group({ mapCompatibility: "waiting-map" }), group({ map: { ...original.map, layoutKey: undefined } }),
-    group({ map: { ...original.map, scene: "Level_7" } })];
+    group({ map: { ...original.map, scene: "Level_7" } }), group({ mapAlignment: undefined }),
+    group({ mapAlignment: { ...alignment(), status: "pending" } }), group({ mapAlignment: { ...alignment(), maxErrorCm: 5.01 } })];
   for (const value of changed) assert.equal(matchesCommunityGroup(value, map()), false);
+});
+
+test("pending map evidence distinguishes an unavailable game version from an older recording lacking landmarks", async () => {
+  for (const [changed, pattern] of [
+    [group({ mapCompatibility: "waiting-map", mapAlignment: { status: "pending", reason: "map-build-unavailable" } }), /游戏版本/],
+    [group({ mapCompatibility: "waiting-map", mapAlignment: { status: "pending", reason: "recording-landmarks-missing" } }), /旧录像.*地标/],
+    [group({ mapCompatibility: "waiting-map", mapAlignment: { status: "pending", reason: "source-landmarks-missing" } }), /地图模型的地标/],
+  ]) {
+    const fake = server([changed]), controller = createCommunityRoutes({ fetchImpl: fake.fetchImpl });
+    await controller.enterMap(map(), { stageIndex: 0 }); await controller.setMode("routes");
+    assert.equal(controller.getSnapshot().status, "mismatch"); assert.match(controller.getSnapshot().message, pattern);
+    assert.deepEqual(fake.calls.map(value => value.path), ["/api/route-groups"]); controller.dispose();
+  }
 });
 
 test("group chapter titles must match the actual branch and native selected indices", () => {
@@ -200,7 +219,8 @@ test("old stage responses cannot overwrite a newer selected chapter, even if fet
 });
 
 test("responses with a stale group, stage, pack or compatibility are rejected before display", () => {
-  for (const invalid of [{ groupId: hash("e") }, { stageIndex: 1 }, { mapPackId: `sha256-${hash("f")}` }, { mapCompatibility: "waiting-map" }]) {
+  for (const invalid of [{ groupId: hash("e") }, { stageIndex: 1 }, { mapPackId: `sha256-${hash("f")}` }, { mapCompatibility: "waiting-map" },
+    { mapAlignment: { ...alignment(), id: hash("8") } }, { coordinateSpace: "recording-world-cm" }]) {
     assert.throws(() => normalizeCommunityStage(routeBody(group(), 0, invalid), heatBody(), group(), map(), 0), /不一致/);
   }
 });

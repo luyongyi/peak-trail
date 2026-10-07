@@ -1,18 +1,18 @@
 # 回忆录 DLL 下载与验证
 
-网站下载为 **PEAK Memories v0.8.0 实验版**，已公开为 GitHub prerelease。站内文件是
-`downloads/memories/0.8.0/PeakReplayLab.dll`，来自
-[v0.8.0 发布页](https://github.com/luyongyi/peak-memories/releases/tag/v0.8.0)。公开发布不等于游戏内显示、性能和多人录制已经实测。
+网站下载为 **PEAK Memories v0.8.1 实验版**，已公开为 GitHub prerelease。站内文件是
+`downloads/memories/0.8.1/PeakReplayLab.dll`，来自
+[v0.8.1 发布页](https://github.com/luyongyi/peak-memories/releases/tag/v0.8.1)。公开发布不等于游戏内显示、性能和多人录制已经实测。
 
 `data/memories/release.json` 固定版本、文件名、大小、SHA-256，以及 `tag`、
 `sourceRevision`、`releaseUrl`、`artifactUrl`；公开构建使用 `channel: release`、
 `releaseStatus: published`、`sourceDirty: false`。
 
 ```text
-FileVersion: 0.8.0.0
-InformationalVersion: 0.8.0+7c1555992ad00bd5bb741dd133b0e47609ebcaa8
-Size: 27,560,448 bytes
-SHA256: 908074d4c5c6c43c4f5c41cbfd832eb7576f64afb0e6bc56601b4181b815344e
+FileVersion: 0.8.1.0
+InformationalVersion: 0.8.1+29cb0a5927e5eb26aa9bd6b33822fa5dfd9e9148
+Size: 27,570,688 bytes
+SHA256: f9b078e6bbf1de519b26196198d438c3d714e23d48c305dc85b4547e282ca94d
 ```
 
 默认打包匿名核对 GitHub API 的已公开状态、精确 Git tag 对应的提交、发布附件

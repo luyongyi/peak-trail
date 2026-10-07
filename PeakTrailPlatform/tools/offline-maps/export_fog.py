@@ -8,7 +8,7 @@ import gc
 import json
 from pathlib import Path
 
-from build_maps import Scene, game_info, pid, sha
+from build_maps import Scene, game_data, game_info, pid, sha
 
 
 def ancestry(scene, go):
@@ -73,7 +73,7 @@ def fog_volume(scene, obj, scene_name, segment_roots):
             'runtimeHeightUnknown': True, 'runtimeSafeZonesUnknown': True}
 
 
-def export_fog(game, catalog_path, packs_path, routes_path, output, slots=None):
+def export_fog(game, catalog_path, packs_path, routes_path, output, slots=None, scene_factory=Scene):
     mapping, _, build = game_info(game)
     catalog = json.loads(catalog_path.read_text(encoding='utf8'))
     routes = json.loads(routes_path.read_text(encoding='utf8'))
@@ -88,7 +88,7 @@ def export_fog(game, catalog_path, packs_path, routes_path, output, slots=None):
             continue
         manifest = json.loads((packs_path / entry['mapPackId'] / 'map-pack.json').read_text(encoding='utf8'))
         name = entry['sceneName']
-        scene_path = game / 'PEAK_Data' / f'level{mapping[name]}'
+        scene_path = game_data(game) / f'level{mapping[name]}'
         scene_hash = sha(scene_path)
         if manifest['source']['sceneSha256'] != scene_hash:
             raise ValueError(f'{name}: source scene changed; rebuild the geometry first')
@@ -97,24 +97,28 @@ def export_fog(game, catalog_path, packs_path, routes_path, output, slots=None):
             raise ValueError('Route sidecar does not match source scene')
         volumes = []
         if route['route']['branch'] == 'swamp-temple':
-            scene = Scene(scene_path, game)
+            scene = scene_factory(scene_path, game)
+            previous_generator = scene.env.typetree_generator
             scene.env.typetree_generator = scene.gen
             roots = [(index, pid(value['_segmentParent'])) for index, value in scene.layers() if pid(value['_segmentParent'])]
             scripts = {}
-            for obj in scene.objects.values():
-                if obj.type.name != 'MonoBehaviour':
-                    continue
-                head = obj.parse_monobehaviour_head()
-                if not head.m_Script.m_PathID:
-                    continue
-                key = (head.m_Script.m_FileID, head.m_Script.m_PathID)
-                if key not in scripts:
-                    scripts[key] = head.m_Script.read().m_ClassName
-                if scripts[key] != 'StatusFieldGloom':
-                    continue
-                value = fog_volume(scene, obj, name, roots)
-                if value:
-                    volumes.append(value)
+            try:
+                for obj in scene.objects.values():
+                    if obj.type.name != 'MonoBehaviour':
+                        continue
+                    head = obj.parse_monobehaviour_head()
+                    if not head.m_Script.m_PathID:
+                        continue
+                    key = (head.m_Script.m_FileID, head.m_Script.m_PathID)
+                    if key not in scripts:
+                        scripts[key] = head.m_Script.read().m_ClassName
+                    if scripts[key] != 'StatusFieldGloom':
+                        continue
+                    value = fog_volume(scene, obj, name, roots)
+                    if value:
+                        volumes.append(value)
+            finally:
+                scene.env.typetree_generator = previous_generator
             del scene
             gc.collect()
         result['maps'].append({'mapPackId': manifest['mapPackId'], 'sceneName': name,

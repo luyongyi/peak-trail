@@ -5,7 +5,9 @@
 const PROJECTED_DECALS = new Set(["M_VFX_PetrifyDecal", "M_VFX_FireballDecal"]);
 
 export function isSourceProjectionProxy(gameBuildId, materialName, shader) {
-  return String(gameBuildId) === "25306743" && shader === "Decal"
+  // Re-audited exact current materials and transparent Decal pass; the legacy
+  // digest-bound ShadowsOnly node table below remains limited to its own build.
+  return ["25306743", "25739797"].includes(String(gameBuildId)) && shader === "Decal"
     && PROJECTED_DECALS.has(materialName);
 }
 

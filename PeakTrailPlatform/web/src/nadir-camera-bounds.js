@@ -1,7 +1,7 @@
-// Build 25306743's exported Void Plane uses M_Void Water / GD/Water-GD.
+// Audited builds 25306743 and 25739797 use M_Void Water / GD/Water-GD.
 // Its 5 km square is retained in the scene; only camera fitting omits it.
 export function nadirCameraBounds(layer, gameBuildId, parts) {
-  if (String(gameBuildId) !== "25306743" || String(layer?.biome).toLowerCase() !== "void") return null;
+  if (!["25306743", "25739797"].includes(String(gameBuildId)) || String(layer?.biome).toLowerCase() !== "void") return null;
   const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
   let omitted = 0, retained = 0;
   for (const part of parts) {

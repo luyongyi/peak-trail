@@ -7,6 +7,7 @@ import { normalizeMapFog } from "../web/src/map-fog.js";
 import { normalizeMapWater } from "../web/src/map-water.js";
 import { normalizeMapEnclosures } from "../web/src/map-enclosures.js";
 import { normalizeMapPeak } from "../web/src/map-peak.js";
+import { fitMapAlignment, validateMapAlignment } from "../server/map-alignment.mjs";
 import { createHash } from "node:crypto";
 import { HOME_ART_FILES } from "../web/src/home-art.js";
 import { checkSiteBudget, checkSiteDownloadReferences, loadSiteArtifact, readSiteRelease, siteReleaseOptions, readSiteStagingProfile } from "./lib/site-release.mjs";
@@ -70,6 +71,7 @@ if (catalog.schemaVersion !== 1 || !Array.isArray(catalog.mapPacks)) {
 }
 const mapPacks = [];
 const enclosureFiles = new Set();
+const trajectorySidecars = new Map();
 for (const entry of catalog.mapPacks) {
   const mapPackId = String(entry?.mapPackId || "").toLowerCase();
   const expectedPath = `./packs/${mapPackId}/map-pack.json`;
@@ -83,6 +85,19 @@ for (const entry of catalog.mapPacks) {
   const mapWater = await verifiedWaterMetadata(manifest);
   const mapEnclosures = await verifiedEnclosureMetadata(manifest);
   const mapPeak = await verifiedPeakMetadata(manifest);
+  const landmarks = await verifiedLandmarkMetadata(manifest);
+  if (landmarks && !route) throw new Error("Map landmark evidence requires native route evidence");
+  if (route) {
+    const filename = `routes.${manifest.gameBuildId}.json`;
+    if (!trajectorySidecars.has(filename)) trajectorySidecars.set(filename, { schemaVersion: 1, gameBuildId: String(manifest.gameBuildId), maps: [] });
+    trajectorySidecars.get(filename).maps.push({ mapPackId, sceneName: manifest.sceneName, mapSlot: manifest.mapSlot,
+      sourceSceneSha256: manifest.source.sceneSha256, route: publicRouteMetadata(route) });
+  }
+  if (landmarks) {
+    const filename = `landmarks.${manifest.gameBuildId}.json`;
+    if (!trajectorySidecars.has(filename)) trajectorySidecars.set(filename, { ...landmarks.header, maps: [] });
+    trajectorySidecars.get(filename).maps.push(landmarks.entry);
+  }
   for (const enclosure of mapEnclosures?.enclosures || []) {
     if (enclosureFiles.has(enclosure.geometry)) continue;
     const path = resolve(mapEnclosuresDirectory, enclosure.geometry);
@@ -99,6 +114,7 @@ for (const entry of catalog.mapPacks) {
 await rm(outputDirectory, { recursive: true, force: true });
 await mkdir(outputDirectory, { recursive: true });
 await mkdir(resolve(outputDirectory, "data", "maps"), { recursive: true });
+for (const [filename, evidence] of trajectorySidecars) await writeFile(resolve(outputDirectory, "data", "maps", filename), JSON.stringify(evidence, null, 2) + "\n");
 await mkdir(resolve(outputDirectory, "schema"), { recursive: true });
 await mkdir(dirname(resolve(outputDirectory, downloadRelease.downloadPath)), { recursive: true });
 await mkdir(resolve(outputDirectory, "data", downloadOptions.product), { recursive: true });
@@ -236,7 +252,56 @@ async function verifiedRouteMetadata(manifest) {
       throw new Error(`Route evidence disagrees with geometry: ${manifest.sceneName}, segment ${segment.index}`);
     }
   }
-  return entry.route;
+  return publicRouteMetadata(entry.route);
+}
+
+function publicRouteMetadata(route) {
+  // Build a fresh static-game whitelist; never copy arbitrary neighbouring
+  // metadata or fields from an evidence document into the public service.
+  return { authority: "serialized-map-handler", branch: route.branch, segments: route.segments.map(segment => {
+    const selected = {};
+    for (const key of ["index", "biome", "biomeId", "name", "campfireName", "stageId", "displayName"]) {
+      if (!Object.hasOwn(segment, key)) continue;
+      const value = segment[key];
+      if (["index", "biomeId"].includes(key) ? !Number.isInteger(value) || value < 0 :
+        !(key === "campfireName" && value === null) && (typeof value !== "string" || value.length > 120 || /[\u0000-\u001f]/u.test(value))) throw new Error("Invalid native route field");
+      selected[key] = value;
+    }
+    return selected;
+  }) };
+}
+
+async function verifiedLandmarkMetadata(manifest) {
+  const build = String(manifest.gameBuildId || "");
+  if (!/^\d+$/.test(build)) return null;
+  let evidence;
+  try { evidence = JSON.parse(await readFile(resolve(mapsDirectory, `landmarks.${build}.json`), "utf8")); }
+  catch (error) { if (error.code === "ENOENT") return null; throw error; }
+  if (evidence.schemaVersion !== 1 || String(evidence.gameBuildId) !== build || evidence.authority !== "serialized-map-landmarks"
+    || !Array.isArray(evidence.maps)) throw new Error("Invalid map landmark evidence");
+  const matches = evidence.maps.filter(value => value.mapPackId === manifest.mapPackId);
+  // A provisioned build must cover its complete catalog before publication.
+  // Builds with no sidecar remain available as a model, with routes pending.
+  if (matches.length !== 1) throw new Error("Missing or duplicate exact map landmark evidence");
+  const value = matches[0];
+  if (value.sceneName !== manifest.sceneName || !/^[a-f0-9]{64}$/.test(value.sourceSceneSha256 || "")
+    || value.sourceSceneSha256 !== manifest.source?.sceneSha256) throw new Error("Map landmark source identity mismatch");
+  const alignment = validateMapAlignment(value.alignment);
+  if (alignment.landmarks.some(point => point.stageIndex !== undefined && !manifest.layers.some(layer => layer.segment === point.stageIndex))
+    || fitMapAlignment(alignment, alignment).status !== "verified") throw new Error("Map landmarks cannot prove the source layout");
+  const header = { schemaVersion: 1, gameBuildId: build, authority: evidence.authority };
+  if (typeof evidence.gameVersion === "string") header.gameVersion = evidence.gameVersion;
+  if (header.gameVersion && manifest.gameVersion && header.gameVersion !== manifest.gameVersion) throw new Error("Map landmark game version mismatch");
+  if (/^[a-f0-9]{32}$/.test(evidence.sourceGameAssemblyMvid || "")) header.sourceGameAssemblyMvid = evidence.sourceGameAssemblyMvid;
+  if (/^[a-f0-9]{64}$/.test(evidence.sourceGameAssemblySha256 || "")) header.sourceGameAssemblySha256 = evidence.sourceGameAssemblySha256;
+  const entry = { sceneName: manifest.sceneName, mapPackId: manifest.mapPackId, sourceSceneSha256: value.sourceSceneSha256, alignment };
+  if (value.expectedLegacyLayoutKey !== undefined || value.legacyRootTransformPolicy !== undefined) {
+    if (!/^[a-f0-9]{64}$/.test(value.expectedLegacyLayoutKey || "") || value.legacyRootTransformPolicy !== "static-no-runtime-trs-writes"
+      || !header.sourceGameAssemblyMvid || !header.sourceGameAssemblySha256) throw new Error("Invalid legacy map landmark proof");
+    entry.expectedLegacyLayoutKey = value.expectedLegacyLayoutKey;
+    entry.legacyRootTransformPolicy = value.legacyRootTransformPolicy;
+  }
+  return { header, entry };
 }
 
 async function verifiedFogMetadata(manifest) {

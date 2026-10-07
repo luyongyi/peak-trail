@@ -8,6 +8,35 @@ or project an overhead picture onto vertical faces.
 
 ## Build
 
+PEAK 2.6.b/build 25739797 stores serialized scenes in `data.unity3d`. Use the
+repeatable complete-build wrapper for this packaging. It unpacks the bundle
+privately with bounded block memory, preserves exact source bytes/hashes, and
+reads managed type metadata from the installed game. It validates an existing
+input cache and completed bake before reuse; it never reassigns an older pack
+to a newer game build.
+
+```powershell
+& local/python/.venv/Scripts/python.exe PeakTrailPlatform/tools/offline-maps/export_build.py --slots all --with-sidecars
+$env:PEAK_TRAIL_GAME_DATA = (Resolve-Path local/native-inputs/25739797/PEAK_Data).Path
+# After disjoint slot jobs finish, regenerate only the complete source sidecars:
+& local/python/.venv/Scripts/python.exe PeakTrailPlatform/tools/offline-maps/export_build_sidecars.py
+```
+
+The wrapper keeps the original meshes and source textures at the same delivery
+quality as the individual exporter. Its 256-pixel reference PNG and 256-square
+collision height grid are separate planar aids. They do not reduce or displace
+the 3D mesh. Lossless outer gzip is finalized before canonical registration.
+Disjoint `--slots` lists may run in at most two processes; registration uses the
+catalog lock. Export the complete sidecars only after both jobs finish.
+
+`landmarks.<build>.json` binds each selected native root and its native progress
+gate to the exact map-pack ID and scene SHA. Positions use Unity world integer
+centimetres; roots also retain world quaternion and scale. At least three
+separated, noncollinear points are needed to prove a rigid route alignment.
+Legacy layout hash recovery is emitted only for an explicitly audited native
+assembly MVID **and** binary SHA with no runtime root TRS writes. A matching
+build ID alone cannot recover missing or different initial layout metadata.
+
 ```powershell
 & PeakTrailPlatform/tools/offline-maps/setup-env.ps1
 & local/python/.venv/Scripts/python.exe PeakTrailPlatform/tools/offline-maps/export_meshes.py --slots 16 --layers 0,1

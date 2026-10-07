@@ -1,4 +1,4 @@
-import { communityMapIdentity, communityPlayers, matchingCommunityGroups, normalizeCommunityStage } from "./community-route-model.js";
+import { communityMapIdentity, communityPlayers, matchingCommunityGroups, normalizeCommunityStage, pendingCommunityMessage } from "./community-route-model.js";
 
 const MAX_RESPONSE_BYTES = 30_000_000;
 const displayError = error => error?.message || "大家的路线暂时无法读取，请稍后刷新。";
@@ -76,7 +76,7 @@ export function createCommunityRoutes({ fetchImpl = globalThis.fetch?.bind(globa
     clearData(); state.groups = []; state.group = null; state.difficulties = [];
     state.status = "loading"; state.message = "正在读取当前地图的公开路线…"; emit();
     try {
-      const { matching, unavailableCount } = matchingCommunityGroups(await readApi(apiBase, token.signal), mapPack);
+      const { matching, unavailableCount, pendingReasons } = matchingCommunityGroups(await readApi(apiBase, token.signal), mapPack);
       if (!active(token)) return;
       state.groups = matching; state.unavailableCount = unavailableCount;
       // Select one recorded layout, never concatenate several layouts merely
@@ -86,7 +86,7 @@ export function createCommunityRoutes({ fetchImpl = globalThis.fetch?.bind(globa
       state.difficulty = state.difficulties.some(value => value.key === previousDifficulty) ? previousDifficulty : "";
       if (!state.group) {
         state.status = unavailableCount ? "mismatch" : "empty";
-        state.message = unavailableCount ? "已有路线尚未匹配当前版本、布局或关卡分支，暂不叠加到地图。" : "当前地图还没有审核通过的完整关卡路线。";
+        state.message = unavailableCount ? pendingCommunityMessage(pendingReasons) : "当前地图还没有审核通过的完整关卡路线。";
         emit(); return;
       }
       await loadStage();

@@ -79,6 +79,16 @@ test('single-chapter Swamp reuses the exact adjacent Citadel exterior without re
   assert.equal(JSON.stringify(pack), before);
 });
 
+test('current source build retains the adjacent native Citadel context with the same strict sidecar identity', () => {
+  const pack = contextualFixture(); pack.gameBuildId = pack.mapEnclosures.gameBuildId = '25739797';
+  const result = chapterEnclosures(pack, pack.layers[0], { includeContext: true });
+  assert.equal(result.length, 1);
+  assert.equal(result[0].sourceRootName, 'Gloom Temple');
+  assert.equal(result[0].segment, 4);
+  pack.mapEnclosures.sourceSceneSha256 = 'd'.repeat(64);
+  assert.deepEqual(chapterEnclosures(pack, pack.layers[0], { includeContext: true }), []);
+});
+
 test('overview and the Citadel chapter keep one native shell, with no contextual duplication', () => {
   const pack = contextualFixture();
   assert.deepEqual(chapterEnclosures(pack, pack.layers[0]), []);
@@ -93,7 +103,7 @@ test('overview and the Citadel chapter keep one native shell, with no contextual
 
 test('contextual exterior is restricted to the audited source build, branch, roots and adjacent stages', () => {
   const mutations = [
-    pack => pack.gameBuildId = pack.mapEnclosures.gameBuildId = '25739797',
+    pack => pack.gameBuildId = pack.mapEnclosures.gameBuildId = '25739798',
     pack => pack.identityVersion = 2,
     pack => pack.route.authority = 'guessed-calendar',
     pack => pack.route.branch = 'volcano-kiln',

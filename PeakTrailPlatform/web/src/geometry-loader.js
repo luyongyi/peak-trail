@@ -311,7 +311,7 @@ export function updateMapFogSurfaceVisibility(terrainRoot, fogObjects = []) {
     const sourceFog = materials.length > 0 && materials.every((material) => {
       const effect = material?.userData?.peakSourceEffect;
       return effect?.kind === "fog" && effect.source?.material === "FogSurface"
-        && effect.source?.shader === "GD/FogSurface" && String(effect.source?.buildId) === "25306743";
+        && effect.source?.shader === "GD/FogSurface" && ["25306743", "25739797"].includes(String(effect.source?.mapBuildId ?? effect.source?.buildId));
     });
     let segment;
     for (let owner = mesh; owner && owner !== terrainRoot; owner = owner.parent) {

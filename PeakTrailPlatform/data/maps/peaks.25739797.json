@@ -1,0 +1,912 @@
+{
+  "schemaVersion": 1,
+  "gameBuildId": "25739797",
+  "gameVersion": "2.6.b",
+  "authority": "serialized-peak-handler",
+  "source": "Unique serialized PeakHandler GameObject subtree; static enabled source renderers only.",
+  "maps": [
+    {
+      "mapPackId": "sha256-8f8944dfe161f3e4eb0416b160d5973b9afd1dd84201c71596185874417043e7",
+      "sceneName": "Level_0",
+      "mapSlot": 0,
+      "sourceSceneSha256": "60fe2f409b6ec253f1ed46c885dac7c3aedba8222b6945aa34599db6949aec87",
+      "geometrySha256": "859134a1b6d4eabfc764e9ba9f96d88cc52f4c29ade024ad88b2fa0448fd3c44",
+      "segment": 4,
+      "biome": "Volcano",
+      "rootGameObject": 40236,
+      "gateGameObject": null,
+      "peakHandler": 623690,
+      "rootName": "Peak_Kiln Variant",
+      "bounds": {
+        "min": [
+          -70.01932520993161,
+          -32.40068817138672,
+          192.54608535766602
+        ],
+        "max": [
+          91.59984165315754,
+          1233.1920121735482,
+          2315.3276203154546
+        ]
+      },
+      "collisionBounds": {
+        "min": [
+          -70.01932587268195,
+          763.0264332843716,
+          2104.307140216614
+        ],
+        "max": [
+          91.59984165315754,
+          1233.1920110405565,
+          2315.3276203154546
+        ]
+      },
+      "statistics": {
+        "meshColliders": 35,
+        "renderers": 61,
+        "SphereCollider": 7,
+        "BoxCollider": 1
+      }
+    },
+    {
+      "mapPackId": "sha256-3d38cb84c8e19af6ac424bbadcd5afea7fac1a45d2dbab98c7f7f92dfb8b4709",
+      "sceneName": "Level_1",
+      "mapSlot": 1,
+      "sourceSceneSha256": "5ffc768327145440f835ae6fff36c8254aff245077ccc676f2df6273907e62ea",
+      "geometrySha256": "ecc44efa3272ea1547225c9deb8f45af6b91aaec874a82fa60330446435a1c0c",
+      "segment": 4,
+      "biome": "Swamp",
+      "rootGameObject": 250334,
+      "gateGameObject": 131112,
+      "peakHandler": 859997,
+      "rootName": "Peak",
+      "bounds": {
+        "min": [
+          -72.24206012141207,
+          -32.40068817138672,
+          192.54608535766602
+        ],
+        "max": [
+          78.29984170084126,
+          1233.1920121735482,
+          2315.3276203154546
+        ]
+      },
+      "collisionBounds": {
+        "min": [
+          -72.24206012141207,
+          979.3231935577137,
+          2131.1047072165866
+        ],
+        "max": [
+          78.29984170084126,
+          1233.1920110405565,
+          2315.3276203154546
+        ]
+      },
+      "statistics": {
+        "renderers": 42,
+        "meshColliders": 28,
+        "SphereCollider": 1,
+        "BoxCollider": 1
+      }
+    },
+    {
+      "mapPackId": "sha256-9aff8876802787444fe2ecc3c46259a9d8bbaf813993991caeed8d268ea31bcf",
+      "sceneName": "Level_2",
+      "mapSlot": 2,
+      "sourceSceneSha256": "ca019dbf09b7578493b2740ecbd03fc556e33cae02033436b1b58d85efe22ccc",
+      "geometrySha256": "8995b1ed99c3ef2fd40c7393cf869f3db63028e23204d14459ea19bf01eec9dc",
+      "segment": 4,
+      "biome": "Volcano",
+      "rootGameObject": 42797,
+      "gateGameObject": null,
+      "peakHandler": 637595,
+      "rootName": "Peak_Kiln Variant",
+      "bounds": {
+        "min": [
+          -70.01932520993161,
+          -32.40068817138672,
+          192.54608535766602
+        ],
+        "max": [
+          91.59984165315754,
+          1233.1920121735482,
+          2315.3276203154546
+        ]
+      },
+      "collisionBounds": {
+        "min": [
+          -70.01932587268195,
+          763.0264332843716,
+          2104.307140216614
+        ],
+        "max": [
+          91.59984165315754,
+          1233.1920110405565,
+          2315.3276203154546
+        ]
+      },
+      "statistics": {
+        "meshColliders": 35,
+        "renderers": 61,
+        "SphereCollider": 7,
+        "BoxCollider": 1
+      }
+    },
+    {
+      "mapPackId": "sha256-8966cef39bb161fe4f40544c5c01dfaa5652dc0659ab3ec696697dd86f54893e",
+      "sceneName": "Level_3",
+      "mapSlot": 3,
+      "sourceSceneSha256": "f9196e6c406d5e0404b83ee568c229631227c626cf8f3c285516718cc28ab301",
+      "geometrySha256": "9138c53a955c0291f22883e540620f8285930d848ecf85147a778a2fc915bbf7",
+      "segment": 4,
+      "biome": "Swamp",
+      "rootGameObject": 199582,
+      "gateGameObject": 104936,
+      "peakHandler": 691989,
+      "rootName": "Peak",
+      "bounds": {
+        "min": [
+          -72.24206012141207,
+          -32.40068817138672,
+          192.54608535766602
+        ],
+        "max": [
+          78.29984170084126,
+          1233.1920121735482,
+          2315.3276203154546
+        ]
+      },
+      "collisionBounds": {
+        "min": [
+          -72.24206012141207,
+          979.3231935577137,
+          2131.1047072165866
+        ],
+        "max": [
+          78.29984170084126,
+          1233.1920110405565,
+          2315.3276203154546
+        ]
+      },
+      "statistics": {
+        "renderers": 42,
+        "meshColliders": 28,
+        "SphereCollider": 1,
+        "BoxCollider": 1
+      }
+    },
+    {
+      "mapPackId": "sha256-8abb59a78d9bc46780285ff400dba34026eb65e823157715c484676984e3ba24",
+      "sceneName": "Level_4",
+      "mapSlot": 4,
+      "sourceSceneSha256": "0bf3013200c9128562d190c3bfe55b274d4fc8b351c6069636e31c9116740f18",
+      "geometrySha256": "d09dc5eaddac708c67d3dc3a0900b6ab0aa63ee8e6cf2e15554a0b4f1ec0935f",
+      "segment": 4,
+      "biome": "Volcano",
+      "rootGameObject": 41185,
+      "gateGameObject": null,
+      "peakHandler": 658371,
+      "rootName": "Peak_Kiln Variant",
+      "bounds": {
+        "min": [
+          -70.01932520993161,
+          -32.40068817138672,
+          192.54608535766602
+        ],
+        "max": [
+          91.59984165315754,
+          1233.1920121735482,
+          2315.3276203154546
+        ]
+      },
+      "collisionBounds": {
+        "min": [
+          -70.01932587268195,
+          763.0264332843716,
+          2104.307140216614
+        ],
+        "max": [
+          91.59984165315754,
+          1233.1920110405565,
+          2315.3276203154546
+        ]
+      },
+      "statistics": {
+        "meshColliders": 35,
+        "renderers": 61,
+        "SphereCollider": 7,
+        "BoxCollider": 1
+      }
+    },
+    {
+      "mapPackId": "sha256-c349ad1fd7febf81de2053de327da3a5baff249f5b8621bc082f33e6d26ec850",
+      "sceneName": "Level_5",
+      "mapSlot": 5,
+      "sourceSceneSha256": "d035c7a19439e2a6512f8750d997bb3a6b86c4960a9e061a87bcf7bbdbe42951",
+      "geometrySha256": "8d4ce51d3f270c39699f295a335f17bb980801d75ad485638aef54ec950f35a4",
+      "segment": 4,
+      "biome": "Swamp",
+      "rootGameObject": 256895,
+      "gateGameObject": 134159,
+      "peakHandler": 886203,
+      "rootName": "Peak",
+      "bounds": {
+        "min": [
+          -72.24206012141207,
+          -32.40068817138672,
+          192.54608535766602
+        ],
+        "max": [
+          78.29984170084126,
+          1233.1920121735482,
+          2315.3276203154546
+        ]
+      },
+      "collisionBounds": {
+        "min": [
+          -72.24206012141207,
+          979.3231935577137,
+          2131.1047072165866
+        ],
+        "max": [
+          78.29984170084126,
+          1233.1920110405565,
+          2315.3276203154546
+        ]
+      },
+      "statistics": {
+        "renderers": 42,
+        "meshColliders": 28,
+        "SphereCollider": 1,
+        "BoxCollider": 1
+      }
+    },
+    {
+      "mapPackId": "sha256-4fbf57cd24f872794f92bb45187fff5243e4febed6d8b5859de29ea6963d894f",
+      "sceneName": "Level_6",
+      "mapSlot": 6,
+      "sourceSceneSha256": "707199891562d1d2d87ae6da4dde9089a4a9515115ef1ec6d08ab8f7fe3a78e6",
+      "geometrySha256": "ea55a296bb82204cc62cfcbbc7440ca2362042349bfda95a75c47d279fe9acbd",
+      "segment": 4,
+      "biome": "Volcano",
+      "rootGameObject": 43404,
+      "gateGameObject": null,
+      "peakHandler": 648886,
+      "rootName": "Peak_Kiln Variant",
+      "bounds": {
+        "min": [
+          -70.01932520993161,
+          -32.40068817138672,
+          192.54608535766602
+        ],
+        "max": [
+          91.59984165315754,
+          1233.1920121735482,
+          2315.3276203154546
+        ]
+      },
+      "collisionBounds": {
+        "min": [
+          -70.01932587268195,
+          763.0264332843716,
+          2104.307140216614
+        ],
+        "max": [
+          91.59984165315754,
+          1233.1920110405565,
+          2315.3276203154546
+        ]
+      },
+      "statistics": {
+        "meshColliders": 35,
+        "renderers": 61,
+        "SphereCollider": 7,
+        "BoxCollider": 1
+      }
+    },
+    {
+      "mapPackId": "sha256-e08d1fea146fa791695b1b5f09ed10f9d25eec3c382d7d9b414c6bfdae1c7b28",
+      "sceneName": "Level_7",
+      "mapSlot": 7,
+      "sourceSceneSha256": "2e56bf611e402f74911e2b5422219e156950ebe5e6862b4ee1e628af1109716d",
+      "geometrySha256": "8423ec998940bbae6903b78fe3815abdd064111637f6d3d292f0728fca75188f",
+      "segment": 4,
+      "biome": "Swamp",
+      "rootGameObject": 201583,
+      "gateGameObject": 105923,
+      "peakHandler": 699856,
+      "rootName": "Peak",
+      "bounds": {
+        "min": [
+          -72.24206012141207,
+          -32.40068817138672,
+          192.54608535766602
+        ],
+        "max": [
+          78.29984170084126,
+          1233.1920121735482,
+          2315.3276203154546
+        ]
+      },
+      "collisionBounds": {
+        "min": [
+          -72.24206012141207,
+          979.3231935577137,
+          2131.1047072165866
+        ],
+        "max": [
+          78.29984170084126,
+          1233.1920110405565,
+          2315.3276203154546
+        ]
+      },
+      "statistics": {
+        "renderers": 42,
+        "meshColliders": 28,
+        "SphereCollider": 1,
+        "BoxCollider": 1
+      }
+    },
+    {
+      "mapPackId": "sha256-1f43e1469f2fc3aecc9730defb266ab7bc9a010d95243a3d7d132adc9f7f5428",
+      "sceneName": "Level_8",
+      "mapSlot": 8,
+      "sourceSceneSha256": "1bafbcbf161da3270fca049d04844f53dd95a85263dbbb7fbbd7bb2db0bec91e",
+      "geometrySha256": "3eb2aa6a63fea7db9349145850b482372e076162aa73c5a7aa986cc6aa069b31",
+      "segment": 4,
+      "biome": "Volcano",
+      "rootGameObject": 40301,
+      "gateGameObject": null,
+      "peakHandler": 653579,
+      "rootName": "Peak_Kiln Variant",
+      "bounds": {
+        "min": [
+          -70.01932520993161,
+          -32.40068817138672,
+          192.54608535766602
+        ],
+        "max": [
+          91.59984165315754,
+          1233.1920121735482,
+          2315.3276203154546
+        ]
+      },
+      "collisionBounds": {
+        "min": [
+          -70.01932587268195,
+          763.0264332843716,
+          2104.307140216614
+        ],
+        "max": [
+          91.59984165315754,
+          1233.1920110405565,
+          2315.3276203154546
+        ]
+      },
+      "statistics": {
+        "meshColliders": 35,
+        "renderers": 61,
+        "SphereCollider": 7,
+        "BoxCollider": 1
+      }
+    },
+    {
+      "mapPackId": "sha256-d5b4ba07467d36d3763e4df2430c0aa11c725490d039dbd969bc05b3391ebf98",
+      "sceneName": "Level_9",
+      "mapSlot": 9,
+      "sourceSceneSha256": "04572ba0cfe82a7c9fb5ab21b86c7a4b653350f7487a43e432746a9f47923995",
+      "geometrySha256": "0182277a38e7c00f8b1bca8dd2692caa71679f0458812f95bbf52b528a1eb65e",
+      "segment": 4,
+      "biome": "Swamp",
+      "rootGameObject": 226514,
+      "gateGameObject": 120785,
+      "peakHandler": 788269,
+      "rootName": "Peak",
+      "bounds": {
+        "min": [
+          -72.24206012141207,
+          -32.40068817138672,
+          192.54608535766602
+        ],
+        "max": [
+          78.29984170084126,
+          1233.1920121735482,
+          2315.3276203154546
+        ]
+      },
+      "collisionBounds": {
+        "min": [
+          -72.24206012141207,
+          979.3231935577137,
+          2131.1047072165866
+        ],
+        "max": [
+          78.29984170084126,
+          1233.1920110405565,
+          2315.3276203154546
+        ]
+      },
+      "statistics": {
+        "renderers": 42,
+        "meshColliders": 28,
+        "SphereCollider": 1,
+        "BoxCollider": 1
+      }
+    },
+    {
+      "mapPackId": "sha256-2f2de8d36c25bc5eb4d18416b640dccf347e44ebbd46ddef59f9d0ea211bc59d",
+      "sceneName": "Level_10",
+      "mapSlot": 10,
+      "sourceSceneSha256": "8468c059a9067f27416a5e2fd1c5ec785cb764f9e3da0528b00c382fdf895f8a",
+      "geometrySha256": "1b02feca72b6b07150c99e0a839de870702d10b950b17c34849b8bc286ca6000",
+      "segment": 4,
+      "biome": "Volcano",
+      "rootGameObject": 38520,
+      "gateGameObject": null,
+      "peakHandler": 586426,
+      "rootName": "Peak_Kiln Variant",
+      "bounds": {
+        "min": [
+          -70.01932520993161,
+          -32.40068817138672,
+          192.54608535766602
+        ],
+        "max": [
+          91.59984165315754,
+          1233.1920121735482,
+          2315.3276203154546
+        ]
+      },
+      "collisionBounds": {
+        "min": [
+          -70.01932587268195,
+          763.0264332843716,
+          2104.307140216614
+        ],
+        "max": [
+          91.59984165315754,
+          1233.1920110405565,
+          2315.3276203154546
+        ]
+      },
+      "statistics": {
+        "meshColliders": 35,
+        "renderers": 61,
+        "SphereCollider": 7,
+        "BoxCollider": 1
+      }
+    },
+    {
+      "mapPackId": "sha256-81d7878c532ca8a87b40cbebc53e18181f6ced5d2ab13a29a719f96a188ca05d",
+      "sceneName": "Level_11",
+      "mapSlot": 11,
+      "sourceSceneSha256": "3364f2cf94f197baf98a8ceed812a6fee11ac283517fd97b96023530720bb288",
+      "geometrySha256": "a64b96980aa7b8bfec868018a4371a0d8a73a5a7ae3682f1ee4b2c1a2ea52e82",
+      "segment": 4,
+      "biome": "Swamp",
+      "rootGameObject": 222617,
+      "gateGameObject": 116086,
+      "peakHandler": 765407,
+      "rootName": "Peak",
+      "bounds": {
+        "min": [
+          -72.24206012141207,
+          -32.40068817138672,
+          192.54608535766602
+        ],
+        "max": [
+          78.29984170084126,
+          1233.1920121735482,
+          2315.3276203154546
+        ]
+      },
+      "collisionBounds": {
+        "min": [
+          -72.24206012141207,
+          979.3231935577137,
+          2131.1047072165866
+        ],
+        "max": [
+          78.29984170084126,
+          1233.1920110405565,
+          2315.3276203154546
+        ]
+      },
+      "statistics": {
+        "meshColliders": 28,
+        "renderers": 42,
+        "SphereCollider": 1,
+        "BoxCollider": 1
+      }
+    },
+    {
+      "mapPackId": "sha256-dce01213c1dd308afad6f4f34337e6c0fe0586cdcd9da890eac72892c17fbbbe",
+      "sceneName": "Level_12",
+      "mapSlot": 12,
+      "sourceSceneSha256": "8f89cffaf567d177d8416f1a1a15cca1cf6ffa51a31252afe68a2b491bab14c7",
+      "geometrySha256": "ce2babc5051fe7e04bf07dc4d02f39ed2cc401c3d0a47fcce8501f596e379bcf",
+      "segment": 4,
+      "biome": "Volcano",
+      "rootGameObject": 45026,
+      "gateGameObject": null,
+      "peakHandler": 714221,
+      "rootName": "Peak_Kiln Variant",
+      "bounds": {
+        "min": [
+          -70.01932520993161,
+          -32.40068817138672,
+          192.54608535766602
+        ],
+        "max": [
+          91.59984165315754,
+          1233.1920121735482,
+          2315.3276203154546
+        ]
+      },
+      "collisionBounds": {
+        "min": [
+          -70.01932587268195,
+          763.0264332843716,
+          2104.307140216614
+        ],
+        "max": [
+          91.59984165315754,
+          1233.1920110405565,
+          2315.3276203154546
+        ]
+      },
+      "statistics": {
+        "meshColliders": 35,
+        "renderers": 61,
+        "SphereCollider": 7,
+        "BoxCollider": 1
+      }
+    },
+    {
+      "mapPackId": "sha256-db99876fa4d919832733b6a72c308cff16559f446035e21d0014dab3a0fa90b2",
+      "sceneName": "Level_13",
+      "mapSlot": 13,
+      "sourceSceneSha256": "ea6e6c7a934744413421d65940a9d0c011f68b4ba58355d3d4198bef9cf331e6",
+      "geometrySha256": "b487b8d1104ef8175b9245ac9fa9aaf9254d612b4512cc351d53a3b67fc97655",
+      "segment": 4,
+      "biome": "Swamp",
+      "rootGameObject": 220637,
+      "gateGameObject": 116699,
+      "peakHandler": 769382,
+      "rootName": "Peak",
+      "bounds": {
+        "min": [
+          -72.24206012141207,
+          -32.40068817138672,
+          192.54608535766602
+        ],
+        "max": [
+          78.29984170084126,
+          1233.1920121735482,
+          2315.3276203154546
+        ]
+      },
+      "collisionBounds": {
+        "min": [
+          -72.24206012141207,
+          979.3231935577137,
+          2131.1047072165866
+        ],
+        "max": [
+          78.29984170084126,
+          1233.1920110405565,
+          2315.3276203154546
+        ]
+      },
+      "statistics": {
+        "renderers": 42,
+        "meshColliders": 28,
+        "SphereCollider": 1,
+        "BoxCollider": 1
+      }
+    },
+    {
+      "mapPackId": "sha256-1a12a665ab7b832ab53afdef30af6947780efd8abea61408cfaa0c2017f1d6eb",
+      "sceneName": "Level_14",
+      "mapSlot": 14,
+      "sourceSceneSha256": "ae5bba6ea5b1e966eec1640147089ce8b0378d6d686a0599c1c17d39810dce05",
+      "geometrySha256": "6e3510f9ee817478a1b24f46e8bed68e16af88c6d75c2c2758bf2ff7b61cf86f",
+      "segment": 4,
+      "biome": "Volcano",
+      "rootGameObject": 38656,
+      "gateGameObject": null,
+      "peakHandler": 554776,
+      "rootName": "Peak_Kiln Variant",
+      "bounds": {
+        "min": [
+          -70.01932520993161,
+          -32.40068817138672,
+          192.54608535766602
+        ],
+        "max": [
+          91.59984165315754,
+          1233.1920121735482,
+          2315.3276203154546
+        ]
+      },
+      "collisionBounds": {
+        "min": [
+          -70.01932587268195,
+          763.0264332843716,
+          2104.307140216614
+        ],
+        "max": [
+          91.59984165315754,
+          1233.1920110405565,
+          2315.3276203154546
+        ]
+      },
+      "statistics": {
+        "meshColliders": 35,
+        "renderers": 61,
+        "SphereCollider": 7,
+        "BoxCollider": 1
+      }
+    },
+    {
+      "mapPackId": "sha256-1577fed4c50a8cd20e6ca2a70df0a882f1fb27a79e4730f6bd6522158406e837",
+      "sceneName": "Level_15",
+      "mapSlot": 15,
+      "sourceSceneSha256": "cbefde26cb05542c2112f38cb11a1beb67835e1fc6a197c8ed8174e7459c94a2",
+      "geometrySha256": "a4815ab1e111fad886c5de716699e12b5ed5c718409f98ef1377bfb1591e69cd",
+      "segment": 4,
+      "biome": "Swamp",
+      "rootGameObject": 221113,
+      "gateGameObject": 115264,
+      "peakHandler": 761001,
+      "rootName": "Peak",
+      "bounds": {
+        "min": [
+          -72.24206012141207,
+          -32.40068817138672,
+          192.54608535766602
+        ],
+        "max": [
+          78.29984170084126,
+          1233.1920121735482,
+          2315.3276203154546
+        ]
+      },
+      "collisionBounds": {
+        "min": [
+          -72.24206012141207,
+          979.3231935577137,
+          2131.1047072165866
+        ],
+        "max": [
+          78.29984170084126,
+          1233.1920110405565,
+          2315.3276203154546
+        ]
+      },
+      "statistics": {
+        "renderers": 42,
+        "meshColliders": 28,
+        "SphereCollider": 1,
+        "BoxCollider": 1
+      }
+    },
+    {
+      "mapPackId": "sha256-21e37b5ad75c73499df7b0e07ed9f31f0f3beb12b39474af564d82ec45c9bc27",
+      "sceneName": "Level_16",
+      "mapSlot": 16,
+      "sourceSceneSha256": "4d21e6ca37d024c43c3837420dc74c40ea213651ebdfc4ab95d1862e5e9f559b",
+      "geometrySha256": "dfb5ea779f6bc543c042c529d37da7b5f70a510e906be8aefa0fb571bd44486e",
+      "segment": 4,
+      "biome": "Volcano",
+      "rootGameObject": 43704,
+      "gateGameObject": null,
+      "peakHandler": 654098,
+      "rootName": "Peak_Kiln Variant",
+      "bounds": {
+        "min": [
+          -70.01932520993161,
+          -32.40068817138672,
+          192.54608535766602
+        ],
+        "max": [
+          91.59984165315754,
+          1233.1920121735482,
+          2315.3276203154546
+        ]
+      },
+      "collisionBounds": {
+        "min": [
+          -70.01932587268195,
+          763.0264332843716,
+          2104.307140216614
+        ],
+        "max": [
+          91.59984165315754,
+          1233.1920110405565,
+          2315.3276203154546
+        ]
+      },
+      "statistics": {
+        "meshColliders": 35,
+        "renderers": 61,
+        "SphereCollider": 7,
+        "BoxCollider": 1
+      }
+    },
+    {
+      "mapPackId": "sha256-d53d40cba5f40d92f8fa7318d3eee760dc10500907f88b8f6af457cd27872ab7",
+      "sceneName": "Level_17",
+      "mapSlot": 17,
+      "sourceSceneSha256": "470eac3820ab47faeb9c848300844935a4eff6d235779eac1c23f17e2199b717",
+      "geometrySha256": "0c37519eb9f04a11b03e85a0065068eec8217619cfb58ef8e1f2fada7772998f",
+      "segment": 4,
+      "biome": "Swamp",
+      "rootGameObject": 200127,
+      "gateGameObject": 105553,
+      "peakHandler": 694783,
+      "rootName": "Peak",
+      "bounds": {
+        "min": [
+          -72.24206012141207,
+          -32.40068817138672,
+          192.54608535766602
+        ],
+        "max": [
+          78.29984170084126,
+          1233.1920121735482,
+          2315.3276203154546
+        ]
+      },
+      "collisionBounds": {
+        "min": [
+          -72.24206012141207,
+          979.3231935577137,
+          2131.1047072165866
+        ],
+        "max": [
+          78.29984170084126,
+          1233.1920110405565,
+          2315.3276203154546
+        ]
+      },
+      "statistics": {
+        "renderers": 42,
+        "meshColliders": 28,
+        "SphereCollider": 1,
+        "BoxCollider": 1
+      }
+    },
+    {
+      "mapPackId": "sha256-0c683b4bfc284fe2995c03e2ae1fb0b1f7b52bdb8f67eb7842ef7a46c2c17da3",
+      "sceneName": "Level_18",
+      "mapSlot": 18,
+      "sourceSceneSha256": "1ecb1b215cd6d9e76e3a74d5ca7953950cb5a0a6216a67ec7a2f9d23784427d3",
+      "geometrySha256": "2991046ecd266e81cc8398cae47c7d6412e8b17f330550fe214b5fb06b6c13de",
+      "segment": 4,
+      "biome": "Volcano",
+      "rootGameObject": 45428,
+      "gateGameObject": null,
+      "peakHandler": 735932,
+      "rootName": "Peak_Kiln Variant",
+      "bounds": {
+        "min": [
+          -70.01932520993161,
+          -32.40068817138672,
+          192.54608535766602
+        ],
+        "max": [
+          91.59984165315754,
+          1233.1920121735482,
+          2315.3276203154546
+        ]
+      },
+      "collisionBounds": {
+        "min": [
+          -70.01932587268195,
+          763.0264332843716,
+          2104.307140216614
+        ],
+        "max": [
+          91.59984165315754,
+          1233.1920110405565,
+          2315.3276203154546
+        ]
+      },
+      "statistics": {
+        "meshColliders": 35,
+        "renderers": 61,
+        "SphereCollider": 7,
+        "BoxCollider": 1
+      }
+    },
+    {
+      "mapPackId": "sha256-9373a468913acb0219a74bbc1ce2d42dc7497e7b88f260575af9b8e1b22b85b3",
+      "sceneName": "Level_19",
+      "mapSlot": 19,
+      "sourceSceneSha256": "d94bd2e994c4229a23e05778fcaf614a297439fecee756f77a8b0c17397afe73",
+      "geometrySha256": "f7ee7b02f4f6c564ff04a107d702b1323d5391770da046dca4313cc35049f1e2",
+      "segment": 4,
+      "biome": "Swamp",
+      "rootGameObject": 231470,
+      "gateGameObject": 114010,
+      "peakHandler": 795383,
+      "rootName": "Peak",
+      "bounds": {
+        "min": [
+          -72.24206012141207,
+          -32.40068817138672,
+          192.54608535766602
+        ],
+        "max": [
+          78.29984170084126,
+          1233.1920121735482,
+          2315.3276203154546
+        ]
+      },
+      "collisionBounds": {
+        "min": [
+          -72.24206012141207,
+          979.3231935577137,
+          2131.1047072165866
+        ],
+        "max": [
+          78.29984170084126,
+          1233.1920110405565,
+          2315.3276203154546
+        ]
+      },
+      "statistics": {
+        "renderers": 42,
+        "meshColliders": 28,
+        "SphereCollider": 1,
+        "BoxCollider": 1
+      }
+    },
+    {
+      "mapPackId": "sha256-ae276cf3116f9ffe0d0a401b84a165b084637c86bedf041b2a968a5e52537142",
+      "sceneName": "Level_20",
+      "mapSlot": 20,
+      "sourceSceneSha256": "bdd4a2dcdba00bc9b7dd092318d6e990b7deea0d713f7d29bacd9e0a0fa203dc",
+      "geometrySha256": "477870aa5f3fdc6d5a412386652ebf89bcaf9778c66cf7c91a612f929204788e",
+      "segment": 4,
+      "biome": "Volcano",
+      "rootGameObject": 43555,
+      "gateGameObject": null,
+      "peakHandler": 643229,
+      "rootName": "Peak_Kiln Variant",
+      "bounds": {
+        "min": [
+          -70.01932520993161,
+          -32.40068817138672,
+          192.54608535766602
+        ],
+        "max": [
+          91.59984165315754,
+          1233.1920121735482,
+          2315.3276203154546
+        ]
+      },
+      "collisionBounds": {
+        "min": [
+          -70.01932587268195,
+          763.0264332843716,
+          2104.307140216614
+        ],
+        "max": [
+          91.59984165315754,
+          1233.1920110405565,
+          2315.3276203154546
+        ]
+      },
+      "statistics": {
+        "meshColliders": 35,
+        "renderers": 61,
+        "SphereCollider": 7,
+        "BoxCollider": 1
+      }
+    }
+  ]
+}

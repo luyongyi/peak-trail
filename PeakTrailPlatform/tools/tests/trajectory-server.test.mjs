@@ -15,7 +15,12 @@ function fixture(change = {}) {
   return { format: "trajectory-v1", recordingId: digest("recording-1"), runKey: digest("run-1"), timeOriginMs: 1000000,
     startedUtc: "2026-10-07T08:00:00Z", durationMs: 2000, sampleHz: 10, coordinateUnit: "cm",
     map: { buildId: "25306743", scene: "Level_0", levelIndex: 42, layoutKey: digest("layout"), route: ["Shore", "Roots"],
-      stages: [{ index: 0, name: "Shore", enterZCm: 0, exitZCm: 1000 }, { index: 1, name: "Roots", enterZCm: 1000, exitZCm: 2000 }] },
+      stages: [{ index: 0, name: "Shore", enterZCm: 0, exitZCm: 1000 }, { index: 1, name: "Roots", enterZCm: 1000, exitZCm: 2000 }],
+      alignment: { version: 1, coordinateSpace: "unity-world-cm", landmarks: [
+        { key: "progress-point:0", kind: "progress-point", stageIndex: 0, name: "Beach_Entry", positionCm: [0, 0, 0] },
+        { key: "progress-point:1", kind: "progress-point", stageIndex: 1, name: "Roots_Entry", positionCm: [1000, 1000, 1000] },
+        { key: "progress-point:peak", kind: "progress-point", name: "Peak", positionCm: [0, 1000, 2000] },
+      ] } },
     difficulty: { ascent: 1, custom: false, mini: false }, players: [{ key: digest("run1-player1"), name: "同名", owner: true, evidence: "native-state",
       points: Array.from({ length: 21 }, (_, index) => [index * 100, 0, 0, index * 100]), events: [] }], ...change };
 }
@@ -28,7 +33,13 @@ async function start(root = null, catalogPath = null) {
 }
 async function isolated(fn, catalogBuild = "25306743") {
   const root = await mkdtemp(join(tmpdir(), "peak-trajectory-test-")), catalogPath = join(root, "catalog.json");
-  await writeFile(catalogPath, JSON.stringify({ schemaVersion: 1, mapPacks: [{ gameBuildId: catalogBuild, sceneName: "Level_0", mapPackId: `sha256-${digest("map")}`, enabled: true }] }));
+  const mapPackId = `sha256-${digest("map")}`, sourceSceneSha256 = digest("source-scene");
+  const packDirectory = join(root, "packs", mapPackId); await mkdir(packDirectory, { recursive: true });
+  await writeFile(join(packDirectory, "map-pack.json"), JSON.stringify({ mapPackId, gameBuildId: catalogBuild, sceneName: "Level_0", coordinateSpace: "unity-world-meters", source: { sceneSha256: sourceSceneSha256 } }));
+  await writeFile(join(root, `landmarks.${catalogBuild}.json`), JSON.stringify({ schemaVersion: 1, gameBuildId: catalogBuild, authority: "serialized-map-landmarks",
+    sourceGameAssemblyMvid: "a".repeat(32), sourceGameAssemblySha256: digest("source-assembly"),
+    maps: [{ sceneName: "Level_0", mapPackId, sourceSceneSha256, alignment: fixture().map.alignment }] }));
+  await writeFile(catalogPath, JSON.stringify({ schemaVersion: 1, mapPacks: [{ gameBuildId: catalogBuild, sceneName: "Level_0", mapPackId, path: `./packs/${mapPackId}/map-pack.json`, route: fixture().map.route, enabled: true }] }));
   const server = await start(root, catalogPath);
   try { await fn({ root, catalogPath, ...server }); }
   finally { await server.close(); await rm(root, { recursive: true, force: true }); }
@@ -251,6 +262,86 @@ test("wrong game build waits for map and exposes approved bare XYZ rather than o
   });
 });
 
+test("canonical route responses and heatmap aggregation use the same proven global translation", async () => {
+  await isolated(async ({ root, base, catalogPath }) => {
+    const raw = fixture(), offset = [5000,-3000,8000];
+    raw.map.alignment.landmarks.forEach(item => { item.positionCm = item.positionCm.map((value, axis) => value + offset[axis]); });
+    raw.map.stages.forEach(stage => { stage.enterZCm += offset[2]; stage.exitZCm += offset[2]; });
+    raw.players[0].points.forEach(point => { for (let axis = 0; axis < 3; axis++) point[axis+1] += offset[axis]; });
+    const upload = await post(base, raw);
+    assert.equal(upload.status, 201); assert.equal(upload.body.mapAlignment.status, "verified"); assert.equal(upload.body.mapAlignment.method, "rigid");
+    await moderate(root, upload.body.uploadId, "approved");
+    const group = (await get(base, "/api/route-groups")).body.groups[0];
+    const routes = (await get(base, `/api/route-groups/${group.id}/stages/0/routes`)).body;
+    const heat = (await get(base, `/api/route-groups/${group.id}/stages/0/heatmap`)).body;
+    assert.equal(routes.coordinateSpace, "canonical-map-world-cm"); assert.equal(routes.mapAlignment.id, group.mapAlignment.id);
+    assert.equal(heat.mapAlignment.id, routes.mapAlignment.id); assert.equal(heat.coordinateSpace, routes.coordinateSpace);
+    assert.deepEqual(routes.routes[0].points, fixture().players[0].points.slice(0,11));
+    assert.deepEqual(heat.cells, aggregateHeatmap([routes.routes[0].points]));
+    const index = JSON.parse(await readFile(join(root, "index", `${upload.body.uploadId}.json`), "utf8"));
+    assert.deepEqual(index.map.alignment, validateTrajectory(raw).trajectory.map.alignment, "stored recording-world evidence is not replaced by the fitted source map");
+    const original = await post(base, fixture()); await moderate(root, original.body.uploadId, "approved");
+    const groups = (await get(base, "/api/route-groups")).body.groups;
+    assert.equal(groups.length, 2, "different recorded layouts are selectable, never merged through a shared source model");
+    assert.ok(groups.every(value => value.mapCompatibility === "matched"));
+    assert.equal((await mapMatch(raw.map, catalogPath)).mapAlignment.method, "rigid");
+  });
+});
+
+test("legacy missing landmarks remain stored and publicly queryable without claiming verified map coordinates", async () => {
+  await isolated(async ({ root, base }) => {
+    const raw = fixture(); delete raw.map.alignment;
+    const upload = await post(base, raw); assert.equal(upload.status, 201); assert.equal(upload.body.mapAlignment.reason, "recording-landmarks-missing");
+    await moderate(root, upload.body.uploadId, "approved");
+    const group = (await get(base, "/api/route-groups")).body.groups[0];
+    assert.equal(group.stageSummaries[0].routeCount, 1); assert.equal(group.mapCompatibility, "waiting-map");
+    const routes = (await get(base, `/api/route-groups/${group.id}/stages/0/routes`)).body;
+    assert.equal(routes.coordinateSpace, "recording-world-cm"); assert.equal(routes.mapAlignment.status, "pending");
+    assert.deepEqual(routes.routes[0].points, raw.players[0].points.slice(0,11));
+  });
+});
+
+test("source scene SHA, exact landmarks and native gate positions reject wrong model/layout evidence", async () => {
+  await isolated(async ({ root, catalogPath }) => {
+    const raw = fixture(); raw.map.stages[0].exitZCm += 1;
+    assert.throws(() => validateTrajectory(raw), /gates disagree/);
+    const displaced = fixture().map; displaced.alignment.landmarks[1].positionCm[0] += 500;
+    assert.equal((await mapMatch(displaced, catalogPath)).mapAlignment.reason, "non-rigid-layout");
+    const path = join(root, "landmarks.25306743.json"), sidecar = JSON.parse(await readFile(path, "utf8"));
+    sidecar.maps[0].sourceSceneSha256 = digest("different-scene"); await writeFile(path, JSON.stringify(sidecar));
+    assert.equal((await mapMatch(fixture().map, catalogPath)).mapAlignment.reason, "source-evidence-mismatch");
+    sidecar.maps[0].sourceSceneSha256 = digest("source-scene"); sidecar.maps[0].alignment.landmarks[1].name = "Wrong native branch";
+    await writeFile(path, JSON.stringify(sidecar));
+    assert.equal((await mapMatch(fixture().map, catalogPath)).mapAlignment.reason, "landmark-identity-mismatch");
+    sidecar.gameBuildId = "25739797"; await writeFile(path, JSON.stringify(sidecar));
+    assert.equal((await mapMatch(fixture().map, catalogPath)).mapAlignment.reason, "source-evidence-mismatch");
+  });
+});
+
+test("audited legacy layout hashes prove only the exact original identity and retain old accepted recordings", async () => {
+  await isolated(async ({ root, base, catalogPath }) => {
+    const path = join(root, "landmarks.25306743.json"), sidecar = JSON.parse(await readFile(path, "utf8"));
+    sidecar.maps[0].expectedLegacyLayoutKey = fixture().map.layoutKey;
+    sidecar.maps[0].legacyRootTransformPolicy = "static-no-runtime-trs-writes";
+    await writeFile(path, JSON.stringify(sidecar));
+    const raw = fixture(); delete raw.map.alignment;
+    const upload = await post(base, raw); assert.equal(upload.status, 201); assert.equal(upload.body.mapAlignment.method, "legacy-layout-key");
+    await moderate(root, upload.body.uploadId, "approved");
+    const group = (await get(base, "/api/route-groups")).body.groups[0];
+    assert.equal(group.mapAlignment.method, "legacy-layout-key");
+    const routes = (await get(base, `/api/route-groups/${group.id}/stages/0/routes`)).body;
+    assert.equal(routes.coordinateSpace, "canonical-map-world-cm"); assert.deepEqual(routes.routes[0].points, raw.players[0].points.slice(0,11));
+    const changedHash = structuredClone(raw.map); changedHash.layoutKey = digest("different-layout");
+    assert.equal((await mapMatch(changedHash, catalogPath)).mapAlignment.status, "pending");
+    const changedGate = structuredClone(raw.map); changedGate.stages[0].exitZCm += 1;
+    assert.equal((await mapMatch(changedGate, catalogPath)).mapAlignment.status, "pending");
+    delete sidecar.maps[0].legacyRootTransformPolicy; await writeFile(path, JSON.stringify(sidecar));
+    assert.equal((await mapMatch(raw.map, catalogPath)).mapAlignment.status, "pending");
+    sidecar.maps[0].legacyRootTransformPolicy = "static-no-runtime-trs-writes"; delete sidecar.sourceGameAssemblyMvid;
+    await writeFile(path, JSON.stringify(sidecar)); assert.equal((await mapMatch(raw.map, catalogPath)).mapAlignment.status, "pending");
+  });
+});
+
 test("persistent upload and moderation recover across real HTTP service restart", async () => {
   const root = await mkdtemp(join(tmpdir(), "peak-trajectory-restart-")), catalogPath = join(root, "catalog.json");
   await writeFile(catalogPath, JSON.stringify({ schemaVersion: 1, mapPacks: [] }));
@@ -273,7 +364,7 @@ test("malformed gzip, private fields, oversized decoded body and unsupported med
     assert.equal((await post(base, null, huge)).status, 413);
     const plain = await fetch(`${base}/api/route-uploads`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
     assert.equal(plain.status, 415);
-    assert.deepEqual(await readdir(root), ["catalog.json"]);
+    assert.deepEqual((await readdir(root)).sort(), ["catalog.json", "landmarks.25306743.json", "packs"]);
   });
 });
 

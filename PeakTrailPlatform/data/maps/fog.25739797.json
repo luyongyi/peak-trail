@@ -1,0 +1,1045 @@
+{
+  "schemaVersion": 1,
+  "gameBuildId": "25739797",
+  "authority": "serialized-map-baseline",
+  "note": "Source initial configuration only; actual rising height, difficulty and lamp safe zones are unknown without world telemetry.",
+  "maps": [
+    {
+      "mapPackId": "sha256-8f8944dfe161f3e4eb0416b160d5973b9afd1dd84201c71596185874417043e7",
+      "sceneName": "Level_0",
+      "mapSlot": 0,
+      "sourceSceneSha256": "60fe2f409b6ec253f1ed46c885dac7c3aedba8222b6945aa34599db6949aec87",
+      "volumes": []
+    },
+    {
+      "mapPackId": "sha256-3d38cb84c8e19af6ac424bbadcd5afea7fac1a45d2dbab98c7f7f92dfb8b4709",
+      "sceneName": "Level_1",
+      "mapSlot": 1,
+      "sourceSceneSha256": "5ffc768327145440f835ae6fff36c8254aff245077ccc676f2df6273907e62ea",
+      "volumes": [
+        {
+          "objectId": "map-fog:Level_1:879604",
+          "kind": "sleep_fog",
+          "prefabName": "SleepyFog",
+          "segment": 3,
+          "pos": [
+            -2.4239959716796875,
+            760.5650005340576,
+            1608.0
+          ],
+          "rot": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "shape": "box",
+          "size": [
+            696.9000244140625,
+            46.869998931884766,
+            700.0
+          ],
+          "radius": null,
+          "activationRadius": null,
+          "warningRadius": null,
+          "topY": 784.0,
+          "surfaceMaterial": "FogSurface",
+          "surfaceShader": "GD/FogSurface",
+          "active": true,
+          "activity": "source-baseline",
+          "authority": "map-baseline",
+          "source": "serialized-map-StatusFieldGloom",
+          "sourcePathId": 879604,
+          "sightDistance": 25.0,
+          "statusAmountPerSecond": 0.008999999612569809,
+          "statusDelaySeconds": 2.0,
+          "runtimeHeightUnknown": true,
+          "runtimeSafeZonesUnknown": true
+        },
+        {
+          "objectId": "map-fog:Level_1:882828",
+          "kind": "sleep_fog",
+          "prefabName": "SleepyFog (1)",
+          "segment": 4,
+          "pos": [
+            -29.337820053100586,
+            445.1299743652344,
+            2108.599998474121
+          ],
+          "rot": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "shape": "box",
+          "size": [
+            696.9000244140625,
+            718.0,
+            700.0
+          ],
+          "radius": null,
+          "activationRadius": null,
+          "warningRadius": null,
+          "topY": 804.1299743652344,
+          "surfaceMaterial": "FogSurface",
+          "surfaceShader": "GD/FogSurface",
+          "active": true,
+          "activity": "source-baseline",
+          "authority": "map-baseline",
+          "source": "serialized-map-StatusFieldGloom",
+          "sourcePathId": 882828,
+          "sightDistance": 60.0,
+          "statusAmountPerSecond": 0.008999999612569809,
+          "statusDelaySeconds": 2.0,
+          "runtimeHeightUnknown": true,
+          "runtimeSafeZonesUnknown": true
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-9aff8876802787444fe2ecc3c46259a9d8bbaf813993991caeed8d268ea31bcf",
+      "sceneName": "Level_2",
+      "mapSlot": 2,
+      "sourceSceneSha256": "ca019dbf09b7578493b2740ecbd03fc556e33cae02033436b1b58d85efe22ccc",
+      "volumes": []
+    },
+    {
+      "mapPackId": "sha256-8966cef39bb161fe4f40544c5c01dfaa5652dc0659ab3ec696697dd86f54893e",
+      "sceneName": "Level_3",
+      "mapSlot": 3,
+      "sourceSceneSha256": "f9196e6c406d5e0404b83ee568c229631227c626cf8f3c285516718cc28ab301",
+      "volumes": [
+        {
+          "objectId": "map-fog:Level_3:704664",
+          "kind": "sleep_fog",
+          "prefabName": "SleepyFog",
+          "segment": 3,
+          "pos": [
+            -2.4239959716796875,
+            760.5650005340576,
+            1608.0
+          ],
+          "rot": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "shape": "box",
+          "size": [
+            696.9000244140625,
+            46.869998931884766,
+            700.0
+          ],
+          "radius": null,
+          "activationRadius": null,
+          "warningRadius": null,
+          "topY": 784.0,
+          "surfaceMaterial": "FogSurface",
+          "surfaceShader": "GD/FogSurface",
+          "active": true,
+          "activity": "source-baseline",
+          "authority": "map-baseline",
+          "source": "serialized-map-StatusFieldGloom",
+          "sourcePathId": 704664,
+          "sightDistance": 25.0,
+          "statusAmountPerSecond": 0.008999999612569809,
+          "statusDelaySeconds": 2.0,
+          "runtimeHeightUnknown": true,
+          "runtimeSafeZonesUnknown": true
+        },
+        {
+          "objectId": "map-fog:Level_3:707574",
+          "kind": "sleep_fog",
+          "prefabName": "SleepyFog (1)",
+          "segment": 4,
+          "pos": [
+            -29.337820053100586,
+            445.1299743652344,
+            2108.599998474121
+          ],
+          "rot": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "shape": "box",
+          "size": [
+            696.9000244140625,
+            718.0,
+            700.0
+          ],
+          "radius": null,
+          "activationRadius": null,
+          "warningRadius": null,
+          "topY": 804.1299743652344,
+          "surfaceMaterial": "FogSurface",
+          "surfaceShader": "GD/FogSurface",
+          "active": true,
+          "activity": "source-baseline",
+          "authority": "map-baseline",
+          "source": "serialized-map-StatusFieldGloom",
+          "sourcePathId": 707574,
+          "sightDistance": 60.0,
+          "statusAmountPerSecond": 0.008999999612569809,
+          "statusDelaySeconds": 2.0,
+          "runtimeHeightUnknown": true,
+          "runtimeSafeZonesUnknown": true
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-8abb59a78d9bc46780285ff400dba34026eb65e823157715c484676984e3ba24",
+      "sceneName": "Level_4",
+      "mapSlot": 4,
+      "sourceSceneSha256": "0bf3013200c9128562d190c3bfe55b274d4fc8b351c6069636e31c9116740f18",
+      "volumes": []
+    },
+    {
+      "mapPackId": "sha256-c349ad1fd7febf81de2053de327da3a5baff249f5b8621bc082f33e6d26ec850",
+      "sceneName": "Level_5",
+      "mapSlot": 5,
+      "sourceSceneSha256": "d035c7a19439e2a6512f8750d997bb3a6b86c4960a9e061a87bcf7bbdbe42951",
+      "volumes": [
+        {
+          "objectId": "map-fog:Level_5:906050",
+          "kind": "sleep_fog",
+          "prefabName": "SleepyFog",
+          "segment": 3,
+          "pos": [
+            -2.4239959716796875,
+            760.5650005340576,
+            1608.0
+          ],
+          "rot": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "shape": "box",
+          "size": [
+            696.9000244140625,
+            46.869998931884766,
+            700.0
+          ],
+          "radius": null,
+          "activationRadius": null,
+          "warningRadius": null,
+          "topY": 784.0,
+          "surfaceMaterial": "FogSurface",
+          "surfaceShader": "GD/FogSurface",
+          "active": true,
+          "activity": "source-baseline",
+          "authority": "map-baseline",
+          "source": "serialized-map-StatusFieldGloom",
+          "sourcePathId": 906050,
+          "sightDistance": 25.0,
+          "statusAmountPerSecond": 0.008999999612569809,
+          "statusDelaySeconds": 2.0,
+          "runtimeHeightUnknown": true,
+          "runtimeSafeZonesUnknown": true
+        },
+        {
+          "objectId": "map-fog:Level_5:909257",
+          "kind": "sleep_fog",
+          "prefabName": "SleepyFog (1)",
+          "segment": 4,
+          "pos": [
+            -29.337820053100586,
+            445.1299743652344,
+            2108.599998474121
+          ],
+          "rot": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "shape": "box",
+          "size": [
+            696.9000244140625,
+            718.0,
+            700.0
+          ],
+          "radius": null,
+          "activationRadius": null,
+          "warningRadius": null,
+          "topY": 804.1299743652344,
+          "surfaceMaterial": "FogSurface",
+          "surfaceShader": "GD/FogSurface",
+          "active": true,
+          "activity": "source-baseline",
+          "authority": "map-baseline",
+          "source": "serialized-map-StatusFieldGloom",
+          "sourcePathId": 909257,
+          "sightDistance": 60.0,
+          "statusAmountPerSecond": 0.008999999612569809,
+          "statusDelaySeconds": 2.0,
+          "runtimeHeightUnknown": true,
+          "runtimeSafeZonesUnknown": true
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-4fbf57cd24f872794f92bb45187fff5243e4febed6d8b5859de29ea6963d894f",
+      "sceneName": "Level_6",
+      "mapSlot": 6,
+      "sourceSceneSha256": "707199891562d1d2d87ae6da4dde9089a4a9515115ef1ec6d08ab8f7fe3a78e6",
+      "volumes": []
+    },
+    {
+      "mapPackId": "sha256-e08d1fea146fa791695b1b5f09ed10f9d25eec3c382d7d9b414c6bfdae1c7b28",
+      "sceneName": "Level_7",
+      "mapSlot": 7,
+      "sourceSceneSha256": "2e56bf611e402f74911e2b5422219e156950ebe5e6862b4ee1e628af1109716d",
+      "volumes": [
+        {
+          "objectId": "map-fog:Level_7:712536",
+          "kind": "sleep_fog",
+          "prefabName": "SleepyFog",
+          "segment": 3,
+          "pos": [
+            -2.4239959716796875,
+            760.5650005340576,
+            1608.0
+          ],
+          "rot": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "shape": "box",
+          "size": [
+            696.9000244140625,
+            46.869998931884766,
+            700.0
+          ],
+          "radius": null,
+          "activationRadius": null,
+          "warningRadius": null,
+          "topY": 784.0,
+          "surfaceMaterial": "FogSurface",
+          "surfaceShader": "GD/FogSurface",
+          "active": true,
+          "activity": "source-baseline",
+          "authority": "map-baseline",
+          "source": "serialized-map-StatusFieldGloom",
+          "sourcePathId": 712536,
+          "sightDistance": 25.0,
+          "statusAmountPerSecond": 0.008999999612569809,
+          "statusDelaySeconds": 2.0,
+          "runtimeHeightUnknown": true,
+          "runtimeSafeZonesUnknown": true
+        },
+        {
+          "objectId": "map-fog:Level_7:715416",
+          "kind": "sleep_fog",
+          "prefabName": "SleepyFog (1)",
+          "segment": 4,
+          "pos": [
+            -29.337820053100586,
+            445.1299743652344,
+            2108.599998474121
+          ],
+          "rot": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "shape": "box",
+          "size": [
+            696.9000244140625,
+            718.0,
+            700.0
+          ],
+          "radius": null,
+          "activationRadius": null,
+          "warningRadius": null,
+          "topY": 804.1299743652344,
+          "surfaceMaterial": "FogSurface",
+          "surfaceShader": "GD/FogSurface",
+          "active": true,
+          "activity": "source-baseline",
+          "authority": "map-baseline",
+          "source": "serialized-map-StatusFieldGloom",
+          "sourcePathId": 715416,
+          "sightDistance": 60.0,
+          "statusAmountPerSecond": 0.008999999612569809,
+          "statusDelaySeconds": 2.0,
+          "runtimeHeightUnknown": true,
+          "runtimeSafeZonesUnknown": true
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-1f43e1469f2fc3aecc9730defb266ab7bc9a010d95243a3d7d132adc9f7f5428",
+      "sceneName": "Level_8",
+      "mapSlot": 8,
+      "sourceSceneSha256": "1bafbcbf161da3270fca049d04844f53dd95a85263dbbb7fbbd7bb2db0bec91e",
+      "volumes": []
+    },
+    {
+      "mapPackId": "sha256-d5b4ba07467d36d3763e4df2430c0aa11c725490d039dbd969bc05b3391ebf98",
+      "sceneName": "Level_9",
+      "mapSlot": 9,
+      "sourceSceneSha256": "04572ba0cfe82a7c9fb5ab21b86c7a4b653350f7487a43e432746a9f47923995",
+      "volumes": [
+        {
+          "objectId": "map-fog:Level_9:801972",
+          "kind": "sleep_fog",
+          "prefabName": "SleepyFog",
+          "segment": 3,
+          "pos": [
+            -2.4239959716796875,
+            760.5650005340576,
+            1608.0
+          ],
+          "rot": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "shape": "box",
+          "size": [
+            696.9000244140625,
+            46.869998931884766,
+            700.0
+          ],
+          "radius": null,
+          "activationRadius": null,
+          "warningRadius": null,
+          "topY": 784.0,
+          "surfaceMaterial": "FogSurface",
+          "surfaceShader": "GD/FogSurface",
+          "active": true,
+          "activity": "source-baseline",
+          "authority": "map-baseline",
+          "source": "serialized-map-StatusFieldGloom",
+          "sourcePathId": 801972,
+          "sightDistance": 25.0,
+          "statusAmountPerSecond": 0.008999999612569809,
+          "statusDelaySeconds": 2.0,
+          "runtimeHeightUnknown": true,
+          "runtimeSafeZonesUnknown": true
+        },
+        {
+          "objectId": "map-fog:Level_9:804839",
+          "kind": "sleep_fog",
+          "prefabName": "SleepyFog (1)",
+          "segment": 4,
+          "pos": [
+            -29.337820053100586,
+            445.1299743652344,
+            2108.599998474121
+          ],
+          "rot": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "shape": "box",
+          "size": [
+            696.9000244140625,
+            718.0,
+            700.0
+          ],
+          "radius": null,
+          "activationRadius": null,
+          "warningRadius": null,
+          "topY": 804.1299743652344,
+          "surfaceMaterial": "FogSurface",
+          "surfaceShader": "GD/FogSurface",
+          "active": true,
+          "activity": "source-baseline",
+          "authority": "map-baseline",
+          "source": "serialized-map-StatusFieldGloom",
+          "sourcePathId": 804839,
+          "sightDistance": 60.0,
+          "statusAmountPerSecond": 0.008999999612569809,
+          "statusDelaySeconds": 2.0,
+          "runtimeHeightUnknown": true,
+          "runtimeSafeZonesUnknown": true
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-2f2de8d36c25bc5eb4d18416b640dccf347e44ebbd46ddef59f9d0ea211bc59d",
+      "sceneName": "Level_10",
+      "mapSlot": 10,
+      "sourceSceneSha256": "8468c059a9067f27416a5e2fd1c5ec785cb764f9e3da0528b00c382fdf895f8a",
+      "volumes": []
+    },
+    {
+      "mapPackId": "sha256-81d7878c532ca8a87b40cbebc53e18181f6ced5d2ab13a29a719f96a188ca05d",
+      "sceneName": "Level_11",
+      "mapSlot": 11,
+      "sourceSceneSha256": "3364f2cf94f197baf98a8ceed812a6fee11ac283517fd97b96023530720bb288",
+      "volumes": [
+        {
+          "objectId": "map-fog:Level_11:782132",
+          "kind": "sleep_fog",
+          "prefabName": "SleepyFog",
+          "segment": 3,
+          "pos": [
+            -2.4239959716796875,
+            760.5650005340576,
+            1608.0
+          ],
+          "rot": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "shape": "box",
+          "size": [
+            696.9000244140625,
+            46.869998931884766,
+            700.0
+          ],
+          "radius": null,
+          "activationRadius": null,
+          "warningRadius": null,
+          "topY": 784.0,
+          "surfaceMaterial": "FogSurface",
+          "surfaceShader": "GD/FogSurface",
+          "active": true,
+          "activity": "source-baseline",
+          "authority": "map-baseline",
+          "source": "serialized-map-StatusFieldGloom",
+          "sourcePathId": 782132,
+          "sightDistance": 25.0,
+          "statusAmountPerSecond": 0.008999999612569809,
+          "statusDelaySeconds": 2.0,
+          "runtimeHeightUnknown": true,
+          "runtimeSafeZonesUnknown": true
+        },
+        {
+          "objectId": "map-fog:Level_11:785090",
+          "kind": "sleep_fog",
+          "prefabName": "SleepyFog (1)",
+          "segment": 4,
+          "pos": [
+            -29.337820053100586,
+            445.1299743652344,
+            2108.599998474121
+          ],
+          "rot": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "shape": "box",
+          "size": [
+            696.9000244140625,
+            718.0,
+            700.0
+          ],
+          "radius": null,
+          "activationRadius": null,
+          "warningRadius": null,
+          "topY": 804.1299743652344,
+          "surfaceMaterial": "FogSurface",
+          "surfaceShader": "GD/FogSurface",
+          "active": true,
+          "activity": "source-baseline",
+          "authority": "map-baseline",
+          "source": "serialized-map-StatusFieldGloom",
+          "sourcePathId": 785090,
+          "sightDistance": 60.0,
+          "statusAmountPerSecond": 0.008999999612569809,
+          "statusDelaySeconds": 2.0,
+          "runtimeHeightUnknown": true,
+          "runtimeSafeZonesUnknown": true
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-dce01213c1dd308afad6f4f34337e6c0fe0586cdcd9da890eac72892c17fbbbe",
+      "sceneName": "Level_12",
+      "mapSlot": 12,
+      "sourceSceneSha256": "8f89cffaf567d177d8416f1a1a15cca1cf6ffa51a31252afe68a2b491bab14c7",
+      "volumes": []
+    },
+    {
+      "mapPackId": "sha256-db99876fa4d919832733b6a72c308cff16559f446035e21d0014dab3a0fa90b2",
+      "sceneName": "Level_13",
+      "mapSlot": 13,
+      "sourceSceneSha256": "ea6e6c7a934744413421d65940a9d0c011f68b4ba58355d3d4198bef9cf331e6",
+      "volumes": [
+        {
+          "objectId": "map-fog:Level_13:783308",
+          "kind": "sleep_fog",
+          "prefabName": "SleepyFog",
+          "segment": 3,
+          "pos": [
+            -2.4239959716796875,
+            760.5650005340576,
+            1608.0
+          ],
+          "rot": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "shape": "box",
+          "size": [
+            696.9000244140625,
+            46.869998931884766,
+            700.0
+          ],
+          "radius": null,
+          "activationRadius": null,
+          "warningRadius": null,
+          "topY": 784.0,
+          "surfaceMaterial": "FogSurface",
+          "surfaceShader": "GD/FogSurface",
+          "active": true,
+          "activity": "source-baseline",
+          "authority": "map-baseline",
+          "source": "serialized-map-StatusFieldGloom",
+          "sourcePathId": 783308,
+          "sightDistance": 25.0,
+          "statusAmountPerSecond": 0.008999999612569809,
+          "statusDelaySeconds": 2.0,
+          "runtimeHeightUnknown": true,
+          "runtimeSafeZonesUnknown": true
+        },
+        {
+          "objectId": "map-fog:Level_13:786099",
+          "kind": "sleep_fog",
+          "prefabName": "SleepyFog (1)",
+          "segment": 4,
+          "pos": [
+            -29.337820053100586,
+            445.1299743652344,
+            2108.599998474121
+          ],
+          "rot": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "shape": "box",
+          "size": [
+            696.9000244140625,
+            718.0,
+            700.0
+          ],
+          "radius": null,
+          "activationRadius": null,
+          "warningRadius": null,
+          "topY": 804.1299743652344,
+          "surfaceMaterial": "FogSurface",
+          "surfaceShader": "GD/FogSurface",
+          "active": true,
+          "activity": "source-baseline",
+          "authority": "map-baseline",
+          "source": "serialized-map-StatusFieldGloom",
+          "sourcePathId": 786099,
+          "sightDistance": 60.0,
+          "statusAmountPerSecond": 0.008999999612569809,
+          "statusDelaySeconds": 2.0,
+          "runtimeHeightUnknown": true,
+          "runtimeSafeZonesUnknown": true
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-1a12a665ab7b832ab53afdef30af6947780efd8abea61408cfaa0c2017f1d6eb",
+      "sceneName": "Level_14",
+      "mapSlot": 14,
+      "sourceSceneSha256": "ae5bba6ea5b1e966eec1640147089ce8b0378d6d686a0599c1c17d39810dce05",
+      "volumes": []
+    },
+    {
+      "mapPackId": "sha256-1577fed4c50a8cd20e6ca2a70df0a882f1fb27a79e4730f6bd6522158406e837",
+      "sceneName": "Level_15",
+      "mapSlot": 15,
+      "sourceSceneSha256": "cbefde26cb05542c2112f38cb11a1beb67835e1fc6a197c8ed8174e7459c94a2",
+      "volumes": [
+        {
+          "objectId": "map-fog:Level_15:777741",
+          "kind": "sleep_fog",
+          "prefabName": "SleepyFog",
+          "segment": 3,
+          "pos": [
+            -2.4239959716796875,
+            760.5650005340576,
+            1608.0
+          ],
+          "rot": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "shape": "box",
+          "size": [
+            696.9000244140625,
+            46.869998931884766,
+            700.0
+          ],
+          "radius": null,
+          "activationRadius": null,
+          "warningRadius": null,
+          "topY": 784.0,
+          "surfaceMaterial": "FogSurface",
+          "surfaceShader": "GD/FogSurface",
+          "active": true,
+          "activity": "source-baseline",
+          "authority": "map-baseline",
+          "source": "serialized-map-StatusFieldGloom",
+          "sourcePathId": 777741,
+          "sightDistance": 25.0,
+          "statusAmountPerSecond": 0.008999999612569809,
+          "statusDelaySeconds": 2.0,
+          "runtimeHeightUnknown": true,
+          "runtimeSafeZonesUnknown": true
+        },
+        {
+          "objectId": "map-fog:Level_15:780785",
+          "kind": "sleep_fog",
+          "prefabName": "SleepyFog (1)",
+          "segment": 4,
+          "pos": [
+            -29.337820053100586,
+            445.1299743652344,
+            2108.599998474121
+          ],
+          "rot": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "shape": "box",
+          "size": [
+            696.9000244140625,
+            718.0,
+            700.0
+          ],
+          "radius": null,
+          "activationRadius": null,
+          "warningRadius": null,
+          "topY": 804.1299743652344,
+          "surfaceMaterial": "FogSurface",
+          "surfaceShader": "GD/FogSurface",
+          "active": true,
+          "activity": "source-baseline",
+          "authority": "map-baseline",
+          "source": "serialized-map-StatusFieldGloom",
+          "sourcePathId": 780785,
+          "sightDistance": 60.0,
+          "statusAmountPerSecond": 0.008999999612569809,
+          "statusDelaySeconds": 2.0,
+          "runtimeHeightUnknown": true,
+          "runtimeSafeZonesUnknown": true
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-21e37b5ad75c73499df7b0e07ed9f31f0f3beb12b39474af564d82ec45c9bc27",
+      "sceneName": "Level_16",
+      "mapSlot": 16,
+      "sourceSceneSha256": "4d21e6ca37d024c43c3837420dc74c40ea213651ebdfc4ab95d1862e5e9f559b",
+      "volumes": []
+    },
+    {
+      "mapPackId": "sha256-d53d40cba5f40d92f8fa7318d3eee760dc10500907f88b8f6af457cd27872ab7",
+      "sceneName": "Level_17",
+      "mapSlot": 17,
+      "sourceSceneSha256": "470eac3820ab47faeb9c848300844935a4eff6d235779eac1c23f17e2199b717",
+      "volumes": [
+        {
+          "objectId": "map-fog:Level_17:707507",
+          "kind": "sleep_fog",
+          "prefabName": "SleepyFog",
+          "segment": 3,
+          "pos": [
+            -2.4239959716796875,
+            760.5650005340576,
+            1608.0
+          ],
+          "rot": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "shape": "box",
+          "size": [
+            696.9000244140625,
+            46.869998931884766,
+            700.0
+          ],
+          "radius": null,
+          "activationRadius": null,
+          "warningRadius": null,
+          "topY": 784.0,
+          "surfaceMaterial": "FogSurface",
+          "surfaceShader": "GD/FogSurface",
+          "active": true,
+          "activity": "source-baseline",
+          "authority": "map-baseline",
+          "source": "serialized-map-StatusFieldGloom",
+          "sourcePathId": 707507,
+          "sightDistance": 25.0,
+          "statusAmountPerSecond": 0.008999999612569809,
+          "statusDelaySeconds": 2.0,
+          "runtimeHeightUnknown": true,
+          "runtimeSafeZonesUnknown": true
+        },
+        {
+          "objectId": "map-fog:Level_17:710314",
+          "kind": "sleep_fog",
+          "prefabName": "SleepyFog (1)",
+          "segment": 4,
+          "pos": [
+            -29.337820053100586,
+            445.1299743652344,
+            2108.599998474121
+          ],
+          "rot": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "shape": "box",
+          "size": [
+            696.9000244140625,
+            718.0,
+            700.0
+          ],
+          "radius": null,
+          "activationRadius": null,
+          "warningRadius": null,
+          "topY": 804.1299743652344,
+          "surfaceMaterial": "FogSurface",
+          "surfaceShader": "GD/FogSurface",
+          "active": true,
+          "activity": "source-baseline",
+          "authority": "map-baseline",
+          "source": "serialized-map-StatusFieldGloom",
+          "sourcePathId": 710314,
+          "sightDistance": 60.0,
+          "statusAmountPerSecond": 0.008999999612569809,
+          "statusDelaySeconds": 2.0,
+          "runtimeHeightUnknown": true,
+          "runtimeSafeZonesUnknown": true
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-0c683b4bfc284fe2995c03e2ae1fb0b1f7b52bdb8f67eb7842ef7a46c2c17da3",
+      "sceneName": "Level_18",
+      "mapSlot": 18,
+      "sourceSceneSha256": "1ecb1b215cd6d9e76e3a74d5ca7953950cb5a0a6216a67ec7a2f9d23784427d3",
+      "volumes": []
+    },
+    {
+      "mapPackId": "sha256-9373a468913acb0219a74bbc1ce2d42dc7497e7b88f260575af9b8e1b22b85b3",
+      "sceneName": "Level_19",
+      "mapSlot": 19,
+      "sourceSceneSha256": "d94bd2e994c4229a23e05778fcaf614a297439fecee756f77a8b0c17397afe73",
+      "volumes": [
+        {
+          "objectId": "map-fog:Level_19:811633",
+          "kind": "sleep_fog",
+          "prefabName": "SleepyFog",
+          "segment": 3,
+          "pos": [
+            -2.4239959716796875,
+            760.5650005340576,
+            1608.0
+          ],
+          "rot": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "shape": "box",
+          "size": [
+            696.9000244140625,
+            46.869998931884766,
+            700.0
+          ],
+          "radius": null,
+          "activationRadius": null,
+          "warningRadius": null,
+          "topY": 784.0,
+          "surfaceMaterial": "FogSurface",
+          "surfaceShader": "GD/FogSurface",
+          "active": true,
+          "activity": "source-baseline",
+          "authority": "map-baseline",
+          "source": "serialized-map-StatusFieldGloom",
+          "sourcePathId": 811633,
+          "sightDistance": 25.0,
+          "statusAmountPerSecond": 0.008999999612569809,
+          "statusDelaySeconds": 2.0,
+          "runtimeHeightUnknown": true,
+          "runtimeSafeZonesUnknown": true
+        },
+        {
+          "objectId": "map-fog:Level_19:817396",
+          "kind": "sleep_fog",
+          "prefabName": "SleepyFog (1)",
+          "segment": 4,
+          "pos": [
+            -29.337820053100586,
+            445.1299743652344,
+            2108.599998474121
+          ],
+          "rot": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "shape": "box",
+          "size": [
+            696.9000244140625,
+            718.0,
+            700.0
+          ],
+          "radius": null,
+          "activationRadius": null,
+          "warningRadius": null,
+          "topY": 804.1299743652344,
+          "surfaceMaterial": "FogSurface",
+          "surfaceShader": "GD/FogSurface",
+          "active": true,
+          "activity": "source-baseline",
+          "authority": "map-baseline",
+          "source": "serialized-map-StatusFieldGloom",
+          "sourcePathId": 817396,
+          "sightDistance": 60.0,
+          "statusAmountPerSecond": 0.008999999612569809,
+          "statusDelaySeconds": 2.0,
+          "runtimeHeightUnknown": true,
+          "runtimeSafeZonesUnknown": true
+        }
+      ]
+    },
+    {
+      "mapPackId": "sha256-ae276cf3116f9ffe0d0a401b84a165b084637c86bedf041b2a968a5e52537142",
+      "sceneName": "Level_20",
+      "mapSlot": 20,
+      "sourceSceneSha256": "bdd4a2dcdba00bc9b7dd092318d6e990b7deea0d713f7d29bacd9e0a0fa203dc",
+      "volumes": []
+    }
+  ]
+}

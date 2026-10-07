@@ -31,6 +31,9 @@ map:
   layoutKey?: 原生场景布局证据的 SHA256
   route: 按真实选择的关卡顺序排列的名字
   stages: [{index, name, enterZCm?, exitZCm?}]
+  alignment?: {version:1, coordinateSpace:"unity-world-cm",
+    landmarks:[{key,kind:segment-root|progress-point,stageIndex?,name,
+      positionCm:[xCm,yCm,zCm],rotation?:[x,y,z,w],scale?:[x,y,z]}]}
 difficulty: {ascent: 整数或 null, custom: bool 或 null, mini: bool 或 null}
 players:
   [{key: 按 runKey/recordingId 作用域散列的玩家身份,
@@ -40,6 +43,8 @@ players:
 ```
 
 最多 16 人；每人每 100 ms 桶最多一个真实点，不插值补点；整数厘米保留 XYZ。`stages` 必须连续编号且名字与 `route` 一致。原生关卡门限必须成对且 `exitZCm > enterZCm`；旧录像可以同时缺失。昵称仅在玩家头信息中写一次，同名玩家凭哈希 key 区分。
+
+`alignment` 是录制开始时一次性读取的地图物件证据，最多 16 个地标，不增加逐帧读取。根使用 `segment-root:<index>`，原生进度点使用 `progress-point:<index>`，山顶使用 `progress-point:peak`。名字来自实际 Transform；根必须同时带世界旋转和缩放，进度点不带它们。关卡门限必须等于对应进度点的 Z，不能把半关随意改成完整关卡。旧录像不借用上传时正在游玩的地图补地标。
 
 压缩请求上限 12 MiB，解压上限 64 MiB。gzip 解压、JSON 验证、关卡筛选、索引读取、聚合和大型响应编码都在 worker 中完成。HTTP 最多 4 个请求进入有界队列，worker 串行运行；同时最多接收一个上传；多余请求返回 429。每来源每分钟最多 20 次上传、120 次公开查询；`--trusted-proxy` 仅在已绑定 loopback 且受信反代设置 `X-Real-IP` 时启用。
 
@@ -85,14 +90,24 @@ node PeakTrailPlatform/server/route-admin.mjs --dir PRIVATE_DIR pending UPLOAD_S
 
 只有 `approved` 且个人关卡完整的数据进入公开结果。每次路线响应最多 200 条且最多 200,000 个点；达到任一上限会明确 `truncated:true`，不会把截断结果冒充全部统计。热力统计仍遍历该筛选条件下的完整有效路线，每条尝试在同一体素仅贡献一次；保留高度带，不把上下层混成一层；不会穿过不连续位移连线。格网最多 250,000 单元。
 
-地图组依据录制的构建、场景、实际布局与分关信息，日期只是导航。目录存在对应 build/scene，且已有原生分支证据匹配时返回 `matched`；没有底图或证据冲突为 `waiting-map`。`mapPackId` 只标识用于显示的导出包，不作为统计组永久主键。
+地图组依据录制的构建、场景、实际布局与分关信息，日期只是导航。目录存在对应 build/scene、原生分支匹配且真实布局证明通过时返回 `matched`；没有底图或证据冲突为 `waiting-map`。`mapPackId` 只标识用于显示的导出包，不作为统计组永久主键。
+
+`matched` 还要求真实布局对齐证明。服务读取对应构建的 `landmarks.<build>.json`，按精确 `mapPackId` 和 `sourceSceneSha256` 绑定底图的 `map-pack.json`。新录像须具有相同完整地标身份，并至少有三个分散、非共线的位置；仅允许整体正向刚性旋转和平移，所有点的误差须不超过 5 cm，根旋转与缩放也须匹配。地标缺失、非刚性变形、不同关卡、不同构建均不能借用底图。返回 `mapAlignment.status=verified|pending` 及原因；历史投稿及审核状态始终保留。
+
+发布 staging 会重建 `routes.<build>.json` 和 `landmarks.<build>.json` 的公开白名单，仅包含实际发布 catalog 中的导出包，绑定其源场景 SHA。已经提供地标的构建必须覆盖该构建的完整 catalog；缺行、重复、错版本、错误场景、无原生路线证明或不可验证的地标会在替换现有站点之前失败。不发布旁边的私人文件或未经引用的旁数据行。
+
+较旧录像只有 `layoutKey` 时，仅在导出工具能从原场景、DLL MVID、完整根路径/XYZ 和原生门限重建完全相等的 `expectedLegacyLayoutKey`，且原生代码已确认无运行时根 TRS 写入时，允许 `legacy-layout-key` 方式证明原位。该方式只使用单位变换；哈希不等、缺原源版本或门限不一致时仍等待证据，绝不猜测旧录像偏移。
+
+私有存储中的坐标、地标和门限保留录制时原值。路线查询先按已验证的整体变换返回 `coordinateSpace=canonical-map-world-cm`，热力图使用同一转换后的点聚合；未证明时只返回 `recording-world-cm` 原始坐标，地图网页拒绝叠加。路线与模型仍共用网页显示原点、一次 Z 镜像和高度缩放。不同实际布局保留独立组，不能因为匹配同一底图就合并统计。
 
 网页入口位于首页「进入地图」后的同一张 3D 地图内，提供「线路图层：仅地图 / 大家的路线 / 热力图」。客户端进一步核对当前 `mapPackId`、构建、场景、原生关卡顺序与终章分支，并且只选一个录制布局组；不能将多个同名场景布局自动混在一起。`waiting-map` 投稿仍保留、可以审核，但地图界面不会叠加其路线，也不会借用旧构建底图。选择具体关卡才查询该关路线和热力，「所有关概览」不造合计热力。这里只使用 GET，无直播轮询、SSE 或网页写入审核接口。
 
 ## 验证
 
 ```powershell
-node --test PeakTrailPlatform/tools/tests/trajectory-server.test.mjs
+node --test PeakTrailPlatform/tools/tests/map-alignment.test.mjs PeakTrailPlatform/tools/tests/trajectory-server.test.mjs
 ```
 
 包括真实 HTTP gzip 上传、白名单拒绝、10 Hz 上限、个人状态/断点、同名与同局合并、难度过滤、高度热力、默认待审核/隐藏撤销、持久化重启、解压上限与孤立文件容量。测试使用合成数据、loopback 和临时私有目录，不连接生产上传接口。
+
+对齐测试额外覆盖原位、整体平移/旋转、厘米量化、镜像/缩放/单关偏移拒绝、源场景 SHA 绑定、路线和热力统一空间、旧地标缺失保留及精确旧布局哈希兼容。网页校验响应的同一对齐证明 ID，防止切图或更新地标后叠加过期坐标。

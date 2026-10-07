@@ -516,3 +516,30 @@ test("recorded, inactive, ambiguous or wrong-source fog never hides static surfa
   }
   fixture.geometry.dispose(); fixture.material.dispose(); model.children[0].dispose();
 });
+
+test("current exported materials keep tinted swamp depth, fog replacement and primary fungal colours", () => {
+  const { batchStaticMeshes, updateMapFogSurfaceVisibility } = compile();
+  const swamp = effectFixture('M_Water_swamp', 'GD/Water-GD');
+  const waterModel = batchStaticMeshes(swamp.scene, '25739797');
+  assert.ok(swamp.material.userData.peakWaterDepth);
+  assert.ok(swamp.material.color.r < .05);
+  const fog = effectFixture('FogSurface', 'GD/FogSurface');
+  const fogModel = batchStaticMeshes(fog.scene, '25739797');
+  const chapter = new THREE.Group(); chapter.userData.segment = 3; chapter.add(fogModel);
+  const terrain = new THREE.Group(); terrain.add(chapter);
+  assert.equal(updateMapFogSurfaceVisibility(terrain, [{ kind: 'sleep_fog', authority: 'map-baseline', segment: 3,
+    surfaceMaterial: 'FogSurface', surfaceShader: 'GD/FogSurface' }]), 1);
+  assert.equal(fogModel.children[0].visible, false);
+  const fungus = effectFixture('M_Mushroom_tree', 'W/Peak_Standard');
+  const color = [.26041290266199724, .023338885548048083, .03023184798988776];
+  Object.assign(fungus.material.userData.peakTerrain, { baseColor: color, topColor: [1, 1, 1], amount: 0,
+    sourceColors: { shader: 'W/Peak_Standard', baseProperty: '_BaseColor', baseFlags: 16 } });
+  const fungusModel = batchStaticMeshes(fungus.scene, '25739797');
+  assert.equal(fungus.material.userData.peakSourceEffect, undefined, 'new export must not reapply legacy Tint correction');
+  const shader = { uniforms: {}, vertexShader: THREE.ShaderLib.standard.vertexShader, fragmentShader: THREE.ShaderLib.standard.fragmentShader };
+  fungus.material.onBeforeCompile(shader, {});
+  assert.deepEqual(shader.uniforms.peakBase.value.toArray(), color);
+  assert.equal(shader.uniforms.peakAmount.value, 0, 'stale white top colour cannot repaint the new cap');
+  for (const fixture of [swamp, fog, fungus]) { fixture.geometry.dispose(); fixture.material.dispose(); }
+  for (const model of [waterModel, fogModel, fungusModel]) model.children.forEach(mesh => mesh.dispose());
+});

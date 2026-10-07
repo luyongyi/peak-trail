@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { validateMapAlignment } from "./map-alignment.mjs";
 
 export const LIMITS = Object.freeze({ compressedBytes: 12 * 1024 * 1024, decodedBytes: 64 * 1024 * 1024,
   durationMs: 4 * 60 * 60 * 1000, players: 16, stages: 16, gapMs: 1500, uploads: 10_000,
@@ -36,7 +37,7 @@ export function validateTrajectory(raw) {
   if (!/^\d{4}-\d{2}-\d{2}T.*Z$/.test(result.startedUtc) || !Number.isFinite(Date.parse(result.startedUtc))) throw problem("startedUtc: UTC timestamp required");
   if (Object.hasOwn(raw, "runKey")) { if (!validHash(raw.runKey)) throw problem("runKey: SHA256 required"); result.runKey = raw.runKey; }
   if (Object.hasOwn(raw, "timeOriginMs")) result.timeOriginMs = integer(raw.timeOriginMs, -60_000, 7 * 24 * 60 * 60 * 1000, "timeOriginMs");
-  object(raw.map, ["buildId", "scene", "levelIndex", "layoutKey", "route", "stages"], ["buildId", "scene", "route", "stages"], "map");
+  object(raw.map, ["buildId", "scene", "levelIndex", "layoutKey", "route", "stages", "alignment"], ["buildId", "scene", "route", "stages"], "map");
   const buildId = text(String(raw.map.buildId), 24, "map.buildId");
   if (!/^[1-9]\d*$/.test(buildId)) throw problem("map.buildId: positive build required");
   const scene = text(raw.map.scene, 80, "map.scene");
@@ -55,6 +56,18 @@ export function validateTrajectory(raw) {
     return value;
   }).sort((a, b) => a.index - b.index);
   if (result.map.stages.length !== result.map.route.length || result.map.stages.some((stage, index) => stage.index !== index || stage.name !== result.map.route[index])) throw problem("stages must match the ordered route");
+  if (Object.hasOwn(raw.map, "alignment")) {
+    result.map.alignment = validateMapAlignment(raw.map.alignment);
+    if (result.map.alignment.landmarks.some(value => value.stageIndex !== undefined && !indices.has(value.stageIndex))) throw problem("landmark references absent stage");
+    const points = new Map(result.map.alignment.landmarks.filter(value => value.kind === "progress-point").map(value => [value.key, value.positionCm]));
+    const ordinary = result.map.stages.filter(stage => stage.name !== "Void");
+    for (let i = 0; i < ordinary.length; i++) {
+      const stage = ordinary[i];
+      if (stage.enterZCm === undefined) continue;
+      const entry = points.get(`progress-point:${stage.index}`), exit = points.get(i + 1 < ordinary.length ? `progress-point:${ordinary[i + 1].index}` : "progress-point:peak");
+      if (!entry || !exit || entry[2] !== stage.enterZCm || exit[2] !== stage.exitZCm) throw problem("stage gates disagree with native landmarks");
+    }
+  }
   object(raw.difficulty, ["ascent", "custom", "mini"], ["ascent", "custom", "mini"], "difficulty");
   result.difficulty = { ascent: raw.difficulty.ascent === null ? null : integer(raw.difficulty.ascent, -100, 1000, "ascent"),
     custom: nullableBool(raw.difficulty.custom, "custom"), mini: nullableBool(raw.difficulty.mini, "mini") };
@@ -89,7 +102,8 @@ export function difficultyInfo(raw) {
   const key = `a${raw.ascent ?? "unknown"}-c${raw.custom === null ? "unknown" : Number(raw.custom)}-m${raw.mini === null ? "unknown" : Number(raw.mini)}`;
   return { key, ...raw, label: `${raw.ascent === null ? "难度未知" : `Ascent ${raw.ascent}`}${raw.custom ? " · 自定义" : ""}${raw.mini ? " · Mini" : ""}` };
 }
-export function groupId(map) { return digest({ buildId: map.buildId, scene: map.scene, layoutKey: map.layoutKey ?? null, route: map.route, stages: map.stages }); }
+export function groupId(map) { return digest({ buildId: map.buildId, scene: map.scene, layoutKey: map.layoutKey ?? null, route: map.route, stages: map.stages,
+  ...(map.alignment ? { alignment: map.alignment } : {}) }); }
 
 function discontinuity(a, b) { const dt = b[0] - a[0]; return dt > LIMITS.gapMs || Math.hypot(b[1] - a[1], b[2] - a[2], b[3] - a[3]) > Math.max(1500, dt * 5); }
 export function extractStageRoutes(trajectory, player, stage) {

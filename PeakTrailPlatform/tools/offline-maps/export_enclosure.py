@@ -15,7 +15,7 @@ import subprocess
 import tempfile
 
 import numpy as np
-from build_maps import Scene, game_info, pid, sha
+from build_maps import Scene, game_data, game_info, pid, sha
 from export_meshes import GlbBuilder
 
 
@@ -100,10 +100,13 @@ def source_enclosure(scene):
 
 
 def export_enclosures(game, catalog_path, packs_path, asset_directory, output, slots=None,
-                      audit_only=False, max_asset_bytes=64 * 1024 * 1024):
+                      audit_only=False, max_asset_bytes=64 * 1024 * 1024, scene_factory=Scene):
     mapping, _, build = game_info(game)
-    if str(build) != '25306743':
-        raise ValueError('Enclosure root selection is audited only for build 25306743')
+    # 2.6.b keeps both selected branch hierarchies, original mesh identities,
+    # disabled parent renderers, enabled splits and vertical model axes. Every
+    # scene is still checked by source_enclosure; an unfamiliar build fails.
+    if str(build) not in ('25306743', '25739797'):
+        raise ValueError('Enclosure root selection is audited only for builds 25306743 and 25739797')
     catalog = json.loads(catalog_path.read_text(encoding='utf8'))
     result = {'schemaVersion': 1, 'gameBuildId': str(build), 'authority': 'serialized-map-enclosure',
               'note': 'Original active pre-split outer mesh roots and exact source model axes; custom shader effects remain approximated. Existing canonical map packs are unchanged.',
@@ -113,11 +116,11 @@ def export_enclosures(game, catalog_path, packs_path, asset_directory, output, s
         if not entry.get('enabled', True) or str(entry['gameBuildId']) != str(build) or (slots and entry['mapSlot'] not in slots):
             continue
         manifest = json.loads((packs_path / entry['mapPackId'] / 'map-pack.json').read_text(encoding='utf8'))
-        path = game / 'PEAK_Data' / f'level{mapping[entry["sceneName"]]}'
+        path = game_data(game) / f'level{mapping[entry["sceneName"]]}'
         scene_hash = sha(path)
         if scene_hash != manifest['source']['sceneSha256']:
             raise ValueError(f'{entry["sceneName"]}: source hash does not match the canonical pack')
-        scene = Scene(path, game)
+        scene = scene_factory(path, game)
         enclosure, instances = source_enclosure(scene)
         if not audit_only:
             asset_directory.mkdir(parents=True, exist_ok=True)
@@ -175,5 +178,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
     if (args.audit_only or args.slots) and not args.output:
         parser.error('Partial/audit exports require an explicit --output and cannot replace the full site metadata')
+    build_id = game_info(args.game)[2]
     export_enclosures(args.game, args.catalog, args.packs, args.assets,
-                      args.output or platform / 'data/maps/enclosures.25306743.json', args.slots, args.audit_only)
+                      args.output or platform / f'data/maps/enclosures.{build_id}.json', args.slots, args.audit_only)

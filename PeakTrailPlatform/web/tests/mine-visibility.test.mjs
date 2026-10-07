@@ -9,6 +9,7 @@ const explosion = (x = 0, t = 10) => ({ type: 'mine_explosion', t, pos: [x, 0, 0
 
 test('only exact-build explosive mushroom is eligible', () => {
   assert.ok(isExplosiveMineMaterial('25306743', 'M_SporeShroomExplo', 'W/Peak_Standard'));
+  assert.ok(isExplosiveMineMaterial('25739797', 'M_SporeShroomExplo', 'W/Peak_Standard'));
   assert.ok(!isExplosiveMineMaterial('other', 'M_SporeShroomExplo', 'W/Peak_Standard'));
   assert.ok(!isExplosiveMineMaterial('25306743', 'M_SporeShroomPoison', 'W/Peak_Standard'));
 });

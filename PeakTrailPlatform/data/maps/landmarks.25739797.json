@@ -1,0 +1,4420 @@
+{
+  "schemaVersion": 1,
+  "gameBuildId": "25739797",
+  "gameVersion": "2.6.b",
+  "sourceGameAssemblyMvid": "60e206758e5a4ad99b5ac31f273b85fc",
+  "sourceGameAssemblySha256": "97141b7fe9cda6ac1db3093d3579908dbff78db0b4343cb3e19429b486a46919",
+  "authority": "serialized-map-landmarks",
+  "maps": [
+    {
+      "sceneName": "Level_0",
+      "mapPackId": "sha256-8f8944dfe161f3e4eb0416b160d5973b9afd1dd84201c71596185874417043e7",
+      "sourceSceneSha256": "60fe2f409b6ec253f1ed46c885dac7c3aedba8222b6945aa34599db6949aec87",
+      "alignment": {
+        "version": 1,
+        "coordinateSpace": "unity-world-cm",
+        "landmarks": [
+          {
+            "key": "segment-root:0",
+            "kind": "segment-root",
+            "name": "Beach_Segment",
+            "positionCm": [
+              0,
+              0,
+              0
+            ],
+            "stageIndex": 0,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:0",
+            "kind": "progress-point",
+            "name": "ReachedShore",
+            "positionCm": [
+              0,
+              -500,
+              -36420
+            ],
+            "stageIndex": 0
+          },
+          {
+            "key": "segment-root:1",
+            "kind": "segment-root",
+            "name": "Jungle_Segment",
+            "positionCm": [
+              0,
+              0,
+              7600
+            ],
+            "stageIndex": 1,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:1",
+            "kind": "progress-point",
+            "name": "ReachedTropics",
+            "positionCm": [
+              0,
+              20960,
+              20320
+            ],
+            "stageIndex": 1
+          },
+          {
+            "key": "segment-root:2",
+            "kind": "segment-root",
+            "name": "Desert_Segment",
+            "positionCm": [
+              0,
+              0,
+              0
+            ],
+            "stageIndex": 2,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:2",
+            "kind": "progress-point",
+            "name": "ReachedAlpine",
+            "positionCm": [
+              0,
+              45044,
+              62770
+            ],
+            "stageIndex": 2
+          },
+          {
+            "key": "segment-root:3",
+            "kind": "segment-root",
+            "name": "Caldera_Segment",
+            "positionCm": [
+              0,
+              0,
+              22800
+            ],
+            "stageIndex": 3,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:3",
+            "kind": "progress-point",
+            "name": "ReachedCaldera",
+            "positionCm": [
+              0,
+              75690,
+              129790
+            ],
+            "stageIndex": 3
+          },
+          {
+            "key": "segment-root:4",
+            "kind": "segment-root",
+            "name": "Volcano_Segment",
+            "positionCm": [
+              0,
+              0,
+              22800
+            ],
+            "stageIndex": 4,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:4",
+            "kind": "progress-point",
+            "name": "ReachedTheKiln",
+            "positionCm": [
+              0,
+              85816,
+              201110
+            ],
+            "stageIndex": 4
+          },
+          {
+            "key": "segment-root:5",
+            "kind": "segment-root",
+            "name": "Beach_Segment",
+            "positionCm": [
+              0,
+              72700,
+              50700
+            ],
+            "stageIndex": 5,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:peak",
+            "kind": "progress-point",
+            "name": "ReachedPeak",
+            "positionCm": [
+              0,
+              118770,
+              213450
+            ]
+          }
+        ]
+      },
+      "expectedLegacyLayoutKey": "78f7a35ec0f44784a9179675d33c72267018c49216c3e0cccc0ee8e149775e57",
+      "legacyRootTransformPolicy": "static-no-runtime-trs-writes"
+    },
+    {
+      "sceneName": "Level_1",
+      "mapPackId": "sha256-3d38cb84c8e19af6ac424bbadcd5afea7fac1a45d2dbab98c7f7f92dfb8b4709",
+      "sourceSceneSha256": "5ffc768327145440f835ae6fff36c8254aff245077ccc676f2df6273907e62ea",
+      "alignment": {
+        "version": 1,
+        "coordinateSpace": "unity-world-cm",
+        "landmarks": [
+          {
+            "key": "segment-root:0",
+            "kind": "segment-root",
+            "name": "Beach_Segment",
+            "positionCm": [
+              0,
+              0,
+              0
+            ],
+            "stageIndex": 0,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:0",
+            "kind": "progress-point",
+            "name": "ReachedShore",
+            "positionCm": [
+              0,
+              -500,
+              -36420
+            ],
+            "stageIndex": 0
+          },
+          {
+            "key": "segment-root:1",
+            "kind": "segment-root",
+            "name": "Roots Segment",
+            "positionCm": [
+              0,
+              0,
+              6700
+            ],
+            "stageIndex": 1,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:1",
+            "kind": "progress-point",
+            "name": "ReachedTropics",
+            "positionCm": [
+              0,
+              20960,
+              20320
+            ],
+            "stageIndex": 1
+          },
+          {
+            "key": "segment-root:2",
+            "kind": "segment-root",
+            "name": "Desert_Segment",
+            "positionCm": [
+              0,
+              0,
+              0
+            ],
+            "stageIndex": 2,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:2",
+            "kind": "progress-point",
+            "name": "ReachedAlpine",
+            "positionCm": [
+              0,
+              45044,
+              62770
+            ],
+            "stageIndex": 2
+          },
+          {
+            "key": "segment-root:3",
+            "kind": "segment-root",
+            "name": "Swamp_Segment",
+            "positionCm": [
+              125,
+              64515,
+              120200
+            ],
+            "stageIndex": 3,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:3",
+            "kind": "progress-point",
+            "name": "ReachedCaldera",
+            "positionCm": [
+              0,
+              75690,
+              129790
+            ],
+            "stageIndex": 3
+          },
+          {
+            "key": "segment-root:4",
+            "kind": "segment-root",
+            "name": "Temple_Segment",
+            "positionCm": [
+              -1700,
+              86210,
+              214700
+            ],
+            "stageIndex": 4,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:4",
+            "kind": "progress-point",
+            "name": "ReachedTheKiln",
+            "positionCm": [
+              0,
+              85816,
+              201110
+            ],
+            "stageIndex": 4
+          },
+          {
+            "key": "segment-root:5",
+            "kind": "segment-root",
+            "name": "Beach_Segment",
+            "positionCm": [
+              0,
+              72700,
+              50700
+            ],
+            "stageIndex": 5,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:peak",
+            "kind": "progress-point",
+            "name": "ReachedPeak",
+            "positionCm": [
+              0,
+              118770,
+              213450
+            ]
+          }
+        ]
+      },
+      "expectedLegacyLayoutKey": "f124d5f7a30059852d02cbcb61ec1a157b25e6c161ea8fd3646b3f012a76c25f",
+      "legacyRootTransformPolicy": "static-no-runtime-trs-writes"
+    },
+    {
+      "sceneName": "Level_2",
+      "mapPackId": "sha256-9aff8876802787444fe2ecc3c46259a9d8bbaf813993991caeed8d268ea31bcf",
+      "sourceSceneSha256": "ca019dbf09b7578493b2740ecbd03fc556e33cae02033436b1b58d85efe22ccc",
+      "alignment": {
+        "version": 1,
+        "coordinateSpace": "unity-world-cm",
+        "landmarks": [
+          {
+            "key": "segment-root:0",
+            "kind": "segment-root",
+            "name": "Beach_Segment",
+            "positionCm": [
+              0,
+              0,
+              0
+            ],
+            "stageIndex": 0,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:0",
+            "kind": "progress-point",
+            "name": "ReachedShore",
+            "positionCm": [
+              0,
+              -500,
+              -36420
+            ],
+            "stageIndex": 0
+          },
+          {
+            "key": "segment-root:1",
+            "kind": "segment-root",
+            "name": "Roots Segment",
+            "positionCm": [
+              0,
+              0,
+              6700
+            ],
+            "stageIndex": 1,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:1",
+            "kind": "progress-point",
+            "name": "ReachedTropics",
+            "positionCm": [
+              0,
+              20960,
+              20320
+            ],
+            "stageIndex": 1
+          },
+          {
+            "key": "segment-root:2",
+            "kind": "segment-root",
+            "name": "Snow_Segment",
+            "positionCm": [
+              0,
+              0,
+              16100
+            ],
+            "stageIndex": 2,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:2",
+            "kind": "progress-point",
+            "name": "ReachedAlpine",
+            "positionCm": [
+              0,
+              45044,
+              62770
+            ],
+            "stageIndex": 2
+          },
+          {
+            "key": "segment-root:3",
+            "kind": "segment-root",
+            "name": "Caldera_Segment",
+            "positionCm": [
+              0,
+              0,
+              22800
+            ],
+            "stageIndex": 3,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:3",
+            "kind": "progress-point",
+            "name": "ReachedCaldera",
+            "positionCm": [
+              0,
+              75690,
+              129790
+            ],
+            "stageIndex": 3
+          },
+          {
+            "key": "segment-root:4",
+            "kind": "segment-root",
+            "name": "Volcano_Segment",
+            "positionCm": [
+              0,
+              0,
+              22800
+            ],
+            "stageIndex": 4,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:4",
+            "kind": "progress-point",
+            "name": "ReachedTheKiln",
+            "positionCm": [
+              0,
+              85816,
+              201110
+            ],
+            "stageIndex": 4
+          },
+          {
+            "key": "segment-root:5",
+            "kind": "segment-root",
+            "name": "Beach_Segment",
+            "positionCm": [
+              0,
+              72700,
+              50700
+            ],
+            "stageIndex": 5,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:peak",
+            "kind": "progress-point",
+            "name": "ReachedPeak",
+            "positionCm": [
+              0,
+              118770,
+              213450
+            ]
+          }
+        ]
+      },
+      "expectedLegacyLayoutKey": "ceaa58365490a1aa1656bf5adeb6f2fc3eb2df9acdd8a433f9579d5e1f5ce270",
+      "legacyRootTransformPolicy": "static-no-runtime-trs-writes"
+    },
+    {
+      "sceneName": "Level_3",
+      "mapPackId": "sha256-8966cef39bb161fe4f40544c5c01dfaa5652dc0659ab3ec696697dd86f54893e",
+      "sourceSceneSha256": "f9196e6c406d5e0404b83ee568c229631227c626cf8f3c285516718cc28ab301",
+      "alignment": {
+        "version": 1,
+        "coordinateSpace": "unity-world-cm",
+        "landmarks": [
+          {
+            "key": "segment-root:0",
+            "kind": "segment-root",
+            "name": "Beach_Segment",
+            "positionCm": [
+              0,
+              0,
+              0
+            ],
+            "stageIndex": 0,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:0",
+            "kind": "progress-point",
+            "name": "ReachedShore",
+            "positionCm": [
+              0,
+              -500,
+              -36420
+            ],
+            "stageIndex": 0
+          },
+          {
+            "key": "segment-root:1",
+            "kind": "segment-root",
+            "name": "Jungle_Segment",
+            "positionCm": [
+              0,
+              0,
+              7600
+            ],
+            "stageIndex": 1,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:1",
+            "kind": "progress-point",
+            "name": "ReachedTropics",
+            "positionCm": [
+              0,
+              20960,
+              20320
+            ],
+            "stageIndex": 1
+          },
+          {
+            "key": "segment-root:2",
+            "kind": "segment-root",
+            "name": "Snow_Segment",
+            "positionCm": [
+              0,
+              0,
+              16100
+            ],
+            "stageIndex": 2,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:2",
+            "kind": "progress-point",
+            "name": "ReachedAlpine",
+            "positionCm": [
+              0,
+              45044,
+              62770
+            ],
+            "stageIndex": 2
+          },
+          {
+            "key": "segment-root:3",
+            "kind": "segment-root",
+            "name": "Swamp_Segment",
+            "positionCm": [
+              125,
+              64515,
+              120200
+            ],
+            "stageIndex": 3,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:3",
+            "kind": "progress-point",
+            "name": "ReachedCaldera",
+            "positionCm": [
+              0,
+              75690,
+              129790
+            ],
+            "stageIndex": 3
+          },
+          {
+            "key": "segment-root:4",
+            "kind": "segment-root",
+            "name": "Temple_Segment",
+            "positionCm": [
+              -1700,
+              86210,
+              214700
+            ],
+            "stageIndex": 4,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:4",
+            "kind": "progress-point",
+            "name": "ReachedTheKiln",
+            "positionCm": [
+              0,
+              85816,
+              201110
+            ],
+            "stageIndex": 4
+          },
+          {
+            "key": "segment-root:5",
+            "kind": "segment-root",
+            "name": "Beach_Segment",
+            "positionCm": [
+              0,
+              72700,
+              50700
+            ],
+            "stageIndex": 5,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:peak",
+            "kind": "progress-point",
+            "name": "ReachedPeak",
+            "positionCm": [
+              0,
+              118770,
+              213450
+            ]
+          }
+        ]
+      },
+      "expectedLegacyLayoutKey": "51497425abb89e2320676aea37d46292b21d5fa5ee477ed1a1225ef01206f2c9",
+      "legacyRootTransformPolicy": "static-no-runtime-trs-writes"
+    },
+    {
+      "sceneName": "Level_4",
+      "mapPackId": "sha256-8abb59a78d9bc46780285ff400dba34026eb65e823157715c484676984e3ba24",
+      "sourceSceneSha256": "0bf3013200c9128562d190c3bfe55b274d4fc8b351c6069636e31c9116740f18",
+      "alignment": {
+        "version": 1,
+        "coordinateSpace": "unity-world-cm",
+        "landmarks": [
+          {
+            "key": "segment-root:0",
+            "kind": "segment-root",
+            "name": "Beach_Segment",
+            "positionCm": [
+              0,
+              0,
+              0
+            ],
+            "stageIndex": 0,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:0",
+            "kind": "progress-point",
+            "name": "ReachedShore",
+            "positionCm": [
+              0,
+              -500,
+              -36420
+            ],
+            "stageIndex": 0
+          },
+          {
+            "key": "segment-root:1",
+            "kind": "segment-root",
+            "name": "Jungle_Segment",
+            "positionCm": [
+              0,
+              0,
+              7600
+            ],
+            "stageIndex": 1,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:1",
+            "kind": "progress-point",
+            "name": "ReachedTropics",
+            "positionCm": [
+              0,
+              20960,
+              20320
+            ],
+            "stageIndex": 1
+          },
+          {
+            "key": "segment-root:2",
+            "kind": "segment-root",
+            "name": "Desert_Segment",
+            "positionCm": [
+              0,
+              0,
+              0
+            ],
+            "stageIndex": 2,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:2",
+            "kind": "progress-point",
+            "name": "ReachedAlpine",
+            "positionCm": [
+              0,
+              45044,
+              62770
+            ],
+            "stageIndex": 2
+          },
+          {
+            "key": "segment-root:3",
+            "kind": "segment-root",
+            "name": "Caldera_Segment",
+            "positionCm": [
+              0,
+              0,
+              22800
+            ],
+            "stageIndex": 3,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:3",
+            "kind": "progress-point",
+            "name": "ReachedCaldera",
+            "positionCm": [
+              0,
+              75690,
+              129790
+            ],
+            "stageIndex": 3
+          },
+          {
+            "key": "segment-root:4",
+            "kind": "segment-root",
+            "name": "Volcano_Segment",
+            "positionCm": [
+              0,
+              0,
+              22800
+            ],
+            "stageIndex": 4,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:4",
+            "kind": "progress-point",
+            "name": "ReachedTheKiln",
+            "positionCm": [
+              0,
+              85816,
+              201110
+            ],
+            "stageIndex": 4
+          },
+          {
+            "key": "segment-root:5",
+            "kind": "segment-root",
+            "name": "Beach_Segment",
+            "positionCm": [
+              0,
+              72700,
+              50700
+            ],
+            "stageIndex": 5,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:peak",
+            "kind": "progress-point",
+            "name": "ReachedPeak",
+            "positionCm": [
+              0,
+              118770,
+              213450
+            ]
+          }
+        ]
+      },
+      "expectedLegacyLayoutKey": "395f162fa3b8ecb7232d15e1db7af1af8606e89c0fe25442edac4a76efc32dc9",
+      "legacyRootTransformPolicy": "static-no-runtime-trs-writes"
+    },
+    {
+      "sceneName": "Level_5",
+      "mapPackId": "sha256-c349ad1fd7febf81de2053de327da3a5baff249f5b8621bc082f33e6d26ec850",
+      "sourceSceneSha256": "d035c7a19439e2a6512f8750d997bb3a6b86c4960a9e061a87bcf7bbdbe42951",
+      "alignment": {
+        "version": 1,
+        "coordinateSpace": "unity-world-cm",
+        "landmarks": [
+          {
+            "key": "segment-root:0",
+            "kind": "segment-root",
+            "name": "Beach_Segment",
+            "positionCm": [
+              0,
+              0,
+              0
+            ],
+            "stageIndex": 0,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:0",
+            "kind": "progress-point",
+            "name": "ReachedShore",
+            "positionCm": [
+              0,
+              -500,
+              -36420
+            ],
+            "stageIndex": 0
+          },
+          {
+            "key": "segment-root:1",
+            "kind": "segment-root",
+            "name": "Roots Segment",
+            "positionCm": [
+              0,
+              0,
+              6700
+            ],
+            "stageIndex": 1,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:1",
+            "kind": "progress-point",
+            "name": "ReachedTropics",
+            "positionCm": [
+              0,
+              20960,
+              20320
+            ],
+            "stageIndex": 1
+          },
+          {
+            "key": "segment-root:2",
+            "kind": "segment-root",
+            "name": "Desert_Segment",
+            "positionCm": [
+              0,
+              0,
+              0
+            ],
+            "stageIndex": 2,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:2",
+            "kind": "progress-point",
+            "name": "ReachedAlpine",
+            "positionCm": [
+              0,
+              45044,
+              62770
+            ],
+            "stageIndex": 2
+          },
+          {
+            "key": "segment-root:3",
+            "kind": "segment-root",
+            "name": "Swamp_Segment",
+            "positionCm": [
+              125,
+              64515,
+              120200
+            ],
+            "stageIndex": 3,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:3",
+            "kind": "progress-point",
+            "name": "ReachedCaldera",
+            "positionCm": [
+              0,
+              75690,
+              129790
+            ],
+            "stageIndex": 3
+          },
+          {
+            "key": "segment-root:4",
+            "kind": "segment-root",
+            "name": "Temple_Segment",
+            "positionCm": [
+              -1700,
+              86210,
+              214700
+            ],
+            "stageIndex": 4,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:4",
+            "kind": "progress-point",
+            "name": "ReachedTheKiln",
+            "positionCm": [
+              0,
+              85816,
+              201110
+            ],
+            "stageIndex": 4
+          },
+          {
+            "key": "segment-root:5",
+            "kind": "segment-root",
+            "name": "Beach_Segment",
+            "positionCm": [
+              0,
+              72700,
+              50700
+            ],
+            "stageIndex": 5,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:peak",
+            "kind": "progress-point",
+            "name": "ReachedPeak",
+            "positionCm": [
+              0,
+              118770,
+              213450
+            ]
+          }
+        ]
+      },
+      "expectedLegacyLayoutKey": "711a530d0509ddb45f0e437bb6f40990a61efee5379ccb3eacbf48718c196f9b",
+      "legacyRootTransformPolicy": "static-no-runtime-trs-writes"
+    },
+    {
+      "sceneName": "Level_6",
+      "mapPackId": "sha256-4fbf57cd24f872794f92bb45187fff5243e4febed6d8b5859de29ea6963d894f",
+      "sourceSceneSha256": "707199891562d1d2d87ae6da4dde9089a4a9515115ef1ec6d08ab8f7fe3a78e6",
+      "alignment": {
+        "version": 1,
+        "coordinateSpace": "unity-world-cm",
+        "landmarks": [
+          {
+            "key": "segment-root:0",
+            "kind": "segment-root",
+            "name": "Beach_Segment",
+            "positionCm": [
+              0,
+              0,
+              0
+            ],
+            "stageIndex": 0,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:0",
+            "kind": "progress-point",
+            "name": "ReachedShore",
+            "positionCm": [
+              0,
+              -500,
+              -36420
+            ],
+            "stageIndex": 0
+          },
+          {
+            "key": "segment-root:1",
+            "kind": "segment-root",
+            "name": "Roots Segment",
+            "positionCm": [
+              0,
+              0,
+              6700
+            ],
+            "stageIndex": 1,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:1",
+            "kind": "progress-point",
+            "name": "ReachedTropics",
+            "positionCm": [
+              0,
+              20960,
+              20320
+            ],
+            "stageIndex": 1
+          },
+          {
+            "key": "segment-root:2",
+            "kind": "segment-root",
+            "name": "Snow_Segment",
+            "positionCm": [
+              0,
+              0,
+              16100
+            ],
+            "stageIndex": 2,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:2",
+            "kind": "progress-point",
+            "name": "ReachedAlpine",
+            "positionCm": [
+              0,
+              45044,
+              62770
+            ],
+            "stageIndex": 2
+          },
+          {
+            "key": "segment-root:3",
+            "kind": "segment-root",
+            "name": "Caldera_Segment",
+            "positionCm": [
+              0,
+              0,
+              22800
+            ],
+            "stageIndex": 3,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:3",
+            "kind": "progress-point",
+            "name": "ReachedCaldera",
+            "positionCm": [
+              0,
+              75690,
+              129790
+            ],
+            "stageIndex": 3
+          },
+          {
+            "key": "segment-root:4",
+            "kind": "segment-root",
+            "name": "Volcano_Segment",
+            "positionCm": [
+              0,
+              0,
+              22800
+            ],
+            "stageIndex": 4,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:4",
+            "kind": "progress-point",
+            "name": "ReachedTheKiln",
+            "positionCm": [
+              0,
+              85816,
+              201110
+            ],
+            "stageIndex": 4
+          },
+          {
+            "key": "segment-root:5",
+            "kind": "segment-root",
+            "name": "Beach_Segment",
+            "positionCm": [
+              0,
+              72700,
+              50700
+            ],
+            "stageIndex": 5,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:peak",
+            "kind": "progress-point",
+            "name": "ReachedPeak",
+            "positionCm": [
+              0,
+              118770,
+              213450
+            ]
+          }
+        ]
+      },
+      "expectedLegacyLayoutKey": "902f70f28b7acf4330f22887b5abf7112a522b278045cb96377ca0c0a2c55924",
+      "legacyRootTransformPolicy": "static-no-runtime-trs-writes"
+    },
+    {
+      "sceneName": "Level_7",
+      "mapPackId": "sha256-e08d1fea146fa791695b1b5f09ed10f9d25eec3c382d7d9b414c6bfdae1c7b28",
+      "sourceSceneSha256": "2e56bf611e402f74911e2b5422219e156950ebe5e6862b4ee1e628af1109716d",
+      "alignment": {
+        "version": 1,
+        "coordinateSpace": "unity-world-cm",
+        "landmarks": [
+          {
+            "key": "segment-root:0",
+            "kind": "segment-root",
+            "name": "Beach_Segment",
+            "positionCm": [
+              0,
+              0,
+              0
+            ],
+            "stageIndex": 0,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:0",
+            "kind": "progress-point",
+            "name": "ReachedShore",
+            "positionCm": [
+              0,
+              -500,
+              -36420
+            ],
+            "stageIndex": 0
+          },
+          {
+            "key": "segment-root:1",
+            "kind": "segment-root",
+            "name": "Jungle_Segment",
+            "positionCm": [
+              0,
+              0,
+              7600
+            ],
+            "stageIndex": 1,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:1",
+            "kind": "progress-point",
+            "name": "ReachedTropics",
+            "positionCm": [
+              0,
+              20960,
+              20320
+            ],
+            "stageIndex": 1
+          },
+          {
+            "key": "segment-root:2",
+            "kind": "segment-root",
+            "name": "Snow_Segment",
+            "positionCm": [
+              0,
+              0,
+              16100
+            ],
+            "stageIndex": 2,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:2",
+            "kind": "progress-point",
+            "name": "ReachedAlpine",
+            "positionCm": [
+              0,
+              45044,
+              62770
+            ],
+            "stageIndex": 2
+          },
+          {
+            "key": "segment-root:3",
+            "kind": "segment-root",
+            "name": "Swamp_Segment",
+            "positionCm": [
+              125,
+              64515,
+              120200
+            ],
+            "stageIndex": 3,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:3",
+            "kind": "progress-point",
+            "name": "ReachedCaldera",
+            "positionCm": [
+              0,
+              75690,
+              129790
+            ],
+            "stageIndex": 3
+          },
+          {
+            "key": "segment-root:4",
+            "kind": "segment-root",
+            "name": "Temple_Segment",
+            "positionCm": [
+              -1700,
+              86210,
+              214700
+            ],
+            "stageIndex": 4,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:4",
+            "kind": "progress-point",
+            "name": "ReachedTheKiln",
+            "positionCm": [
+              0,
+              85816,
+              201110
+            ],
+            "stageIndex": 4
+          },
+          {
+            "key": "segment-root:5",
+            "kind": "segment-root",
+            "name": "Beach_Segment",
+            "positionCm": [
+              0,
+              72700,
+              50700
+            ],
+            "stageIndex": 5,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:peak",
+            "kind": "progress-point",
+            "name": "ReachedPeak",
+            "positionCm": [
+              0,
+              118770,
+              213450
+            ]
+          }
+        ]
+      },
+      "expectedLegacyLayoutKey": "08408c72e229d26a4355bf5bcab64c30d21c95dd00b73689b7935192a65a685f",
+      "legacyRootTransformPolicy": "static-no-runtime-trs-writes"
+    },
+    {
+      "sceneName": "Level_8",
+      "mapPackId": "sha256-1f43e1469f2fc3aecc9730defb266ab7bc9a010d95243a3d7d132adc9f7f5428",
+      "sourceSceneSha256": "1bafbcbf161da3270fca049d04844f53dd95a85263dbbb7fbbd7bb2db0bec91e",
+      "alignment": {
+        "version": 1,
+        "coordinateSpace": "unity-world-cm",
+        "landmarks": [
+          {
+            "key": "segment-root:0",
+            "kind": "segment-root",
+            "name": "Beach_Segment",
+            "positionCm": [
+              0,
+              0,
+              0
+            ],
+            "stageIndex": 0,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:0",
+            "kind": "progress-point",
+            "name": "ReachedShore",
+            "positionCm": [
+              0,
+              -500,
+              -36420
+            ],
+            "stageIndex": 0
+          },
+          {
+            "key": "segment-root:1",
+            "kind": "segment-root",
+            "name": "Jungle_Segment",
+            "positionCm": [
+              0,
+              0,
+              7600
+            ],
+            "stageIndex": 1,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:1",
+            "kind": "progress-point",
+            "name": "ReachedTropics",
+            "positionCm": [
+              0,
+              20960,
+              20320
+            ],
+            "stageIndex": 1
+          },
+          {
+            "key": "segment-root:2",
+            "kind": "segment-root",
+            "name": "Desert_Segment",
+            "positionCm": [
+              0,
+              0,
+              0
+            ],
+            "stageIndex": 2,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:2",
+            "kind": "progress-point",
+            "name": "ReachedAlpine",
+            "positionCm": [
+              0,
+              45044,
+              62770
+            ],
+            "stageIndex": 2
+          },
+          {
+            "key": "segment-root:3",
+            "kind": "segment-root",
+            "name": "Caldera_Segment",
+            "positionCm": [
+              0,
+              0,
+              22800
+            ],
+            "stageIndex": 3,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:3",
+            "kind": "progress-point",
+            "name": "ReachedCaldera",
+            "positionCm": [
+              0,
+              75690,
+              129790
+            ],
+            "stageIndex": 3
+          },
+          {
+            "key": "segment-root:4",
+            "kind": "segment-root",
+            "name": "Volcano_Segment",
+            "positionCm": [
+              0,
+              0,
+              22800
+            ],
+            "stageIndex": 4,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:4",
+            "kind": "progress-point",
+            "name": "ReachedTheKiln",
+            "positionCm": [
+              0,
+              85816,
+              201110
+            ],
+            "stageIndex": 4
+          },
+          {
+            "key": "segment-root:5",
+            "kind": "segment-root",
+            "name": "Beach_Segment",
+            "positionCm": [
+              0,
+              72700,
+              50700
+            ],
+            "stageIndex": 5,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:peak",
+            "kind": "progress-point",
+            "name": "ReachedPeak",
+            "positionCm": [
+              0,
+              118770,
+              213450
+            ]
+          }
+        ]
+      },
+      "expectedLegacyLayoutKey": "659d17c33eb870fac42c860124a7eee3ac26fe1740dfc2c3a72ca42cb4cc13e7",
+      "legacyRootTransformPolicy": "static-no-runtime-trs-writes"
+    },
+    {
+      "sceneName": "Level_9",
+      "mapPackId": "sha256-d5b4ba07467d36d3763e4df2430c0aa11c725490d039dbd969bc05b3391ebf98",
+      "sourceSceneSha256": "04572ba0cfe82a7c9fb5ab21b86c7a4b653350f7487a43e432746a9f47923995",
+      "alignment": {
+        "version": 1,
+        "coordinateSpace": "unity-world-cm",
+        "landmarks": [
+          {
+            "key": "segment-root:0",
+            "kind": "segment-root",
+            "name": "Beach_Segment",
+            "positionCm": [
+              0,
+              0,
+              0
+            ],
+            "stageIndex": 0,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:0",
+            "kind": "progress-point",
+            "name": "ReachedShore",
+            "positionCm": [
+              0,
+              -500,
+              -36420
+            ],
+            "stageIndex": 0
+          },
+          {
+            "key": "segment-root:1",
+            "kind": "segment-root",
+            "name": "Roots Segment",
+            "positionCm": [
+              0,
+              0,
+              6700
+            ],
+            "stageIndex": 1,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:1",
+            "kind": "progress-point",
+            "name": "ReachedTropics",
+            "positionCm": [
+              0,
+              20960,
+              20320
+            ],
+            "stageIndex": 1
+          },
+          {
+            "key": "segment-root:2",
+            "kind": "segment-root",
+            "name": "Snow_Segment",
+            "positionCm": [
+              0,
+              0,
+              16100
+            ],
+            "stageIndex": 2,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:2",
+            "kind": "progress-point",
+            "name": "ReachedAlpine",
+            "positionCm": [
+              0,
+              45044,
+              62770
+            ],
+            "stageIndex": 2
+          },
+          {
+            "key": "segment-root:3",
+            "kind": "segment-root",
+            "name": "Swamp_Segment",
+            "positionCm": [
+              125,
+              64515,
+              120200
+            ],
+            "stageIndex": 3,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:3",
+            "kind": "progress-point",
+            "name": "ReachedCaldera",
+            "positionCm": [
+              0,
+              75690,
+              129790
+            ],
+            "stageIndex": 3
+          },
+          {
+            "key": "segment-root:4",
+            "kind": "segment-root",
+            "name": "Temple_Segment",
+            "positionCm": [
+              -1700,
+              86210,
+              214700
+            ],
+            "stageIndex": 4,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:4",
+            "kind": "progress-point",
+            "name": "ReachedTheKiln",
+            "positionCm": [
+              0,
+              85816,
+              201110
+            ],
+            "stageIndex": 4
+          },
+          {
+            "key": "segment-root:5",
+            "kind": "segment-root",
+            "name": "Beach_Segment",
+            "positionCm": [
+              0,
+              72700,
+              50700
+            ],
+            "stageIndex": 5,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:peak",
+            "kind": "progress-point",
+            "name": "ReachedPeak",
+            "positionCm": [
+              0,
+              118770,
+              213450
+            ]
+          }
+        ]
+      },
+      "expectedLegacyLayoutKey": "29ee8b10302364f350acf11382f8310779dcdb83ec6a2c240b44b7956e5958ac",
+      "legacyRootTransformPolicy": "static-no-runtime-trs-writes"
+    },
+    {
+      "sceneName": "Level_10",
+      "mapPackId": "sha256-2f2de8d36c25bc5eb4d18416b640dccf347e44ebbd46ddef59f9d0ea211bc59d",
+      "sourceSceneSha256": "8468c059a9067f27416a5e2fd1c5ec785cb764f9e3da0528b00c382fdf895f8a",
+      "alignment": {
+        "version": 1,
+        "coordinateSpace": "unity-world-cm",
+        "landmarks": [
+          {
+            "key": "segment-root:0",
+            "kind": "segment-root",
+            "name": "Beach_Segment",
+            "positionCm": [
+              0,
+              0,
+              0
+            ],
+            "stageIndex": 0,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:0",
+            "kind": "progress-point",
+            "name": "ReachedShore",
+            "positionCm": [
+              0,
+              -500,
+              -36420
+            ],
+            "stageIndex": 0
+          },
+          {
+            "key": "segment-root:1",
+            "kind": "segment-root",
+            "name": "Jungle_Segment",
+            "positionCm": [
+              0,
+              0,
+              7600
+            ],
+            "stageIndex": 1,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:1",
+            "kind": "progress-point",
+            "name": "ReachedTropics",
+            "positionCm": [
+              0,
+              20960,
+              20320
+            ],
+            "stageIndex": 1
+          },
+          {
+            "key": "segment-root:2",
+            "kind": "segment-root",
+            "name": "Snow_Segment",
+            "positionCm": [
+              0,
+              0,
+              16100
+            ],
+            "stageIndex": 2,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:2",
+            "kind": "progress-point",
+            "name": "ReachedAlpine",
+            "positionCm": [
+              0,
+              45044,
+              62770
+            ],
+            "stageIndex": 2
+          },
+          {
+            "key": "segment-root:3",
+            "kind": "segment-root",
+            "name": "Caldera_Segment",
+            "positionCm": [
+              0,
+              0,
+              22800
+            ],
+            "stageIndex": 3,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:3",
+            "kind": "progress-point",
+            "name": "ReachedCaldera",
+            "positionCm": [
+              0,
+              75690,
+              129790
+            ],
+            "stageIndex": 3
+          },
+          {
+            "key": "segment-root:4",
+            "kind": "segment-root",
+            "name": "Volcano_Segment",
+            "positionCm": [
+              0,
+              0,
+              22800
+            ],
+            "stageIndex": 4,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:4",
+            "kind": "progress-point",
+            "name": "ReachedTheKiln",
+            "positionCm": [
+              0,
+              85816,
+              201110
+            ],
+            "stageIndex": 4
+          },
+          {
+            "key": "segment-root:5",
+            "kind": "segment-root",
+            "name": "Beach_Segment",
+            "positionCm": [
+              0,
+              72700,
+              50700
+            ],
+            "stageIndex": 5,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:peak",
+            "kind": "progress-point",
+            "name": "ReachedPeak",
+            "positionCm": [
+              0,
+              118770,
+              213450
+            ]
+          }
+        ]
+      },
+      "expectedLegacyLayoutKey": "d783125b05114c7e10c52ef987d6436d8e3777188339549803cfc15f1e3d79b7",
+      "legacyRootTransformPolicy": "static-no-runtime-trs-writes"
+    },
+    {
+      "sceneName": "Level_11",
+      "mapPackId": "sha256-81d7878c532ca8a87b40cbebc53e18181f6ced5d2ab13a29a719f96a188ca05d",
+      "sourceSceneSha256": "3364f2cf94f197baf98a8ceed812a6fee11ac283517fd97b96023530720bb288",
+      "alignment": {
+        "version": 1,
+        "coordinateSpace": "unity-world-cm",
+        "landmarks": [
+          {
+            "key": "segment-root:0",
+            "kind": "segment-root",
+            "name": "Beach_Segment",
+            "positionCm": [
+              0,
+              0,
+              0
+            ],
+            "stageIndex": 0,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:0",
+            "kind": "progress-point",
+            "name": "ReachedShore",
+            "positionCm": [
+              0,
+              -500,
+              -36420
+            ],
+            "stageIndex": 0
+          },
+          {
+            "key": "segment-root:1",
+            "kind": "segment-root",
+            "name": "Jungle_Segment",
+            "positionCm": [
+              0,
+              0,
+              7600
+            ],
+            "stageIndex": 1,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:1",
+            "kind": "progress-point",
+            "name": "ReachedTropics",
+            "positionCm": [
+              0,
+              20960,
+              20320
+            ],
+            "stageIndex": 1
+          },
+          {
+            "key": "segment-root:2",
+            "kind": "segment-root",
+            "name": "Desert_Segment",
+            "positionCm": [
+              0,
+              0,
+              0
+            ],
+            "stageIndex": 2,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:2",
+            "kind": "progress-point",
+            "name": "ReachedAlpine",
+            "positionCm": [
+              0,
+              45044,
+              62770
+            ],
+            "stageIndex": 2
+          },
+          {
+            "key": "segment-root:3",
+            "kind": "segment-root",
+            "name": "Swamp_Segment",
+            "positionCm": [
+              125,
+              64515,
+              120200
+            ],
+            "stageIndex": 3,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:3",
+            "kind": "progress-point",
+            "name": "ReachedCaldera",
+            "positionCm": [
+              0,
+              75690,
+              129790
+            ],
+            "stageIndex": 3
+          },
+          {
+            "key": "segment-root:4",
+            "kind": "segment-root",
+            "name": "Temple_Segment",
+            "positionCm": [
+              -1700,
+              86210,
+              214700
+            ],
+            "stageIndex": 4,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:4",
+            "kind": "progress-point",
+            "name": "ReachedTheKiln",
+            "positionCm": [
+              0,
+              85816,
+              201110
+            ],
+            "stageIndex": 4
+          },
+          {
+            "key": "segment-root:5",
+            "kind": "segment-root",
+            "name": "Beach_Segment",
+            "positionCm": [
+              0,
+              72700,
+              50700
+            ],
+            "stageIndex": 5,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:peak",
+            "kind": "progress-point",
+            "name": "ReachedPeak",
+            "positionCm": [
+              0,
+              118770,
+              213450
+            ]
+          }
+        ]
+      },
+      "expectedLegacyLayoutKey": "42354a29dc995b0fafba3aea9857155a2df916cc18a580f3bc9b3cea356c1430",
+      "legacyRootTransformPolicy": "static-no-runtime-trs-writes"
+    },
+    {
+      "sceneName": "Level_12",
+      "mapPackId": "sha256-dce01213c1dd308afad6f4f34337e6c0fe0586cdcd9da890eac72892c17fbbbe",
+      "sourceSceneSha256": "8f89cffaf567d177d8416f1a1a15cca1cf6ffa51a31252afe68a2b491bab14c7",
+      "alignment": {
+        "version": 1,
+        "coordinateSpace": "unity-world-cm",
+        "landmarks": [
+          {
+            "key": "segment-root:0",
+            "kind": "segment-root",
+            "name": "Beach_Segment",
+            "positionCm": [
+              0,
+              0,
+              0
+            ],
+            "stageIndex": 0,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:0",
+            "kind": "progress-point",
+            "name": "ReachedShore",
+            "positionCm": [
+              0,
+              -500,
+              -36420
+            ],
+            "stageIndex": 0
+          },
+          {
+            "key": "segment-root:1",
+            "kind": "segment-root",
+            "name": "Roots Segment",
+            "positionCm": [
+              0,
+              0,
+              6700
+            ],
+            "stageIndex": 1,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:1",
+            "kind": "progress-point",
+            "name": "ReachedTropics",
+            "positionCm": [
+              0,
+              20960,
+              20320
+            ],
+            "stageIndex": 1
+          },
+          {
+            "key": "segment-root:2",
+            "kind": "segment-root",
+            "name": "Desert_Segment",
+            "positionCm": [
+              0,
+              0,
+              0
+            ],
+            "stageIndex": 2,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:2",
+            "kind": "progress-point",
+            "name": "ReachedAlpine",
+            "positionCm": [
+              0,
+              45044,
+              62770
+            ],
+            "stageIndex": 2
+          },
+          {
+            "key": "segment-root:3",
+            "kind": "segment-root",
+            "name": "Caldera_Segment",
+            "positionCm": [
+              0,
+              0,
+              22800
+            ],
+            "stageIndex": 3,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:3",
+            "kind": "progress-point",
+            "name": "ReachedCaldera",
+            "positionCm": [
+              0,
+              75690,
+              129790
+            ],
+            "stageIndex": 3
+          },
+          {
+            "key": "segment-root:4",
+            "kind": "segment-root",
+            "name": "Volcano_Segment",
+            "positionCm": [
+              0,
+              0,
+              22800
+            ],
+            "stageIndex": 4,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:4",
+            "kind": "progress-point",
+            "name": "ReachedTheKiln",
+            "positionCm": [
+              0,
+              85816,
+              201110
+            ],
+            "stageIndex": 4
+          },
+          {
+            "key": "segment-root:5",
+            "kind": "segment-root",
+            "name": "Beach_Segment",
+            "positionCm": [
+              0,
+              72700,
+              50700
+            ],
+            "stageIndex": 5,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:peak",
+            "kind": "progress-point",
+            "name": "ReachedPeak",
+            "positionCm": [
+              0,
+              118770,
+              213450
+            ]
+          }
+        ]
+      },
+      "expectedLegacyLayoutKey": "f94eececa9be182bdd6022394de9efb801f3889c4702d1f39010041e39d3a525",
+      "legacyRootTransformPolicy": "static-no-runtime-trs-writes"
+    },
+    {
+      "sceneName": "Level_13",
+      "mapPackId": "sha256-db99876fa4d919832733b6a72c308cff16559f446035e21d0014dab3a0fa90b2",
+      "sourceSceneSha256": "ea6e6c7a934744413421d65940a9d0c011f68b4ba58355d3d4198bef9cf331e6",
+      "alignment": {
+        "version": 1,
+        "coordinateSpace": "unity-world-cm",
+        "landmarks": [
+          {
+            "key": "segment-root:0",
+            "kind": "segment-root",
+            "name": "Beach_Segment",
+            "positionCm": [
+              0,
+              0,
+              0
+            ],
+            "stageIndex": 0,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:0",
+            "kind": "progress-point",
+            "name": "ReachedShore",
+            "positionCm": [
+              0,
+              -500,
+              -36420
+            ],
+            "stageIndex": 0
+          },
+          {
+            "key": "segment-root:1",
+            "kind": "segment-root",
+            "name": "Roots Segment",
+            "positionCm": [
+              0,
+              0,
+              6700
+            ],
+            "stageIndex": 1,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:1",
+            "kind": "progress-point",
+            "name": "ReachedTropics",
+            "positionCm": [
+              0,
+              20960,
+              20320
+            ],
+            "stageIndex": 1
+          },
+          {
+            "key": "segment-root:2",
+            "kind": "segment-root",
+            "name": "Snow_Segment",
+            "positionCm": [
+              0,
+              0,
+              16100
+            ],
+            "stageIndex": 2,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:2",
+            "kind": "progress-point",
+            "name": "ReachedAlpine",
+            "positionCm": [
+              0,
+              45044,
+              62770
+            ],
+            "stageIndex": 2
+          },
+          {
+            "key": "segment-root:3",
+            "kind": "segment-root",
+            "name": "Swamp_Segment",
+            "positionCm": [
+              125,
+              64515,
+              120200
+            ],
+            "stageIndex": 3,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:3",
+            "kind": "progress-point",
+            "name": "ReachedCaldera",
+            "positionCm": [
+              0,
+              75690,
+              129790
+            ],
+            "stageIndex": 3
+          },
+          {
+            "key": "segment-root:4",
+            "kind": "segment-root",
+            "name": "Temple_Segment",
+            "positionCm": [
+              -1700,
+              86210,
+              214700
+            ],
+            "stageIndex": 4,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:4",
+            "kind": "progress-point",
+            "name": "ReachedTheKiln",
+            "positionCm": [
+              0,
+              85816,
+              201110
+            ],
+            "stageIndex": 4
+          },
+          {
+            "key": "segment-root:5",
+            "kind": "segment-root",
+            "name": "Beach_Segment",
+            "positionCm": [
+              0,
+              72700,
+              50700
+            ],
+            "stageIndex": 5,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:peak",
+            "kind": "progress-point",
+            "name": "ReachedPeak",
+            "positionCm": [
+              0,
+              118770,
+              213450
+            ]
+          }
+        ]
+      },
+      "expectedLegacyLayoutKey": "68702645d9d8e5cdf1e6c735b01cc9c10692f88597f195e97c1dcd9be135443e",
+      "legacyRootTransformPolicy": "static-no-runtime-trs-writes"
+    },
+    {
+      "sceneName": "Level_14",
+      "mapPackId": "sha256-1a12a665ab7b832ab53afdef30af6947780efd8abea61408cfaa0c2017f1d6eb",
+      "sourceSceneSha256": "ae5bba6ea5b1e966eec1640147089ce8b0378d6d686a0599c1c17d39810dce05",
+      "alignment": {
+        "version": 1,
+        "coordinateSpace": "unity-world-cm",
+        "landmarks": [
+          {
+            "key": "segment-root:0",
+            "kind": "segment-root",
+            "name": "Beach_Segment",
+            "positionCm": [
+              0,
+              0,
+              0
+            ],
+            "stageIndex": 0,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:0",
+            "kind": "progress-point",
+            "name": "ReachedShore",
+            "positionCm": [
+              0,
+              -500,
+              -36420
+            ],
+            "stageIndex": 0
+          },
+          {
+            "key": "segment-root:1",
+            "kind": "segment-root",
+            "name": "Jungle_Segment",
+            "positionCm": [
+              0,
+              0,
+              7600
+            ],
+            "stageIndex": 1,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:1",
+            "kind": "progress-point",
+            "name": "ReachedTropics",
+            "positionCm": [
+              0,
+              20960,
+              20320
+            ],
+            "stageIndex": 1
+          },
+          {
+            "key": "segment-root:2",
+            "kind": "segment-root",
+            "name": "Snow_Segment",
+            "positionCm": [
+              0,
+              0,
+              16100
+            ],
+            "stageIndex": 2,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:2",
+            "kind": "progress-point",
+            "name": "ReachedAlpine",
+            "positionCm": [
+              0,
+              45044,
+              62770
+            ],
+            "stageIndex": 2
+          },
+          {
+            "key": "segment-root:3",
+            "kind": "segment-root",
+            "name": "Caldera_Segment",
+            "positionCm": [
+              0,
+              0,
+              22800
+            ],
+            "stageIndex": 3,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:3",
+            "kind": "progress-point",
+            "name": "ReachedCaldera",
+            "positionCm": [
+              0,
+              75690,
+              129790
+            ],
+            "stageIndex": 3
+          },
+          {
+            "key": "segment-root:4",
+            "kind": "segment-root",
+            "name": "Volcano_Segment",
+            "positionCm": [
+              0,
+              0,
+              22800
+            ],
+            "stageIndex": 4,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:4",
+            "kind": "progress-point",
+            "name": "ReachedTheKiln",
+            "positionCm": [
+              0,
+              85816,
+              201110
+            ],
+            "stageIndex": 4
+          },
+          {
+            "key": "segment-root:5",
+            "kind": "segment-root",
+            "name": "Beach_Segment",
+            "positionCm": [
+              0,
+              72700,
+              50700
+            ],
+            "stageIndex": 5,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:peak",
+            "kind": "progress-point",
+            "name": "ReachedPeak",
+            "positionCm": [
+              0,
+              118770,
+              213450
+            ]
+          }
+        ]
+      },
+      "expectedLegacyLayoutKey": "cc9cdcdfc623efb0bc5ab3de6632385d5c1e16b7087a817244a2ff3931da0ee2",
+      "legacyRootTransformPolicy": "static-no-runtime-trs-writes"
+    },
+    {
+      "sceneName": "Level_15",
+      "mapPackId": "sha256-1577fed4c50a8cd20e6ca2a70df0a882f1fb27a79e4730f6bd6522158406e837",
+      "sourceSceneSha256": "cbefde26cb05542c2112f38cb11a1beb67835e1fc6a197c8ed8174e7459c94a2",
+      "alignment": {
+        "version": 1,
+        "coordinateSpace": "unity-world-cm",
+        "landmarks": [
+          {
+            "key": "segment-root:0",
+            "kind": "segment-root",
+            "name": "Beach_Segment",
+            "positionCm": [
+              0,
+              0,
+              0
+            ],
+            "stageIndex": 0,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:0",
+            "kind": "progress-point",
+            "name": "ReachedShore",
+            "positionCm": [
+              0,
+              -500,
+              -36420
+            ],
+            "stageIndex": 0
+          },
+          {
+            "key": "segment-root:1",
+            "kind": "segment-root",
+            "name": "Jungle_Segment",
+            "positionCm": [
+              0,
+              0,
+              7600
+            ],
+            "stageIndex": 1,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:1",
+            "kind": "progress-point",
+            "name": "ReachedTropics",
+            "positionCm": [
+              0,
+              20960,
+              20320
+            ],
+            "stageIndex": 1
+          },
+          {
+            "key": "segment-root:2",
+            "kind": "segment-root",
+            "name": "Desert_Segment",
+            "positionCm": [
+              0,
+              0,
+              0
+            ],
+            "stageIndex": 2,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:2",
+            "kind": "progress-point",
+            "name": "ReachedAlpine",
+            "positionCm": [
+              0,
+              45044,
+              62770
+            ],
+            "stageIndex": 2
+          },
+          {
+            "key": "segment-root:3",
+            "kind": "segment-root",
+            "name": "Swamp_Segment",
+            "positionCm": [
+              125,
+              64515,
+              120200
+            ],
+            "stageIndex": 3,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:3",
+            "kind": "progress-point",
+            "name": "ReachedCaldera",
+            "positionCm": [
+              0,
+              75690,
+              129790
+            ],
+            "stageIndex": 3
+          },
+          {
+            "key": "segment-root:4",
+            "kind": "segment-root",
+            "name": "Temple_Segment",
+            "positionCm": [
+              -1700,
+              86210,
+              214700
+            ],
+            "stageIndex": 4,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:4",
+            "kind": "progress-point",
+            "name": "ReachedTheKiln",
+            "positionCm": [
+              0,
+              85816,
+              201110
+            ],
+            "stageIndex": 4
+          },
+          {
+            "key": "segment-root:5",
+            "kind": "segment-root",
+            "name": "Beach_Segment",
+            "positionCm": [
+              0,
+              72700,
+              50700
+            ],
+            "stageIndex": 5,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:peak",
+            "kind": "progress-point",
+            "name": "ReachedPeak",
+            "positionCm": [
+              0,
+              118770,
+              213450
+            ]
+          }
+        ]
+      },
+      "expectedLegacyLayoutKey": "129f66dd97983ee0a54bf67b6dcd0dd533ff52aa6e48a2ab7e9bc1d548ac5c3c",
+      "legacyRootTransformPolicy": "static-no-runtime-trs-writes"
+    },
+    {
+      "sceneName": "Level_16",
+      "mapPackId": "sha256-21e37b5ad75c73499df7b0e07ed9f31f0f3beb12b39474af564d82ec45c9bc27",
+      "sourceSceneSha256": "4d21e6ca37d024c43c3837420dc74c40ea213651ebdfc4ab95d1862e5e9f559b",
+      "alignment": {
+        "version": 1,
+        "coordinateSpace": "unity-world-cm",
+        "landmarks": [
+          {
+            "key": "segment-root:0",
+            "kind": "segment-root",
+            "name": "Beach_Segment",
+            "positionCm": [
+              0,
+              0,
+              0
+            ],
+            "stageIndex": 0,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:0",
+            "kind": "progress-point",
+            "name": "ReachedShore",
+            "positionCm": [
+              0,
+              -500,
+              -36420
+            ],
+            "stageIndex": 0
+          },
+          {
+            "key": "segment-root:1",
+            "kind": "segment-root",
+            "name": "Roots Segment",
+            "positionCm": [
+              0,
+              0,
+              6700
+            ],
+            "stageIndex": 1,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:1",
+            "kind": "progress-point",
+            "name": "ReachedTropics",
+            "positionCm": [
+              0,
+              20960,
+              20320
+            ],
+            "stageIndex": 1
+          },
+          {
+            "key": "segment-root:2",
+            "kind": "segment-root",
+            "name": "Snow_Segment",
+            "positionCm": [
+              0,
+              0,
+              16100
+            ],
+            "stageIndex": 2,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:2",
+            "kind": "progress-point",
+            "name": "ReachedAlpine",
+            "positionCm": [
+              0,
+              45044,
+              62770
+            ],
+            "stageIndex": 2
+          },
+          {
+            "key": "segment-root:3",
+            "kind": "segment-root",
+            "name": "Caldera_Segment",
+            "positionCm": [
+              0,
+              0,
+              22800
+            ],
+            "stageIndex": 3,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:3",
+            "kind": "progress-point",
+            "name": "ReachedCaldera",
+            "positionCm": [
+              0,
+              75690,
+              129790
+            ],
+            "stageIndex": 3
+          },
+          {
+            "key": "segment-root:4",
+            "kind": "segment-root",
+            "name": "Volcano_Segment",
+            "positionCm": [
+              0,
+              0,
+              22800
+            ],
+            "stageIndex": 4,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:4",
+            "kind": "progress-point",
+            "name": "ReachedTheKiln",
+            "positionCm": [
+              0,
+              85816,
+              201110
+            ],
+            "stageIndex": 4
+          },
+          {
+            "key": "segment-root:5",
+            "kind": "segment-root",
+            "name": "Beach_Segment",
+            "positionCm": [
+              0,
+              72700,
+              50700
+            ],
+            "stageIndex": 5,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:peak",
+            "kind": "progress-point",
+            "name": "ReachedPeak",
+            "positionCm": [
+              0,
+              118770,
+              213450
+            ]
+          }
+        ]
+      },
+      "expectedLegacyLayoutKey": "da4f2fb9dd243538bb49228ce713e1a73b0f160b25a1377336cbd877a91c7a85",
+      "legacyRootTransformPolicy": "static-no-runtime-trs-writes"
+    },
+    {
+      "sceneName": "Level_17",
+      "mapPackId": "sha256-d53d40cba5f40d92f8fa7318d3eee760dc10500907f88b8f6af457cd27872ab7",
+      "sourceSceneSha256": "470eac3820ab47faeb9c848300844935a4eff6d235779eac1c23f17e2199b717",
+      "alignment": {
+        "version": 1,
+        "coordinateSpace": "unity-world-cm",
+        "landmarks": [
+          {
+            "key": "segment-root:0",
+            "kind": "segment-root",
+            "name": "Beach_Segment",
+            "positionCm": [
+              0,
+              0,
+              0
+            ],
+            "stageIndex": 0,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:0",
+            "kind": "progress-point",
+            "name": "ReachedShore",
+            "positionCm": [
+              0,
+              -500,
+              -36420
+            ],
+            "stageIndex": 0
+          },
+          {
+            "key": "segment-root:1",
+            "kind": "segment-root",
+            "name": "Jungle_Segment",
+            "positionCm": [
+              0,
+              0,
+              7600
+            ],
+            "stageIndex": 1,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:1",
+            "kind": "progress-point",
+            "name": "ReachedTropics",
+            "positionCm": [
+              0,
+              20960,
+              20320
+            ],
+            "stageIndex": 1
+          },
+          {
+            "key": "segment-root:2",
+            "kind": "segment-root",
+            "name": "Snow_Segment",
+            "positionCm": [
+              0,
+              0,
+              16100
+            ],
+            "stageIndex": 2,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:2",
+            "kind": "progress-point",
+            "name": "ReachedAlpine",
+            "positionCm": [
+              0,
+              45044,
+              62770
+            ],
+            "stageIndex": 2
+          },
+          {
+            "key": "segment-root:3",
+            "kind": "segment-root",
+            "name": "Swamp_Segment",
+            "positionCm": [
+              125,
+              64515,
+              120200
+            ],
+            "stageIndex": 3,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:3",
+            "kind": "progress-point",
+            "name": "ReachedCaldera",
+            "positionCm": [
+              0,
+              75690,
+              129790
+            ],
+            "stageIndex": 3
+          },
+          {
+            "key": "segment-root:4",
+            "kind": "segment-root",
+            "name": "Temple_Segment",
+            "positionCm": [
+              -1700,
+              86210,
+              214700
+            ],
+            "stageIndex": 4,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:4",
+            "kind": "progress-point",
+            "name": "ReachedTheKiln",
+            "positionCm": [
+              0,
+              85816,
+              201110
+            ],
+            "stageIndex": 4
+          },
+          {
+            "key": "segment-root:5",
+            "kind": "segment-root",
+            "name": "Beach_Segment",
+            "positionCm": [
+              0,
+              72700,
+              50700
+            ],
+            "stageIndex": 5,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:peak",
+            "kind": "progress-point",
+            "name": "ReachedPeak",
+            "positionCm": [
+              0,
+              118770,
+              213450
+            ]
+          }
+        ]
+      },
+      "expectedLegacyLayoutKey": "242837a988b76bc01f9328b15c6f80ded397beaaba8662ad3e3c1e0745df1713",
+      "legacyRootTransformPolicy": "static-no-runtime-trs-writes"
+    },
+    {
+      "sceneName": "Level_18",
+      "mapPackId": "sha256-0c683b4bfc284fe2995c03e2ae1fb0b1f7b52bdb8f67eb7842ef7a46c2c17da3",
+      "sourceSceneSha256": "1ecb1b215cd6d9e76e3a74d5ca7953950cb5a0a6216a67ec7a2f9d23784427d3",
+      "alignment": {
+        "version": 1,
+        "coordinateSpace": "unity-world-cm",
+        "landmarks": [
+          {
+            "key": "segment-root:0",
+            "kind": "segment-root",
+            "name": "Beach_Segment",
+            "positionCm": [
+              0,
+              0,
+              0
+            ],
+            "stageIndex": 0,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:0",
+            "kind": "progress-point",
+            "name": "ReachedShore",
+            "positionCm": [
+              0,
+              -500,
+              -36420
+            ],
+            "stageIndex": 0
+          },
+          {
+            "key": "segment-root:1",
+            "kind": "segment-root",
+            "name": "Roots Segment",
+            "positionCm": [
+              0,
+              0,
+              6700
+            ],
+            "stageIndex": 1,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:1",
+            "kind": "progress-point",
+            "name": "ReachedTropics",
+            "positionCm": [
+              0,
+              20960,
+              20320
+            ],
+            "stageIndex": 1
+          },
+          {
+            "key": "segment-root:2",
+            "kind": "segment-root",
+            "name": "Desert_Segment",
+            "positionCm": [
+              0,
+              0,
+              0
+            ],
+            "stageIndex": 2,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:2",
+            "kind": "progress-point",
+            "name": "ReachedAlpine",
+            "positionCm": [
+              0,
+              45044,
+              62770
+            ],
+            "stageIndex": 2
+          },
+          {
+            "key": "segment-root:3",
+            "kind": "segment-root",
+            "name": "Caldera_Segment",
+            "positionCm": [
+              0,
+              0,
+              22800
+            ],
+            "stageIndex": 3,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:3",
+            "kind": "progress-point",
+            "name": "ReachedCaldera",
+            "positionCm": [
+              0,
+              75690,
+              129790
+            ],
+            "stageIndex": 3
+          },
+          {
+            "key": "segment-root:4",
+            "kind": "segment-root",
+            "name": "Volcano_Segment",
+            "positionCm": [
+              0,
+              0,
+              22800
+            ],
+            "stageIndex": 4,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:4",
+            "kind": "progress-point",
+            "name": "ReachedTheKiln",
+            "positionCm": [
+              0,
+              85816,
+              201110
+            ],
+            "stageIndex": 4
+          },
+          {
+            "key": "segment-root:5",
+            "kind": "segment-root",
+            "name": "Beach_Segment",
+            "positionCm": [
+              0,
+              72700,
+              50700
+            ],
+            "stageIndex": 5,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:peak",
+            "kind": "progress-point",
+            "name": "ReachedPeak",
+            "positionCm": [
+              0,
+              118770,
+              213450
+            ]
+          }
+        ]
+      },
+      "expectedLegacyLayoutKey": "bbf9a9d9665ca9616d402cc2e28c1f91d64506d459bdb5a75e6fbbd4b6f0fc8f",
+      "legacyRootTransformPolicy": "static-no-runtime-trs-writes"
+    },
+    {
+      "sceneName": "Level_19",
+      "mapPackId": "sha256-9373a468913acb0219a74bbc1ce2d42dc7497e7b88f260575af9b8e1b22b85b3",
+      "sourceSceneSha256": "d94bd2e994c4229a23e05778fcaf614a297439fecee756f77a8b0c17397afe73",
+      "alignment": {
+        "version": 1,
+        "coordinateSpace": "unity-world-cm",
+        "landmarks": [
+          {
+            "key": "segment-root:0",
+            "kind": "segment-root",
+            "name": "Beach_Segment",
+            "positionCm": [
+              0,
+              0,
+              0
+            ],
+            "stageIndex": 0,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:0",
+            "kind": "progress-point",
+            "name": "ReachedShore",
+            "positionCm": [
+              0,
+              -500,
+              -36420
+            ],
+            "stageIndex": 0
+          },
+          {
+            "key": "segment-root:1",
+            "kind": "segment-root",
+            "name": "Jungle_Segment",
+            "positionCm": [
+              0,
+              0,
+              7600
+            ],
+            "stageIndex": 1,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:1",
+            "kind": "progress-point",
+            "name": "ReachedTropics",
+            "positionCm": [
+              0,
+              20960,
+              20320
+            ],
+            "stageIndex": 1
+          },
+          {
+            "key": "segment-root:2",
+            "kind": "segment-root",
+            "name": "Desert_Segment",
+            "positionCm": [
+              0,
+              0,
+              0
+            ],
+            "stageIndex": 2,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:2",
+            "kind": "progress-point",
+            "name": "ReachedAlpine",
+            "positionCm": [
+              0,
+              45044,
+              62770
+            ],
+            "stageIndex": 2
+          },
+          {
+            "key": "segment-root:3",
+            "kind": "segment-root",
+            "name": "Swamp_Segment",
+            "positionCm": [
+              125,
+              64515,
+              120200
+            ],
+            "stageIndex": 3,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:3",
+            "kind": "progress-point",
+            "name": "ReachedCaldera",
+            "positionCm": [
+              0,
+              75690,
+              129790
+            ],
+            "stageIndex": 3
+          },
+          {
+            "key": "segment-root:4",
+            "kind": "segment-root",
+            "name": "Temple_Segment",
+            "positionCm": [
+              -1700,
+              86210,
+              214700
+            ],
+            "stageIndex": 4,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:4",
+            "kind": "progress-point",
+            "name": "ReachedTheKiln",
+            "positionCm": [
+              0,
+              85816,
+              201110
+            ],
+            "stageIndex": 4
+          },
+          {
+            "key": "segment-root:5",
+            "kind": "segment-root",
+            "name": "Beach_Segment",
+            "positionCm": [
+              0,
+              72700,
+              50700
+            ],
+            "stageIndex": 5,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:peak",
+            "kind": "progress-point",
+            "name": "ReachedPeak",
+            "positionCm": [
+              0,
+              118770,
+              213450
+            ]
+          }
+        ]
+      },
+      "expectedLegacyLayoutKey": "e51a10be1d6d7360af172f774e0bb245d3e822477ec634899fcff28c667acedf",
+      "legacyRootTransformPolicy": "static-no-runtime-trs-writes"
+    },
+    {
+      "sceneName": "Level_20",
+      "mapPackId": "sha256-ae276cf3116f9ffe0d0a401b84a165b084637c86bedf041b2a968a5e52537142",
+      "sourceSceneSha256": "bdd4a2dcdba00bc9b7dd092318d6e990b7deea0d713f7d29bacd9e0a0fa203dc",
+      "alignment": {
+        "version": 1,
+        "coordinateSpace": "unity-world-cm",
+        "landmarks": [
+          {
+            "key": "segment-root:0",
+            "kind": "segment-root",
+            "name": "Beach_Segment",
+            "positionCm": [
+              0,
+              0,
+              0
+            ],
+            "stageIndex": 0,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:0",
+            "kind": "progress-point",
+            "name": "ReachedShore",
+            "positionCm": [
+              0,
+              -500,
+              -36420
+            ],
+            "stageIndex": 0
+          },
+          {
+            "key": "segment-root:1",
+            "kind": "segment-root",
+            "name": "Roots Segment",
+            "positionCm": [
+              0,
+              0,
+              6700
+            ],
+            "stageIndex": 1,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:1",
+            "kind": "progress-point",
+            "name": "ReachedTropics",
+            "positionCm": [
+              0,
+              20960,
+              20320
+            ],
+            "stageIndex": 1
+          },
+          {
+            "key": "segment-root:2",
+            "kind": "segment-root",
+            "name": "Snow_Segment",
+            "positionCm": [
+              0,
+              0,
+              16100
+            ],
+            "stageIndex": 2,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:2",
+            "kind": "progress-point",
+            "name": "ReachedAlpine",
+            "positionCm": [
+              0,
+              45044,
+              62770
+            ],
+            "stageIndex": 2
+          },
+          {
+            "key": "segment-root:3",
+            "kind": "segment-root",
+            "name": "Caldera_Segment",
+            "positionCm": [
+              0,
+              0,
+              22800
+            ],
+            "stageIndex": 3,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:3",
+            "kind": "progress-point",
+            "name": "ReachedCaldera",
+            "positionCm": [
+              0,
+              75690,
+              129790
+            ],
+            "stageIndex": 3
+          },
+          {
+            "key": "segment-root:4",
+            "kind": "segment-root",
+            "name": "Volcano_Segment",
+            "positionCm": [
+              0,
+              0,
+              22800
+            ],
+            "stageIndex": 4,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:4",
+            "kind": "progress-point",
+            "name": "ReachedTheKiln",
+            "positionCm": [
+              0,
+              85816,
+              201110
+            ],
+            "stageIndex": 4
+          },
+          {
+            "key": "segment-root:5",
+            "kind": "segment-root",
+            "name": "Beach_Segment",
+            "positionCm": [
+              0,
+              72700,
+              50700
+            ],
+            "stageIndex": 5,
+            "rotation": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "progress-point:peak",
+            "kind": "progress-point",
+            "name": "ReachedPeak",
+            "positionCm": [
+              0,
+              118770,
+              213450
+            ]
+          }
+        ]
+      },
+      "expectedLegacyLayoutKey": "94c09770af86c9fcd421f177bcf6b3c2ea782b6606dae7cacd0cfcb44c4991d7",
+      "legacyRootTransformPolicy": "static-no-runtime-trs-writes"
+    }
+  ]
+}

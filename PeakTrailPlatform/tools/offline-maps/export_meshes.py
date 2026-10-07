@@ -8,7 +8,7 @@ import argparse, collections, datetime, gc, hashlib, io, json, math, shutil, str
 from pathlib import Path
 import numpy as np
 from PIL import Image
-from build_maps import Scene, MeshHandler, PPtr, BIOMES, GEOMETRY_ROOT_FIELDS, game_info, pid, sha, vec
+from build_maps import Scene, MeshHandler, PPtr, BIOMES, GEOMETRY_ROOT_FIELDS, game_data, game_info, pid, sha, vec
 
 FOLIAGE_TEXTURE_MAX_SIDE = 256
 FUNGAL_BASE_TINT_MATERIALS = {'M_Mushroom_tree', 'M_Mushroom_tree_evil', 'Glow Shroom'}
@@ -299,7 +299,7 @@ def export_one(args,slot):
     manifest['identityVersion']=3; manifest['mapPackId']=''; manifest['generatedAtUtc']=datetime.datetime.now(datetime.timezone.utc).isoformat()
     manifest['source']['kind']='offline-unity-original-mesh'; manifest['source']['geometrySource']='original indexed MeshFilter geometry, shared meshes and exact world transforms; no height-field reconstruction or decimation'
     manifest['source']['limitations']=['Game-specific custom shader effects remain approximated with source material colors and original UV/base textures.','Moving props and spawned loot are not part of the static scene model.','Legacy height/PNG data is retained only as a separate planar reference, never used to build this 3D geometry.']
-    scene=Scene(args.game/'PEAK_Data'/f'level{mapping[name]}',args.game)
+    scene=Scene(game_data(args.game)/f'level{mapping[name]}',args.game)
     manifest['route']=scene.route()
     selected={int(v) for v in args.layers.split(',')} if args.layers!='all' else None
     reports=[]

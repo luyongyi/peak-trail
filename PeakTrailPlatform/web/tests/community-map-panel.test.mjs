@@ -6,6 +6,7 @@ import { createCommunityMapPanel } from "../src/community-map-panel.js";
 const ids = ["appShell", "communityToggle", "communityLayerControl", "communityMode", "communityPanel", "communityRefresh", "communityStatus", "communityFilters",
   "communityGroupField", "communityGroup", "communityDifficulty", "communityHeight", "communityLegend", "communityPlayers"];
 const hash = character => character.repeat(64);
+const alignment = () => ({ status: "verified", id: hash("9"), method: "identity", landmarkCount: 3, maxErrorCm: 0 });
 const route = ["Shore", "Roots", "Alpine", "Volcano", "Kiln"];
 function map() {
   return { mapPackId: `sha256-${hash("a")}`, gameBuildId: "25306743", sceneName: "Level_8",
@@ -13,7 +14,7 @@ function map() {
     layers: route.map((_, segment) => ({ segment })) };
 }
 function group(id = hash("b"), layoutKey = hash("c")) {
-  return { id, mapPackId: map().mapPackId, mapCompatibility: "matched",
+  return { id, mapPackId: map().mapPackId, mapCompatibility: "matched", mapAlignment: alignment(),
     map: { buildId: "25306743", scene: "Level_8", layoutKey, levelIndex: 81, route, stages: route.map((name, index) => ({ index, name })) },
     stageSummaries: route.map((name, index) => ({ index, name, routeCount: 2 })),
     difficulties: [{ key: "ascent3", label: "登山 3" }] };
@@ -32,7 +33,8 @@ function node(tagName = "div") {
 const settle = () => new Promise(resolve => setImmediate(resolve));
 function response(value) { return new Response(JSON.stringify(value), { headers: { "Content-Type": "application/json" } }); }
 function stageResponse(id, stageIndex, heat = false) {
-  const common = { groupId: id, stageIndex, mapCompatibility: "matched", mapPackId: map().mapPackId, totalRouteCount: 2 };
+  const common = { groupId: id, stageIndex, mapCompatibility: "matched", mapPackId: map().mapPackId,
+    mapAlignment: alignment(), coordinateSpace: "canonical-map-world-cm", totalRouteCount: 2 };
   return heat ? { ...common, routeCount: 2, cellSizeCm: 200, heightBandCm: 200, cells: [[0, 0, 0, 1], [1, 1, 1, 1]] }
     : { ...common, truncated: false, routes: [{ id: "one", name: '<img src=x onerror="alert(1)">',
       points: [[0, 0, 100, 0], [100, 100, 300, 100]], breaks: [] },

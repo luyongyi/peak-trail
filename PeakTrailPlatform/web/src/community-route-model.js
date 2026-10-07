@@ -4,6 +4,11 @@ import { heightBands, normalizeHeatmap, normalizeRouteGroups, normalizeRoutes, r
 const HASH = /^[a-f0-9]{64}$/;
 const PACK_ID = /^sha256-[a-f0-9]{64}$/;
 const canonicalName = value => value === "Citadel" ? "Temple" : String(value || "");
+function verifiedAlignment(value) {
+  return value?.status === "verified" && HASH.test(value.id || "") && ["identity", "rigid", "legacy-layout-key"].includes(value.method)
+    && Number.isInteger(value.landmarkCount) && value.landmarkCount >= 3 && value.landmarkCount <= 16
+    && Number.isFinite(value.maxErrorCm) && value.maxErrorCm >= 0 && value.maxErrorCm <= 5;
+}
 
 export function mapRouteStages(mapPack) {
   const route = normalizeRoute(mapPack?.route);
@@ -28,7 +33,7 @@ export function communityMapIdentity(mapPack) {
 }
 
 export function matchesCommunityGroup(group, mapPack) {
-  if (!communityMapIdentity(mapPack) || group?.mapCompatibility !== "matched"
+  if (!communityMapIdentity(mapPack) || group?.mapCompatibility !== "matched" || !verifiedAlignment(group.mapAlignment)
     || group.mapPackId !== mapPack.mapPackId || String(group.map?.buildId) !== String(mapPack.gameBuildId)
     || group.map?.scene !== mapPack.sceneName || !HASH.test(group.map?.layoutKey || "")
     || !Array.isArray(group.map?.route) || !Array.isArray(group.map?.stages)) return false;
@@ -49,13 +54,23 @@ export function matchingCommunityGroups(value, mapPack) {
   const groups = normalizeRouteGroups(value);
   const sameScene = groups.filter(group => group.map.scene === mapPack?.sceneName);
   const matching = sameScene.filter(group => matchesCommunityGroup(group, mapPack));
-  return { matching, unavailableCount: sameScene.length - matching.length };
+  return { matching, unavailableCount: sameScene.length - matching.length,
+    pendingReasons: [...new Set(sameScene.filter(group => !matchesCommunityGroup(group, mapPack)).map(group =>
+      String(group.map?.buildId) !== String(mapPack.gameBuildId) ? "map-build-unavailable" : group.mapAlignment?.reason || "alignment-unproven"))] };
+}
+
+export function pendingCommunityMessage(reasons = []) {
+  if (reasons.includes("map-build-unavailable")) return "已有路线与当前底图的游戏版本不同，暂时不能显示在这张地图上。";
+  if (reasons.includes("recording-landmarks-missing")) return "旧录像未记录地图地标，路线已保留；需要验证原地图布局后才能显示。";
+  if (reasons.includes("source-landmarks-missing")) return "路线已保留，正在等待当前地图模型的地标数据，验证对齐后才能显示。";
+  return "已有路线的布局、地标或关卡分支尚未通过对齐验证，暂不叠加到地图。";
 }
 
 export function normalizeCommunityStage(rawRoutes, rawHeatmap, group, mapPack, stageIndex) {
   for (const value of [rawRoutes, rawHeatmap]) {
     if (value?.groupId !== group.id || value.stageIndex !== stageIndex || value.mapCompatibility !== "matched"
-      || value.mapPackId !== mapPack.mapPackId) throw new Error("返回的路线与当前地图或关卡不一致，请刷新。");
+      || value.mapPackId !== mapPack.mapPackId || !verifiedAlignment(value.mapAlignment)
+      || value.mapAlignment.id !== group.mapAlignment?.id || value.coordinateSpace !== "canonical-map-world-cm") throw new Error("返回的路线与当前地图或关卡不一致，请刷新。");
   }
   if (!matchesCommunityGroup(group, mapPack) || !group.stageSummaries.some(stage => stage.index === stageIndex)) {
     throw new Error("当前地图没有这个关卡的已核验路线。");

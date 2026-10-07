@@ -10,7 +10,7 @@ from pathlib import Path
 
 import numpy as np
 from UnityPy.classes import PPtr
-from build_maps import Scene, game_info, pid, sha
+from build_maps import Scene, game_data, game_info, pid, sha
 from export_meshes import stored_color_to_linear
 
 
@@ -86,7 +86,7 @@ def ocean_surface(scene, obj, segment):
                          'storedColor': rgba, 'linearColor': stored_color_to_linear(rgba[:3], flags).tolist()}}
 
 
-def export_water(game, catalog_path, packs_path, output, slots=None):
+def export_water(game, catalog_path, packs_path, output, slots=None, scene_factory=Scene):
     mapping, _, build = game_info(game)
     catalog = json.loads(catalog_path.read_text(encoding='utf8'))
     result = {'schemaVersion': 1, 'gameBuildId': str(build), 'authority': 'serialized-map-baseline',
@@ -97,14 +97,14 @@ def export_water(game, catalog_path, packs_path, output, slots=None):
             continue
         manifest = json.loads((packs_path / entry['mapPackId'] / 'map-pack.json').read_text(encoding='utf8'))
         name = entry['sceneName']
-        path = game / 'PEAK_Data' / f'level{mapping[name]}'
+        path = game_data(game) / f'level{mapping[name]}'
         scene_hash = sha(path)
         if manifest['source']['sceneSha256'] != scene_hash:
             raise ValueError(f'{name}: source scene changed; rebuild the geometry first')
         shores = [layer['segment'] for layer in manifest['layers'] if layer['biome'] == 'Shore']
         if len(shores) != 1:
             raise ValueError(f'{name}: expected one confirmed shore chapter')
-        scene = Scene(path, game)
+        scene = scene_factory(path, game)
         surfaces = []
         for obj in scene.objects.values():
             if obj.type.name != 'GameObject':

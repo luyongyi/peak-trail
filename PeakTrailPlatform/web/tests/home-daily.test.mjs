@@ -213,6 +213,20 @@ test("source-bound PeakHandler metadata enables a summit intent on the shared te
   assert.match(summit.description, /PeakHandler/);
 });
 
+test("current audited build retains source-bound summit and native Nadir chapter navigation", () => {
+  const currentBuild = '25739797';
+  const currentCatalog = { ...catalog, activeGameBuildId: currentBuild, mapPacks: [{ ...entry, gameBuildId: currentBuild }] };
+  const pack = { ...mapPack('swamp-temple'), gameBuildId: currentBuild };
+  pack.mapPeak = { segment: 4, collisionBounds: { min: [-70, 979, 2131], max: [78, 1233, 2315] } };
+  pack.layers.push({ id: 'segment-05-void', segment: 5, biome: 'Void', name: 'Void' });
+  const result = view({ catalog: currentCatalog, mapPack: pack });
+  assert.equal(result.destinations[0].available, true);
+  assert.equal(result.destinations[0].viewIntent, 'summit');
+  assert.equal(result.destinations[0].segment, 4);
+  assert.equal(result.destinations[1].available, true);
+  assert.equal(result.destinations[1].segment, 5);
+});
+
 test("Nadir uses an actual Void model, independent of the daily four or the summit enum", () => {
   const pack = mapPack();
   pack.layers.push({ id: "segment-05-void", segment: 5, biome: "Void", name: "Void" });

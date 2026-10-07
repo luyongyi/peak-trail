@@ -4,6 +4,7 @@ import { gzipSync, gunzipSync } from "node:zlib";
 import { randomUUID } from "node:crypto";
 import { LIMITS, problem, digest, validHash, validateTrajectory, difficultyInfo, groupId,
   extractStageRoutes, routeDedupeKey, dedupeRoutes, aggregateHeatmap } from "./trajectory-contract.mjs";
+import { fitMapAlignment, alignedRoutePoints, validateMapAlignment } from "./map-alignment.mjs";
 
 async function setup(root) { for (const child of ["index", "uploads", "routes"]) await mkdir(join(root, child), { recursive: true, mode: 0o700 }); }
 async function readJson(path) { return JSON.parse(await readFile(path, "utf8")); }
@@ -45,18 +46,22 @@ export async function loadIndex(root) {
   return entries;
 }
 export async function mapMatch(map, catalogPath) {
+  const waiting = reason => ({ mapCompatibility: "waiting-map", mapPackId: null, mapAlignment: { status: "pending", reason } });
   try {
+    if (!/^[1-9]\d*$/.test(String(map.buildId)) || !/^Level_\d+$/.test(map.scene)) return waiting("invalid-map-identity");
     const catalog = await readJson(catalogPath);
-    let evidence = null;
-    try { evidence = await readJson(join(dirname(catalogPath), `routes.${map.buildId}.json`)); } catch (error) { if (error.code !== "ENOENT") return { mapCompatibility: "waiting-map", mapPackId: null }; }
+    let evidence = null, landmarks = null;
+    try { evidence = await readJson(join(dirname(catalogPath), `routes.${map.buildId}.json`)); } catch (error) { if (error.code !== "ENOENT") return waiting("source-evidence-unavailable"); }
+    try { landmarks = await readJson(join(dirname(catalogPath), `landmarks.${map.buildId}.json`)); } catch (error) { if (error.code !== "ENOENT") return waiting("source-evidence-unavailable"); }
     const candidates = (catalog.schemaVersion === 1 && Array.isArray(catalog.mapPacks) ? catalog.mapPacks : []).filter((entry) => entry.enabled !== false
       && String(entry.gameBuildId) === map.buildId && entry.sceneName === map.scene && /^sha256-[a-f0-9]{64}$/.test(entry.mapPackId ?? ""));
+    if (!candidates.length) return waiting("map-build-unavailable");
     const compatible = candidates.filter((entry) => {
       const observed = evidence?.maps?.find((value) => value.sceneName === map.scene && value.mapPackId === entry.mapPackId);
       if (evidence && !observed) return false;
       const route = entry.route ?? observed?.route;
       const segments = Array.isArray(route) ? route.map((biome, index) => ({ index, biome })) : route?.segments;
-      if (!segments) return true;
+      if (!Array.isArray(segments) || !segments.length) return false;
       const equivalent = (segment) => {
         const name = map.route[segment.index];
         if (name === segment.biome) return true;
@@ -69,8 +74,45 @@ export async function mapMatch(map, catalogPath) {
         && map.route.every((biome, index) => segments.some((segment) => segment.index === index && equivalent(segment)) || (index === 5 && biome === "Void"));
     });
     compatible.sort((a, b) => (Date.parse(b.generatedAtUtc) || 0) - (Date.parse(a.generatedAtUtc) || 0));
-    return { mapCompatibility: compatible.length ? "matched" : "waiting-map", mapPackId: compatible[0]?.mapPackId ?? null };
-  } catch { return { mapCompatibility: "waiting-map", mapPackId: null }; }
+    if (!compatible.length) return waiting("map-branch-mismatch");
+    if (landmarks?.schemaVersion !== 1 || !Array.isArray(landmarks.maps)) return waiting(map.alignment ? "source-landmarks-missing" : "recording-landmarks-missing");
+    if (String(landmarks.gameBuildId) !== map.buildId || landmarks.authority !== "serialized-map-landmarks") return waiting("source-evidence-mismatch");
+    let reason = map.alignment ? "source-landmarks-missing" : "recording-landmarks-missing";
+    for (const entry of compatible) {
+      const source = landmarks.maps.find(value => value.sceneName === map.scene && value.mapPackId === entry.mapPackId);
+      if (!source) continue;
+      // A sidecar belongs to one exact exported scene, not just a Level_N name.
+      // Keep all reads inside the catalog's immutable public pack directory.
+      if (entry.path !== `./packs/${entry.mapPackId}/map-pack.json`) { reason = "source-evidence-unavailable"; continue; }
+      const pack = await readJson(join(dirname(catalogPath), "packs", entry.mapPackId, "map-pack.json"));
+      if (pack.mapPackId !== entry.mapPackId || String(pack.gameBuildId) !== map.buildId || pack.sceneName !== map.scene
+        || pack.coordinateSpace !== "unity-world-meters" || !validHash(source.sourceSceneSha256)
+        || source.sourceSceneSha256 !== pack.source?.sceneSha256) { reason = "source-evidence-mismatch"; continue; }
+      let alignment;
+      if (map.alignment) alignment = fitMapAlignment(map.alignment, source.alignment);
+      else {
+        // Older headers contain a hash of every native root path/XYZ and gate.
+        // Only an exact hash regenerated from audited source DLL/scene data,
+        // with no runtime root TRS writes, can prove an identity-only mapping.
+        // It never estimates an offset or supplies evidence missing from a run.
+        const canonical = validateMapAlignment(source.alignment);
+        const ordinary = map.stages.filter(stage => stage.name !== "Void");
+        const gates = new Map(canonical.landmarks.filter(value => value.kind === "progress-point").map(value => [value.key, value.positionCm[2]]));
+        const gatesMatch = ordinary.every((stage, i) => stage.enterZCm === gates.get(`progress-point:${stage.index}`)
+          && stage.exitZCm === gates.get(i + 1 < ordinary.length ? `progress-point:${ordinary[i+1].index}` : "progress-point:peak"));
+        if (source.legacyRootTransformPolicy !== "static-no-runtime-trs-writes" || !validHash(source.expectedLegacyLayoutKey)
+          || !/^[a-f0-9]{32}$/.test(landmarks.sourceGameAssemblyMvid || "") || !validHash(landmarks.sourceGameAssemblySha256)
+          || source.expectedLegacyLayoutKey !== map.layoutKey || !gatesMatch || canonical.landmarks.length < 3) continue;
+        alignment = { status: "verified", method: "legacy-layout-key", landmarkCount: canonical.landmarks.length, maxErrorCm: 0,
+          transform: { rotation: [1,0,0,0,1,0,0,0,1], translationCm: [0,0,0] } };
+      }
+      if (alignment.status !== "verified") { reason = alignment.reason; continue; }
+      alignment.id = digest({ mapPackId: entry.mapPackId, sourceSceneSha256: source.sourceSceneSha256,
+        recorded: map.alignment || { layoutKey: map.layoutKey, method: alignment.method }, canonical: source.alignment });
+      return { mapCompatibility: "matched", mapPackId: entry.mapPackId, mapAlignment: alignment };
+    }
+    return waiting(reason);
+  } catch { return waiting("source-evidence-unavailable"); }
 }
 export async function ingestUpload(root, compressed, catalogPath) {
   if (compressed.byteLength > LIMITS.compressedBytes) throw problem("compressed body exceeds 12 MiB", 413);
@@ -171,11 +213,16 @@ export async function queryRoutes(root, catalogPath, group, stage, difficulty, l
   if (!chosen || !chosen.map.stages.some((entry) => entry.index === stage)) throw problem("unknown public route group/stage", 404);
   const candidates = chosen.routes.filter((route) => route.stageIndex === stage && (!difficulty || route.difficulty.key === difficulty));
   const base = { groupId: group, stageIndex: stage, ...(await mapMatch(chosen.map, catalogPath)), totalRouteCount: candidates.length };
+  base.coordinateSpace = base.mapAlignment.status === "verified" ? "canonical-map-world-cm" : "recording-world-cm";
+  const readAligned = async route => {
+    const data = await readRoute(root, route);
+    return { ...data, points: alignedRoutePoints(data.points, base.mapAlignment) };
+  };
   if (heat) {
     const counts = new Map();
     for (const route of candidates) {
       // Each complete individual attempt contributes at most one visit to a voxel.
-      const cells = aggregateHeatmap([(await readRoute(root, route)).points]);
+      const cells = aggregateHeatmap([(await readAligned(route)).points]);
       for (const [x, y, z, count] of cells) { const key = `${x},${y},${z}`; counts.set(key, (counts.get(key) ?? 0) + count); }
       if (counts.size > LIMITS.heatCells) throw problem("heatmap capacity exceeded", 413);
     }
@@ -185,7 +232,7 @@ export async function queryRoutes(root, catalogPath, group, stage, difficulty, l
   const routes = []; let pointCount = 0;
   for (const route of candidates.slice(0, Math.min(200, limit))) {
     if (pointCount + route.pointCount > LIMITS.queryPoints) break;
-    const data = await readRoute(root, route); pointCount += data.points.length;
+    const data = await readAligned(route); pointCount += data.points.length;
     routes.push({ id: route.id, playerKey: route.playerKey, name: route.name, difficulty: route.difficulty, ...data });
   }
   return { ...base, routes, truncated: routes.length < candidates.length, pointCount };

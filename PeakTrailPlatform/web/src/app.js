@@ -275,9 +275,9 @@ function segmentChineseBase(option) {
   if (routed) {
     const routeBuild = state.routeView?.source === "recorded"
       ? state.trace?.manifest?.gameBuildId : state.mapPack?.gameBuildId;
-    // Only this verified build shares the summit with the final regular layer.
+    // These source-audited builds share the summit with the final regular layer.
     // The label describes an available area, not a recorded summit arrival.
-    return String(routeBuild) === "25306743" && option?.segment === 4
+    return ["25306743", "25739797"].includes(String(routeBuild)) && option?.segment === 4
       && ["volcano-kiln", "swamp-temple"].includes(route?.branch)
       && classifyRouteSegment(route.segments.find((entry) => entry.index === 4)).kind === "chapter"
       ? `${routed} · 含顶峰` : routed;

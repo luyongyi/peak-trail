@@ -43,6 +43,7 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
     mkdir(resolve(platform, "data", "recorder"), { recursive: true }),
     mkdir(resolve(platform, "data", "memories"), { recursive: true }),
     mkdir(resolve(platform, "schema"), { recursive: true }),
+    mkdir(resolve(platform, "server"), { recursive: true }),
     mkdir(pack, { recursive: true }),
     mkdir(secondPack, { recursive: true }),
     mkdir(resolve(enclosures, "private"), { recursive: true }),
@@ -52,6 +53,7 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
   ]);
   await Promise.all([
     copyFile(resolve(platformSource, "tools", "stage-site.mjs"), resolve(tools, "stage-site.mjs")),
+    copyFile(resolve(platformSource, "server", "map-alignment.mjs"), resolve(platform, "server", "map-alignment.mjs")),
     copyFile(resolve(platformSource, "tools", "lib", "game-assets.mjs"), resolve(tools, "lib", "game-assets.mjs")),
     copyFile(resolve(platformSource, "tools", "lib", "local-paths.mjs"), resolve(tools, "lib", "local-paths.mjs")),
     copyFile(resolve(platformSource, "tools", "lib", "recorder-release.mjs"), resolve(tools, "lib", "recorder-release.mjs")),
@@ -117,15 +119,24 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
   const evidence = {
     schemaVersion: 1,
     gameBuildId: "123",
-    maps: [{
-      mapPackId: packId,
-      sceneName: manifest.sceneName,
-      mapSlot: manifest.mapSlot,
-      sourceSceneSha256: manifest.source.sceneSha256,
-      route,
-    }],
+    maps: [manifest, secondManifest].map(value => ({ mapPackId: value.mapPackId,
+      sceneName: value.sceneName, mapSlot: value.mapSlot, sourceSceneSha256: value.source.sceneSha256, route })),
   };
+  evidence.privatePath = "must not publish";
+  evidence.maps.push({ mapPackId: `sha256-${'e'.repeat(64)}`, sceneName: 'Unserved', privateRecordings: ['must not publish'] });
   const evidencePath = resolve(platform, "data", "maps", "routes.123.json");
+  const alignment = { version: 1, coordinateSpace: 'unity-world-cm', landmarks: [
+    { key: 'segment-root:0', kind: 'segment-root', stageIndex: 0, name: 'Beach_Segment', positionCm: [0,0,0], rotation: [0,0,0,1], scale: [1,1,1] },
+    { key: 'progress-point:3', kind: 'progress-point', stageIndex: 3, name: 'Caldera Gate', positionCm: [1000,1000,1000] },
+    { key: 'progress-point:peak', kind: 'progress-point', name: 'Peak Gate', positionCm: [0,1000,2000] },
+  ] };
+  const landmarkEvidence = { schemaVersion: 1, gameBuildId: '123', authority: 'serialized-map-landmarks',
+    sourceGameAssemblyMvid: 'a'.repeat(32), sourceGameAssemblySha256: 'f'.repeat(64), privatePath: 'must not publish',
+    maps: [manifest,secondManifest].map(value => ({ sceneName: value.sceneName, mapPackId: value.mapPackId,
+      sourceSceneSha256: value.source.sceneSha256, alignment, expectedLegacyLayoutKey: '9'.repeat(64), legacyRootTransformPolicy: 'static-no-runtime-trs-writes',
+      privateRecordings: ['must not publish'] })) };
+  landmarkEvidence.maps.push({ mapPackId: `sha256-${'e'.repeat(64)}`, sceneName: 'Unserved', privateRecordings: ['must not publish'] });
+  const landmarkPath = resolve(platform,'data','maps','landmarks.123.json');
   const fogEvidence = { schemaVersion: 1, gameBuildId: '123', authority: 'serialized-map-baseline', maps: [{
     mapPackId: packId, sceneName: manifest.sceneName, mapSlot: manifest.mapSlot,
     sourceSceneSha256: manifest.source.sceneSha256, volumes: [],
@@ -171,6 +182,7 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
     writeFile(resolve(pack, "map-pack.json"), manifestBytes),
     writeFile(resolve(secondPack, "map-pack.json"), secondManifestBytes),
     writeFile(evidencePath, JSON.stringify(evidence)),
+    writeFile(landmarkPath, JSON.stringify(landmarkEvidence)),
     writeFile(fogPath, JSON.stringify(fogEvidence)),
     writeFile(waterPath, JSON.stringify(waterEvidence)),
     writeFile(enclosureEvidencePath, JSON.stringify(enclosureEvidence)),
@@ -216,6 +228,15 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
   const stagedManifestBytes = await readFile(stagedManifestPath, "utf8");
   const stagedManifest = JSON.parse(stagedManifestBytes);
   assert.deepEqual(stagedManifest.route, route);
+  const stagedRoutes = JSON.parse(await readFile(resolve(staged,'data','maps','routes.123.json'),'utf8'));
+  const stagedLandmarks = JSON.parse(await readFile(resolve(staged,'data','maps','landmarks.123.json'),'utf8'));
+  assert.equal(stagedRoutes.maps.length,2); assert.equal(stagedLandmarks.maps.length,2);
+  assert.equal(stagedRoutes.privatePath,undefined); assert.equal(stagedLandmarks.privatePath,undefined);
+  assert.ok(stagedLandmarks.maps.every(value=>value.privateRecordings===undefined));
+  assert.deepEqual(stagedLandmarks.maps[0].alignment.landmarks.map(value=>value.key),['progress-point:3','progress-point:peak','segment-root:0']);
+  assert.equal(stagedLandmarks.maps[0].sourceSceneSha256,manifest.source.sceneSha256);
+  assert.equal(stagedLandmarks.maps[0].expectedLegacyLayoutKey,'9'.repeat(64));
+  assert.equal(stagedLandmarks.sourceGameAssemblyMvid,'a'.repeat(32));
   assert.deepEqual(stagedManifest.mapFog.volumes, []);
   assert.equal(stagedManifest.mapFog.authority, 'serialized-map-baseline');
   assert.deepEqual(stagedManifest.mapWater.surfaces, [waterSurface]);
@@ -292,6 +313,28 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
   assert.equal(await readFile(resolve(staged, "preflight-marker.txt"), "utf8"), "keep on failure");
   assert.deepEqual(await readFile(resolve(staged, recorderRelease.downloadPath)), recorderBytes);
   await writeFile(recorderPath, recorderBytes);
+  for (const invalidate of [
+    value => { value.maps.splice(0,1); },
+    value => { value.maps.push(value.maps[0]); },
+    value => { value.maps[0].sourceSceneSha256 = '0'.repeat(64); },
+    value => { value.maps[0].sceneName = 'Level_2'; },
+    value => { value.maps[0].alignment.landmarks[0].positionCm[0] = .5; },
+    value => { value.maps[0].alignment.landmarks[0].scale = [0,1,1]; },
+    value => { value.maps[0].alignment.landmarks[1].stageIndex = 2; value.maps[0].alignment.landmarks[1].key = 'progress-point:2'; },
+    value => { value.maps[0].alignment.landmarks.forEach((landmark,index)=>{landmark.positionCm=[0,0,index*2000];}); },
+    value => { delete value.sourceGameAssemblyMvid; },
+  ]) {
+    const invalid = structuredClone(landmarkEvidence); invalidate(invalid); await writeFile(landmarkPath,JSON.stringify(invalid));
+    await assert.rejects(execFileAsync(process.execPath,[resolve(tools,'stage-site.mjs')],options), /landmark|layout|scale|coordinates/i);
+    assert.equal(await readFile(resolve(staged,'preflight-marker.txt'),'utf8'),'keep on failure');
+    assert.equal(await readFile(stagedManifestPath,'utf8'),stagedManifestBytes);
+  }
+  await writeFile(landmarkPath,JSON.stringify(landmarkEvidence));
+  const missingRoute = structuredClone(evidence); missingRoute.maps.splice(0,1);
+  await writeFile(evidencePath,JSON.stringify(missingRoute));
+  await assert.rejects(execFileAsync(process.execPath,[resolve(tools,'stage-site.mjs')],options), /requires native route evidence/);
+  assert.equal(await readFile(resolve(staged,'preflight-marker.txt'),'utf8'),'keep on failure');
+  await writeFile(evidencePath,JSON.stringify(evidence));
   const invalidFog = structuredClone(fogEvidence);
   invalidFog.maps[0].sourceSceneSha256 = '0'.repeat(64);
   await writeFile(fogPath, JSON.stringify(invalidFog));

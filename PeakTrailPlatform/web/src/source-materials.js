@@ -1,3 +1,5 @@
+import { effects25739797 } from './source-materials.25739797.js';
+
 // PEAK build 25306743, read from sharedassets4.assets; no chosen biome palette.
 // Full raw color/shader evidence: tools/offline-maps/source-effect-materials.25306743.json.
 // These are color-only substitutes for depth/flow shaders, not game screenshots.
@@ -74,8 +76,9 @@ function linearComponent(value) {
 }
 
 export function getSourceEffectMaterial(buildId, materialName, shader) {
-  if (String(buildId) !== '25306743' || !Object.hasOwn(effects, materialName)) return null;
-  const effect = effects[materialName];
+  const registry = String(buildId) === '25306743' ? effects : String(buildId) === '25739797' ? effects25739797 : null;
+  if (!registry || !Object.hasOwn(registry, materialName)) return null;
+  const effect = registry[materialName];
   if (effect.shader !== shader) return null;
   const primaryRgb = effect.rgba.slice(0, 3).map(v => effect.flags & 16 ? v : linearComponent(v));
   const tintRgb = effect.tint?.slice(0, 3).map(v => effect.tintFlags & 16 ? v : linearComponent(v));
@@ -97,7 +100,7 @@ export function getSourceEffectMaterial(buildId, materialName, shader) {
     opacity: effect.opacity ?? 1,
     source: {
       buildId: effect.evidenceBuildId ?? 25306743,
-      mapBuildId: 25306743,
+      mapBuildId: Number(buildId),
       asset: effect.asset || 'sharedassets4.assets',
       pathId: effect.pathId,
       shader: effect.shader,
@@ -117,6 +120,7 @@ export function getSourceEffectMaterial(buildId, materialName, shader) {
         shallowStored: [...effect.waterDepth.shallow], tintStored: [...effect.waterDepth.tint],
         propertyFlags: effect.waterDepth.flags,
         shaderEvidenceBuildId: 25739797, crossBuildShaderIdentityVerified: false,
+        sameBuildShaderEvidence: String(buildId) === '25739797',
         formula: 'smoothstep(0, 1, min(10 * min(abs(sceneEyeDepth - surfaceEyeDepth) / _Depth, 1), 1))',
         approximation: 'Shallow replaces the missing refracted scene colour; primary branch without noise, secondary colour, foam or waves; native alpha is not reconstructed',
       } : null,
