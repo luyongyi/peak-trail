@@ -18,6 +18,7 @@ import { SourceWaterRenderer } from "./source-water-renderer.js";
 import { nadirCameraBounds } from "./nadir-camera-bounds.js";
 import { CommunityRouteOverlay } from "./community-route-overlay.js";
 import { EnclosureContextRenderer } from "./enclosure-context-renderer.js";
+import { fitSurveyCamera } from "./survey-camera-fit.js";
 
 function collectWaterDepthEntries(root, heightScale) {
   const entries = [];
@@ -239,7 +240,11 @@ export class TrailScene {
     this.gameAssetPack = null;
     this.lastFrameTime = null;
     this.cameraSelectionRevision = 0;
-    this.controls.addEventListener("start", () => { ++this.cameraSelectionRevision; });
+    this.surveyPreset = null;
+    this.controls.addEventListener("start", () => {
+      this.surveyPreset = null;
+      ++this.cameraSelectionRevision;
+    });
 
     this.worldRoot = new THREE.Group();
     this.terrainRoot = new THREE.Group();
@@ -284,6 +289,11 @@ export class TrailScene {
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height, false);
     this.communityOverlay?.setViewport(width, height);
+    // Reframe only an untouched preset. A resized sidebar or phone rotation
+    // must not replace a view the user has already moved or a replay camera.
+    if (this.surveyPreset && this.freeCamera.mode === "orbit" && this.followTargetId == null) {
+      this.applySurveyPreset(this.surveyPreset);
+    }
   }
 
   animate(timestamp) {
@@ -304,8 +314,10 @@ export class TrailScene {
 
   async setData({ mapPack, trace, useMap, activeSegment, viewIntent = null }) {
     this.communityOverlay?.clear();
+    const retainReplayCamera = Boolean(trace && this.trace === trace);
+    const retainedPreset = retainReplayCamera ? this.surveyPreset : null;
+    const autoFrame = !retainReplayCamera || Boolean(retainedPreset);
     if (this.trace !== trace) this.setFollowTarget(null);
-    const cameraRevision = this.cameraSelectionRevision;
     if (this.trace !== trace) this.playerPortraits.clear();
     this.mapPack = mapPack || null;
     this.trace = trace || null;
@@ -324,14 +336,16 @@ export class TrailScene {
     const bounds = this.useMap ? mountainBounds : trace?.bounds || mapPack?.bounds || null;
     if (bounds) {
       this.currentBounds = bounds;
-      this.origin.fromArray([
+      // Keeping an in-place replay's display origin also keeps its free/follow
+      // camera in the same world position when a compatible map arrives.
+      if (!retainReplayCamera) this.origin.fromArray([
         (bounds.min[0] + bounds.max[0]) / 2,
         (bounds.min[1] + bounds.max[1]) / 2,
         (bounds.min[2] + bounds.max[2]) / 2,
       ]);
     } else {
       this.currentBounds = { min: [-50, -2, -50], max: [50, 15, 50] };
-      this.origin.set(0, 0, 0);
+      if (!retainReplayCamera) this.origin.set(0, 0, 0);
     }
 
     const token = ++this.buildToken;
@@ -354,18 +368,33 @@ export class TrailScene {
     this.worldRenderer.setMapFog(this.useMap ? this.mapPack : null);
     this.sourceWater?.setMap(this.useMap ? this.mapPack : null, this.origin);
 
+    // Source bounds are available before the GLB. Put the camera at the selected
+    // chapter immediately, rather than leaving it at the previous world's origin
+    // while parsing. Later user gestures still own the camera after this point.
+    this.applyHeightScale();
+    this.resize();
+    if (autoFrame && this.followTargetId == null) {
+      if (retainedPreset) this.applySurveyPreset(retainedPreset);
+      else this.fitView();
+    }
+    const cameraRevision = this.cameraSelectionRevision;
+    // A retained follow target needs its marker before awaiting terrain; the
+    // animation loop must not interpret this loading gap as a departed player.
+    if (this.trace) this.buildTracks();
+    this.setTime(this.currentTime);
+
     // The overview legitimately loads every chapter: without it the empty daily
     // viewer would show a bare grid forever (its "loading" status never
     // resolves). First paint stays fast because terrain streams in per chapter.
     if (this.useMap) await this.buildTerrain(token);
     if (token !== this.buildToken) return;
-    if (this.trace) this.buildTracks();
     this.applyHeightScale();
     this.applyLayerVisibility();
     this.setTime(this.currentTime);
-    if (cameraRevision === this.cameraSelectionRevision && this.followTargetId === null) {
-      this.fitView();
-      if (!this.summitCameraBounds() && isInteriorLayer(this.selectedLayer(), this.mapPack?.route)) this.enterInteriorView(false);
+    if (autoFrame && cameraRevision === this.cameraSelectionRevision && this.followTargetId === null) {
+      if (retainedPreset) this.applySurveyPreset(retainedPreset);
+      else this.fitView();
+      if (this.trace && !retainReplayCamera && !this.summitCameraBounds() && isInteriorLayer(this.selectedLayer(), this.mapPack?.route)) this.enterInteriorView(false);
     }
   }
 
@@ -945,6 +974,7 @@ export class TrailScene {
     // field is undefined rather than null: already-not-following is a no-op.
     if (next === null ? this.followTargetId == null : next === this.followTargetId) return;
     this.followTargetId = next;
+    this.surveyPreset = null;
     ++this.cameraSelectionRevision;
     if (next !== null) {
       this.freeCamera.setMode("orbit", { focus: false });
@@ -1286,8 +1316,13 @@ export class TrailScene {
   }
 
   setHeightScale(value) {
-    this.heightScale = THREE.MathUtils.clamp(Number(value) || 1, 0.2, 5);
+    const next = THREE.MathUtils.clamp(Number(value) || 1, 0.2, 5);
+    const changed = next !== this.heightScale;
+    this.heightScale = next;
     this.applyHeightScale();
+    if (changed && this.surveyPreset && this.freeCamera.mode === "orbit" && this.followTargetId == null) {
+      this.applySurveyPreset(this.surveyPreset);
+    }
     this.setTime(this.currentTime);
   }
 
@@ -1339,7 +1374,7 @@ export class TrailScene {
       if (this.followTargetId != null || selected !== this.activeSegment || buildRevision !== this.buildToken
           || selectionRevision !== this.geometrySelectionToken || cameraRevision !== this.cameraSelectionRevision) return;
       if (this.summitCameraBounds() || this.nadirGeometryBounds() || this.enclosureContext?.bounds) this.fitView();
-      else if (isInteriorLayer(this.selectedLayer(), this.mapPack?.route)) this.enterInteriorView(false);
+      else if (this.trace && isInteriorLayer(this.selectedLayer(), this.mapPack?.route)) this.enterInteriorView(false);
     });
   }
 
@@ -1347,7 +1382,7 @@ export class TrailScene {
     this.viewIntent = intent === "summit" ? "summit" : null;
     if (this.followTargetId == null) {
       this.fitView();
-      if (!this.viewIntent && isInteriorLayer(this.selectedLayer(), this.mapPack?.route)) this.enterInteriorView(false);
+      if (this.trace && !this.viewIntent && isInteriorLayer(this.selectedLayer(), this.mapPack?.route)) this.enterInteriorView(false);
     }
   }
 
@@ -1433,6 +1468,7 @@ export class TrailScene {
 
   enterInteriorView(focus = true) {
     this.setFollowTarget(null);
+    this.surveyPreset = null;
     ++this.cameraSelectionRevision;
     const pose = chooseRecordedInteriorPose(this.trace, this.currentTime, this.viewBounds(), { playerVisibility: this.playerVisibility });
     if (pose) {
@@ -1474,11 +1510,12 @@ export class TrailScene {
     if (focus) this.freeCamera.focus();
   }
 
-  toggleFreeCamera() { this.setFollowTarget(null); ++this.cameraSelectionRevision; this.freeCamera.setMode(this.freeCamera.mode === "free" ? "orbit" : "free"); this.freeCamera.focus(); }
+  toggleFreeCamera() { this.setFollowTarget(null); this.surveyPreset = null; ++this.cameraSelectionRevision; this.freeCamera.setMode(this.freeCamera.mode === "free" ? "orbit" : "free"); this.freeCamera.focus(); }
 
   focusWorldEvent(event) {
     if (!event.objectId || !event.pos) return;
     this.setFollowTarget(null);
+    this.surveyPreset = null;
     ++this.cameraSelectionRevision;
     // Rendered space: the world root is Z-mirrored (Unity LH → three RH).
     const target = new THREE.Vector3(event.pos[0] - this.origin.x, (event.pos[1] - this.origin.y) * this.heightScale, -(event.pos[2] - this.origin.z));
@@ -1491,52 +1528,37 @@ export class TrailScene {
     this.setFollowTarget(null);
     ++this.cameraSelectionRevision;
     this.freeCamera.setMode("orbit");
-    const bounds = this.cameraFitBounds();
-    if (!bounds) return;
-    const width = Math.max(5, bounds.max[0] - bounds.min[0]);
-    const height = Math.max(5, (bounds.max[1] - bounds.min[1]) * this.heightScale);
-    const depth = Math.max(5, bounds.max[2] - bounds.min[2]);
-    const largest = Math.max(width / Math.min(1, this.camera.aspect), depth, height * 1.35);
-    const distance = Math.max(25, largest / (2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2))) * 1.05);
-    this.camera.up.set(0, 1, 0);
-    const target = new THREE.Vector3(
-      (bounds.min[0] + bounds.max[0]) / 2 - this.origin.x,
-      ((bounds.min[1] + bounds.max[1]) / 2 - this.origin.y) * this.heightScale,
-      -((bounds.min[2] + bounds.max[2]) / 2 - this.origin.z),
-    );
-    // Daily scenes climb toward +Z. Looking from the sea keeps later, taller
-    // biomes behind the recorded route; the Z-mirrored world renders the sea
-    // (game -Z) on the +Z side.
-    this.camera.position.copy(target).add(new THREE.Vector3(distance * 0.52, distance * 0.7, distance * 0.62));
-    this.controls.target.copy(target);
-    this.camera.near = Math.max(0.1, distance / 5000);
-    this.camera.far = Math.max(2000, distance * 8);
-    this.camera.updateProjectionMatrix();
-    this.controls.update();
+    this.surveyPreset = "overview";
+    this.applySurveyPreset(this.surveyPreset);
   }
 
   topView() {
     this.setFollowTarget(null);
     ++this.cameraSelectionRevision;
     this.freeCamera.setMode("orbit");
-    const bounds = this.cameraFitBounds();
-    if (!bounds) return;
-    const width = Math.max(5, bounds.max[0] - bounds.min[0]);
-    const depth = Math.max(5, bounds.max[2] - bounds.min[2]);
-    const largest = Math.max(width / Math.min(1, this.camera.aspect), depth);
-    const distance = Math.max(30, largest / (2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2))) * 1.1);
-    this.camera.up.set(0, 0, -1);
-    const target = new THREE.Vector3(
-      (bounds.min[0] + bounds.max[0]) / 2 - this.origin.x,
-      ((bounds.min[1] + bounds.max[1]) / 2 - this.origin.y) * this.heightScale,
-      -((bounds.min[2] + bounds.max[2]) / 2 - this.origin.z),
-    );
-    this.camera.position.copy(target).add(new THREE.Vector3(0, distance, 0.001));
-    this.controls.target.copy(target);
-    this.camera.near = Math.max(0.1, distance / 5000);
-    this.camera.far = Math.max(2000, distance * 8);
-    this.camera.updateProjectionMatrix();
+    this.surveyPreset = "top";
+    this.applySurveyPreset(this.surveyPreset);
+  }
+
+  applySurveyPreset(preset) {
+    const frame = fitSurveyCamera({ bounds: this.cameraFitBounds(), origin: this.origin.toArray(),
+      heightScale: this.heightScale, aspect: this.camera.aspect, verticalFovDegrees: this.camera.fov,
+      ...(preset === "top" ? { direction: [0, 1, 0], up: [0, 0, -1] } : {}) });
+    if (!frame) return;
+    const damping = this.controls.enableDamping;
+    this.controls.enableDamping = false;
     this.controls.update();
+    this.camera.up.fromArray(frame.up);
+    this.camera.position.fromArray(frame.position);
+    this.controls.target.fromArray(frame.target);
+    this.camera.near = frame.near;
+    this.camera.far = frame.far;
+    this.controls.minDistance = frame.minDistance;
+    this.controls.maxDistance = frame.maxDistance;
+    this.camera.updateProjectionMatrix();
+    // The first update flushed old pan/zoom; this one applies the exact frame.
+    this.controls.update();
+    this.controls.enableDamping = damping;
   }
 
   dispose() {

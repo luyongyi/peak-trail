@@ -8,6 +8,7 @@ import { latestLifeEventBefore, MARKER_LIFE_EVENT_TYPES } from "../src/protocol.
 import { pointInBounds } from "../src/trail-spatial.js";
 import { FOLLOW_DISTANCE, FOLLOW_MIN_DISTANCE, FOLLOW_MAX_DISTANCE, FOLLOW_INTERIOR_DISTANCE, FOLLOW_INTERIOR_MIN_DISTANCE, FOLLOW_INTERIOR_MAX_DISTANCE } from "../src/spectator-camera.js";
 import { followLayerAtPosition } from "../src/map-enclosures.js";
+import { fitSurveyCamera } from "../src/survey-camera-fit.js";
 
 // The real TrailScene methods and ReplayCamera own state transitions. Only
 // WebGL, terrain-query and world-rendering ports are replaced with small spies.
@@ -17,6 +18,7 @@ const source = (await readFile(new URL("../src/scene.js", import.meta.url), "utf
 const ports = { THREE, chooseRecordedInteriorPose, isInteriorLayer, latestLifeEventBefore,
   MARKER_LIFE_EVENT_TYPES, pointInBounds, FOLLOW_DISTANCE, FOLLOW_MIN_DISTANCE, FOLLOW_MAX_DISTANCE,
   FOLLOW_INTERIOR_DISTANCE, FOLLOW_INTERIOR_MIN_DISTANCE, FOLLOW_INTERIOR_MAX_DISTANCE, followLayerAtPosition,
+  fitSurveyCamera,
   updateRecordedMineVisibility() {}, updateMapFogSurfaceVisibility() {} };
 const TrailScene = new Function(...Object.keys(ports), `${source}\nreturn TrailScene;`)(...Object.values(ports));
 

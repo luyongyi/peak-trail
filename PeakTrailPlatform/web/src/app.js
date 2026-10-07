@@ -473,6 +473,10 @@ function renderSegmentNavigation() {
   elements.segmentLoadStatus.className = `segment-load-status is-${status.status}`;
   elements.segmentLoadStatus.textContent = status.text;
   elements.segmentLoadStatus.title = status.message || status.text;
+  if (state.workspaceMode === "explore") {
+    elements.compatibilityText.textContent = status.status === "loading" ? "地图加载中…"
+      : status.status === "error" ? "地图加载失败" : "地图浏览";
+  }
 
   const desiredSelectValue = isOverview ? "all" : String(state.selectedSegment);
   if (elements.layerSelect.value !== desiredSelectValue) elements.layerSelect.value = desiredSelectValue;
@@ -966,6 +970,10 @@ async function openHomeChapter(map, segment, presentedView, intent = null) {
   // never flash while entering a map and early layer choices are retained.
   syncWorkspaceState();
   dismissGate();
+  // Re-entering the same chapter is a fresh homepage navigation. Its data
+  // signature may be cached, but its old panned/free camera is not the default.
+  viewer?.resize();
+  viewer?.fitView();
   await renderData();
   if (revision !== state.traceSelectionRevision) return;
   if (previous !== map) previous?.disposeAssets?.();

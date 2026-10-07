@@ -75,7 +75,7 @@ function fixture({ liveVisible = true } = {}) {
     live: { es: null, code: null, trace: null, timer: 0, demoTimer: 0, pollTimer: 0, dirty: false, lastSeq: 0, reconnectAttempts: 0 },
   };
   const elements = Object.fromEntries(["appShell", "liveStateRow", "eventToast", "modeReplay", "modeLive", "replaySource", "liveSource", "modeChip", "liveUrl", "layerSelect"].map((key) => [key, node()]));
-  const calls = { renders: [], assets: [], urls: [], clearedIntervals: [], errors: [], loading: [], statuses: [], compatibility: [], archive: 0, dismissed: 0, daily: 0, liveRefreshes: 0, attached: 0 };
+  const calls = { renders: [], camera: [], assets: [], urls: [], clearedIntervals: [], errors: [], loading: [], statuses: [], compatibility: [], archive: 0, dismissed: 0, daily: 0, liveRefreshes: 0, attached: 0 };
   const streams = [];
   class FakeEventSource {
     static CLOSED = 2;
@@ -86,6 +86,7 @@ function fixture({ liveVisible = true } = {}) {
   let api;
   const ports = {
     FEATURES: { liveVisible },
+    viewer: { resize: () => calls.camera.push("resize"), fitView: () => calls.camera.push("fit") },
     state, elements, $: (id) => elements[id], document: { createElement: node }, URL, EventSource: FakeEventSource,
     buildHomeDailyView: (input) => buildHomeDailyView({ ...input, now }),
     assessCompatibility, selectTraceMapPack, ProtocolError,
@@ -122,6 +123,14 @@ function fixture({ liveVisible = true } = {}) {
   const view = (map = today) => buildHomeDailyView({ daily: state.daily, catalog, mapPack: map, now });
   return { api, state, elements, calls, streams, today, archivedMap, trace, archive, view };
 }
+
+test("re-entering the same home chapter restores a default camera even when its map data is cached", async () => {
+  const f = fixture();
+  await f.api.openHomeChapter(f.today, 0, f.view());
+  await f.api.openHomeChapter(f.today, 0, f.view());
+  assert.deepEqual(f.calls.camera, ["resize", "fit", "resize", "fit"]);
+  assert.equal(f.state.selectedSegment, 0);
+});
 
 test("hidden live mode does not enter a live workspace, poll the relay, or create an SSE connection", async () => {
   const f = fixture({ liveVisible: FEATURES.liveVisible });

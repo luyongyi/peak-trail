@@ -320,6 +320,8 @@ test("delayed interior geometry cannot override a camera mode the user chose whi
 
 test("uninterrupted interior chapter load requests automatic placement without stealing focus", async () => {
   const { scene, requests } = fixture();
+  scene.trace = { manifest: { sampleHz: 5 }, participants: [], tracks: new Map(), events: [] };
+  scene.buildTracks = () => {};
   scene.mapPack.layers[1].name = "Temple_Segment";
   const placements = [];
   scene.enterInteriorView = (focus) => placements.push(focus);
