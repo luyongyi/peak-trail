@@ -21,13 +21,23 @@ const schemaDirectory = resolve(platformDirectory, "schema");
 const bundledHomeArtDirectory = resolve(dataDirectory, "home-art");
 const outputDirectory = resolve(platformDirectory, "site-dist");
 const { gameAssetsDirectory, mapPacksDirectory, mapEnclosuresDirectory, homeArtDirectory } = localAssetPaths;
+
+// Keep bookmarked URLs recoverable without publishing the retired recorder
+// tutorial or standalone collector. Neither page loads old scripts or uploads.
+const retiredEntryPage = `<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>旧足迹入口暂时下线 · PEAK 回忆录</title>
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0d1917;color:#edf5ee;font:16px/1.8 system-ui}main{max-width:32rem;padding:2rem}h1{font-size:1.5rem}a{color:#9cdbc1}</style></head>
+<body><main><h1>旧足迹入口暂时下线</h1><p>现在使用回忆录 Mod 录制与回放。在首页进入地图后，可查看回忆录上传的路线与热力图。</p>
+<a href="./">返回首页</a></main></body></html>\n`;
+
 export async function stageSite({ preview = false, argv = process.argv.slice(2), env = process.env } = {}) {
 const profile = await readSiteStagingProfile(resolve(toolDirectory, "site-build-profile.json"), argv, { preview });
 // Verify the one selected DLL before replacing a previously staged site.
 const downloadOptions = siteReleaseOptions(argv, env);
 const downloadRelease = await readSiteRelease(dataDirectory, downloadOptions.product);
 const downloadBytes = await loadSiteArtifact(downloadRelease, { ...downloadOptions, preview });
-checkSiteDownloadReferences(await Promise.all(["index.html", "guide.html"].map(name => readFile(resolve(webDirectory, name), "utf8"))), downloadRelease);
+checkSiteDownloadReferences([await readFile(resolve(webDirectory, "index.html"), "utf8"), retiredEntryPage], downloadRelease);
 // Only allowlisted illustrations are public; never copy a local folder wholesale.
 const homeArtSources = new Map();
 for (const file of HOME_ART_FILES) {
@@ -122,8 +132,8 @@ await writeFile(resolve(outputDirectory, downloadRelease.downloadPath), download
 await writeFile(resolve(outputDirectory, "data", downloadOptions.product, "release.json"), JSON.stringify(downloadRelease, null, 2) + "\n");
 await Promise.all([
   cp(resolve(webDirectory, "index.html"), resolve(outputDirectory, "index.html")),
-  cp(resolve(webDirectory, "guide.html"), resolve(outputDirectory, "guide.html")),
-  cp(resolve(webDirectory, "routes.html"), resolve(outputDirectory, "routes.html")),
+  writeFile(resolve(outputDirectory, "guide.html"), retiredEntryPage),
+  writeFile(resolve(outputDirectory, "routes.html"), retiredEntryPage),
   cp(resolve(webDirectory, "styles.css"), resolve(outputDirectory, "styles.css")),
   cp(resolve(webDirectory, "home.css"), resolve(outputDirectory, "home.css")),
   cp(resolve(webDirectory, "src"), resolve(outputDirectory, "src"), { recursive: true }),

@@ -9,14 +9,14 @@ const release = JSON.parse(await readFile(new URL("../../data/memories/release.j
 const download = `./${release.downloadPath}`;
 const guide = guideHtml.match(/<section class="home-guide"[\s\S]*?<\/section>/)[0];
 
-test("the homepage and guide download the memories DLL advertised by the exact manifest", () => {
+test("the homepage downloads the advertised memories DLL without a retired guide entry", () => {
   assert.equal(release.product, "peak-memories");
   assert.match(release.version, /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/);
   assert.equal(release.filename, "PeakReplayLab.dll");
   assert.equal(release.downloadPath, `downloads/memories/${release.version}/PeakReplayLab.dll`);
   const nav = html.match(/<nav class="home-actions"[\s\S]*?<\/nav>/)[0];
   assert.ok(nav.includes(`href="${download}"`));
-  assert.ok(nav.includes('href="./guide.html"'));
+  assert.doesNotMatch(nav, /href="\.\/guide\.html"|安装教程/);
   assert.doesNotMatch(html, /<section class="home-guide"|id="homeGuide"/);
   assert.ok(guideHtml.includes('href="./"'));
   assert.ok(guide.includes(`href="${download}"`));
@@ -95,7 +95,7 @@ test("manual sharing explains the lightweight review step and the map's initiall
   assert.doesNotMatch(guide, /\[Live\]|ServerUrl|现场观测|实时观看|开启直播|稳定玩家 ID/);
 });
 
-test("repository and release-list links identify the new mod while old log import stays available", () => {
+test("archived guide links identify memories; the public homepage hides old log intake", () => {
   const source = guideHtml.match(/<section class="home-source"[\s\S]*?<\/section>/)[0];
   assert.doesNotMatch(html, /<section class="home-source"|id="homeSource"/);
   assert.ok(source.includes(`href="${release.repositoryUrl}"`));
@@ -103,12 +103,14 @@ test("repository and release-list links identify the new mod while old log impor
   assert.ok(source.includes(`href="${release.repositoryUrl}/releases"`));
   assert.equal((source.match(/target="_blank" rel="noopener noreferrer"/g) || []).length, 3);
   assert.doesNotMatch(source, /对应源码|recorder-v|开源协议|MIT|随意使用/);
-  assert.match(html, /id="gateReplay"[\s\S]*?导入旧日志/);
+  assert.match(html, /id="gateReplay"[^>]*\bhidden\b[^>]*\bdisabled\b/);
+  assert.match(css, /\.home-replay\[hidden\][^{]*\{\s*display:\s*none;/);
   assert.match(guide, /旧足迹 Mod 的日志可继续从首页「导入旧日志」打开/);
   assert.match(guide, /新回忆录录像在游戏里观看，两种文件格式不同/);
   assert.match(html, /id="gateLive"[^>]*\bhidden/);
   assert.doesNotMatch(html, /href="\.\/routes\.html"/);
   assert.match(html, /id="communityToggle"[^>]*aria-expanded="false"/);
+  assert.doesNotMatch(html, /本地导入不上传/);
 });
 
 test("phone guide paths, source links and five-card maps retain wrapping and accessible links", () => {

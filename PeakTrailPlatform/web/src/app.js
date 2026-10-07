@@ -599,7 +599,7 @@ async function initializeViewer() {
     window.__ptState = state; // debug/QA hook: playback/live diagnostics
     await renderData();
   } catch (error) {
-    showError("2.5D 视图未能启动", `足迹仍可导入并查看事件、物品和体力。请检查网络与浏览器的 WebGL 支持后刷新。${error.message}`, 0);
+    showError("地图视图未能启动", `请检查网络与浏览器的 WebGL 支持后刷新。${error.message}`, 0);
   }
 }
 
@@ -642,6 +642,7 @@ function setSourceLoading(kind, loading) {
 }
 
 async function importMap(files) {
+  if (!FEATURES.legacyReplayVisible) return;
   const requestRevision = ++state.mapRequestRevision;
   state.manualMapLoads += 1;
   setSourceLoading("map", true);
@@ -671,6 +672,7 @@ async function importMap(files) {
 }
 
 async function importTrace(files) {
+  if (!FEATURES.legacyReplayVisible) return;
   if (!files || (files instanceof FileBundle ? !files.files.length : !files.length)) {
     showError("所选目录没有可读取的文件", "请选择 PeakTrailRecordings 总目录，或直接导入其中的 PeakTrailHistory.ndjson。");
     return;
@@ -716,9 +718,9 @@ function setSourceMode(mode) {
   elements.modeLive?.classList.toggle("is-active", live);
   elements.modeReplay?.setAttribute("aria-selected", String(!live));
   elements.modeLive?.setAttribute("aria-selected", String(live));
-  elements.replaySource.hidden = live;
+  elements.replaySource.hidden = live || !FEATURES.legacyReplayVisible;
   elements.liveSource.hidden = !live;
-  elements.modeChip.textContent = live ? "直播" : "回放";
+  elements.modeChip.textContent = live ? "直播" : FEATURES.legacyReplayVisible ? "回放" : "地图";
   if (live) {
     if (!elements.liveUrl.value) elements.liveUrl.value = defaultRelayUrl();
     void refreshLiveRuns();
@@ -887,6 +889,7 @@ function enterLive(code) {
 
 async function enterModeFromGate(mode) {
   if (mode === "live" && !FEATURES.liveVisible) return;
+  if (mode === "replay" && !FEATURES.legacyReplayVisible) return;
   state.workspaceMode = mode;
   syncWorkspaceState();
   dismissGate();
@@ -1426,6 +1429,7 @@ function populateSessionSelect(preferredSessionId = null) {
 }
 
 async function selectTraceSession(sessionId, showMismatch = true) {
+  if (!FEATURES.legacyReplayVisible) return;
   const trace = state.traceCollection?.sessions.find(
     (candidate) => candidate.manifest.sessionId === sessionId,
   );
@@ -1462,6 +1466,7 @@ async function selectTraceSession(sessionId, showMismatch = true) {
 }
 
 async function importMixed(files) {
+  if (!FEATURES.legacyReplayVisible) return;
   const list = Array.from(files || []);
   if (!list.length) return;
   const names = list.map((file) => file.name.toLowerCase());
@@ -2369,7 +2374,9 @@ elements.liveDisconnect.addEventListener("click", () => disconnectLive());
 elements.mapInput.addEventListener("change", () => importMap(elements.mapInput.files));
 elements.traceInput.addEventListener("change", () => importTrace(elements.traceInput.files));
 elements.traceFolderInput.addEventListener("change", () => importTrace(elements.traceFolderInput.files));
-elements.traceSourceButton.addEventListener("click", () => elements.traceInput.click());
+elements.traceSourceButton.addEventListener("click", () => {
+  if (FEATURES.legacyReplayVisible) elements.traceInput.click();
+});
 elements.dateSelect.addEventListener("change", async () => {
   populateSessionSelect();
   try {
@@ -2487,6 +2494,7 @@ let dragDepth = 0;
 window.addEventListener("dragenter", (event) => {
   if (!event.dataTransfer?.types.includes("Files")) return;
   event.preventDefault();
+  if (!FEATURES.legacyReplayVisible) return;
   dragDepth += 1;
   elements.dropOverlay.classList.add("is-visible");
 });
@@ -2502,6 +2510,7 @@ window.addEventListener("drop", async (event) => {
   event.preventDefault();
   dragDepth = 0;
   elements.dropOverlay.classList.remove("is-visible");
+  if (!FEATURES.legacyReplayVisible) return;
   try {
     const files = await collectDroppedFiles(event.dataTransfer);
     if (!files.length) {
@@ -2526,6 +2535,7 @@ window.addEventListener("beforeunload", () => {
 });
 
 async function bootstrapMapFromQuery() {
+  if (!FEATURES.legacyReplayVisible) return;
   const mapPackUrl = new URLSearchParams(window.location.search).get("mapPack");
   if (!mapPackUrl) return;
   setSourceLoading("map", true);
@@ -2553,6 +2563,16 @@ async function bootstrapMapFromQuery() {
 async function bootstrap() {
   elements.gateLive.hidden = !FEATURES.liveVisible;
   elements.modeLive.hidden = !FEATURES.liveVisible;
+  elements.gateReplay.hidden = !FEATURES.legacyReplayVisible;
+  elements.gateReplay.disabled = !FEATURES.legacyReplayVisible;
+  elements.modeReplay.hidden = !FEATURES.legacyReplayVisible;
+  elements.replaySource.hidden = !FEATURES.legacyReplayVisible;
+  elements.importMenu.hidden = !FEATURES.legacyReplayVisible;
+  $("replayEmptyState").hidden = !FEATURES.legacyReplayVisible;
+  for (const input of [elements.mapInput, elements.traceInput, elements.traceFolderInput]) {
+    input.hidden = !FEATURES.legacyReplayVisible;
+    input.disabled = !FEATURES.legacyReplayVisible;
+  }
   elements.gateDebug.closest("details").hidden = !FEATURES.liveVisible;
   showGate();
   updateCompatibilityUI();

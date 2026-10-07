@@ -51,7 +51,9 @@ Do not copy `local/` wholesale. In particular, recordings, archives, logs, game
 installations, private keys, and `.env` files must never enter the public assets.
 The existing validation/staging scripts use `PEAK_TRAIL_ASSET_ROOT` to read the
 separately provisioned assets; missing or mismatched assets fail before publishing.
-The static site does not offer any upload API. Browser log import remains local.
+The static site itself does not offer any upload API. Old browser log import and
+recorder tutorial entries are retired; bookmarked `guide.html` and `routes.html`
+URLs publish a simple return-home notice without legacy scripts or downloads.
 
 Historical memoir uploads use the new Node `/api/route-uploads` API described in
 `server/trajectory-README.md`; the static file server itself still accepts no uploads.
@@ -171,13 +173,15 @@ directory `/var/www/peak-trail-acme`. Install the HTTPS config only after issuin
 the certificate; validate Nginx before reload and keep a rollback copy. A Certbot
 deploy hook must validate/reload Nginx when this certificate renews.
 
-`peak-trail-live.service` runs the relay as the separate, non-login `peaklive`
+`peak-trail-live.service` runs the memoir service as the separate, non-login `peaklive`
 account. Install the root-owned `live-start.sh` under `/srv/peak-trail`; it resolves
 the current release before launching Node from `/opt/peak-trail/node/bin/node`.
-There are no external npm dependencies. No `--dir` is supplied: incoming live
-records are held in relay memory, not written as recording files on the server.
+There are no external npm dependencies. Existing service and health identifiers
+stay unchanged. The launcher does not supply `--legacy-live`: old `/api/runs`
+and every subpath, plus `/watch`, return 410 without accepting records. `--dir`
+has no effect unless the old relay is explicitly restored; old storage is retained.
 
-The browser now hides live tracking and its polling by default. Community routes
+The browser disables the old footprint, import and live tracking entries. Community routes
 and heatmaps are selected inside the existing **进入地图** view through **线路图层**.
 Its manually uploaded historical trajectories use a separate private
 `--routes-dir`, not the live relay's recording option or the static site tree.
@@ -187,10 +191,9 @@ path and the updated launcher is required before enabling this API; follow
 until moderation. Unmatched builds or native branches never overlay old map
 geometry; there is no standalone route-collection page to publish.
 
-The owner explicitly chose the original four-character room flow without added
-login/password. `/api/` and `/watch/` are reverse proxied over HTTPS, including
-unbuffered SSE; the process listens only on `127.0.0.1:8787`. A room code is **not**
-strong access control, and live endpoints contain participant identifiers and
-positions. Do not describe this mode as private/authenticated or enable relay
-disk persistence without a separate decision. Personal local import files and
-historical recording archives are never part of deployment.
+`/api/` and `/watch/` remain reverse proxied over HTTPS; the process listens only
+on `127.0.0.1:8787`. Backend defaults retire the old relay without requiring an
+Nginx, systemd or permission change. A future explicit `--legacy-live` restoration
+would expose the original unauthenticated four-character room flow and requires
+a separate decision. Personal local import files and historical recording
+archives are never part of deployment.

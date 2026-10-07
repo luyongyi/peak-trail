@@ -1,4 +1,5 @@
-// PeakTrail live relay v1 — zero-dependency Node server for real-time run sharing.
+// PeakTrail memoir service. The historical live relay is retained behind an
+// explicit opt-in; public deployments serve memoir uploads/routes by default.
 //
 // Contract (v1, intentionally minimal):
 //   - The recorder derives a 4-character code from the room-shared RunId
@@ -46,8 +47,9 @@ function htmlEscape(value) {
 }
 
 export function createLiveServer(options = {}) {
+  const legacyLiveEnabled = options.legacyLiveEnabled === true;
   const trajectories = createTrajectoryApi({ root: options.trajectoryDir, catalogPath: options.catalogPath, trustedProxy: options.trustedProxy });
-  const persistenceDir = options.persistenceDir ? resolve(options.persistenceDir) : null;
+  const persistenceDir = legacyLiveEnabled && options.persistenceDir ? resolve(options.persistenceDir) : null;
   if (persistenceDir) mkdirSync(persistenceDir, { recursive: true });
   const dailyResolver = options.dailyResolver ?? resolveDaily;
   const dailyNow = options.dailyNow ?? Date.now;
@@ -75,8 +77,8 @@ export function createLiveServer(options = {}) {
       }
     }
   }
-  const sweeper = setInterval(sweepRuns, 10_000);
-  sweeper.unref?.();
+  const sweeper = legacyLiveEnabled ? setInterval(sweepRuns, 10_000) : null;
+  sweeper?.unref?.();
 
   function registerRun(body) {
     const runId = normalizeRunId(body?.runId);
@@ -365,6 +367,13 @@ export function createLiveServer(options = {}) {
       else res.end();
     };
 
+    // Reject all old entry points before accepting preflight or reading bodies.
+    // Memoir APIs above, daily rotation and health remain independent of this flag.
+    if (!legacyLiveEnabled && (path === "/api/runs" || path.startsWith("/api/runs/")
+        || path === "/watch" || path.startsWith("/watch/"))) {
+      return json(410, { error: "legacy-live-disabled", message: "旧足迹直播暂时下线，请使用回忆录 Mod 上传轨迹。" });
+    }
+
     if (method === "OPTIONS") {
       res.writeHead(204, {
         "access-control-allow-origin": "*",
@@ -439,7 +448,7 @@ export function createLiveServer(options = {}) {
 
     if (method === "GET" && path === "/") {
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      res.end(statusPage());
+      res.end(legacyLiveEnabled ? statusPage() : memoirStatusPage());
       return;
     }
     const watchMatch = path.match(/^\/watch\/([a-z0-9]{4})$/);
@@ -450,6 +459,13 @@ export function createLiveServer(options = {}) {
     }
 
     json(404, { error: "not-found" });
+  }
+
+  function memoirStatusPage() {
+    return `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PEAK 回忆录服务</title><h1>PEAK 回忆录服务</h1>
+<p>支持回忆录 Mod 的轨迹上传、路线与热力图。旧足迹直播暂时下线。</p>
+<p><a href="https://peak.mylus.cn/">返回地图首页</a></p></html>`;
   }
 
   function statusPage() {
@@ -530,6 +546,7 @@ function upsert(playerId, player) {
       } else res.end();
     });
   });
+  server.once("close", () => { if (sweeper) clearInterval(sweeper); });
   server.once("close", trajectories.close);
   return { server, runs, codeByRunId, startDailyPrewarm };
 }
@@ -543,11 +560,12 @@ export function startCli(argv = process.argv.slice(2)) {
   const host = flag("host", "127.0.0.1");
   const dir = flag("dir", null);
   const trajectoryDir = flag("routes-dir", process.env.PEAK_TRAJECTORY_DIR ?? null);
-  const { server, startDailyPrewarm } = createLiveServer({ persistenceDir: dir, trajectoryDir, trustedProxy: argv.includes("--trusted-proxy") });
+  const legacyLiveEnabled = argv.includes("--legacy-live");
+  const { server, startDailyPrewarm } = createLiveServer({ persistenceDir: dir, trajectoryDir, legacyLiveEnabled, trustedProxy: argv.includes("--trusted-proxy") });
   startDailyPrewarm();
   server.listen(port, host, () => {
-    console.log(`PeakTrail live relay on http://${host}:${port}/ (code-confirmed runs, multi-producer dedupe)`);
-    if (host !== "127.0.0.1") {
+    console.log(`PeakTrail memoir service on http://${host}:${port}/ (legacy live ${legacyLiveEnabled ? "enabled" : "disabled"})`);
+    if (legacyLiveEnabled && host !== "127.0.0.1") {
       console.log("WARNING: bound beyond loopback — anyone who guesses the 4-character code can read live positions. Put access control in front (reverse proxy) until token auth lands.");
     }
   });

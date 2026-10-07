@@ -14,7 +14,7 @@
 .home-nav-link:hover { color: #f0e2b3; }
 .home-nav-link span { color: #c3b787; }
 .home-live { display: flex; align-items: center; gap: 9px; color: #b3c0b7; background: transparent; border: 0; padding: 10px 0; }
-.home-live[hidden], .home-footer details[hidden] { display: none; }
+.home-live[hidden], .home-replay[hidden], .home-footer details[hidden] { display: none; }
 .home-live i { width: 5px; height: 5px; border-radius: 50%; background: #829289; }
 .home-live.has-runs i { background: #bdd88a; box-shadow: 0 0 10px #bdd88a55; }
 .home-live-count { font-size: 10px; color: #798b81; font-variant-numeric: tabular-nums; }

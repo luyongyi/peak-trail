@@ -47,7 +47,7 @@ function node() {
     replaceChildren() { this.children = []; }, append(child) { this.children.push(child); },
   };
 }
-function fixture({ liveVisible = true } = {}) {
+function fixture({ liveVisible = true, legacyReplayVisible = true } = {}) {
   const today = makeMap();
   // A historical game build with the SAME slot must not be laid on today's map.
   const archivedMap = makeMap(archiveId, "24000000");
@@ -85,7 +85,7 @@ function fixture({ liveVisible = true } = {}) {
   }
   let api;
   const ports = {
-    FEATURES: { liveVisible },
+    FEATURES: { liveVisible, legacyReplayVisible },
     viewer: { resize: () => calls.camera.push("resize"), fitView: () => calls.camera.push("fit") },
     state, elements, $: (id) => elements[id], document: { createElement: node }, URL, EventSource: FakeEventSource,
     buildHomeDailyView: (input) => buildHomeDailyView({ ...input, now }),
@@ -143,6 +143,54 @@ test("hidden live mode does not enter a live workspace, poll the relay, or creat
   assert.equal(f.calls.liveRefreshes, 0);
   assert.equal(f.state.live.pollTimer, 0);
   assert.equal(f.streams.length, 0);
+});
+
+test("disabled legacy replay cannot restore an archive, while home map navigation still works", async () => {
+  const f = fixture(FEATURES);
+  f.state.workspaceMode = "home";
+  const revision = f.state.traceSelectionRevision;
+  await f.api.enterModeFromGate("replay");
+  await f.api.selectTraceSession(f.trace.manifest.sessionId);
+  assert.equal(f.state.workspaceMode, "home");
+  assert.equal(f.state.traceSelectionRevision, revision);
+  assert.equal(f.calls.renders.length, 0);
+  assert.equal(f.calls.dismissed, 0);
+  await f.api.openHomeChapter(f.today, 2, f.view());
+  assert.equal(f.state.workspaceMode, "explore");
+  assert.equal(f.state.mapPack, f.today);
+  assert.equal(f.state.selectedSegment, 2);
+  assert.equal(f.elements.replaySource.hidden, true);
+  assert.equal(f.elements.modeChip.textContent, "地图");
+});
+
+test("disabled legacy file and query entry points return before reading local files or fetching", async () => {
+  const names = ["importMap", "importTrace", "importMixed", "bootstrapMapFromQuery"];
+  const unexpected = () => { throw new Error("disabled intake must not read files or URLs"); };
+  const api = new Function("FEATURES", "window", "loadMapPackBundle", "loadTraceCollection", "loadMapPackUrl",
+    `${names.map(appFunction).join("\n")}\nreturn {${names.join(",")}};`)(FEATURES,
+      new Proxy({}, { get: unexpected }), unexpected, unexpected, unexpected);
+  const files = new Proxy({}, { get: unexpected });
+  await api.importMap(files);
+  await api.importTrace(files);
+  await api.importMixed(files);
+  await api.bootstrapMapFromQuery();
+});
+
+test("disabled legacy drop intake prevents browser file navigation without traversing directories", async () => {
+  const drop = source.match(/^window\.addEventListener\("drop", async \(event\) => \{[^]*?^\}\);/m);
+  assert.ok(drop);
+  let handler, prevented = 0, reads = 0;
+  const ports = {
+    FEATURES, window: { addEventListener: (_, callback) => { handler = callback; } },
+    elements: { dropOverlay: { classList: { remove() {} } } },
+    collectDroppedFiles: () => { reads++; throw new Error("unexpected directory traversal"); },
+    importMixed: () => { throw new Error("unexpected legacy import"); },
+    showError: () => { throw new Error("unexpected error UI"); },
+  };
+  new Function(...Object.keys(ports), `let dragDepth = 1;\n${drop[0]}`)(...Object.values(ports));
+  await handler({ preventDefault: () => { prevented++; }, dataTransfer: {} });
+  assert.equal(prevented, 1);
+  assert.equal(reads, 0);
 });
 
 test("all live IO entry points return before network or timer work with the default feature setting", async () => {

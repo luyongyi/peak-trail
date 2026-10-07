@@ -11,6 +11,7 @@ function route(points, breaks = []) { return normalizeRoutes({ routes: [{ id: "o
 
 test("live is hidden and cannot poll by default; explicitly reenabled mode retains the gate rule", () => {
   assert.equal(FEATURES.liveVisible, false);
+  assert.equal(FEATURES.legacyReplayVisible, false);
   assert.equal(shouldPollLive({ pageOpen: true }), false);
   assert.equal(shouldPollLive({ visible: true, pageOpen: false }), false);
   assert.equal(shouldPollLive({ visible: true, pageOpen: true }), true);
@@ -20,6 +21,13 @@ test("live and demo controls remain hidden while community layers belong to the 
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   assert.match(html, /id="gateLive"[^>]*\bhidden/);
   assert.match(html, /id="modeLive"[^>]*\bhidden/);
+  assert.match(html, /id="gateReplay"[^>]*\bhidden\b[^>]*\bdisabled\b/);
+  for (const id of ["mapInput", "traceInput", "traceFolderInput"]) {
+    const input = html.match(new RegExp(`<input\\s[^>]*id="${id}"[^>]*>`))[0];
+    assert.match(input, /\bhidden\b/);
+    assert.match(input, /\bdisabled\b/);
+  }
+  assert.match(html, /id="importMenu"[^>]*\bhidden/);
   assert.match(html, /<details hidden><summary>开发工具/);
   assert.doesNotMatch(html, /href="\.\/routes\.html"/);
   assert.match(html, /id="communityMode"/);

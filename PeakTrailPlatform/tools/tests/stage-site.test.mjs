@@ -65,8 +65,8 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
     copyFile(resolve(platformSource, "web", "src", "map-peak.js"), resolve(platform, "web", "src", "map-peak.js")),
     copyFile(resolve(platformSource, "web", "src", "home-art.js"), resolve(platform, "web", "src", "home-art.js")),
     writeFile(resolve(platform, "web", "index.html"), '<!doctype html><a href="./downloads/recorder/0.7.1/PeakTrailRecorder.dll" download>Download</a>'),
-    writeFile(resolve(platform, "web", "guide.html"), "<!doctype html><title>Install guide</title>"),
-    writeFile(resolve(platform, "web", "routes.html"), "<!doctype html><title>Map redirect</title>"),
+    writeFile(resolve(platform, "web", "guide.html"), '<!doctype html><title>Legacy install guide</title><a href="downloads/recorder/old/PeakTrailRecorder.dll">Old recorder</a>'),
+    writeFile(resolve(platform, "web", "routes.html"), '<!doctype html><title>Legacy routes</title><script>oldCollector()</script>'),
     writeFile(resolve(platform, "web", "styles.css"), "body{}"),
     writeFile(resolve(platform, "web", "home.css"), ".home-page{}"),
     writeFile(resolve(platform, "web", "src", "app.js"), "export {};"),
@@ -218,7 +218,13 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
   const options = { env: { ...process.env, PEAK_TRAIL_ASSET_ROOT: assets, PEAK_TRAIL_DOWNLOAD_PRODUCT: "recorder", PEAK_TRAIL_RECORDER_DLL: recorderPath } };
   await execFileAsync(process.execPath, [resolve(tools, "stage-site.mjs")], options);
   const staged = resolve(platform, "site-dist");
-  assert.equal(await readFile(resolve(staged, "guide.html"), "utf8"), "<!doctype html><title>Install guide</title>");
+  for (const name of ["guide.html", "routes.html"]) {
+    const page = await readFile(resolve(staged, name), "utf8");
+    assert.match(page, /旧足迹入口暂时下线/);
+    assert.match(page, /<a href="\.\/">返回首页<\/a>/);
+    assert.match(page, /回忆录 Mod/);
+    assert.doesNotMatch(page, /<script|<form|PeakTrailRecorder|oldCollector|Legacy install guide|Legacy routes/);
+  }
   assert.deepEqual(await readFile(resolve(staged, recorderRelease.downloadPath)), recorderBytes);
   assert.deepEqual(JSON.parse(await readFile(resolve(staged, "data", "recorder", "release.json"), "utf8")), recorderRelease);
   assert.deepEqual(await readdir(resolve(staged, "downloads", "recorder", "0.7.1")), ["PeakTrailRecorder.dll"]);

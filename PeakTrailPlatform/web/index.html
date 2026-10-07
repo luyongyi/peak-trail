@@ -32,11 +32,10 @@
         </div>
         <nav class="home-actions" aria-label="回忆录与地图工具">
           <a class="home-nav-link" href="./downloads/memories/0.8.1/PeakReplayLab.dll" download="PeakReplayLab.dll" aria-label="下载回忆录 Mod 0.8.1 已发布实验版">下载回忆录 Mod <span aria-hidden="true">↓</span></a>
-          <a class="home-nav-link" href="./guide.html">安装教程</a>
           <button class="home-live is-empty" id="gateLive" type="button" aria-controls="gateLiveList" aria-expanded="false" hidden>
             <i aria-hidden="true"></i><span>现场观测</span><span class="home-live-count" id="homeLiveCount">—</span>
           </button>
-          <button class="home-replay" id="gateReplay" type="button">
+          <button class="home-replay" id="gateReplay" type="button" hidden disabled>
             导入旧日志<span aria-hidden="true">↗</span>
           </button>
         </nav>
@@ -125,7 +124,7 @@
             </div>
           </section>
         </section>
-        <footer class="home-footer"><span>非官方粉丝工具 · 与 Landfall / Aggro Crab 无关联</span><details hidden><summary>开发工具</summary><button class="gate-debug" id="gateDebug" type="button">演示直播（非真实对局）</button></details><span>本地导入不上传 · 回忆录可主动上传精简轨迹</span></footer>
+        <footer class="home-footer"><span>非官方粉丝工具 · 与 Landfall / Aggro Crab 无关联</span><details hidden><summary>开发工具</summary><button class="gate-debug" id="gateDebug" type="button">演示直播（非真实对局）</button></details><span>回忆录可主动上传精简轨迹</span></footer>
       </div>
     </div>
 
@@ -140,7 +139,7 @@
           </span>
           <span>
             <strong>PEAK TRAIL</strong>
-            <small id="modeChip">回放</small>
+            <small id="modeChip">地图</small>
           </span>
         </a>
 
@@ -153,19 +152,21 @@
           <input
             id="mapInput"
             class="visually-hidden"
+            hidden disabled
             type="file"
             multiple
             accept=".json,.png,.f32,.raw,application/json,image/png,application/octet-stream"
           />
-          <input id="traceFolderInput" class="visually-hidden" type="file" multiple webkitdirectory directory />
+          <input id="traceFolderInput" class="visually-hidden" type="file" multiple webkitdirectory directory hidden disabled />
           <input
             id="traceInput"
             class="visually-hidden"
+            hidden disabled
             type="file"
             multiple
             accept=".json,.ndjson,.partial,application/json,application/x-ndjson"
           />
-          <details class="import-menu" id="importMenu">
+          <details class="import-menu" id="importMenu" hidden>
             <summary class="button button-secondary">换记录 ▾</summary>
             <div class="import-menu-pop">
               <label for="traceFolderInput">足迹总目录</label>
@@ -177,7 +178,7 @@
         </div>
       </header>
 
-      <section class="replay-empty-state" id="replayEmptyState" aria-labelledby="replayEmptyTitle">
+      <section class="replay-empty-state" id="replayEmptyState" aria-labelledby="replayEmptyTitle" hidden>
         <div class="empty-glyph" aria-hidden="true"><span></span><span></span><span></span></div>
         <p class="eyebrow">我的足迹</p>
         <h1 id="replayEmptyTitle">导入足迹，开始回放</h1>
@@ -189,7 +190,7 @@
       </section>
 
       <main class="workspace">
-        <section class="viewport-panel" aria-label="地图浏览与足迹回放视图">
+        <section class="viewport-panel" aria-label="地图浏览与玩家路线视图">
           <canvas id="sceneCanvas"></canvas>
 
           <div class="viewport-fade" aria-hidden="true"></div>
@@ -198,7 +199,7 @@
             <div class="viewport-statuses">
               <div class="compatibility-pill is-neutral" id="compatibilityPill">
                 <span class="status-dot"></span>
-                <span id="compatibilityText">等待地图与足迹</span>
+                <span id="compatibilityText">等待地图</span>
               </div>
               <span class="analysis-overlay-note"><i class="trail-key-visible"></i>可见轨迹 <i class="trail-key-occluded"></i>遮挡轨迹 · 淡色透视</span>
             </div>
@@ -308,7 +309,7 @@
           </div>
         </section>
 
-        <aside class="inspector" aria-label="地图线路与回放筛选">
+        <aside class="inspector" aria-label="地图路线与热力筛选">
           <section class="inspector-section community-section" id="communityPanel" aria-label="大家的路线与热力设置" hidden>
             <div class="section-heading compact"><div><span class="eyebrow">走过这张地图的人</span><h2>大家的路线</h2></div><button type="button" class="community-refresh" id="communityRefresh">刷新</button></div>
             <label class="community-layer-control" id="communityLayerControl" hidden>
@@ -342,11 +343,11 @@
             </div>
 
             <div class="source-tabs" role="tablist" aria-label="数据源类型">
-              <button id="modeReplay" class="source-tab is-active" type="button" role="tab" aria-selected="true">回放</button>
+              <button id="modeReplay" class="source-tab is-active" type="button" role="tab" aria-selected="true" hidden>回放</button>
               <button id="modeLive" class="source-tab" type="button" role="tab" aria-selected="false" hidden>直播</button>
             </div>
 
-            <div id="replaySource">
+            <div id="replaySource" hidden>
               <div class="source-list">
                 <button class="source-row" id="traceSourceButton" type="button">
                   <span class="source-icon trace-icon" aria-hidden="true">

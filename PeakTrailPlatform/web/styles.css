@@ -2979,6 +2979,7 @@ body.gate-open .app-shell { visibility: hidden; }
    then use the map. A daily map on the home page must not expose an empty
    replay workspace. */
 .replay-empty-state { display: none; }
+#replayEmptyState[hidden], #importMenu[hidden], #replaySource[hidden] { display: none !important; }
 .app-shell[data-replay-state="empty"] {
   grid-template-rows: 56px minmax(0, 1fr);
 }

@@ -7,16 +7,16 @@
     notice.hidden = false;
   };
   if (window.location.protocol === "file:") {
-    show("当前页面直接从文件打开，浏览器无法启动足迹解析。请双击 PeakTrailPlatform 文件夹中的 Start-Viewer.cmd，再在自动打开的网页中选择足迹目录。");
+    show("当前页面直接从文件打开，地图与路线无法加载。请通过网站地址打开页面。");
     document.querySelectorAll('input[type="file"], #traceSourceButton').forEach((input) => {
       input.disabled = true;
     });
-    document.getElementById("dailyScene").textContent = "请启动查看器";
+    document.getElementById("dailyScene").textContent = "请通过网站访问";
     return;
   }
   let ready = false;
   const timer = setTimeout(() => {
-    if (!ready) show("页面尚未启动完成，足迹解析还不可用。请刷新页面；本地使用请双击 Start-Viewer.cmd 启动。");
+    if (!ready) show("地图与路线页面尚未加载完成，请检查网络后刷新页面。");
   }, 12000);
   window.addEventListener("peaktrail-ready", () => {
     ready = true;
@@ -25,6 +25,6 @@
   }, { once: true });
   document.getElementById("applicationScript").addEventListener("error", () => {
     clearTimeout(timer);
-    show("足迹查看器加载失败。请刷新页面；本地使用请双击 Start-Viewer.cmd，避免直接打开 index.html。");
+    show("地图与路线页面加载失败，请检查网络后刷新页面。");
   });
 })();

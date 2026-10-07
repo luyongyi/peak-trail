@@ -152,8 +152,12 @@ test("heatmap counts each route once per voxel, retains height and never bridges
   assert.equal(aggregateHeatmap([[[0, 0, 0, 0]], [[0, 0, 0, 0]]])[0][3], 2);
 });
 
-test("real HTTP upload is private pending, idempotent, approved routes are visible, hiding removes heat", async () => {
-  await isolated(async ({ root, base }) => {
+test("default memoir service keeps upload, moderation, routes and heat available while old live is retired", async () => {
+  await isolated(async ({ root, base, live }) => {
+    assert.equal((await get(base, "/api/runs")).status, 410);
+    const retired = await fetch(base + "/api/runs", { method: "POST", body: "old live registration" });
+    assert.equal(retired.status, 410);
+    assert.equal(live.runs.size, 0);
     const first = await post(base, fixture()); assert.equal(first.status, 201); assert.match(first.body.uploadId, /^[a-f0-9]{64}$/);
     assert.equal(first.body.moderationStatus, "pending"); assert.equal(first.body.mapCompatibility, "matched");
     assert.equal(first.body.stages[0].stages[0].completion, "complete");

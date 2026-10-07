@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createLiveServer } from "../../server/live-server.mjs";
 import { deriveRunCode } from "../../server/run-code.mjs";
 
 const RUN_ID = "9bf6aaa3-0712-49e2-83d0-6e54930c3d90";
 
-async function start(options = {}) {
+async function startService(options = {}) {
   const live = createLiveServer(options);
   await new Promise((resolveListen) => live.server.listen(0, "127.0.0.1", resolveListen));
   const { port } = live.server.address();
@@ -20,6 +23,9 @@ async function start(options = {}) {
   };
 }
 
+// The retained relay contract is exercised only with an explicit opt-in.
+const start = (options = {}) => startService({ legacyLiveEnabled: true, ...options });
+
 const register = async (base, body) => {
   const response = await fetch(`${base}/api/runs`, {
     method: "POST", headers: { "content-type": "application/json" },
@@ -29,12 +35,43 @@ const register = async (base, body) => {
 };
 
 test("deployment health endpoint exposes no room or player information", async () => {
-  const { base, close } = await start();
+  const { base, close } = await startService();
   try {
     const response = await fetch(`${base}/api/health`);
     assert.equal(response.status, 200);
     assert.equal(response.headers.get("cache-control"), "no-store");
     assert.deepEqual(await response.json(), { ok: true, service: "peak-trail-live" });
+  } finally { await close(); }
+});
+
+test("default service retires every old live entry without touching recorder storage or daily health", async t => {
+  const root = await mkdtemp(join(tmpdir(), "peak-retired-live-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const sentinel = join(root, "retained-old-recording.ndjson");
+  await writeFile(sentinel, "retained locally; never read or modified by this service");
+  const persistenceDir = join(root, "unused-live-directory");
+  const daily = { schemaVersion: 1, mapSlot: 17, gameBuildId: "25739797" };
+  const { live, base, close } = await startService({ persistenceDir, dailyResolver: async () => daily });
+  try {
+    for (const path of ["/api/runs", "/api/runs/abcd", "/api/runs/abcd/records", "/api/runs/abcd/snapshot",
+      "/api/runs/abcd/stream", "/watch", "/watch/abcd"]) {
+      for (const method of ["GET", "POST", "OPTIONS", "HEAD"]) {
+        const response = await fetch(base + path, { method, ...(method === "POST" ? { body: "not JSON or a recording" } : {}) });
+        assert.equal(response.status, 410, `${method} ${path} remains retired`);
+        assert.equal(response.headers.get("cache-control"), "no-store");
+        if (method !== "HEAD") assert.equal((await response.json()).error, "legacy-live-disabled");
+        else assert.equal(await response.text(), "");
+      }
+    }
+    assert.equal(live.runs.size, 0);
+    assert.equal(live.codeByRunId.size, 0);
+    await assert.rejects(access(persistenceDir), { code: "ENOENT" });
+    assert.equal(await readFile(sentinel, "utf8"), "retained locally; never read or modified by this service");
+    assert.deepEqual(await (await fetch(base + "/api/daily")).json(), daily);
+    assert.deepEqual(await (await fetch(base + "/api/health")).json(), { ok: true, service: "peak-trail-live" });
+    const page = await (await fetch(base + "/")).text();
+    assert.match(page, /PEAK 回忆录服务/);
+    assert.doesNotMatch(page, /\/api\/runs|EventSource|<script|live runs/);
   } finally { await close(); }
 });
 
