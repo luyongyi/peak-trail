@@ -1,0 +1,103 @@
+{
+  "evidenceKind": "Read-only installed Unity material extraction, D3D11 bytecode disassembly, and published GLB comparison; original game bytecode/images are not included in this report.",
+  "installedBuildId": "25739797",
+  "publishedMapBuildId": "25306743",
+  "shader": {
+    "name": "W/Peak_Rock",
+    "asset": "globalgamemanagers.assets",
+    "pathId": 150,
+    "pass": "Forward",
+    "vertexProgramIndex": 4,
+    "pixelProgramIndex": 44,
+    "compressedBlobSha256": "e1f9e25a78aa780fccbec818e79a5a06dbd279a6d67bbf87836ffd5210bec602"
+  },
+  "material": {
+    "name": "M_Forest_rock",
+    "asset": "sharedassets3.assets",
+    "pathId": 56
+  },
+  "compiledEvidence": [
+    {
+      "program": "vertex 4",
+      "lines": [
+        79,
+        80
+      ],
+      "finding": "Input TEXCOORD0 v3 is copied to output TEXCOORD3 o4; the pixel shader receives it as v4. BaseTexture coordinates are mesh UV0."
+    },
+    {
+      "program": "pixel 44",
+      "lines": [
+        396,
+        399
+      ],
+      "finding": "t3 is _BaseTexture; cb3[4] is _BaseTexture_ST; cb3[3] is _BaseColor; cb3[31].x is _BaseTexAmount. The shader applies UV0*ST.xy+ST.zw and computes base=BaseColor*mix(1,BaseTexture.rgb,BaseTexAmount)."
+    },
+    {
+      "program": "pixel 44",
+      "lines": [
+        494,
+        498
+      ],
+      "finding": "The top branch independently blends TopColor/TopColor1/TopColor2 using TopTex/TopTex2 masks, then multiplies by Tint. BaseTexture does not multiply this branch."
+    },
+    {
+      "program": "pixel 44",
+      "lines": [
+        569,
+        578
+      ],
+      "finding": "Top blend uses world-normal Y (or local direction when enabled), sampled TopColorMaskTex.r*TopColorTexInfuence, TopColorRemap and TopColorAmount."
+    },
+    {
+      "program": "pixel 44",
+      "lines": [
+        559,
+        560,
+        600
+      ],
+      "finding": "Independent bottom and top branches are combined by lerp(bottom,top,topAmount); M_Forest_rock TopColorShadowAmount=0 makes the intervening base attenuation 1."
+    }
+  ],
+  "comparison": {
+    "publishedGlb": "material-fidelity-v6/25306743/Level_17/segment-01-roots.glb",
+    "baseColorStored": [
+      0.18316125869750977,
+      0.225825235247612,
+      0.2641509175300598
+    ],
+    "topColorStored": [
+      0.6235920190811157,
+      0.6792452931404114,
+      0.2467069923877716
+    ],
+    "bothColorsExactlyMatch": true,
+    "installedBaseTexture": {
+      "name": "A_Texture 28",
+      "asset": "resources.assets",
+      "pathId": 957,
+      "dimensions": [
+        2048,
+        2048
+      ],
+      "savedScale": [
+        1,
+        1
+      ],
+      "savedOffset": [
+        0,
+        0
+      ]
+    },
+    "publishedTextureIndex": 0,
+    "installedTextureDownsampledTo512RgbaExactlyMatchesPublished": true,
+    "texture512RgbaSha256": "8fd2af2bb23ec96ec2b11bf508eb03320b375b3f28c120c8fe7bd555acc4ccc7"
+  },
+  "bug": "The viewer multiplied BaseTexture.rgb by the entire mix(BaseColor,TopColor,amount). This incorrectly retained UV0 texture detail on the top-color surface.",
+  "repair": "Keep BaseTexture UV0/ST sampling. Multiply its sample into the base branch, then blend that textured base with the independent top-color branch.",
+  "limits": [
+    "The shader bytecode audited here is installed build 25739797. Published build 25306743 shader bytecode was unavailable; its base/top color values and BaseTexture pixels match exactly, but bytecode identity across builds is not claimed.",
+    "The viewer still approximates Texture1/2/3 layers, TopTex/TopTex2 masks, TopColorMaskTex, hue shifts, Tint and game lighting. This repair corrects BaseTexture/top compositing without claiming full shader parity.",
+    "Installed W/Peak_Rock uses TopColorRemap [0.5579954385757446,0.7692307233810425]. Saved TopSurfaceTightness and UseTopColor are undeclared legacy fields; exported slope metadata remains an approximation."
+  ]
+}

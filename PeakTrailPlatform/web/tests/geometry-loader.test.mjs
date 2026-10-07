@@ -158,6 +158,51 @@ test("terrain blending consumes the corrected inverse-transpose instance normal"
   geometry.dispose(); material.dispose(); batch.children.forEach((mesh) => mesh.dispose());
 });
 
+test("forest rock top colour replaces UV0 noise instead of inheriting its stripes", () => {
+  const { batchStaticMeshes } = compile();
+  const material = new THREE.MeshStandardMaterial({ map: new THREE.Texture(), alphaTest: 0.4 });
+  material.userData.peakTerrain = { baseColor: [0.183, 0.226, 0.264], topColor: [0.347, 0.419, 0.050],
+    tightness: [0.707, 0.765], amount: 1, topAlpha: 1, sourceMaterial: "M_Forest_rock",
+    sourceColors: { shader: "W/Peak_Rock" } };
+  const geometry = new THREE.PlaneGeometry(); const scene = new THREE.Group();
+  scene.add(new THREE.Mesh(geometry, material)); const batch = batchStaticMeshes(scene);
+  const shader = { uniforms: {}, vertexShader: THREE.ShaderLib.standard.vertexShader,
+    fragmentShader: THREE.ShaderLib.standard.fragmentShader };
+  material.onBeforeCompile(shader, {});
+  // Execute the actual injected scalar channel expression. Distinct noise
+  // texels model the forest mesh's u=0, varying-v UVs, including a black texel.
+  const statement = shader.fragmentShader.match(/#include <color_fragment>\s*(diffuseColor\.rgb[^;]+;)/)?.[1];
+  assert.ok(statement);
+  const shade = new Function("diffuseColor", "peakBase", "peakTop", "peakRamp", "vPeakUp", "peakAmount", "peakTopAlpha", "mix", "smoothstep",
+    `${statement}\nreturn diffuseColor;`);
+  const mix = (a, b, t) => a * (1 - t) + b * t;
+  const smoothstep = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  const sample = (texel, up, amount = 1, alpha = 1) => shade({ rgb: texel, a: 0.37 },
+    0.183, 0.347, { x: 0.707, y: 0.765 }, up, amount, alpha, mix, smoothstep);
+  for (const texel of [0, 0.12, 0.9, 1]) {
+    assert.equal(sample(texel, 1).rgb, 0.347, "grass-covered tops must not carry bottom-layer noise");
+    assert.equal(sample(texel, 0).rgb, texel * 0.183, "walls retain the original base texture");
+    assert.ok(Math.abs(sample(texel, 0.736).rgb - mix(texel * 0.183, 0.347, 0.5)) < 1e-12);
+    assert.equal(sample(texel, 1, 0).rgb, texel * 0.183);
+    assert.equal(sample(texel, 1, 1, 0).rgb, texel * 0.183);
+    assert.equal(sample(texel, 1).a, 0.37, "source cutout opacity is preserved");
+  }
+  assert.match(shader.fragmentShader, /#include <map_fragment>/);
+  assert.match(shader.fragmentShader, /#include <alphatest_fragment>/);
+  // Different blend equations cannot share a cached GPU program.
+  const vine = new THREE.MeshStandardMaterial();
+  vine.userData.peakTerrain = { ...material.userData.peakTerrain, sourceColors: { shader: "W/Vine" } };
+  const vineScene = new THREE.Group(); vineScene.add(new THREE.Mesh(geometry, vine));
+  const vineBatch = batchStaticMeshes(vineScene);
+  const vineShader = { uniforms: {}, vertexShader: THREE.ShaderLib.standard.vertexShader,
+    fragmentShader: THREE.ShaderLib.standard.fragmentShader };
+  vine.onBeforeCompile(vineShader, {});
+  assert.match(vineShader.fragmentShader, /diffuseColor\.rgb \*= mix\(peakBase, peakTop,/);
+  assert.notEqual(material.customProgramCacheKey(), vine.customProgramCacheKey());
+  material.map.dispose(); geometry.dispose(); material.dispose(); vine.dispose();
+  [...batch.children, ...vineBatch.children].forEach((mesh) => mesh.dispose());
+});
+
 test("shared foliage top colours never paint props teal, authored terrain tops keep their blend", () => {
   const { verifiableTopBlend, batchStaticMeshes } = compile();
   // Every GD/FoliageGD and W/Peak_Mirage material stores the same default _TopColor;

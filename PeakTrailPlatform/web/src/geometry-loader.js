@@ -77,6 +77,10 @@ function applyTerrainMaterial(material) {
   const base = terrain.baseColor;
   const top = terrain.topColor;
   if (!Array.isArray(base) || !Array.isArray(top)) return;
+  // W/Peak_Rock samples _BaseTexture on UV0 for the bottom layer, then blends
+  // that layer with the independent top colour. Generated forest ground has
+  // constant UV0.u: multiplying this texture over the top creates false stripes.
+  const baseTextureOnly = terrain.sourceColors?.shader === "W/Peak_Rock";
   material.color.set(0xffffff);
   material.onBeforeCompile = (shader) => {
     shader.uniforms.peakBase = { value: new THREE.Color(base[0], base[1], base[2]) };
@@ -90,9 +94,11 @@ function applyTerrainMaterial(material) {
       "#include <defaultnormal_vertex>\nvPeakUp = max(inverseTransformDirection(normalize(transformedNormal), viewMatrix).y, 0.0);");
     shader.fragmentShader = "varying float vPeakUp;\nuniform vec3 peakBase;\nuniform vec3 peakTop;\nuniform vec2 peakRamp;\nuniform float peakAmount;\nuniform float peakTopAlpha;\n" + shader.fragmentShader;
     shader.fragmentShader = shader.fragmentShader.replace("#include <color_fragment>",
-      "#include <color_fragment>\ndiffuseColor.rgb *= mix(peakBase, peakTop, smoothstep(peakRamp.x, peakRamp.y, vPeakUp) * peakAmount * peakTopAlpha);");
+      baseTextureOnly
+        ? "#include <color_fragment>\ndiffuseColor.rgb = mix(diffuseColor.rgb * peakBase, peakTop, smoothstep(peakRamp.x, peakRamp.y, vPeakUp) * peakAmount * peakTopAlpha);"
+        : "#include <color_fragment>\ndiffuseColor.rgb *= mix(peakBase, peakTop, smoothstep(peakRamp.x, peakRamp.y, vPeakUp) * peakAmount * peakTopAlpha);");
   };
-  material.customProgramCacheKey = () => "peak-terrain-original-mesh-v1";
+  material.customProgramCacheKey = () => baseTextureOnly ? "peak-terrain-rock-base-map-v2" : "peak-terrain-original-mesh-v1";
   material.needsUpdate = true;
 }
 
@@ -143,7 +149,10 @@ function useExactInstanceNormals(material) {
   };
   material.customProgramCacheKey = () => material.userData?.peakSourceEffect
     ? `peak-source-effect-${material.userData.peakSourceEffect.kind}-affine-normals-v1`
-    : material.userData?.peakTerrain ? "peak-terrain-affine-normals-v1" : "peak-prop-affine-normals-v1";
+    : material.userData?.peakTerrain
+      ? material.userData.peakTerrain.sourceColors?.shader === "W/Peak_Rock"
+        ? "peak-terrain-rock-base-map-affine-normals-v2" : "peak-terrain-affine-normals-v1"
+      : "peak-prop-affine-normals-v1";
   material.needsUpdate = true;
 }
 
