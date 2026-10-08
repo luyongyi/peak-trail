@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
-  "fetchedAtUtc": "2026-10-07T21:57:46.081Z",
-  "nextChangeAtUtc": "2026-10-08T16:59:59.081Z",
+  "fetchedAtUtc": "2026-10-08T22:02:29.872Z",
+  "nextChangeAtUtc": "2026-10-09T16:59:59.872Z",
   "source": "https://peaklogin3.azurewebsites.net/api/VersionCheck?version=2.6",
   "apiVersion": "2.6",
   "versionOkay": true,
-  "levelIndex": 480,
+  "levelIndex": 481,
   "mapCount": 21,
-  "mapSlot": 18,
-  "sceneName": "Level_18",
-  "secondsRemaining": 68533,
+  "mapSlot": 19,
+  "sceneName": "Level_19",
+  "secondsRemaining": 68250,
   "message": "bing bong is a father of two"
 }
