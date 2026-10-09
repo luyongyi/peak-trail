@@ -2,6 +2,20 @@
 
 本模块接收回忆录 Mod 在本地重新提取的小包。它不接收 `.peakrun`、录像资源、库存、状态条、音频或世界物件。旧足迹直播接口默认关闭，回忆录上传、路线与热力查询保持正常。通过白名单协议验证的新投稿自动 `approved`；公开路线与热力仍只使用完整的个人关卡尝试，并要求原生地图对齐证明。
 
+## 队伍搜索与查看
+
+`GET /api/route-teams?member=<昵称片段>&group=<可选地图组哈希>&difficulty=<可选难度key>&limit=50` 返回 `{teams,truncated}`。昵称采用 Unicode NFKC 规范化、不区分大小写的子串匹配；同名仅匹配文本，不合并玩家身份。默认 50、最多 100 支队伍，按最近录制时间排序。队伍摘要包含 `id/groupId/startedUtc/lastStartedUtc/difficulty/map/members/stageSummaries`；`members` 最多 64 人，超限显式标记 `membersTruncated`。
+
+队伍身份由地图布局组、难度和可靠的对局作用域散列产生。只有同时具有 `runKey` 和有效共享 `timeOriginMs` 的上传才跨录像归队；否则按 `recordingId` 隔离。旧索引已有完整路线时可沿用其已验证的 `dedupe.scope`，没有可靠证据不猜测归队。录制者 `owner` 仅用于优选本人的观察，不能当作队长。
+
+`GET /api/route-teams/<teamId>` 返回 `{team}`，在摘要上添加现有的 `mapCompatibility/mapPackId/mapAlignment`。`GET /api/route-teams/<teamId>/stages/<stage>/routes` 返回队内成员的实际预览，包括部分线路、`completion/completed/gameCompleted` 与真实 `breaks`。同一成员的多个来源优先选该关有点、本人录制、原生切关证据和点数，不将多个来源拼接成完整线路。该关无点的成员仍返回空路线，避免误认为该成员已经离队。每条路线时间保持原始非负 `tMs`，`timeBasis=recording-ms`；可靠共享时钟时另附 `timeOriginMs`，包括合法的负原点。
+
+新上传在私有小型索引保存可派生的队伍及分关摘要；普通搜索只读索引，不全站解压轨迹。查看一支旧队伍时，最多顺序核验 64 个旧来源，在响应中恢复其实际分关摘要，不写回索引、不改变队伍身份；超限标记 `metadataTruncated/truncated`。旧录像缺少关卡门限和原生时间线时仍接受，无法分关的成员返回 `unknown` 空路线，不猜测其坐标属于哪关。
+
+已批准但只有部分线路的地图组也可查询和打开；它们不贡献公开完整路线或热力。所有队伍接口按每次请求的当前审核状态生成，隐藏、拒绝或保留投稿立即撤销对应来源。
+
+公开 `routes` 与 `heatmap` 端点可带 `team=<teamId>`，仍同时受当前地图组、关卡和难度约束。热力增加 `countBy=team|player`（默认 `player`）：同队在同一 2 米三维格只计一次，按成员则同队同成员只计一次；不同队伍/对局独立累加。`routeCount` 仍为完整个人尝试数量，另返回 `countBy/teamCount`。部分、死亡、断点和未知证据的预览不会混入热力；高度分层保持独立。团队简图仅由网页展示层生成，不修改这些个人原始坐标或通关判定。
+
 ## 本地运行
 
 ```powershell

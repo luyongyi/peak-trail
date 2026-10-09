@@ -39,11 +39,47 @@ test("resolver uses the verified native matchmaking version and timestamps the r
 
 test("rejected versions and malformed countdowns cannot become valid observations", async () => {
   for (const bad of [payload({ VersionOkay: false }), payload({ LevelIndex: 1.5 }),
-    payload({ HoursUntilLevel: 24 }), payload({ MinutesUntilLevel: 60 }),
+    payload({ HoursUntilLevel: -1 }), payload({ HoursUntilLevel: 596524 }),
+    payload({ HoursUntilLevel: 596523, MinutesUntilLevel: 59, SecondsUntilLevel: 59 }),
+    payload({ MinutesUntilLevel: 60 }),
     payload({ SecondsUntilLevel: undefined }), payload({ SecondsUntilLevel: -1 })]) {
     await assert.rejects(resolveDaily({ now: () => START, fetchImpl: async () => response(bad) }));
   }
   await assert.rejects(resolveDaily({ mapCount: 0 }), /PEAK_MAP_COUNT/);
+});
+
+test("native total-hour countdowns permit extended observations without inventing a lock policy", async () => {
+  for (const hours of [24, 168, 336]) {
+    const daily = await resolveDaily({ now: () => START, fetchImpl: async () => response(payload({
+      HoursUntilLevel: hours, MinutesUntilLevel: 0, SecondsUntilLevel: 0,
+    })) });
+    assert.equal(daily.secondsRemaining, hours * 3600);
+    assert.equal(Date.parse(daily.nextChangeAtUtc), START + hours * 3600_000);
+    assert.equal(daily.sceneName, "Level_17");
+    assert.equal("lockedUntil" in daily, false, "a countdown does not prove a biome lock");
+    assert.equal(cachedDailyIsFresh(daily, START + 86400_000), false,
+      "extended countdowns still require another daily official confirmation");
+  }
+});
+
+test("official same-day map replacements and repeated indices are observed, never incremented by date", async () => {
+  let now = START, levelIndex = 479;
+  const observed = [];
+  const cache = createDailyCache({ now: () => now, resolver: async () => {
+    observed.push(levelIndex);
+    return resolveDaily({ now: () => now, fetchImpl: async () => response(payload({ LevelIndex: levelIndex,
+      HoursUntilLevel: 23, MinutesUntilLevel: 59, SecondsUntilLevel: 59 })) });
+  } });
+  assert.equal((await cache.read()).sceneName, "Level_17");
+  levelIndex = 470; // Synthetic rollback/replacement, not tomorrow's index.
+  now += 600_000;
+  assert.equal((await cache.read()).sceneName, "Level_8");
+  now += 86400_000;
+  const repeated = await cache.read();
+  assert.equal(repeated.levelIndex, 470);
+  assert.equal(repeated.sceneName, "Level_8");
+  assert.equal(repeated.fetchedAtUtc, new Date(now).toISOString());
+  assert.deepEqual(observed, [479, 470, 470]);
 });
 
 test("a query crossing Shanghai 01:00 rechecks the rotation instead of relabelling the old map", async () => {
@@ -162,6 +198,21 @@ test("scheduled updater shares the resolver version and preserves the old snapsh
     assert.equal(current.apiVersion, DEFAULT_API_VERSION);
     assert.equal(current.sceneName, "Level_17");
     assert.equal(requestVersion, "2.6");
+    const historyPath = join(directory, "data/daily/history.json");
+    await writeFile(historyPath, JSON.stringify({ schemaVersion: 1, observations: [{
+      observedAtUtc: new Date(Date.now() - 86400_000).toISOString(),
+      levelIndex: current.levelIndex, mapSlot: current.mapSlot, sceneName: current.sceneName,
+      nextChangeAtUtc: current.nextChangeAtUtc,
+    }] }));
+    const repeated = await runUpdater(join(directory, "tools/update-daily.mjs"), env);
+    assert.equal(repeated.code, 0, repeated.output);
+    const repeatedHistory = JSON.parse(await readFile(historyPath, "utf8"));
+    assert.equal(repeatedHistory.observations.length, 2, "a repeated map on another day is retained as an official confirmation");
+    assert.equal(repeatedHistory.observations[1].levelIndex, current.levelIndex);
+    const sameDay = await runUpdater(join(directory, "tools/update-daily.mjs"), env);
+    assert.equal(sameDay.code, 0, sameDay.output);
+    assert.equal(JSON.parse(await readFile(historyPath, "utf8")).observations.length, 2,
+      "same-boundary retries do not duplicate the history");
     const workflow = await readFile(new URL("../../../.github/workflows/peak-daily-map.yml", import.meta.url), "utf8");
     assert.match(workflow, /PEAK_API_VERSION: \$\{\{ vars\.PEAK_API_VERSION \}\}/);
     assert.doesNotMatch(workflow, /PEAK_API_VERSION: ["']?2\.4/);

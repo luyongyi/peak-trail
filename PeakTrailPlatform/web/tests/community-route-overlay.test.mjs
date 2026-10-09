@@ -3,6 +3,7 @@ import test from "node:test";
 import { readFile } from "node:fs/promises";
 import * as THREE from "../../vendor/three/0.180.0/build/three.module.js";
 import { normalizeRoutes, normalizeHeatmap, routeEdges, routeColor } from "../src/route-collection-model.js";
+import { buildTeamRouteSegments, teamMemberColor } from "../src/team-route-model.js";
 
 async function lineAddon(name, dependencies = {}) {
   const source = (await readFile(new URL(`../../vendor/three/0.180.0/examples/jsm/lines/${name}.js`, import.meta.url), "utf8"))
@@ -16,7 +17,8 @@ const LineMaterial = await lineAddon("LineMaterial");
 const LineSegments2 = await lineAddon("LineSegments2", { LineSegmentsGeometry, LineMaterial });
 const source = (await readFile(new URL("../src/community-route-overlay.js", import.meta.url), "utf8"))
   .replace(/^import .*;\r?\n/gm, "").replace("export class CommunityRouteOverlay", "class CommunityRouteOverlay");
-const ports = { THREE, LineSegmentsGeometry, LineMaterial, LineSegments2, normalizeRoutes, normalizeHeatmap, routeEdges, routeColor };
+const ports = { THREE, LineSegmentsGeometry, LineMaterial, LineSegments2, normalizeRoutes, normalizeHeatmap, routeEdges, routeColor,
+  buildTeamRouteSegments, teamMemberColor };
 const CommunityRouteOverlay = new Function(...Object.keys(ports), `${source}\nreturn CommunityRouteOverlay;`)(...Object.values(ports));
 const sceneSource = (await readFile(new URL("../src/scene.js", import.meta.url), "utf8"))
   .replace(/^import .*;\r?\n/gm, "").replace("export class TrailScene", "class TrailScene");
@@ -195,5 +197,47 @@ test("resize changes only screen-width line uniforms and creates no clocks, call
   for (const material of overlay.lineMaterials) assert.deepEqual(material.resolution.toArray(), [1200, 800]);
   assert.equal(overlay.players.get("route-a").group.children[0].geometry, geometry);
   assert.doesNotMatch(source, /requestAnimationFrame|setInterval|fetch\(|document\.|gameAsset|avatar/);
+  overlay.dispose();
+});
+
+test("team corridors render once, preserve world alignment, and rebuild when members or reference change", () => {
+  const scene = sceneFixture();
+  const teamRoutes = [
+    { id: "a", playerKey: "A", points: [[0, 10100, 20200, 30300], [100, 10200, 20200, 30300]], breaks: [] },
+    { id: "b", playerKey: "B", points: [[0, 10100, 20200, 30340], [100, 10200, 20200, 30340]], breaks: [] },
+  ];
+  const input = dto({ mode: "team", routes: teamRoutes, visiblePlayers: new Set(["A", "B"]), referencePlayerKey: "A" });
+  assert.equal(scene.setCommunityOverlay(input), true);
+  const overlay = scene.communityOverlay;
+  assert.equal(overlay.root.children.length, 1, "one shared corridor, not two overlaid player ribbons");
+  const shared = overlay.root.children[0];
+  assert.equal(shared.userData.shared, true);
+  assert.deepEqual(shared.userData.playerKeys, ["A", "B"]);
+  assert.equal(shared.children.length, 2, "diagram omits repeated sample-point caps");
+  assert.deepEqual(position(shared.children[1].geometry.attributes.instanceStart, 0), [1, 2, 3]);
+  scene.worldRoot.updateMatrixWorld(true);
+  assert.deepEqual(new THREE.Vector3(1, 2, 3).applyMatrix4(shared.children[1].matrixWorld).toArray(), [1, 2, -3]);
+  const firstGeometry = shared.children[1].geometry;
+  assert.equal(scene.setCommunityOverlay({ ...input, visiblePlayers: new Set(["B", "A"]) }), true);
+  assert.equal(overlay.root.children[0].children[1].geometry, firstGeometry, "equivalent checkbox selection uses existing GPU objects");
+  assert.equal(scene.setCommunityOverlay({ ...input, referencePlayerKey: "B" }), true);
+  assert.notEqual(overlay.root.children[0].children[1].geometry, firstGeometry);
+  assert.deepEqual(position(overlay.root.children[0].children[1].geometry.attributes.instanceStart, 0), [1, 2, Math.fround(3.4)]);
+  assert.equal(scene.setCommunityOverlay({ ...input, visiblePlayers: new Set(["B"]) }), true);
+  assert.equal(overlay.root.children[0].userData.shared, false, "hiding A removes it from corridor membership");
+  assert.deepEqual(overlay.root.children[0].userData.playerKeys, ["B"]);
+  assert.equal(scene.setCommunityOverlay({ ...input, visiblePlayers: new Set() }), true);
+  assert.equal(overlay.root.children.length, 0);
+  overlay.dispose();
+});
+
+test("member route color agrees with the legend and does not change when route order changes", () => {
+  const overlay = new CommunityRouteOverlay(), input = dto();
+  input.routes.push({ ...input.routes[0], id: "route-b", playerKey: "player-b" });
+  overlay.setData(input, origin());
+  const color = overlay.players.get("route-a").group.children[1].material.color.clone();
+  assert.ok(color.equals(new THREE.Color(teamMemberColor("player-a"))));
+  overlay.setData({ ...input, routes: [...input.routes].reverse() }, origin());
+  assert.ok(overlay.players.get("route-a").group.children[1].material.color.equals(color));
   overlay.dispose();
 });

@@ -311,11 +311,20 @@
 
         <aside class="inspector" aria-label="地图路线与热力筛选">
           <section class="inspector-section community-section" id="communityPanel" aria-label="大家的路线与热力设置" hidden>
-            <div class="section-heading compact"><div><span class="eyebrow">走过这张地图的人</span><h2>大家的路线</h2></div><button type="button" class="community-refresh" id="communityRefresh">刷新</button></div>
+            <div class="section-heading compact"><div><span class="eyebrow">走过这张地图的人</span><h2>大家的路线</h2></div><div class="community-heading-actions"><button type="button" class="community-refresh" id="communityRefresh">刷新</button><button type="button" class="community-refresh" id="communityCollapse" aria-label="收起路线设置，保留地图与路线">收起</button></div></div>
+            <form id="communitySearchForm" class="community-team-search" aria-label="按成员搜索队伍">
+              <label for="communityMemberSearch">找队伍</label>
+              <div class="community-search-row"><input id="communityMemberSearch" type="search" maxlength="80" placeholder="输入成员名字" aria-label="队员名字"><button id="communitySearchButton" type="submit" class="community-refresh">搜索</button></div>
+              <select id="communitySearchScope" aria-label="队伍搜索范围"><option value="current">当前地图</option><option value="all">全部地图</option></select>
+            </form>
+            <p id="communityTeamSearchStatus" class="community-status" role="status" aria-live="polite">输入成员名字，查找他参与的队伍。</p>
+            <div id="communityTeamResults" class="community-team-results" aria-label="找到的队伍"></div>
+            <button type="button" id="communityTeamClear" class="community-refresh" hidden>返回全部队伍</button>
             <label class="community-layer-control" id="communityLayerControl" hidden>
               <span>线路图层</span>
               <select id="communityMode" aria-label="线路图层">
                 <option value="off">仅地图</option>
+                <option value="team" disabled>团队简图</option>
                 <option value="routes">大家的路线</option>
                 <option value="heatmap">热力图</option>
               </select>
@@ -325,10 +334,13 @@
               <label id="communityGroupField">地图记录<select id="communityGroup" aria-label="地图记录组"></select></label>
               <label>难度<select id="communityDifficulty" aria-label="路线难度"><option value="">全部难度</option></select></label>
               <label>高度层<select id="communityHeight" aria-label="路线高度层"><option value="">全部高度</option></select></label>
+              <label hidden>热力计数<select id="communityCountBy" aria-label="热力计数方式"><option value="team">按队伍</option><option value="player">按成员</option></select></label>
+              <label hidden>参考队长<select id="communityReference" aria-label="参考队长"><option value="">不指定参考队长</option></select></label>
             </div>
             <p class="community-legend" id="communityLegend" hidden></p>
+            <div id="communityMembersControls" class="community-members-controls" hidden><label><input type="checkbox" id="communityAllPlayers" checked>显示全员</label></div>
             <div class="community-players" id="communityPlayers"></div>
-            <p class="community-upload-note">路线来自回忆录上传的完整录像。通过自动校验后，完整走完当前关卡的记录才计入路线与热力。</p>
+            <p class="community-upload-note">路线来自回忆录上传的完整录像。队伍可查看实际走过的路线，完整走完当前关卡的记录才计入公开热力。收起设置后，地图与路线继续显示。</p>
           </section>
           <div class="app-compat-controls" hidden aria-hidden="true">
             <div class="section-heading">

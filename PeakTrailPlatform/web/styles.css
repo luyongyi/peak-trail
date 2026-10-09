@@ -3051,6 +3051,22 @@ body.gate-open .app-shell { visibility: hidden; }
 .community-player i { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .community-player span { overflow-wrap: anywhere; }
 .community-upload-note { border-top: 1px solid var(--line); margin: 14px 0 0; padding-top: 12px; color: var(--muted); font-size: .68rem; line-height: 1.8; }
+.community-heading-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.community-team-search { display: grid; gap: 8px; margin-top: 14px; color: var(--muted-strong); font-size: .75rem; }
+.community-search-row { display: flex; gap: 7px; }
+.community-search-row input { min-width: 0; flex: 1; }
+.community-team-search input, .community-team-search select { border: 1px solid var(--line); border-radius: 7px; padding: 9px; color: var(--text); background: var(--surface-raised); }
+.community-team-results { display: grid; gap: 7px; max-height: 220px; overflow-y: auto; overscroll-behavior: contain; margin-bottom: 10px; }
+.community-team-result { text-align: left; border: 1px solid var(--line); border-radius: 7px; background: var(--surface-raised); color: var(--text); padding: 10px; font: inherit; font-size: .72rem; line-height: 1.7; overflow-wrap: anywhere; cursor: pointer; }
+.community-team-result[aria-pressed="true"] { border-color: var(--accent); color: var(--accent-strong); }
+.community-members-controls { font-size: .75rem; color: var(--muted-strong); }
+.community-members-controls input { accent-color: var(--accent); }
+.community-team-search[hidden], .community-members-controls[hidden], #communityTeamClear[hidden] { display: none; }
+@media (max-width: 760px) {
+  .community-heading-actions button { min-height: 40px; }
+  .community-team-search input, .community-team-search select { font-size: 16px; }
+  .app-shell[data-workspace-mode="explore"].community-panel-open .inspector { max-width: min(360px, calc(100vw - 24px)); max-height: calc(100dvh - 100px); overflow-y: auto; }
+}
 @media (max-width: 743px), (min-width: 744px) and (max-width: 1100px) and (orientation: portrait) {
   .app-shell[data-workspace-mode="explore"] .viewport-panel { height: calc(100dvh - 56px); min-height: 260px; }
   .app-shell[data-workspace-mode="explore"].community-panel-open .inspector {

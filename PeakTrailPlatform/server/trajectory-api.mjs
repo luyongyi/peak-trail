@@ -52,7 +52,8 @@ export function createTrajectoryApi({ root = null, catalogPath = null, trustedPr
   }
   async function handle(req, res) {
     const url = new URL(req.url, "http://localhost"), path = url.pathname;
-    if (path !== "/api/route-uploads" && path !== "/api/route-groups" && !path.startsWith("/api/route-groups/")) return false;
+    if (path !== "/api/route-uploads" && path !== "/api/route-groups" && !path.startsWith("/api/route-groups/")
+      && path !== "/api/route-teams" && !path.startsWith("/api/route-teams/")) return false;
     if (req.method === "OPTIONS") { res.writeHead(204, headers).end(); return true; }
     if (!root) { json(res, 503, { error: "route-storage-unconfigured" }); return true; }
     if (limited(req) || active >= 4 || (req.method === "POST" && uploading)) { json(res, 429, { error: "route-service-busy", retryAfterSeconds: 5 }); return true; }
@@ -64,10 +65,27 @@ export function createTrajectoryApi({ root = null, catalogPath = null, trustedPr
         if (req.headers["x-trajectory-format"] && req.headers["x-trajectory-format"] !== "trajectory-v1") throw problem("unsupported trajectory format", 415);
         const result = await job({ operation: "upload", body: await body(req) }); json(res, result.duplicate ? 200 : 201, result.json);
       } else if (path === "/api/route-groups" && req.method === "GET") json(res, 200, (await job({ operation: "groups" })).json);
+      else if (path === "/api/route-teams" && req.method === "GET") {
+        const member = url.searchParams.get("member") ?? "", group = url.searchParams.get("group") ?? "";
+        const difficulty = url.searchParams.get("difficulty") ?? "", limit = Number(url.searchParams.get("limit") ?? 50);
+        if (member.length > 80 || /[\u0000-\u001f]/u.test(member) || (group && !validHash(group))
+          || difficulty.length > 100 || !Number.isInteger(limit) || limit < 1 || limit > 100) throw problem("invalid team search");
+        json(res, 200, (await job({ operation: "teams", member, group, difficulty, limit })).json);
+      }
       else {
+        const teamDetail = path.match(/^\/api\/route-teams\/([a-f0-9]{64})$/);
+        const teamStage = path.match(/^\/api\/route-teams\/([a-f0-9]{64})\/stages\/(\d+)\/routes$/);
         const inspection = path.match(/^\/api\/route-groups\/([a-f0-9]{64})\/uploads\/([a-f0-9]{64})\/stages\/(\d+)\/inspection$/);
         const match = path.match(/^\/api\/route-groups\/([a-f0-9]{64})\/stages\/(\d+)\/(routes|heatmap)$/);
         if (req.method !== "GET") throw problem("method not allowed", 405);
+        if (teamDetail) {
+          json(res, 200, (await job({ operation: "team", team: teamDetail[1] })).json);
+          return true;
+        }
+        if (teamStage) {
+          json(res, 200, (await job({ operation: "team-routes", team: teamStage[1], stage: Number(teamStage[2]) })).json);
+          return true;
+        }
         if (inspection) {
           json(res, 200, (await job({ operation: "inspection", group: inspection[1], upload: inspection[2], stage: Number(inspection[3]) })).json);
           return true;
@@ -77,7 +95,9 @@ export function createTrajectoryApi({ root = null, catalogPath = null, trustedPr
         if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw problem("limit must be 1..200");
         const difficulty = url.searchParams.get("difficulty") ?? "";
         if (difficulty.length > 100) throw problem("invalid difficulty filter");
-        json(res, 200, (await job({ operation: match[3] === "heatmap" ? "heatmap" : "routes", group: match[1], stage: Number(match[2]), difficulty, limit })).json);
+        const team = url.searchParams.get("team") ?? "", countBy = url.searchParams.get("countBy") ?? "player";
+        if ((team && !validHash(team)) || !["player", "team"].includes(countBy)) throw problem("invalid team/countBy filter");
+        json(res, 200, (await job({ operation: match[3] === "heatmap" ? "heatmap" : "routes", group: match[1], stage: Number(match[2]), difficulty, limit, team, countBy })).json);
       }
     } catch (error) { json(res, error.statusCode ?? 500, { error: error.message }); }
     finally { active -= 1; if (req.method === "POST") uploading = false; }

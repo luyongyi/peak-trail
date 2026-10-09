@@ -19,13 +19,21 @@ function map(overrides = {}) {
     route: { branch: "volcano-kiln", segments: ["Shore", "Roots", "Alpine", "Volcano", "Volcano"].map((biome, index) => ({ index, biome })) },
     layers: route.map((_, segment) => ({ segment })), disposed: 0, disposeAssets() { this.disposed++; }, ...overrides };
 }
-function fixture({ groups = [group()], loaded = map(), catalog = null } = {}) {
+function team(overrides = {}) {
+  return { id: hash("d"), groupId: hash("b"), startedUtc: "2026-10-08T14:00:00Z", lastStartedUtc: "2026-10-08T15:00:00Z",
+    map: { scene: "Level_8", buildId: "25739797", levelIndex: 481 }, mapPackId: packId, mapCompatibility: "matched",
+    mapAlignment: group().mapAlignment, members: [{ playerKey: hash("1"), name: "Mylu" }],
+    stageSummaries: route.map((name, index) => ({ index, name, memberCount: index <= 3 ? 1 : 0, completedCount: 0 })), ...overrides };
+}
+function fixture({ groups = [group()], loaded = map(), catalog = null, selectedTeam = team(), currentMapPack = null } = {}) {
   const calls = [];
   const exact = { identityVersion: 3, mapPackId: packId, gameBuildId: "25739797", sceneName: "Level_8", path: `./packs/${packId}/map-pack.json` };
   const ports = {
     readGroups: async () => { calls.push("groups"); return { groups }; },
     readCatalog: async () => { calls.push("catalog"); return { catalog: catalog || { schemaVersion: 1, activeGameBuildId: "30000000", mapPacks: [exact] }, baseUrl: "https://peak.mylus.cn/data/maps/catalog.json" }; },
     loadMapPack: async url => { calls.push(url); return loaded; },
+    readTeam: async id => { calls.push(`team:${id}`); return { team: selectedTeam }; },
+    currentMapPack,
   };
   return { calls, ports, loaded, exact };
 }
@@ -47,6 +55,58 @@ test("the public share URL carries only the exact group and chapter", () => {
   assert.deepEqual(parseHistoricalRouteLink(new URL(inspection).search), { groupId: hash("b"), stageIndex: 3, inspectionId: hash("d") });
   assert.throws(() => parseHistoricalRouteLink(`?routeGroup=${hash("b")}&inspection=private`));
   assert.throws(() => parseHistoricalRouteLink(`?routeGroup=${hash("b")}&inspection=${hash("d")}&inspection=${hash("e")}`));
+});
+
+test("team links share only public identifiers and reject conflicting, repeated and invalid selectors", () => {
+  const url = historicalRouteUrl("https://peak.mylus.cn/?adminToken=private&inspection=old#secret", hash("b"), 3, null, hash("d"));
+  assert.equal(url, `https://peak.mylus.cn/?routeGroup=${hash("b")}&stage=3&team=${hash("d")}`);
+  assert.deepEqual(parseHistoricalRouteLink(new URL(url).search), { groupId: hash("b"), stageIndex: 3, teamId: hash("d") });
+  assert.deepEqual(parseHistoricalRouteLink(`?routeGroup=${hash("b")}&team=${hash("d")}`), { groupId: hash("b"), stageIndex: null, teamId: hash("d") });
+  for (const suffix of ["team=", "team=player-name", `team=${hash("d")}&team=${hash("e")}`,
+    `team=${hash("d")}&inspection=${hash("e")}`]) assert.throws(() => parseHistoricalRouteLink(`?routeGroup=${hash("b")}&${suffix}`));
+  assert.throws(() => historicalRouteUrl("https://peak.mylus.cn/", hash("b"), 3, null, "player-name"));
+  assert.throws(() => historicalRouteUrl("https://peak.mylus.cn/", hash("b"), 3, hash("e"), hash("d")));
+  assert.equal(historicalRouteUrl(url, hash("b"), 2), `https://peak.mylus.cn/?routeGroup=${hash("b")}&stage=2`,
+    "clearing a selected team removes it from the share URL");
+});
+
+test("a team with only partial paths opens its latest observed chapter independently of public completion totals", async () => {
+  const partial = group({ stageSummaries: group().stageSummaries.map(stage => ({ ...stage, routeCount: 0 })) });
+  const selectedTeam = team({ stageSummaries: team().stageSummaries.map(stage => ({ ...stage, memberCount: 1 })) });
+  const f = fixture({ groups: [partial], selectedTeam });
+  const result = await loadHistoricalRouteLink({ groupId: hash("b"), teamId: hash("d"), stageIndex: null }, f.ports);
+  assert.equal(result.stageIndex, 4);
+  assert.equal(result.teamId, hash("d")); assert.equal(result.inspectionId, null);
+  assert.match(result.title, /团队路线$/);
+  assert.deepEqual(f.calls, ["groups", `team:${hash("d")}`, "catalog", `https://peak.mylus.cn/data/maps/packs/${packId}/map-pack.json`]);
+});
+
+test("a selected team must prove the requested public group and its original map identity", async () => {
+  for (const changes of [{ id: hash("f") }, { groupId: hash("f") }, { mapPackId: `sha256-${hash("f")}` },
+    { mapAlignment: { ...group().mapAlignment, id: hash("f") } },
+    { mapCompatibility: "waiting-map" }, { map: { ...team().map, scene: "Level_9" } },
+    { map: { ...team().map, buildId: "25306743" } }]) {
+    const f = fixture({ selectedTeam: team(changes) });
+    await assert.rejects(loadHistoricalRouteLink({ groupId: hash("b"), teamId: hash("d"), stageIndex: 3 }, f.ports), /不属于/);
+    assert.deepEqual(f.calls, ["groups", `team:${hash("d")}`], "a mismatched team cannot fetch or replace any model");
+  }
+  const absent = fixture({ selectedTeam: undefined });
+  absent.ports.readTeam = async () => { throw new Error("HTTP 404"); };
+  await assert.rejects(loadHistoricalRouteLink({ groupId: hash("b"), teamId: hash("d"), stageIndex: 3 }, absent.ports), /404/);
+});
+
+test("a team on an already verified map reuses the current pack and never disposes or downloads it", async () => {
+  const current = map();
+  const f = fixture({ currentMapPack: current });
+  const result = await loadHistoricalRouteLink({ groupId: hash("b"), teamId: hash("d"), stageIndex: 3 }, f.ports);
+  assert.equal(result.mapPack, current); assert.equal(result.reusedMapPack, true); assert.equal(current.disposed, 0);
+  assert.deepEqual(f.calls, ["groups", `team:${hash("d")}`, "catalog"]);
+  const oldBuild = map({ gameBuildId: "25306743" });
+  const other = fixture({ currentMapPack: oldBuild });
+  const loaded = await loadHistoricalRouteLink({ groupId: hash("b"), teamId: hash("d"), stageIndex: 3 }, other.ports);
+  assert.notEqual(loaded.mapPack, oldBuild); assert.equal(loaded.reusedMapPack, false);
+  assert.equal(oldBuild.disposed, 0, "the resolver does not dispose the currently displayed pack");
+  assert.equal(other.calls.length, 4, "same scene from another build is not reused");
 });
 
 test("inspection data proves both public identities and preserves partial paths and break timestamps", () => {
@@ -217,4 +277,114 @@ test("missing, failed or stale daily observations cannot turn the historical car
     assert.equal(f.elements.dailyScene.textContent, "历史 Level_18"); assert.equal(f.elements.dailyCountdown.textContent, "2026-10-08 · 轮换 480");
     assert.equal(f.state.mapPack, f.original);
   }
+});
+
+async function appFunction(name) {
+  const source = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const implementation = source.match(new RegExp(`^(?:async )?function ${name}\\([^]*?^\\}`, "m"))?.[0];
+  assert.ok(implementation, name);
+  return implementation;
+}
+
+async function historicalNavigationFixture({ current = map(), render = async () => {} } = {}) {
+  const calls = { fit: 0, reset: 0, overlays: 0, urls: [] };
+  const state = { mapPack: current, workspaceMode: "explore", trace: null, selectedSegment: 3,
+    mapRequestRevision: 1, traceSelectionRevision: 4, replayCollection: null };
+  const noop = () => {};
+  const ports = { state, elements: { liveStateRow: {}, eventToast: { classList: { remove: noop } } },
+    disconnectLive: noop, setSourceMode: noop, setPlaying: noop, updateDailyCountdown: noop,
+    resetSegmentNavigation: () => { calls.reset++; }, assessCompatibility: () => ({ compatible: true }),
+    syncGameAssetsForTrace: noop, updateTraceUI: noop, updateMapUI: noop, updateCompatibilityUI: noop,
+    syncWorkspaceState: noop, dismissGate: noop, viewer: { resize: noop, fitView: () => { calls.fit++; } },
+    renderData: () => render(state), updateHistoricalRouteUrl: stage => calls.urls.push(stage),
+    communityMapPanel: { openHistorical: async () => { calls.overlays++; } } };
+  const implementation = await appFunction("openHistoricalRoute");
+  const open = new Function(...Object.keys(ports), `${implementation}; return openHistoricalRoute;`)(...Object.values(ports));
+  return { open, state, calls, current };
+}
+
+test("choosing another team on the current chapter preserves the model object and camera", async () => {
+  const f = await historicalNavigationFixture();
+  await f.open({ group: group(), mapPack: f.current, stageIndex: 3, title: "团队路线", inspectionId: null,
+    teamId: hash("d"), reusedMapPack: true }, 1);
+  assert.equal(f.state.mapPack, f.current); assert.equal(f.current.disposed, 0);
+  assert.equal(f.state.historicalRoute.teamId, hash("d"));
+  assert.equal(f.calls.fit, 0); assert.equal(f.calls.reset, 0);
+  assert.deepEqual(f.calls.urls, [3]); assert.equal(f.calls.overlays, 1);
+});
+
+test("cross-map team navigation fits its original model and releases the prior pack", async () => {
+  const f = await historicalNavigationFixture();
+  const other = map({ mapPackId: `sha256-${hash("e")}`, sceneName: "Level_9" });
+  await f.open({ group: group(), mapPack: other, stageIndex: 3, title: "团队路线", teamId: hash("d") }, 1);
+  assert.equal(f.state.mapPack, other); assert.equal(f.current.disposed, 1); assert.equal(other.disposed, 0);
+  assert.equal(f.calls.fit, 1); assert.equal(f.calls.reset, 1);
+});
+
+test("cancelled team navigation cannot dispose a borrowed current map or alter the selected overlay", async () => {
+  const f = await historicalNavigationFixture(); f.state.mapRequestRevision = 2;
+  await f.open({ group: group(), mapPack: f.current, stageIndex: 3, reusedMapPack: true }, 1);
+  assert.equal(f.current.disposed, 0); assert.equal(f.calls.overlays, 0); assert.equal(f.calls.fit, 0);
+  const stale = map();
+  await f.open({ group: group(), mapPack: stale, stageIndex: 3 }, 1);
+  assert.equal(stale.disposed, 1); assert.equal(f.state.mapPack, f.current);
+});
+
+test("a map reselected while geometry streams is not disposed by an older navigation", async () => {
+  const f = await historicalNavigationFixture({ render: async state => {
+    state.mapPack = original;
+    state.mapRequestRevision++; state.traceSelectionRevision++;
+  } });
+  const original = f.current, incoming = map();
+  await f.open({ group: group(), mapPack: incoming, stageIndex: 3 }, 1);
+  assert.equal(f.state.mapPack, original); assert.equal(original.disposed, 0);
+  assert.equal(f.calls.overlays, 0); assert.deepEqual(f.calls.urls, []);
+});
+
+test("historical service JSON reads have a timeout and stop oversized chunked responses before buffering the body", async () => {
+  const implementation = await appFunction("readHistoricalJson");
+  let canceled = 0, options;
+  const body = new ReadableStream({ start(controller) { controller.enqueue(new Uint8Array(33)); }, cancel() { canceled++; } });
+  const oversized = new Response(body, { headers: { "content-type": "application/json" } });
+  const bounded = new Function("fetch", `${implementation}; return readHistoricalJson;`)(async (_, settings) => {
+    options = settings; return oversized;
+  });
+  await assert.rejects(bounded("/api/route-teams/public", 32), /数据过大/);
+  assert.equal(canceled, 1); assert.equal(options.cache, "no-store"); assert.ok(options.signal instanceof AbortSignal);
+  const good = new Function("fetch", `${implementation}; return readHistoricalJson;`)(async () => new Response('{"team":null}',
+    { headers: { "content-type": "application/json" } }));
+  assert.deepEqual(await good("/api/route-teams/public", 32), { team: null });
+});
+
+test("clearing a team preserves its current map and removes the team from subsequent chapter share links", async () => {
+  const state = { selectedSegment: 3, historicalRoute: { group: group(), title: "历史路线 · 团队路线", teamId: hash("d") } };
+  let url = `https://peak.mylus.cn/?routeGroup=${hash("b")}&stage=3&team=${hash("d")}`, opened = 0;
+  const ports = { state, window: { location: { get href() { return url; } }, history: { replaceState(_, __, next) { url = next; } } },
+    historicalRouteUrl, renderSegmentNavigation: () => {}, syncWorkspaceState: () => {},
+    communityMapPanel: { openHistorical: async () => { opened++; } } };
+  const source = `${await appFunction("updateHistoricalRouteUrl")}\n${await appFunction("openCommunityTeam")}`;
+  const clear = new Function(...Object.keys(ports), `${source}; return openCommunityTeam;`)(...Object.values(ports));
+  await clear(null);
+  assert.equal(state.historicalRoute.teamId, null); assert.equal(state.historicalRoute.title, "历史路线");
+  assert.equal(new URL(url).searchParams.has("team"), false); assert.equal(opened, 1);
+  state.historicalRoute.teamId = hash("d"); state.selectedSegment = null;
+  url += `&team=${hash("d")}`;
+  await clear(null);
+  assert.equal(new URL(url).searchParams.has("team"), false, "clearing also works from the overview");
+});
+
+test("a real lightweight search summary preserves the current chapter before its verified team lookup", async () => {
+  const state = { mapPack: map(), selectedSegment: 0, historicalRoute: null }, links = [];
+  const implementation = await appFunction("openCommunityTeam");
+  const open = new Function("state", "navigateHistoricalRoute", `${implementation}; return openCommunityTeam;`)
+    (state, async link => links.push(link));
+  const summary = team();
+  delete summary.mapPackId; delete summary.mapCompatibility; delete summary.mapAlignment;
+  await open(summary);
+  assert.deepEqual(links.at(-1), { groupId: summary.groupId, teamId: summary.id, stageIndex: 0 },
+    "a same-map search does not jump to the team's last chapter and reset the current camera");
+  await open({ ...summary, map: { ...summary.map, buildId: "25306743" } });
+  assert.equal(links.at(-1).stageIndex, null, "another build must choose its own observed chapter");
+  await open({ ...summary, map: { ...summary.map, scene: "Level_9" } });
+  assert.equal(links.at(-1).stageIndex, null);
 });

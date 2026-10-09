@@ -590,8 +590,10 @@ function syncGameAssetsForTrace(trace, selectionRevision) {
 let viewer;
 const communityMapPanel = createCommunityMapPanel({
   getContext: () => ({ enabled: state.workspaceMode === "explore", mapPack: state.mapPack, stageIndex: state.selectedSegment,
-    routeGroupId: state.historicalRoute?.group.id || null, inspectionId: state.historicalRoute?.inspectionId || null }),
+    routeGroupId: state.historicalRoute?.group.id || null, inspectionId: state.historicalRoute?.inspectionId || null,
+    teamId: state.historicalRoute?.teamId || null }),
   getScene: () => viewer,
+  onOpenTeam: openCommunityTeam,
 });
 function syncCommunityContext(options) { communityMapPanel.sync(options); }
 async function initializeViewer() {
@@ -994,8 +996,10 @@ async function openHomeChapter(map, segment, presentedView, intent = null) {
 // Historical shares resolve independently of today's card availability. Every
 // map and overlay request is pinned to this group's verified original layout.
 async function openHistoricalRoute(destination, revision) {
-  const { group, mapPack: map, stageIndex, title, inspectionId } = destination;
-  if (revision !== state.mapRequestRevision) { map.disposeAssets?.(); return; }
+  const { group, mapPack: map, stageIndex, title, inspectionId, teamId } = destination;
+  if (revision !== state.mapRequestRevision) { if (!destination.reusedMapPack && map !== state.mapPack) map.disposeAssets?.(); return; }
+  const previous = state.mapPack;
+  const preserveView = previous === map && state.workspaceMode === "explore" && !state.trace && state.selectedSegment === stageIndex;
   const selectionRevision = ++state.traceSelectionRevision;
   disconnectLive(true);
   elements.liveStateRow.hidden = true;
@@ -1008,36 +1012,38 @@ async function openHistoricalRoute(destination, revision) {
   state.traceCollection = state.replayCollection;
   state.currentTime = 0;
   state.lastEventTime = -1;
-  const previous = state.mapPack;
   state.mapPack = map;
   state.mapSourceKind = "historical-route";
-  state.historicalRoute = { group, title, inspectionId };
+  state.historicalRoute = { group, title, inspectionId, teamId: teamId || null };
   updateDailyCountdown();
   state.dailyMapStatus = null;
-  resetSegmentNavigation(null);
+  if (!preserveView) resetSegmentNavigation(null);
   state.selectedSegment = stageIndex;
   state.segmentSelectionMode = "manual";
   state.compatibility = assessCompatibility(null, map);
   syncGameAssetsForTrace(null, selectionRevision);
   updateTraceUI(); updateMapUI(); updateCompatibilityUI(false);
   syncWorkspaceState(); dismissGate();
-  viewer?.resize(); viewer?.fitView();
+  viewer?.resize();
+  if (!preserveView) viewer?.fitView();
   await renderData();
-  if (selectionRevision !== state.traceSelectionRevision) return;
-  if (previous !== map) previous?.disposeAssets?.();
+  if (previous !== map && previous !== state.mapPack) previous?.disposeAssets?.();
+  if (selectionRevision !== state.traceSelectionRevision || revision !== state.mapRequestRevision || state.mapPack !== map) return;
   updateHistoricalRouteUrl(stageIndex);
   await communityMapPanel.openHistorical();
 }
 
 function updateHistoricalRouteUrl(stageIndex) {
   if (!state.historicalRoute) return;
-  window.history.replaceState(null, "", historicalRouteUrl(window.location.href, state.historicalRoute.group.id, stageIndex, state.historicalRoute.inspectionId || null));
+  window.history.replaceState(null, "", historicalRouteUrl(window.location.href, state.historicalRoute.group.id, stageIndex,
+    state.historicalRoute.inspectionId || null, state.historicalRoute.teamId || null));
 }
 
 function clearHistoricalRouteUrl() {
   const url = new URL(window.location.href);
   url.searchParams.delete("routeGroup"); url.searchParams.delete("stage");
   url.searchParams.delete("inspection");
+  url.searchParams.delete("team");
   window.history.replaceState(null, "", url.href);
 }
 
@@ -1625,7 +1631,7 @@ function syncWorkspaceState() {
   shell.dataset.workspaceMode = state.workspaceMode;
   shell.dataset.replayState = replayEmpty ? "empty" : state.trace ? "ready" : "explore";
   if (state.workspaceMode === "explore") elements.modeChip.textContent = state.historicalRoute
-    ? state.historicalRoute.inspectionId ? "验收预览" : "历史路线" : "地图";
+    ? state.historicalRoute.inspectionId ? "验收预览" : state.historicalRoute.teamId ? "团队路线" : "历史路线" : "地图";
   syncCommunityContext();
 }
 
@@ -2669,21 +2675,74 @@ async function bootstrapHistoricalRouteFromQuery() {
   try { link = parseHistoricalRouteLink(window.location.search); }
   catch (error) { showError("历史路线未打开", error.message, 0); return; }
   if (!link) return;
+  await navigateHistoricalRoute(link);
+}
+
+async function readHistoricalJson(path, limit = 30_000_000) {
+  const response = await fetch(path, { cache: "no-store", headers: { Accept: "application/json" }, signal: AbortSignal.timeout(20_000) });
+  if (!response.ok) throw new Error(`历史路线服务暂不可用（HTTP ${response.status}）。`);
+  if (!response.headers.get("content-type")?.includes("application/json")) throw new Error("历史路线服务返回格式无效。");
+  if (Number(response.headers.get("content-length")) > limit) throw new Error("历史路线数据过大。");
+  const reader = response.body?.getReader();
+  let text;
+  if (reader) {
+    const chunks = []; let size = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        size += value.byteLength;
+        if (size > limit) { await reader.cancel(); throw new Error("历史路线数据过大。"); }
+        chunks.push(value);
+      }
+    } finally { reader.releaseLock(); }
+    const bytes = new Uint8Array(size); let offset = 0;
+    for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+    text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } else {
+    text = await response.text();
+    if (new TextEncoder().encode(text).byteLength > limit) throw new Error("历史路线数据过大。");
+  }
+  return JSON.parse(text);
+}
+
+async function openCommunityTeam(team) {
+  if (!team) {
+    if (!state.historicalRoute?.teamId) return;
+    state.historicalRoute = { ...state.historicalRoute, teamId: null,
+      title: state.historicalRoute.title.replace(/ · 团队路线$/, "") };
+    if (Number.isInteger(state.selectedSegment)) updateHistoricalRouteUrl(state.selectedSegment);
+    else {
+      const url = new URL(window.location.href); url.searchParams.delete("team");
+      window.history.replaceState(null, "", url.href);
+    }
+    renderSegmentNavigation(); syncWorkspaceState();
+    await communityMapPanel.openHistorical();
+    return;
+  }
+  // Search results may belong to another day, scene or game build. Resolve
+  // their original verified pack before drawing any of the team's positions.
+  // Search summaries carry scene/build; only the single-team lookup carries
+  // the verified pack. These hints preserve a candidate chapter, while the
+  // resolver still proves the exact pack before reusing any model or camera.
+  const sameMap = team.map?.scene === state.mapPack?.sceneName && String(team.map?.buildId) === String(state.mapPack?.gameBuildId)
+    && (!team.mapPackId || team.mapPackId === state.mapPack?.mapPackId);
+  const stageIndex = (state.historicalRoute?.group.id === team.groupId || sameMap)
+    && team.stageSummaries?.some(stage => stage.index === state.selectedSegment && stage.memberCount > 0)
+    ? state.selectedSegment : null;
+  await navigateHistoricalRoute({ groupId: team.groupId, teamId: team.id, stageIndex });
+}
+
+async function navigateHistoricalRoute(link) {
   const revision = ++state.mapRequestRevision;
   state.manualMapLoads++;
   setSourceLoading("map", true);
   try {
     const destination = await loadHistoricalRouteLink(link, {
-      readGroups: async () => {
-        const response = await fetch("/api/route-groups", { cache: "no-store", headers: { Accept: "application/json" } });
-        if (!response.ok) throw new Error(`历史路线服务暂不可用（HTTP ${response.status}）。`);
-        if (!response.headers.get("content-type")?.includes("application/json")) throw new Error("历史路线服务返回格式无效。");
-        if (Number(response.headers.get("content-length")) > 30_000_000) throw new Error("历史路线列表过大。");
-        const text = await response.text();
-        if (text.length > 30_000_000) throw new Error("历史路线列表过大。");
-        return JSON.parse(text);
-      },
+      readGroups: () => readHistoricalJson("/api/route-groups"),
+      readTeam: id => readHistoricalJson(`/api/route-teams/${id}`, 1_000_000),
       readCatalog: () => ensureMapCatalog(), loadMapPack: loadMapPackUrl,
+      currentMapPack: state.mapPack,
     });
     await openHistoricalRoute(destination, revision);
   } catch (error) { if (revision === state.mapRequestRevision) showError("历史路线未打开", error.message, 0); }

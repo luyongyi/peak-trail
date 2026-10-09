@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { resolveDaily } from "../server/peak-daily.mjs";
+import { latestDailyBoundary, resolveDaily } from "../server/peak-daily.mjs";
 
 const toolDirectory = dirname(fileURLToPath(import.meta.url));
 const platformDirectory = resolve(toolDirectory, "..");
@@ -27,7 +27,11 @@ try {
 }
 
 const previous = history.observations.at(-1);
-if (!previous || previous.levelIndex !== current.levelIndex) {
+// A repeated official index on another day is still a new observation. Keep
+// those confirmations instead of silently erasing an extended map-pool period.
+if (!previous || previous.levelIndex !== current.levelIndex
+    || previous.sceneName !== current.sceneName || previous.mapSlot !== current.mapSlot
+    || latestDailyBoundary(Date.parse(previous.observedAtUtc)) !== latestDailyBoundary(Date.parse(current.fetchedAtUtc))) {
   history.observations.push({
     observedAtUtc: current.fetchedAtUtc,
     levelIndex: current.levelIndex,

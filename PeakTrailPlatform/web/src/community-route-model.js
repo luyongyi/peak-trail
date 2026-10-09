@@ -1,5 +1,6 @@
 import { normalizeRoute } from "./map-route.js";
-import { heightBands, normalizeHeatmap, normalizeRouteGroups, normalizeRoutes, routeColor } from "./route-collection-model.js";
+import { heightBands, normalizeHeatmap, normalizeRouteGroups, normalizeRoutes } from "./route-collection-model.js";
+import { teamMemberColor } from "./team-route-model.js";
 
 const HASH = /^[a-f0-9]{64}$/;
 const PACK_ID = /^sha256-[a-f0-9]{64}$/;
@@ -82,8 +83,55 @@ export function normalizeCommunityStage(rawRoutes, rawHeatmap, group, mapPack, s
 }
 
 export function communityPlayers(routes, hidden = new Set()) {
-  return routes.map((route, index) => ({ id: route.id, playerKey: route.playerKey, name: route.name,
-    color: routeColor(index), visible: !hidden.has(route.id), difficulty: route.difficulty || null }));
+  const players = new Map();
+  for (const route of routes) {
+    const key = route.playerKey || route.id;
+    if (!players.has(key)) players.set(key, { id: key, playerKey: key, name: route.name,
+      color: teamMemberColor(key), visible: !hidden.has(key), difficulty: route.difficulty || null, pointCount: 0, hasPoints: false });
+    const player = players.get(key);
+    player.pointCount += route.points?.length || 0;
+    player.hasPoints = player.pointCount > 0;
+  }
+  return [...players.values()];
+}
+
+export function normalizeCommunityTeams(value) {
+  if (!Array.isArray(value?.teams) || value.teams.length > 50) throw new Error("队伍列表格式无效。");
+  const ids = new Set();
+  return { teams: value.teams.map(team => {
+    if (!HASH.test(team?.id || "") || ids.has(team.id) || !HASH.test(team.groupId || "")
+      || !Number.isFinite(Date.parse(team.startedUtc)) || !team.map || typeof team.map.scene !== "string"
+      || !Array.isArray(team.members) || team.members.length > 64 || !Array.isArray(team.stageSummaries) || team.stageSummaries.length > 64
+      || team.stageSummaries.some(stage => !Number.isInteger(stage?.index) || stage.index < 0 || typeof stage.name !== "string"
+        || !Number.isSafeInteger(stage.memberCount) || stage.memberCount < 0 || !Number.isSafeInteger(stage.completedCount) || stage.completedCount < 0)) throw new Error("队伍身份无效。");
+    ids.add(team.id);
+    const members = new Map();
+    for (const member of team.members) {
+      if (!HASH.test(member?.playerKey || "") || typeof member.name !== "string") throw new Error("队员身份无效。");
+      members.set(member.playerKey, { playerKey: member.playerKey, name: member.name || "登山者" });
+    }
+    return { ...team, members: [...members.values()] };
+  }), truncated: Boolean(value.truncated) };
+}
+
+export function normalizeCommunityTeamStage(value, group, mapPack, stageIndex, teamId) {
+  if (value?.teamId !== teamId || value.groupId !== group.id || value.stageIndex !== stageIndex
+    || value.mapCompatibility !== "matched" || value.mapPackId !== mapPack.mapPackId
+    || !verifiedAlignment(value.mapAlignment) || value.mapAlignment.id !== group.mapAlignment?.id
+    || value.coordinateSpace !== "canonical-map-world-cm" || !matchesCommunityGroup(group, mapPack)) {
+    throw new Error("这支队伍的路线与当前地图不一致，请打开对应地图。");
+  }
+  const response = normalizeRoutes(value);
+  if (response.routes.some(route => !HASH.test(route.playerKey || "") || typeof route.completed !== "boolean"
+    || ![true, false, null, undefined].includes(route.gameCompleted))) throw new Error("队员路线格式无效。");
+  return { routes: response.routes, heatmap: null, totalRouteCount: response.totalRouteCount, truncated: Boolean(response.truncated),
+    teamLoaded: true, heightBands: heightBands(response.routes, null) };
+}
+
+export function communityTeamLabel(team) {
+  const date = new Date(team.startedUtc).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
+  const difficulty = typeof team.difficulty === "string" ? team.difficulty : team.difficulty?.label || team.difficulty?.key || "难度未知";
+  return `${date} · ${team.map.scene} · ${difficulty} · ${team.members.map(member => member.name).join("、")}`;
 }
 
 export function communityGroupLabel(group, index = 0) {

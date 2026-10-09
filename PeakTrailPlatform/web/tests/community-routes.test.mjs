@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { communityGroupLabel, communityMapIdentity, mapRouteStages, matchesCommunityGroup, normalizeCommunityStage } from "../src/community-route-model.js";
+import { communityGroupLabel, communityMapIdentity, communityPlayers, mapRouteStages, matchesCommunityGroup, normalizeCommunityStage, normalizeCommunityTeams, normalizeCommunityTeamStage } from "../src/community-route-model.js";
 import { createCommunityRoutes } from "../src/community-routes.js";
 
 const hash = character => character.repeat(64);
@@ -215,10 +215,11 @@ test("difficulty filters are encoded and retained only when the chosen layout su
   const key = first.difficulties[1].key;
   await controller.setDifficulty(key);
   assert.equal(controller.getSnapshot().difficulty, key);
-  assert.ok(fake.calls.slice(-2).every(call => call.path.endsWith(`?difficulty=${encodeURIComponent(key)}`)));
+  assert.ok(fake.calls.slice(-2).every(call => new URL(call.path, "https://example.invalid").searchParams.get("difficulty") === key));
+  assert.equal(new URL(fake.calls.at(-1).path, "https://example.invalid").searchParams.get("countBy"), "team");
   await controller.selectGroup(second.id);
   assert.equal(controller.getSnapshot().difficulty, "");
-  assert.ok(fake.calls.slice(-2).every(call => !call.path.includes("?")));
+  assert.ok(fake.calls.slice(-2).every(call => !new URL(call.path, "https://example.invalid").searchParams.has("difficulty")));
 });
 
 test("only mismatch data never reaches a route or heatmap endpoint", async () => {
@@ -319,4 +320,114 @@ test("truncation is reported truthfully and a reentered identical map only chang
   await controller.enterMap(map(), { stageIndex: null });
   assert.equal(fake.calls.filter(call => call.path === "/api/route-groups").length, 1);
   assert.equal(controller.getSnapshot().stageIndex, null); assert.equal(controller.getSnapshot().routes.length, 0);
+});
+
+function team(overrides = {}) {
+  return { id: hash("6"), groupId: group().id, startedUtc: "2026-10-08T13:44:03Z", lastStartedUtc: "2026-10-08T13:44:03Z",
+    difficulty: "登山 0", map: { buildId: map().gameBuildId, scene: map().sceneName, levelIndex: 480 },
+    members: [{ playerKey: hash("1"), name: "Mylu" }, { playerKey: hash("2"), name: "队友" }], stageSummaries: [], ...overrides };
+}
+function teamStage(stageIndex = 0, overrides = {}) {
+  return { ...routeBody(group(), stageIndex), teamId: team().id,
+    routes: routeBody().routes.map((route, index) => ({ ...route, completed: index === 0, completion: index === 0 ? "complete" : "partial", gameCompleted: index === 0 })), ...overrides };
+}
+function teamServer() {
+  const basic = server(), calls = basic.calls;
+  return { calls, fetchImpl: async (path, options) => {
+    if (path.startsWith("/api/route-teams?")) { calls.push({ path, ...options }); return response({ teams: [team()], truncated: false }); }
+    const match = path.match(/^\/api\/route-teams\/([a-f0-9]{64})\/stages\/(\d+)\/routes$/);
+    if (match) { calls.push({ path, ...options }); return response(teamStage(Number(match[2]))); }
+    return basic.fetchImpl(path, options);
+  } };
+}
+
+test("member search is explicitly submitted, scoped to a layout, encoded and separate from route loading", async () => {
+  const fake = teamServer(), controller = createCommunityRoutes({ fetchImpl: fake.fetchImpl });
+  await controller.enterMap(map(), { stageIndex: 0 });
+  assert.equal(fake.calls.filter(call => call.path.startsWith("/api/route-teams")).length, 0);
+  await controller.searchTeams({ member: " My lu & 队友 ", allMaps: false });
+  const request = new URL(fake.calls.at(-1).path, "https://example.invalid");
+  assert.equal(request.searchParams.get("member"), "My lu & 队友"); assert.equal(request.searchParams.get("group"), group().id);
+  assert.equal(controller.getSnapshot().teams.length, 1); assert.equal(controller.getSnapshot().mode, "off");
+  await controller.searchTeams({ member: "Mylu", allMaps: true });
+  assert.equal(new URL(fake.calls.at(-1).path, "https://example.invalid").searchParams.has("group"), false);
+  assert.equal(fake.calls.filter(call => call.path.includes("/stages/")).length, 0);
+  controller.dispose();
+});
+
+test("selected team includes partial members, exposes independent stable keys and only requests heat on demand", async () => {
+  const fake = teamServer(), controller = createCommunityRoutes({ fetchImpl: fake.fetchImpl });
+  await controller.enterMap(map(), { stageIndex: 0 }); await controller.searchTeams({ member: "Mylu" }); await controller.selectTeam(team().id);
+  let snapshot = controller.getSnapshot();
+  assert.equal(snapshot.teamId, team().id); assert.equal(snapshot.mode, "team"); assert.equal(snapshot.routes.length, 2);
+  assert.equal(snapshot.routes[1].completed, false); assert.equal(snapshot.heatmap, null);
+  assert.equal(fake.calls.filter(call => call.path.includes("/heatmap")).length, 0);
+  controller.setReferencePlayer(hash("2")); controller.setPlayerVisible(hash("1"), false);
+  assert.equal(controller.getSnapshot().referencePlayerKey, hash("2")); assert.equal(controller.getSnapshot().players[0].visible, false);
+  const requestCount = fake.calls.length; await controller.setMode("routes");
+  assert.equal(fake.calls.length, requestCount); assert.equal(controller.getSnapshot().players[0].visible, false);
+  controller.setAllPlayersVisible(false); assert.equal(controller.getSnapshot().players.some(player => player.visible), false);
+  controller.setAllPlayersVisible(true); assert.equal(controller.getSnapshot().players.every(player => player.visible), true);
+  await controller.setMode("heatmap");
+  assert.equal(new URL(fake.calls.at(-1).path, "https://example.invalid").searchParams.get("team"), team().id);
+  await controller.setCountBy("player");
+  assert.equal(new URL(fake.calls.at(-1).path, "https://example.invalid").searchParams.get("countBy"), "player");
+  await controller.selectTeam(null); snapshot = controller.getSnapshot();
+  assert.equal(snapshot.teamId, null); assert.equal(snapshot.referencePlayerKey, null);
+  controller.dispose();
+});
+
+test("member toggles unify several recordings of one person but never merge identical names", () => {
+  const routes = routeBody().routes;
+  const players = communityPlayers([routes[0], { ...routes[0], id: "another-session" }, routes[1]], new Set([hash("1")]));
+  assert.equal(players.length, 2); assert.equal(players[0].visible, false); assert.equal(players[1].visible, true);
+  assert.equal(players[0].pointCount, 4); assert.equal(players[0].hasPoints, true);
+  const empty = communityPlayers([{ ...routes[0], points: [] }])[0];
+  assert.equal(empty.pointCount, 0); assert.equal(empty.hasPoints, false);
+  assert.equal(players[0].color, communityPlayers([routes[1], routes[0]])[1].color);
+});
+
+test("team direct links preserve original map identity and never combine with inspection routes", async () => {
+  const fake = teamServer(), controller = createCommunityRoutes({ fetchImpl: fake.fetchImpl });
+  await controller.enterMap(map(), { groupId: group().id, teamId: team().id, stageIndex: 3, mode: "team" });
+  assert.equal(controller.getSnapshot().teamId, team().id); assert.equal(controller.getSnapshot().stageIndex, 3);
+  assert.equal(controller.getSnapshot().routes.length, 2); assert.equal(controller.getSnapshot().referencePlayerKey, null);
+  await controller.setStage(4); assert.equal(controller.getSnapshot().teamId, team().id);
+  assert.ok(fake.calls.filter(call => call.path.includes("/stages/")).every(call => call.path.startsWith(`/api/route-teams/${team().id}`)));
+  await assert.rejects(controller.enterMap(map(), { groupId: group().id, teamId: team().id, inspectionId: hash("d") }), /队伍链接/);
+  controller.dispose();
+});
+
+test("slow member searches cannot replace later results or revive a cleared map", async () => {
+  const pending = [], fake = server(), controller = createCommunityRoutes({ fetchImpl: (path, options) => path.startsWith("/api/route-teams?")
+    ? new Promise(resolve => pending.push({ options, resolve })) : fake.fetchImpl(path, options) });
+  await controller.enterMap(map(), { stageIndex: 0 });
+  const first = controller.searchTeams({ member: "old" }); const second = controller.searchTeams({ member: "new" });
+  assert.equal(pending[0].options.signal.aborted, true);
+  pending[1].resolve(response({ teams: [team({ id: hash("7") })] })); await second;
+  pending[0].resolve(response({ teams: [team()] })); await first;
+  assert.equal(controller.getSnapshot().teams[0].id, hash("7"));
+  const late = controller.searchTeams({ member: "late" }); controller.clear();
+  pending[2].resolve(response({ teams: [team()] })); await late;
+  assert.equal(controller.getSnapshot().teams.length, 0); assert.equal(controller.getSnapshot().mapPackId, null);
+  controller.dispose();
+});
+
+test("team data rejects stale maps and malformed player identity before overlaying the model", () => {
+  for (const change of [{ teamId: hash("7") }, { groupId: hash("d") }, { stageIndex: 4 },
+    { mapPackId: `sha256-${hash("d")}` }, { coordinateSpace: "recording-world-cm" }, { mapAlignment: { ...alignment(), id: hash("7") } }]) {
+    assert.throws(() => normalizeCommunityTeamStage(teamStage(0, change), group(), map(), 0, team().id), /不一致/);
+  }
+  assert.throws(() => normalizeCommunityTeams({ teams: [team({ members: [{ playerKey: "Mylu", name: "Mylu" }] })] }), /队员身份/);
+  assert.throws(() => normalizeCommunityTeamStage(teamStage(0, { routes: [{ ...teamStage().routes[0], playerKey: "name-only" }] }), group(), map(), 0, team().id), /队员路线/);
+});
+
+test("team capacity limits are disclosed instead of presenting truncated observations as the whole team", async () => {
+  const fake = teamServer(), controller = createCommunityRoutes({ fetchImpl: (path, options) =>
+    /^\/api\/route-teams\/[a-f0-9]{64}\/stages\//.test(path)
+      ? Promise.resolve(response(teamStage(0, { truncated: true }))) : fake.fetchImpl(path, options) });
+  await controller.enterMap(map(), { groupId: group().id, teamId: team().id, stageIndex: 0, mode: "team" });
+  assert.equal(controller.getSnapshot().truncated, true);
+  assert.match(controller.getSnapshot().message, /部分成员或轨迹尚未显示/);
+  controller.dispose();
 });

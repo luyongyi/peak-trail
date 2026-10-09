@@ -552,7 +552,11 @@ test("legacy unknown and missing gates upload successfully without public comple
   await isolated(async ({ root, base }) => {
     const raw = fixture(); raw.players[0].evidence = "legacy-unknown";
     const upload = await post(base, raw); assert.equal(upload.status, 201); assert.equal(upload.body.stages[0].stages[0].completion, "unknown");
-    await moderate(root, upload.body.uploadId, "approved"); assert.deepEqual((await get(base, "/api/route-groups")).body.groups, []);
+    await moderate(root, upload.body.uploadId, "approved");
+    const groups = (await get(base, "/api/route-groups")).body.groups;
+    assert.equal(groups.length, 1); assert.ok(groups[0].stageSummaries.every(stage => stage.routeCount === 0));
+    assert.deepEqual((await get(base, `/api/route-groups/${groups[0].id}/stages/0/routes`)).body.routes, []);
+    assert.deepEqual((await get(base, `/api/route-groups/${groups[0].id}/stages/0/heatmap`)).body.cells, []);
     const absent = fixture({ recordingId: digest("missing-gates") }); for (const stage of absent.map.stages) { delete stage.enterZCm; delete stage.exitZCm; }
     const old = await post(base, absent); assert.equal(old.status, 201); assert.equal(old.body.stages[0].stages[0].completion, "unknown");
   });

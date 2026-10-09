@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createDailyRefreshClock, createDailySourceReader, dailyObservationIsFresh,
-  dailySourceUrls, latestDailyBoundary, nextDailyBoundary } from "../src/daily-refresh.js";
+  dailySourceUrls, latestDailyBoundary, nextDailyBoundary, DAILY_RECHECK_MS } from "../src/daily-refresh.js";
 import { buildHomeDailyView } from "../src/home-daily.js";
 
 const START = Date.parse("2026-09-24T16:59:50Z");
@@ -207,6 +207,45 @@ test("visibility and slow polls do not refetch a cache already confirmed after t
   clock.schedule(current);
   await Promise.all([clock.wake(), clock.wake(), clock.wake()]);
   assert.equal(calls, 0);
+  clock.dispose();
+});
+
+test("an open map checks for official intraday changes within ten minutes while retaining the valid model", async () => {
+  const timer = fakeTimers(), calls = [];
+  const confirmedAt = START + 20_000;
+  timer.sleepUntil(confirmedAt);
+  const current = { ...daily(4, confirmedAt + 86400_000), fetchedAtUtc: new Date(confirmedAt).toISOString() };
+  const replacement = { ...current, levelIndex: 470, mapSlot: 8, sceneName: "Level_8" };
+  let clock;
+  clock = createDailyRefreshClock({ ...timer,
+    expire: async () => calls.push("expire"),
+    refresh: async () => {
+      calls.push(replacement.sceneName);
+      clock.schedule({ ...replacement, fetchedAtUtc: new Date(timer.now()).toISOString() });
+    } });
+  assert.equal(DAILY_RECHECK_MS, 600_000);
+  clock.schedule(current);
+  await timer.advance(confirmedAt + DAILY_RECHECK_MS - 1);
+  assert.deepEqual(calls, []);
+  await timer.advance(confirmedAt + DAILY_RECHECK_MS + 50);
+  assert.deepEqual(calls, ["Level_8"], "the still-valid model is not expired or cleared before confirmation");
+  await clock.wake();
+  assert.equal(calls.length, 1, "a fresh official observation gains a new check interval");
+  clock.dispose();
+});
+
+test("resuming a suspended tab rechecks an old but unexpired official observation", async () => {
+  const timer = fakeTimers(); let expired = 0, refreshed = 0;
+  const currentAt = START + 20_000;
+  timer.sleepUntil(currentAt);
+  const current = { ...daily(4, currentAt + 7 * 86400_000), fetchedAtUtc: new Date(currentAt).toISOString() };
+  const clock = createDailyRefreshClock({ ...timer, expire: async () => { expired += 1; },
+    refresh: async () => { refreshed += 1; } });
+  clock.schedule(current);
+  timer.sleepUntil(currentAt + DAILY_RECHECK_MS + 1);
+  await clock.wake();
+  assert.equal(refreshed, 1);
+  assert.equal(expired, 0);
   clock.dispose();
 });
 

@@ -2,7 +2,8 @@ import * as THREE from "three";
 import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
-import { normalizeRoutes, normalizeHeatmap, routeEdges, routeColor } from "./route-collection-model.js";
+import { normalizeRoutes, normalizeHeatmap, routeEdges } from "./route-collection-model.js";
+import { buildTeamRouteSegments, teamMemberColor } from "./team-route-model.js";
 
 function release(root) {
   const geometries = new Set(), materials = new Set();
@@ -49,17 +50,51 @@ export class CommunityRouteOverlay {
 
   setVisiblePlayers(keys) {
     const visible = keys === null || keys === undefined ? null : new Set(keys);
-    for (const [id, entry] of this.players) entry.group.visible = !visible || visible.has(id) || visible.has(entry.playerKey);
+    for (const [id, entry] of this.players) entry.group.visible = Boolean(!visible || visible.has(id)
+      || visible.has(entry.playerKey) || entry.playerKeys?.some(key => visible.has(key)));
+  }
+
+  addLines(positions, endpoints, color, metadata, width = 2.8) {
+    if (!positions.length) return null;
+    const geometry = new LineSegmentsGeometry();
+    geometry.setPositions(positions);
+    const group = new THREE.Group();
+    group.name = "community-route";
+    group.userData = metadata;
+    for (const [opacity, depthFunc, lineWidth, order] of [[.2, THREE.GreaterDepth, width * .72, 21], [.85, THREE.LessEqualDepth, width, 22]]) {
+      // Screen-space ribbons keep their winding after the world Z mirror,
+      // while Three reverses its front-face rule for that negative matrix.
+      const material = new LineMaterial({ color, linewidth: lineWidth, worldUnits: false, transparent: true, opacity,
+        depthTest: true, depthFunc, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true });
+      material.resolution.set(this.width, this.height);
+      this.lineMaterials.add(material);
+      const line = new LineSegments2(geometry, material);
+      line.renderOrder = order;
+      group.add(line);
+    }
+    if (endpoints.length) {
+      const pointsGeometry = new THREE.BufferGeometry();
+      pointsGeometry.setAttribute("position", new THREE.Float32BufferAttribute(endpoints, 3));
+      const points = new THREE.Points(pointsGeometry, new THREE.PointsMaterial({ color, size: 5, sizeAttenuation: false,
+        transparent: true, opacity: .85, depthTest: false, depthWrite: false }));
+      points.renderOrder = 23;
+      group.add(points);
+    }
+    this.root.add(group);
+    return group;
   }
 
   setData(input, origin, heightScale = 1) {
     if (!input || input.mode === "off" || !Number.isInteger(input.stageIndex)) { this.clear(); return; }
     const band = input.heightBand === null || input.heightBand === undefined ? null : input.heightBand;
     if (band !== null && !Number.isSafeInteger(band)) throw new Error("Invalid community height band");
-    if (!["routes", "heatmap"].includes(input.mode)) throw new Error("Invalid community overlay mode");
+    if (!["team", "routes", "heatmap"].includes(input.mode)) throw new Error("Invalid community overlay mode");
+    const memberSelection = input.visiblePlayers == null ? null : JSON.stringify([...input.visiblePlayers].sort());
+    const referencePlayerKey = input.referencePlayerKey || null;
     const source = this.source;
     const same = source && source.mode === input.mode && source.routes === input.routes && source.heatmap === input.heatmap
-      && source.stageIndex === input.stageIndex && source.band === band && source.origin.every((value, axis) => value === origin.getComponent(axis));
+      && source.stageIndex === input.stageIndex && source.band === band && source.origin.every((value, axis) => value === origin.getComponent(axis))
+      && (input.mode !== "team" || source.memberSelection === memberSelection && source.referencePlayerKey === referencePlayerKey);
     if (same) {
       this.root.scale.y = heightScale;
       this.setVisiblePlayers(input.visiblePlayers);
@@ -70,7 +105,7 @@ export class CommunityRouteOverlay {
     if (input.mode === "routes") {
       const routes = normalizeRoutes({ routes: input.routes || [] }).routes;
       const heightBandCm = input.heatmap?.heightBandCm || 200;
-      routes.forEach((route, index) => {
+      routes.forEach(route => {
         const positions = [], endpoints = [];
         const edges = routeEdges(route, { band, heightBandCm });
         let previousEnd = null;
@@ -83,33 +118,33 @@ export class CommunityRouteOverlay {
           previousEnd = end;
         }
         if (previousEnd) endpoints.push(...local(previousEnd));
-        if (!positions.length) return;
-        const geometry = new LineSegmentsGeometry();
-        geometry.setPositions(positions);
-        const color = routeColor(index);
-        const group = new THREE.Group();
-        group.name = "community-route";
-        group.userData = { routeId: route.id, playerKey: route.playerKey, stageIndex: input.stageIndex };
-        for (const [opacity, depthFunc, width, order] of [[.2, THREE.GreaterDepth, 2, 21], [.85, THREE.LessEqualDepth, 2.8, 22]]) {
-          // Screen-space ribbons keep their winding after the world Z mirror,
-          // while Three reverses its front-face rule for that negative matrix.
-          const material = new LineMaterial({ color, linewidth: width, worldUnits: false, transparent: true, opacity,
-            depthTest: true, depthFunc, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true });
-          material.resolution.set(this.width, this.height);
-          this.lineMaterials.add(material);
-          const line = new LineSegments2(geometry, material);
-          line.renderOrder = order;
-          group.add(line);
-        }
-        const pointsGeometry = new THREE.BufferGeometry();
-        pointsGeometry.setAttribute("position", new THREE.Float32BufferAttribute(endpoints, 3));
-        const points = new THREE.Points(pointsGeometry, new THREE.PointsMaterial({ color, size: 5, sizeAttenuation: false,
-          transparent: true, opacity: .85, depthTest: false, depthWrite: false }));
-        points.renderOrder = 23;
-        group.add(points);
-        this.root.add(group);
-        this.players.set(route.id, { group, playerKey: route.playerKey });
+        const group = this.addLines(positions, endpoints, teamMemberColor(route.playerKey || route.id),
+          { routeId: route.id, playerKey: route.playerKey, stageIndex: input.stageIndex });
+        if (group) this.players.set(route.id, { group, playerKey: route.playerKey });
       });
+    } else if (input.mode === "team") {
+      const pieces = buildTeamRouteSegments(input.routes, { visiblePlayers: input.visiblePlayers, referencePlayerKey,
+        band, heightBandCm: input.heatmap?.heightBandCm || 200 });
+      const batches = new Map();
+      for (const piece of pieces) {
+        // Batch shared pieces by member count. Individual branches retain each
+        // member's stable color, with a slightly stronger reference route.
+        const shared = piece.members.length > 1, key = shared ? `shared-${piece.members.length}-${piece.reference}` : piece.members[0];
+        let batch = batches.get(key);
+        if (!batch) {
+          batch = { positions: [], members: new Set(), reference: piece.reference, shared,
+            color: shared ? "#f1d389" : teamMemberColor(piece.members[0]) };
+          batches.set(key, batch);
+        }
+        batch.positions.push(...local(piece.start), ...local(piece.end));
+        piece.members.forEach(member => batch.members.add(member));
+      }
+      for (const [key, batch] of batches) {
+        const playerKeys = [...batch.members];
+        const group = this.addLines(batch.positions, [], batch.color, { team: true, shared: batch.shared,
+          reference: batch.reference, playerKeys, stageIndex: input.stageIndex }, batch.shared ? 3.6 : batch.reference ? 3.2 : 2.6);
+        if (group) this.players.set(key, { group, playerKeys });
+      }
     } else {
       const heatmap = normalizeHeatmap(input.heatmap);
       const cells = band === null ? heatmap.cells : heatmap.cells.filter(cell => cell[1] === band);
@@ -139,7 +174,7 @@ export class CommunityRouteOverlay {
     }
     this.mode = input.mode;
     this.source = { mode: input.mode, routes: input.routes, heatmap: input.heatmap, stageIndex: input.stageIndex,
-      band, origin: origin.toArray() };
+      band, origin: origin.toArray(), memberSelection, referencePlayerKey };
     this.root.scale.y = heightScale;
     this.root.visible = true;
     this.setVisiblePlayers(input.visiblePlayers);

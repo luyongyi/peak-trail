@@ -14,7 +14,8 @@ export async function proxyRouteRead(request, response, base) {
   const url = new URL(request.url, "http://127.0.0.1");
   const collection = /^\/api\/route-groups(?:\/[a-zA-Z0-9_-]+\/stages\/\d+\/(?:routes|heatmap))?$/.test(url.pathname);
   const inspection = /^\/api\/route-groups\/[a-f0-9]{64}\/uploads\/[a-f0-9]{64}\/stages\/\d+\/inspection$/.test(url.pathname);
-  if (!collection && !inspection) return false;
+  const teams = /^\/api\/route-teams(?:\/[a-f0-9]{64}(?:\/stages\/\d+\/routes)?)?$/.test(url.pathname);
+  if (!collection && !inspection && !teams) return false;
   if (!["GET", "HEAD"].includes(request.method)) {
     response.writeHead(405, { Allow: "GET, HEAD" }).end();
     return true;

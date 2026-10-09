@@ -1,5 +1,6 @@
 const SHANGHAI_OFFSET_MS = 8 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
+export const DAILY_RECHECK_MS = 10 * 60_000;
 
 /** Most recent 01:00 in Asia/Shanghai. Before 01:00, this is yesterday's boundary. */
 export function latestDailyBoundary(now = Date.now()) {
@@ -84,6 +85,7 @@ export function createDailySourceReader({
 /** Boundary/retry timers complement the slow poll; a resumed tab refreshes too. */
 export function createDailyRefreshClock({
   refresh, expire, now = Date.now, setTimer = setTimeout, clearTimer = clearTimeout,
+  recheckMs = DAILY_RECHECK_MS,
 }) {
   let daily = null;
   let expiryTimer = null;
@@ -91,12 +93,19 @@ export function createDailyRefreshClock({
   let scheduledRetryAt = 0;
   let inFlight = null;
   let disposed = false;
+  if (!Number.isFinite(recheckMs) || recheckMs <= 0) throw new Error("Daily recheck interval must be positive");
+
+  function needsRecheck(current) {
+    const fetched = Date.parse(daily?.fetchedAtUtc);
+    return !Number.isFinite(fetched) || current - fetched >= recheckMs;
+  }
 
   function wake() {
     if (disposed) return Promise.resolve();
     const current = now();
     if (scheduledRetryAt > current) return Promise.resolve();
-    if (daily && dailyObservationIsFresh(daily, current) && scheduledRetryAt <= 0) return Promise.resolve();
+    if (daily && dailyObservationIsFresh(daily, current) && !needsRecheck(current)
+        && scheduledRetryAt <= 0) return Promise.resolve();
     if (!inFlight) {
       inFlight = (async () => {
         if (daily && !dailyObservationIsFresh(daily, now())) await expire(daily);
@@ -116,10 +125,12 @@ export function createDailyRefreshClock({
       if (disposed) return;
       const current = now();
       const reportedDeadline = Date.parse(daily?.nextChangeAtUtc);
+      const fetched = Date.parse(daily?.fetchedAtUtc);
       const boundary = nextDailyBoundary(current);
       const deadline = Math.min(
         Number.isFinite(reportedDeadline) ? reportedDeadline : Infinity,
         Number.isFinite(boundary) ? boundary : Infinity,
+        Number.isFinite(fetched) ? fetched + recheckMs : Infinity,
       );
       const delay = deadline - current;
       if (Number.isFinite(delay) && delay > 0) expiryTimer = setTimer(wake, delay + 50);

@@ -36,6 +36,16 @@ test("development route proxy is read-only, preserves filtering, and cannot prox
     assert.equal((await fetch(origin + inspection.replace("b".repeat(64), "bad-upload"))).status, 404);
     assert.equal(requests.length, 3);
     assert.ok(requests.every(request => request.method === "GET"));
+    const teamId = "c".repeat(64);
+    for (const path of [`/api/route-teams?member=%E5%B0%8F%E6%98%8E&limit=50`, `/api/route-teams/${teamId}`,
+      `/api/route-teams/${teamId}/stages/3/routes`, `/api/route-groups/${"a".repeat(64)}/stages/3/heatmap?team=${teamId}&countBy=team`]) {
+      const result = await fetch(origin + path);
+      assert.equal(result.status, 200); assert.equal((await result.json()).url, path);
+    }
+    assert.equal((await fetch(`${origin}/api/route-teams/${teamId}`, { method: "POST", body: "private" })).status, 405);
+    assert.equal((await fetch(`${origin}/api/route-teams/not-a-hash`)).status, 404);
+    assert.equal((await fetch(`${origin}/api/route-teams/${teamId}/private`)).status, 404);
+    assert.equal(requests.length, 7);
   } finally { await close(proxy); await close(upstream); }
 });
 

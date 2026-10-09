@@ -1,4 +1,4 @@
-import { matchesCommunityGroup, pendingCommunityMessage } from "./community-route-model.js";
+import { matchesCommunityGroup, normalizeCommunityTeams, pendingCommunityMessage } from "./community-route-model.js";
 import { heightBands, normalizeRouteGroups, normalizeRoutes } from "./route-collection-model.js";
 import { selectTraceMapPack } from "./protocol.js";
 
@@ -16,7 +16,10 @@ export function parseHistoricalRouteLink(search) {
   }
   const inspectionId = params.get("inspection");
   if (params.getAll("inspection").length > 1 || (inspectionId !== null && !HASH.test(inspectionId))) throw new Error("历史验收预览的投稿身份无效。");
-  return { groupId, stageIndex: stage === null ? null : Number(stage), ...(inspectionId ? { inspectionId } : {}) };
+  const teamId = params.get("team");
+  if (params.getAll("team").length > 1 || (teamId !== null && !HASH.test(teamId))) throw new Error("历史路线链接的队伍身份无效。");
+  if (teamId && inspectionId) throw new Error("队伍路线与单次投稿预览不能同时选择。");
+  return { groupId, stageIndex: stage === null ? null : Number(stage), ...(inspectionId ? { inspectionId } : {}), ...(teamId ? { teamId } : {}) };
 }
 
 export function historicalRouteTitle(group) {
@@ -29,33 +32,51 @@ export function historicalRouteTitle(group) {
 
 // Only a public group selects its original pack. The daily rotation, date and
 // Level_N alone never choose a replacement map or relax the alignment checks.
-export async function loadHistoricalRouteLink(link, { readGroups, readCatalog, loadMapPack } = {}) {
+export async function loadHistoricalRouteLink(link, { readGroups, readCatalog, loadMapPack, readTeam, currentMapPack = null } = {}) {
+  if (!HASH.test(link?.groupId || "") || link.teamId && (!HASH.test(link.teamId) || link.inspectionId)) throw new Error("历史路线链接参数无效。");
   const groups = normalizeRouteGroups(await readGroups());
   const group = groups.find(value => value.id === link.groupId);
   if (!group) throw new Error("这个历史路线组尚未公开或已下线，请确认上传结果。");
   if (group.mapCompatibility !== "matched" || !PACK_ID.test(group.mapPackId || "")) {
     throw new Error(pendingCommunityMessage([group.mapAlignment?.reason]));
   }
+  let team = null;
+  if (link.teamId) {
+    if (!readTeam) throw new Error("队伍路线服务暂不可用。");
+    const body = await readTeam(link.teamId);
+    team = normalizeCommunityTeams({ teams: [body?.team] }).teams[0];
+    if (team.id !== link.teamId || team.groupId !== group.id || team.map.scene !== group.map.scene
+        || String(team.map.buildId) !== String(group.map.buildId) || team.mapCompatibility !== "matched"
+        || team.mapPackId !== group.mapPackId || team.mapAlignment?.id !== group.mapAlignment?.id) throw new Error("这支队伍不属于链接指定的原地图，请重新打开队伍。");
+    if (team.stageSummaries.length > 64 || team.stageSummaries.some(stage => !Number.isSafeInteger(stage?.index)
+        || !Number.isSafeInteger(stage.memberCount) || stage.memberCount < 0
+        || !group.stageSummaries.some(value => value.index === stage.index))) throw new Error("队伍的关卡记录无效。");
+  }
   const { catalog, baseUrl } = await readCatalog();
   const entry = selectTraceMapPack(catalog, { mapPackId: group.mapPackId, sceneName: group.map.scene, gameBuildId: group.map.buildId });
   if (!entry || entry.mapPackId !== group.mapPackId || String(entry.gameBuildId) !== String(group.map.buildId)
     || entry.sceneName !== group.map.scene) throw new Error("历史路线对应的原版地图尚未发布，暂时无法检查匹配。");
-  const stageIndex = link.stageIndex ?? group.stageSummaries.filter(stage => stage.routeCount > 0).at(-1)?.index;
+  const stageIndex = link.stageIndex ?? (team
+    ? team.stageSummaries.filter(stage => stage.memberCount > 0).sort((a, b) => a.index - b.index).at(-1)?.index
+    : group.stageSummaries.filter(stage => stage.routeCount > 0).at(-1)?.index);
   if (!Number.isInteger(stageIndex) || !group.stageSummaries.some(stage => stage.index === stageIndex)) {
     throw new Error("历史路线组中没有这个关卡。");
   }
-  const mapPack = await loadMapPack(new URL(entry.path, baseUrl).href);
+  const reusedMapPack = Boolean(currentMapPack && matchesCommunityGroup(group, currentMapPack));
+  const mapPack = reusedMapPack ? currentMapPack : await loadMapPack(new URL(entry.path, baseUrl).href);
   if (!matchesCommunityGroup(group, mapPack)) {
-    mapPack?.disposeAssets?.();
+    if (!reusedMapPack) mapPack?.disposeAssets?.();
     throw new Error("历史路线与原地图的版本、关卡或地标不匹配，暂不叠加。");
   }
-  return { group, mapPack, stageIndex, inspectionId: link.inspectionId || null,
-    title: `${historicalRouteTitle(group)}${link.inspectionId ? " · 验收预览" : ""}` };
+  return { group, mapPack, stageIndex, inspectionId: link.inspectionId || null, teamId: team?.id || null, team, reusedMapPack,
+    title: `${historicalRouteTitle(group)}${link.inspectionId ? " · 验收预览" : team ? " · 团队路线" : ""}` };
 }
 
-export function historicalRouteUrl(value, groupId, stageIndex, inspectionId = null) {
+export function historicalRouteUrl(value, groupId, stageIndex, inspectionId = null, teamId = null) {
   if (!HASH.test(groupId) || !Number.isInteger(stageIndex) || stageIndex < 0 || stageIndex > 99) throw new Error("历史路线链接参数无效。");
   if (inspectionId !== null && !HASH.test(inspectionId)) throw new Error("历史验收预览的投稿身份无效。");
+  if (teamId !== null && !HASH.test(teamId)) throw new Error("历史路线链接的队伍身份无效。");
+  if (teamId && inspectionId) throw new Error("队伍路线与单次投稿预览不能同时选择。");
   const url = new URL(value);
   // A shared public URL carries only the map group and chapter, never an
   // unrelated local-import parameter or a private upload/admin token.
@@ -64,6 +85,7 @@ export function historicalRouteUrl(value, groupId, stageIndex, inspectionId = nu
   url.searchParams.set("routeGroup", groupId);
   url.searchParams.set("stage", String(stageIndex));
   if (inspectionId) url.searchParams.set("inspection", inspectionId);
+  if (teamId) url.searchParams.set("team", teamId);
   return url.href;
 }
 

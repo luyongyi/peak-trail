@@ -4,7 +4,8 @@ import { readFile } from "node:fs/promises";
 import { createCommunityMapPanel } from "../src/community-map-panel.js";
 
 const ids = ["appShell", "communityToggle", "communityLayerControl", "communityMode", "communityPanel", "communityRefresh", "communityStatus", "communityFilters",
-  "communityGroupField", "communityGroup", "communityDifficulty", "communityHeight", "communityLegend", "communityPlayers"];
+  "communityGroupField", "communityGroup", "communityDifficulty", "communityHeight", "communityLegend", "communityPlayers", "communityCollapse", "communitySearchForm", "communityMemberSearch", "communitySearchScope",
+  "communitySearchButton", "communityTeamSearchStatus", "communityTeamResults", "communityTeamClear", "communityCountBy", "communityReference", "communityMembersControls", "communityAllPlayers"];
 const hash = character => character.repeat(64);
 const alignment = () => ({ status: "verified", id: hash("9"), method: "identity", landmarkCount: 3, maxErrorCm: 0 });
 const route = ["Shore", "Roots", "Alpine", "Volcano", "Kiln"];
@@ -40,16 +41,25 @@ function stageResponse(id, stageIndex, heat = false) {
       points: [[0, 0, 100, 0], [100, 100, 300, 100]], breaks: [] },
       { id: "two", name: "登山者", points: [[0, 200, 100, 0], [100, 300, 100, 100]], breaks: [] }] };
 }
-function fixture({ groups = [group()], enabled = true, stageIndex = 0, deferStage = null, inspectionRouteStates = null } = {}) {
+function fixture({ groups = [group()], enabled = true, stageIndex = 0, deferStage = null, inspectionRouteStates = null, teams = [], navigateTeams = false, teamRouteStates = null } = {}) {
   const elements = Object.fromEntries(ids.map(id => [id, node()]));
   const heatOption = node("option");
   elements.communityMode.querySelector = selector => selector === 'option[value="heatmap"]' ? heatOption : null;
   const root = { getElementById: id => elements[id], createElement: node };
-  const calls = [], deferred = [], firstScene = { overlays: [], setCommunityOverlay(value) { this.overlays.push(value); } };
+  const calls = [], deferred = [], openedTeams = [], firstScene = { overlays: [], setCommunityOverlay(value) { this.overlays.push(value); } };
   let context = { enabled, mapPack: map(), stageIndex }, scene = firstScene;
   const fetchImpl = async (path, options) => {
     calls.push({ path, ...options });
     if (path === "/api/route-groups") return response({ groups });
+    if (path.startsWith("/api/route-teams?")) return response({ teams });
+    const teamMatch = path.match(/^\/api\/route-teams\/([a-f0-9]{64})\/stages\/(\d+)\/routes$/);
+    if (teamMatch) {
+      const selected = teams.find(team => team.id === teamMatch[1]);
+      const body = stageResponse(selected.groupId, Number(teamMatch[2]));
+      return response({ ...body, teamId: selected.id, routes: body.routes.map((route, index) => ({ ...route,
+        playerKey: selected.members[index].playerKey, name: selected.members[index].name, completed: index === 0, gameCompleted: index === 0,
+        ...(teamRouteStates?.[index] || {}) })) });
+    }
     const inspectionMatch = path.match(/\/([a-f0-9]{64})\/uploads\/([a-f0-9]{64})\/stages\/(\d+)\/inspection/);
     if (inspectionMatch) {
       const body = stageResponse(inspectionMatch[1], Number(inspectionMatch[3]));
@@ -65,11 +75,11 @@ function fixture({ groups = [group()], enabled = true, stageIndex = 0, deferStag
     if (Number(match[2]) === deferStage) return new Promise(resolve => deferred.push({ options, resolve: () => resolve(response(body)) }));
     return response(body);
   };
-  const panel = createCommunityMapPanel({ root, getContext: () => context, getScene: () => scene, fetchImpl });
+  const panel = createCommunityMapPanel({ root, getContext: () => context, getScene: () => scene, fetchImpl, onOpenTeam: navigateTeams ? team => openedTeams.push(team) : null });
   async function change(id, value) { elements[id].value = value; elements[id].dispatch("change"); await settle(); }
   async function toggle() { elements.communityToggle.dispatch("click"); await settle(); }
   async function open() { panel.sync(); await toggle(); }
-  return { elements, heatOption, calls, deferred, panel, firstScene, change, toggle, open,
+  return { elements, heatOption, calls, deferred, openedTeams, panel, firstScene, change, toggle, open,
     get context() { return context; }, set context(value) { context = value; }, get scene() { return scene; }, set scene(value) { scene = value; } };
 }
 
@@ -173,23 +183,35 @@ test("an explicit historical context opens routes pinned to its group while norm
   f.panel.dispose();
 });
 
-test("closing the panel aborts route reads immediately, stays closed across scene restore and reopens without automatic routes", async () => {
+test("collapsing only hides settings; pending routes finish and remain visible across scene restore", async () => {
   const f = fixture({ deferStage: 0 }); await f.open();
   f.elements.communityMode.value = "heatmap"; f.elements.communityMode.dispatch("change");
   assert.equal(f.deferred.length, 2); assert.equal(f.elements.communityPanel.hidden, false);
   await f.toggle();
   assert.equal(f.elements.communityPanel.hidden, true); assert.equal(f.elements.communityLayerControl.hidden, true);
-  assert.equal(f.elements.communityMode.value, "off"); assert.equal(f.elements.communityToggle.attributes["aria-expanded"], "false");
+  assert.equal(f.elements.communityMode.value, "heatmap"); assert.equal(f.elements.communityToggle.attributes["aria-expanded"], "false");
   assert.equal(f.elements.appShell.classList.contains("community-panel-open"), false);
-  assert.equal(f.scene.overlays.at(-1).mode, "off"); assert.ok(f.deferred.every(value => value.options.signal.aborted));
-  const replacement = { overlays: [], setCommunityOverlay(value) { this.overlays.push(value); } }; f.scene = replacement;
-  f.context = { ...f.context, stageIndex: 1 }; f.panel.sync({ restore: true });
-  assert.equal(replacement.overlays.at(-1).mode, "off");
+  assert.equal(f.scene.overlays.at(-1).mode, "off"); assert.ok(f.deferred.every(value => !value.options.signal.aborted));
   for (const pending of f.deferred) pending.resolve(); await settle();
-  assert.equal(replacement.overlays.at(-1).mode, "off"); assert.equal(f.elements.communityPanel.hidden, true);
+  assert.equal(f.scene.overlays.at(-1).mode, "heatmap"); assert.equal(f.elements.communityPanel.hidden, true);
+  const replacement = { overlays: [], setCommunityOverlay(value) { this.overlays.push(value); } }; f.scene = replacement;
+  f.panel.sync({ restore: true });
+  assert.equal(replacement.overlays.at(-1).mode, "heatmap");
   const requests = f.calls.length; await f.toggle();
-  assert.equal(f.calls.length, requests); assert.equal(f.elements.communityMode.value, "off");
-  assert.equal(replacement.overlays.at(-1).mode, "off"); assert.equal(f.elements.communityPanel.hidden, false);
+  assert.equal(f.calls.length, requests); assert.equal(f.elements.communityMode.value, "heatmap");
+  assert.equal(replacement.overlays.at(-1).mode, "heatmap"); assert.equal(f.elements.communityPanel.hidden, false);
+  await f.change("communityMode", "off");
+  assert.equal(replacement.overlays.at(-1).mode, "off");
+  f.panel.dispose();
+});
+
+test("the dedicated mobile collapse button preserves members and selected layer, including hidden chapter changes", async () => {
+  const f = fixture(); await f.open(); await f.change("communityMode", "routes");
+  f.elements.communityCollapse.dispatch("click"); await settle();
+  assert.equal(f.elements.communityPanel.hidden, true); assert.equal(f.scene.overlays.at(-1).mode, "routes");
+  f.context = { ...f.context, stageIndex: 2 }; f.panel.sync(); await settle();
+  assert.equal(f.elements.communityPanel.hidden, true); assert.equal(f.scene.overlays.at(-1).mode, "routes");
+  assert.equal(f.scene.overlays.at(-1).stageIndex, 2);
   f.panel.dispose();
 });
 
@@ -296,4 +318,83 @@ test("panel hidden attributes remain effective against its flex and grid present
   for (const selector of [".community-layer-control[hidden]", ".community-section[hidden]", ".community-filters[hidden]",
     ".community-filters label[hidden]", ".community-legend[hidden]"]) assert.ok(hiddenRule.includes(selector), selector);
   assert.match(hiddenRule, /display\s*:\s*none/);
+});
+
+function sampleTeam(overrides = {}) {
+  return { id: hash("6"), groupId: group().id, startedUtc: "2026-10-08T13:44:03Z", difficulty: { label: "登山 0" },
+    map: { buildId: map().gameBuildId, scene: map().sceneName, levelIndex: 480 },
+    members: [{ playerKey: hash("1"), name: "Mylu" }, { playerKey: hash("2"), name: "队友" }], stageSummaries: [], ...overrides };
+}
+
+test("team search requires form submission, displays safe member text and can open the full team", async () => {
+  const selected = sampleTeam({ members: [{ playerKey: hash("1"), name: '<script>alert("name")</script>' }, { playerKey: hash("2"), name: "Mylu" }] });
+  const f = fixture({ teams: [selected] }); await f.open();
+  f.elements.communityMemberSearch.value = "Mylu"; f.elements.communityMemberSearch.dispatch("input"); await settle();
+  assert.equal(f.calls.filter(call => call.path.startsWith("/api/route-teams?")).length, 0);
+  f.elements.communitySearchForm.dispatch("submit"); await settle();
+  assert.equal(f.elements.communityTeamResults.children.length, 1);
+  const result = f.elements.communityTeamResults.children[0];
+  assert.match(result.textContent, /登山 0/); assert.match(result.textContent, /<script>/); assert.equal(result.children.length, 0);
+  result.dispatch("click"); await settle();
+  assert.equal(f.scene.overlays.at(-1).mode, "team"); assert.equal(f.scene.overlays.at(-1).teamId, selected.id);
+  assert.deepEqual([...f.scene.overlays.at(-1).visiblePlayers], [hash("1"), hash("2")]);
+  assert.equal(f.elements.communityPlayers.children.length, 2); assert.match(f.elements.communityPlayers.children[1].children[2].textContent, /本关尚未完成/);
+  await f.change("communityReference", hash("2")); assert.equal(f.scene.overlays.at(-1).referencePlayerKey, hash("2"));
+  f.elements.communityAllPlayers.checked = false; f.elements.communityAllPlayers.dispatch("change");
+  assert.equal(f.scene.overlays.at(-1).visiblePlayers.size, 0);
+  f.elements.communityCollapse.dispatch("click");
+  assert.equal(f.elements.communityPanel.hidden, true); assert.equal(f.scene.overlays.at(-1).mode, "team");
+  assert.equal(f.scene.overlays.at(-1).visiblePlayers.size, 0);
+  f.panel.dispose();
+});
+
+test("searching another map opens that team's original model instead of drawing on the current map", async () => {
+  const remote = sampleTeam({ groupId: hash("7"), map: { buildId: "25739797", scene: "Level_18" } });
+  const f = fixture({ teams: [remote], navigateTeams: true }); await f.open();
+  f.elements.communityMemberSearch.value = "Mylu"; f.elements.communitySearchScope.value = "all";
+  f.elements.communitySearchForm.dispatch("submit"); await settle();
+  const parameters = new URL(f.calls.at(-1).path, "https://example.invalid").searchParams;
+  assert.equal(parameters.has("group"), false);
+  f.elements.communityTeamResults.children[0].dispatch("click"); await settle();
+  assert.deepEqual(f.openedTeams, [remote]); assert.equal(f.scene.overlays.at(-1).mode, "off");
+  assert.equal(f.calls.filter(call => call.path.includes(`/route-teams/${remote.id}/stages/`)).length, 0);
+  f.panel.dispose();
+});
+
+test("same-map teams also use the shareable navigation callback and clearing the team removes the URL selection", async () => {
+  const selected = sampleTeam(), f = fixture({ teams: [selected], navigateTeams: true }); await f.open();
+  f.elements.communityMemberSearch.value = "Mylu"; f.elements.communitySearchForm.dispatch("submit"); await settle();
+  f.elements.communityTeamResults.children[0].dispatch("click"); await settle();
+  assert.deepEqual(f.openedTeams, [selected]); assert.equal(f.calls.filter(call => call.path.includes(`/route-teams/${selected.id}/stages/`)).length, 0);
+  f.context = { ...f.context, routeGroupId: group().id, teamId: selected.id }; await f.panel.openHistorical();
+  assert.equal(f.scene.overlays.at(-1).teamId, selected.id); assert.equal(f.scene.overlays.at(-1).mode, "team");
+  f.elements.communityTeamClear.dispatch("click"); await settle();
+  assert.deepEqual(f.openedTeams, [selected, null]);
+  f.panel.dispose();
+});
+
+test("team member counts distinguish partial observations and empty members without inventing paths", async () => {
+  const selected = sampleTeam();
+  for (const allEmpty of [false, true]) {
+    const f = fixture({ teams: [selected], teamRouteStates: [
+      { completion: "partial", completed: false, gameCompleted: true, breaks: [100], ...(allEmpty ? { points: [] } : {}) },
+      { points: [], completion: "partial", completed: false, gameCompleted: null },
+    ] });
+    f.context = { ...f.context, routeGroupId: group().id, teamId: selected.id }; await f.panel.openHistorical();
+    assert.equal(f.elements.communityPlayers.children.length, 2);
+    assert.equal(f.elements.communityPlayers.children[1].children[2].textContent, "队友（本关无记录）");
+    assert.equal(f.elements.communityPlayers.children[1].children[0].checked, true, "an unrecorded member is still independently selectable");
+    assert.deepEqual(f.scene.overlays.at(-1).routes[1].points, [], "empty coordinates pass through unchanged");
+    if (allEmpty) {
+      assert.equal(f.elements.communityStatus.textContent, "本队 2 位队员 · 本关暂无录制轨迹。");
+      assert.equal(f.elements.communityStatus.dataset.state, "empty");
+      assert.equal(f.elements.communityPlayers.children[0].children[2].textContent, "Mylu（本关无记录）");
+      assert.ok(f.scene.overlays.at(-1).routes.every(route => !route.points.length));
+    } else {
+      assert.match(f.elements.communityStatus.textContent, /^本队 2 位队员 · 1 位有本关轨迹 · 已完成本关 · 线路有断点/);
+      assert.equal(f.elements.communityStatus.dataset.state, "ready");
+      assert.equal(f.elements.communityPlayers.children[0].children[2].textContent, "Mylu（已完成本关 · 线路有断点）");
+    }
+    f.panel.dispose();
+  }
 });

@@ -1,5 +1,5 @@
 import { parentPort, workerData } from "node:worker_threads";
-import { ingestUpload, listGroups, queryRoutes, autoApprovePending, queryInspection } from "./trajectory-store.mjs";
+import { ingestUpload, listGroups, queryRoutes, autoApprovePending, queryInspection, listTeams, queryTeam, queryTeamRoutes } from "./trajectory-store.mjs";
 
 let migrationComplete = false;
 try {
@@ -8,7 +8,10 @@ try {
   migrationComplete = true;
   const result = operation === "upload" ? await ingestUpload(root, Buffer.from(workerData.body), catalogPath)
     : operation === "groups" ? await listGroups(root, catalogPath)
+      : operation === "teams" ? await listTeams(root, workerData)
+      : operation === "team" ? await queryTeam(root, catalogPath, workerData.team)
+      : operation === "team-routes" ? await queryTeamRoutes(root, catalogPath, workerData.team, workerData.stage)
       : operation === "inspection" ? await queryInspection(root, catalogPath, workerData.group, workerData.upload, workerData.stage)
-      : await queryRoutes(root, catalogPath, workerData.group, workerData.stage, workerData.difficulty, workerData.limit, operation === "heatmap");
+      : await queryRoutes(root, catalogPath, workerData.group, workerData.stage, workerData.difficulty, workerData.limit, operation === "heatmap", { team: workerData.team, countBy: workerData.countBy });
   parentPort.postMessage({ json: JSON.stringify(result), duplicate: result.duplicate, migrationComplete });
 } catch (error) { parentPort.postMessage({ error: error.message, statusCode: error.statusCode ?? 500, migrationComplete }); }

@@ -6,6 +6,10 @@
 export const DEFAULT_API_VERSION = "2.6";
 export const DEFAULT_MAP_COUNT = 21;
 export const DAILY_CACHE_MS = 10 * 60_000;
+// Current NextLevelService adds the native integer HoursUntilLevel directly;
+// it is a total hour count, not a 0..23 wall-clock component. Bound the sum to
+// the game's signed 32-bit second arithmetic rather than assuming a daily lock.
+const MAX_NATIVE_COUNTDOWN_SECONDS = 2_147_483_647;
 const SHANGHAI_OFFSET_MS = 8 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -83,11 +87,11 @@ export async function resolveDaily({
   }
 
   const secondsRemaining = [
-    countdownPart(payload.HoursUntilLevel, "HoursUntilLevel", 23) * 3600,
+    countdownPart(payload.HoursUntilLevel, "HoursUntilLevel", Math.floor(MAX_NATIVE_COUNTDOWN_SECONDS / 3600)) * 3600,
     countdownPart(payload.MinutesUntilLevel, "MinutesUntilLevel", 59) * 60,
     countdownPart(payload.SecondsUntilLevel, "SecondsUntilLevel", 59),
   ].reduce((sum, value) => sum + value, 0);
-  if (!Number.isFinite(secondsRemaining) || secondsRemaining < 0) {
+  if (!Number.isSafeInteger(secondsRemaining) || secondsRemaining < 0 || secondsRemaining > MAX_NATIVE_COUNTDOWN_SECONDS) {
     throw new Error("PEAK daily endpoint returned an invalid rotation countdown");
   }
 
