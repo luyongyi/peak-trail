@@ -187,8 +187,9 @@ Its manually uploaded historical trajectories use a separate private
 `--routes-dir`, not the live relay's recording option or the static site tree.
 Administrator installation of `/var/lib/peak-trail-routes`, the writable systemd
 path and the updated launcher is required before enabling this API; follow
-[the staged enablement procedure](trajectory-enablement.md). Posts remain pending
-until moderation. Unmatched builds or native branches never overlay old map
+[the staged enablement procedure](trajectory-enablement.md). Valid posts are
+automatically approved; existing unreviewed posts are revalidated once and approved.
+Explicit administrator decisions remain in force. Unmatched builds or native branches never overlay old map
 geometry; there is no standalone route-collection page to publish.
 
 `/api/` and `/watch/` remain reverse proxied over HTTPS; the process listens only

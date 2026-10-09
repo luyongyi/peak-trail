@@ -3,13 +3,14 @@ import test from "node:test";
 import { mkdtemp, mkdir, readFile, writeFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 import { EventEmitter } from "node:events";
 import { setImmediate as nextTurn, setTimeout as pause } from "node:timers/promises";
 import { createLiveServer } from "../../server/live-server.mjs";
 import { createTrajectoryApi } from "../../server/trajectory-api.mjs";
-import { digest, validateTrajectory, extractStageRoutes, aggregateHeatmap } from "../../server/trajectory-contract.mjs";
-import { moderate, ingestUpload, mapMatch } from "../../server/trajectory-store.mjs";
+import { digest, validateTrajectory, extractStageRoutes, extractInspectionStage, aggregateHeatmap } from "../../server/trajectory-contract.mjs";
+import { moderate, ingestUpload, mapMatch, autoApprovePending } from "../../server/trajectory-store.mjs";
 
 function fixture(change = {}) {
   return { format: "trajectory-v1", recordingId: digest("recording-1"), runKey: digest("run-1"), timeOriginMs: 1000000,
@@ -52,7 +53,7 @@ async function post(base, raw, compressed = null) {
 async function get(base, path) { const response = await fetch(base + path); return { status: response.status, body: await response.json() }; }
 
 function heldWorkerHarness(timeoutMs) {
-  const workers = []; let running = 0, peakRunning = 0;
+  const workers = [], jobs = []; let running = 0, peakRunning = 0;
   class HeldWorker extends EventEmitter {
     constructor() { super(); this.terminateCount = 0; this.exited = false; running += 1; peakRunning = Math.max(peakRunning, running); }
     // Deliberately resolve termination before exit to guard against treating the
@@ -61,17 +62,42 @@ function heldWorkerHarness(timeoutMs) {
     exit(code) { if (!this.exited) { this.exited = true; running -= 1; this.emit("exit", code); } }
   }
   const api = createTrajectoryApi({ root: tmpdir(), workerTimeoutMs: timeoutMs,
-    workerFactory: () => { const worker = new HeldWorker(); workers.push(worker); return worker; } });
+    workerFactory: (_url, options) => { jobs.push(options.workerData); const worker = new HeldWorker(); workers.push(worker); return worker; } });
   const request = () => ({ url: "/api/route-groups", method: "GET", headers: {}, socket: { remoteAddress: "127.0.0.1" } });
   const response = () => ({ destroyed: false, writableEnded: false,
     writeHead(status) { this.status = status; }, end(json) { this.body = JSON.parse(json); this.writableEnded = true; } });
-  return { api, workers, request, response, peak: () => peakRunning,
+  return { api, workers, jobs, request, response, peak: () => peakRunning,
     close: () => { api.close(); for (const worker of workers) worker.exit(1); } };
 }
+test("default route worker uses this release's staged catalog and explicit test catalogs remain authoritative", async () => {
+  for (const catalogPath of [null, join(tmpdir(), "explicit-trajectory-catalog.json")]) {
+    let options;
+    const worker = new EventEmitter(); worker.terminate = () => Promise.resolve(0);
+    const api = createTrajectoryApi({ root: tmpdir(), catalogPath, workerFactory: (_url, value) => { options = value; return worker; } });
+    const res = { destroyed: false, writableEnded: false, writeHead() {}, end() { this.writableEnded = true; } };
+    const job = api.handle({ url: "/api/route-groups", method: "GET", headers: {}, socket: { remoteAddress: "127.0.0.1" } }, res);
+    await until(() => options);
+    assert.equal(options.workerData.catalogPath, catalogPath ?? fileURLToPath(new URL("../../site-dist/data/maps/catalog.json", import.meta.url)));
+    worker.emit("message", { json: '{"groups":[]}', migrationComplete: true }); worker.emit("exit", 0);
+    await job; api.close();
+  }
+});
 async function until(predicate) {
   for (let turn = 0; turn < 1000 && !predicate(); turn += 1) await nextTurn();
   assert.ok(predicate(), "expected lifecycle condition did not arrive");
 }
+
+test("historical migration runs once after a completed first worker, even when that request is invalid", async () => {
+  const h = heldWorkerHarness(1000), first = h.response(), second = h.response();
+  try {
+    const firstJob = h.api.handle(h.request(), first), secondJob = h.api.handle(h.request(), second);
+    await until(() => h.workers.length === 1); assert.equal(h.jobs[0].migratePending, true);
+    h.workers[0].emit("message", { error: "invalid request", statusCode: 400, migrationComplete: true }); h.workers[0].exit(0);
+    await until(() => h.workers.length === 2); assert.equal(h.jobs[1].migratePending, false);
+    h.workers[1].emit("message", { json: '{"groups":[]}', migrationComplete: true }); h.workers[1].exit(0);
+    await Promise.all([firstJob, secondJob]); assert.equal(first.status, 400); assert.equal(second.status, 200);
+  } finally { h.close(); }
+});
 
 test("worker error holds the serial queue until actual exit, preserving one live heap", async () => {
   const h = heldWorkerHarness(1000), first = h.response(), second = h.response();
@@ -152,19 +178,22 @@ test("heatmap counts each route once per voxel, retains height and never bridges
   assert.equal(aggregateHeatmap([[[0, 0, 0, 0]], [[0, 0, 0, 0]]])[0][3], 2);
 });
 
-test("default memoir service keeps upload, moderation, routes and heat available while old live is retired", async () => {
+test("default memoir service automatically approves valid uploads while old live stays retired", async () => {
   await isolated(async ({ root, base, live }) => {
     assert.equal((await get(base, "/api/runs")).status, 410);
     const retired = await fetch(base + "/api/runs", { method: "POST", body: "old live registration" });
     assert.equal(retired.status, 410);
     assert.equal(live.runs.size, 0);
     const first = await post(base, fixture()); assert.equal(first.status, 201); assert.match(first.body.uploadId, /^[a-f0-9]{64}$/);
-    assert.equal(first.body.moderationStatus, "pending"); assert.equal(first.body.mapCompatibility, "matched");
+    assert.equal(first.body.moderationStatus, "approved"); assert.equal(first.body.mapCompatibility, "matched");
     assert.equal(first.body.stages[0].stages[0].completion, "complete");
-    assert.deepEqual((await get(base, "/api/route-groups")).body.groups, []);
+    const immediatelyPublic = (await get(base, "/api/route-groups")).body.groups;
+    assert.equal(immediatelyPublic.length, 1); assert.equal(first.body.groupId, immediatelyPublic[0].id);
+    assert.equal(immediatelyPublic[0].firstStartedUtc, fixture().startedUtc); assert.equal(immediatelyPublic[0].lastStartedUtc, fixture().startedUtc);
     const duplicate = await post(base, fixture()); assert.equal(duplicate.status, 200); assert.equal(duplicate.body.duplicate, true);
     assert.equal((await readdir(join(root, "index"))).length, 1);
-    await moderate(root, first.body.uploadId, "approved");
+    const index = JSON.parse(await readFile(join(root, "index", `${first.body.uploadId}.json`), "utf8"));
+    assert.equal(index.reviewMethod, "automatic-contract-v1"); assert.ok(index.reviewedUtc); assert.equal(index.startedUtc, fixture().startedUtc);
     const group = (await get(base, "/api/route-groups")).body.groups[0]; assert.equal(group.stageSummaries[0].routeCount, 1);
     const [routes, heat] = await Promise.all([get(base, `/api/route-groups/${group.id}/stages/0/routes`), get(base, `/api/route-groups/${group.id}/stages/0/heatmap`)]);
     assert.equal(routes.status, 200); assert.equal(heat.status, 200);
@@ -176,6 +205,138 @@ test("default memoir service keeps upload, moderation, routes and heat available
     assert.deepEqual((await get(base, "/api/route-groups")).body.groups, []);
     assert.equal((await get(base, `/api/route-groups/${group.id}/stages/0/heatmap`)).status, 404);
     assert.equal((await post(base, fixture())).body.moderationStatus, "hidden");
+  });
+});
+
+async function legacyPending(root, id) {
+  const path = join(root, "index", `${id}.json`), entry = JSON.parse(await readFile(path, "utf8"));
+  entry.moderationStatus = "pending"; delete entry.reviewedUtc; delete entry.reviewMethod; delete entry.startedUtc;
+  await writeFile(path, JSON.stringify(entry)); return entry;
+}
+
+test("historical untouched pending submissions migrate after restart using their recording date", async () => {
+  await isolated(async ({ root, base, catalogPath, close }) => {
+    const upload = await post(base, fixture()); await legacyPending(root, upload.body.uploadId);
+    await close(); const restarted = await start(root, catalogPath);
+    try {
+      const groups = (await get(restarted.base, "/api/route-groups")).body.groups;
+      assert.equal(groups.length, 1); assert.equal(groups[0].id, upload.body.groupId);
+      assert.equal(groups[0].firstStartedUtc, fixture().startedUtc);
+      const index = JSON.parse(await readFile(join(root, "index", `${upload.body.uploadId}.json`), "utf8"));
+      assert.equal(index.moderationStatus, "approved"); assert.equal(index.reviewMethod, "automatic-contract-v1");
+      assert.equal(index.startedUtc, fixture().startedUtc); const reviewedUtc = index.reviewedUtc;
+      assert.equal((await post(restarted.base, fixture())).body.moderationStatus, "approved");
+      await get(restarted.base, "/api/route-groups");
+      assert.equal(JSON.parse(await readFile(join(root, "index", `${upload.body.uploadId}.json`), "utf8")).reviewedUtc, reviewedUtc);
+      // Migration runs once per service. A later administrative hold cannot be
+      // reinterpreted as a newly discovered original pending submission.
+      await moderate(root, upload.body.uploadId, "pending");
+      assert.deepEqual((await get(restarted.base, "/api/route-groups")).body.groups, []);
+    } finally { await restarted.close(); }
+  });
+});
+
+test("automatic migration preserves hidden, rejected and explicitly held pending submissions", async () => {
+  await isolated(async ({ root, base }) => {
+    const entries = [];
+    for (const [i, status] of ["hidden", "rejected", "pending"].entries()) {
+      const upload = await post(base, fixture({ recordingId: digest(`manual-${i}`) }));
+      await moderate(root, upload.body.uploadId, status);
+      entries.push({ id: upload.body.uploadId, status, bytes: await readFile(join(root, "index", `${upload.body.uploadId}.json`)) });
+    }
+    assert.deepEqual(await autoApprovePending(root), { approved: 0, invalid: 0, busy: 0 });
+    for (const entry of entries) {
+      const bytes = await readFile(join(root, "index", `${entry.id}.json`));
+      assert.deepEqual(bytes, entry.bytes); assert.equal(JSON.parse(bytes).moderationStatus, entry.status);
+    }
+    assert.deepEqual((await get(base, "/api/route-groups")).body.groups, []);
+  });
+});
+
+test("automatic migration fails closed on altered payload, index or derived route", async () => {
+  await isolated(async ({ root, base }) => {
+    for (const [i, damage] of ["gzip", "sha", "private-field", "index", "route", "missing-route"].entries()) {
+      const raw = fixture({ recordingId: digest(`damaged-${i}`) }), upload = await post(base, raw);
+      const entry = await legacyPending(root, upload.body.uploadId), indexPath = join(root, "index", `${entry.id}.json`);
+      const uploadPath = join(root, "uploads", `${entry.id}.json.gz`), routePath = join(root, "routes", entry.routes[0].file);
+      if (damage === "gzip") await writeFile(uploadPath, "damaged gzip");
+      if (damage === "sha") { raw.players[0].name = "changed"; await writeFile(uploadPath, gzipSync(JSON.stringify(raw))); }
+      if (damage === "private-field") { raw.players[0].steamId = "76561190000000000"; await writeFile(uploadPath, gzipSync(JSON.stringify(raw))); }
+      if (damage === "index") { entry.routes[0].stageIndex = 1; await writeFile(indexPath, JSON.stringify(entry)); }
+      if (damage === "route") await writeFile(routePath, gzipSync(JSON.stringify({ points: [[0,0,0,0],[100,0,0,1000]], breaks: [] })));
+      if (damage === "missing-route") await rm(routePath);
+    }
+    assert.deepEqual(await autoApprovePending(root), { approved: 0, invalid: 6, busy: 0 });
+    for (const file of await readdir(join(root, "index"))) {
+      const entry = JSON.parse(await readFile(join(root, "index", file), "utf8"));
+      assert.equal(entry.moderationStatus, "pending"); assert.equal(Object.hasOwn(entry, "reviewedUtc"), false);
+    }
+    assert.deepEqual((await get(base, "/api/route-groups")).body.groups, []);
+  });
+});
+
+test("automatic review and administrative withdrawal share an exclusive index lock", async () => {
+  await isolated(async ({ root, base }) => {
+    const upload = await post(base, fixture()), entry = await legacyPending(root, upload.body.uploadId);
+    const lockPath = join(root, "index", `${entry.id}.json.review-lock`);
+    await writeFile(lockPath, "held by another reviewer", { flag: "wx" });
+    const withdrawing = moderate(root, entry.id, "hidden");
+    assert.deepEqual(await autoApprovePending(root), { approved: 0, invalid: 0, busy: 1 });
+    await rm(lockPath); await withdrawing;
+    assert.deepEqual(await autoApprovePending(root), { approved: 0, invalid: 0, busy: 0 });
+    assert.equal(JSON.parse(await readFile(join(root, "index", `${entry.id}.json`), "utf8")).moderationStatus, "hidden");
+    assert.equal((await readdir(join(root, "index"))).some(file => file.endsWith("review-lock")), false);
+  });
+});
+
+test("approved inspection shows incomplete volcanic travel without changing complete route or heat totals", async () => {
+  await isolated(async ({ root, base }) => {
+    const raw = fixture({ durationMs: 3500 }); delete raw.map.alignment;
+    raw.map.route = ["Shore", "Roots", "Mesa", "Volcano", "Kiln"];
+    raw.map.stages = raw.map.route.map((name, index) => ({ index, name, enterZCm: index * 1000, exitZCm: (index + 1) * 1000 }));
+    raw.players[0].points = Array.from({ length: 36 }, (_, i) => [i * 100, 0, 0, i * 100]);
+    raw.players[0].events = [{ tMs: 2500, kind: "warp" }, { tMs: 3200, kind: "break" }];
+    const upload = await post(base, raw); assert.equal(upload.body.moderationStatus, "approved");
+    const group = (await get(base, "/api/route-groups")).body.groups[0];
+    assert.deepEqual(group.stageSummaries.map(stage => stage.routeCount), [1,1,0,0,0]);
+    const normalPath = `/api/route-groups/${group.id}/stages/3`, inspectionPath = `/api/route-groups/${group.id}/uploads/${upload.body.uploadId}/stages/3/inspection`;
+    const [beforeRoutes, beforeHeat, inspection] = await Promise.all([get(base, normalPath + "/routes"), get(base, normalPath + "/heatmap"), get(base, inspectionPath)]);
+    assert.equal(inspection.status, 200); assert.equal(inspection.body.inspection, true); assert.equal(inspection.body.excludedFromAggregation, true);
+    assert.equal(inspection.body.groupId, group.id); assert.equal(inspection.body.uploadId, upload.body.uploadId);
+    assert.equal(inspection.body.routes.length, 1); assert.equal(inspection.body.routes[0].completion, "partial"); assert.equal(inspection.body.routes[0].completed, false);
+    assert.deepEqual(inspection.body.routes[0].breaks, [3200]); assert.ok(inspection.body.routes[0].points.length > 1);
+    assert.deepEqual((await get(base, normalPath + "/routes")).body, beforeRoutes.body);
+    assert.deepEqual((await get(base, normalPath + "/heatmap")).body, beforeHeat.body);
+    assert.equal(beforeRoutes.body.routes.length, 0); assert.equal(beforeHeat.body.routeCount, 0);
+    assert.equal((await get(base, `/api/route-groups/${digest("other-group")}/uploads/${upload.body.uploadId}/stages/3/inspection`)).status, 404);
+    await moderate(root, upload.body.uploadId, "hidden"); assert.equal((await get(base, inspectionPath)).status, 404);
+  });
+});
+
+test("inspection retains real interruptions, sampling gaps, excessive movement and re-entry breaks", () => {
+  const raw = fixture({ durationMs: 5000 }), player = raw.players[0], stage = raw.map.stages[0];
+  player.points = [[0,0,0,0],[100,0,0,100],[200,2000,0,200],[300,2000,0,300],
+    [400,2000,0,3000],[500,2000,0,400],[2200,2000,0,500],[2300,2000,0,600]];
+  player.events = [{ tMs: 250, kind: "warp" }, { tMs: 2000, kind: "dead" }, { tMs: 2250, kind: "revive" }];
+  const result = extractInspectionStage(raw, player, stage);
+  assert.deepEqual(result.points, player.points.filter(point => point[3] <= 1300));
+  assert.deepEqual(result.breaks, [200,250,500,2000,2200,2250]); assert.equal(result.completion, "partial");
+});
+
+test("inspection uses the same verified landmark transform and refuses damaged approved stored coordinates", async () => {
+  await isolated(async ({ root, base }) => {
+    const raw = fixture(), offset = [5000,-3000,8000];
+    raw.map.alignment.landmarks.forEach(item => { item.positionCm = item.positionCm.map((value, axis) => value + offset[axis]); });
+    raw.map.stages.forEach(stage => { stage.enterZCm += offset[2]; stage.exitZCm += offset[2]; });
+    raw.players[0].points.forEach(point => { for (let axis = 0; axis < 3; axis++) point[axis+1] += offset[axis]; });
+    const upload = await post(base, raw), path = `/api/route-groups/${upload.body.groupId}/uploads/${upload.body.uploadId}/stages/0/inspection`;
+    const result = await get(base, path);
+    assert.equal(result.status, 200); assert.equal(result.body.coordinateSpace, "canonical-map-world-cm");
+    assert.equal(result.body.mapAlignment.id, upload.body.mapAlignment.id);
+    assert.deepEqual(result.body.routes[0].points, fixture().players[0].points.slice(0,14));
+    await writeFile(join(root, "uploads", `${upload.body.uploadId}.json.gz`), gzipSync(JSON.stringify(fixture())));
+    assert.equal((await get(base, path)).status, 503);
+    await moderate(root, upload.body.uploadId, "rejected"); assert.equal((await get(base, path)).status, 404);
   });
 });
 
@@ -368,7 +529,8 @@ test("malformed gzip, private fields, oversized decoded body and unsupported med
     assert.equal((await post(base, null, huge)).status, 413);
     const plain = await fetch(`${base}/api/route-uploads`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
     assert.equal(plain.status, 415);
-    assert.deepEqual((await readdir(root)).sort(), ["catalog.json", "landmarks.25306743.json", "packs"]);
+    assert.deepEqual((await readdir(root)).sort(), ["catalog.json", "index", "landmarks.25306743.json", "packs", "routes", "uploads"]);
+    for (const child of ["index", "routes", "uploads"]) assert.deepEqual(await readdir(join(root, child)), []);
   });
 });
 

@@ -6,15 +6,17 @@ import { LIMITS, problem, validHash } from "./trajectory-contract.mjs";
 export function createTrajectoryApi({ root = null, catalogPath = null, trustedProxy = false,
   workerFactory = (url, options) => new Worker(url, options), workerTimeoutMs = 45_000 } = {}) {
   root = root ? resolve(root) : null;
-  catalogPath = catalogPath ?? fileURLToPath(new URL("../data/maps/catalog.json", import.meta.url));
-  let active = 0, uploading = false, closed = false, tail = Promise.resolve(); const workers = new Set(), rate = new Map();
+  // The published catalog and its immutable packs are staged together in this
+  // release. Source metadata alone does not include the model/landmark evidence.
+  catalogPath = catalogPath ?? fileURLToPath(new URL("../site-dist/data/maps/catalog.json", import.meta.url));
+  let active = 0, uploading = false, closed = false, migratedPending = false, tail = Promise.resolve(); const workers = new Set(), rate = new Map();
   const headers = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff",
     "access-control-allow-origin": "*", "access-control-allow-methods": "GET, POST, OPTIONS", "access-control-allow-headers": "content-type,content-encoding,x-trajectory-format" };
   function json(res, code, value) { if (!res.destroyed && !res.writableEnded) { res.writeHead(code, headers); res.end(typeof value === "string" ? value : JSON.stringify(value)); } }
   function runJob(data) {
     if (closed) return Promise.reject(problem("trajectory service stopped", 503));
     return new Promise((done, reject) => {
-      const worker = workerFactory(new URL("./trajectory-worker.mjs", import.meta.url), { workerData: { ...data, root, catalogPath }, resourceLimits: { maxOldGenerationSizeMb: 384 } });
+      const worker = workerFactory(new URL("./trajectory-worker.mjs", import.meta.url), { workerData: { ...data, root, catalogPath, migratePending: !migratedPending }, resourceLimits: { maxOldGenerationSizeMb: 384 } });
       workers.add(worker);
       let result, failure;
       // Neither terminate() nor the error event guarantees that the thread's heap
@@ -23,6 +25,7 @@ export function createTrajectoryApi({ root = null, catalogPath = null, trustedPr
       worker.once("message", (message) => { result = message; });
       worker.once("error", (error) => { clearTimeout(timeout); failure ??= problem(`trajectory worker failed: ${error.message}`, 503); });
       worker.once("exit", (code) => { clearTimeout(timeout); workers.delete(worker);
+        if (result?.migrationComplete === true && code === 0 && !failure) migratedPending = true;
         if (failure) reject(failure);
         else if (code !== 0 || !result) reject(problem("trajectory worker stopped", 503));
         else if (result.error) reject(problem(result.error, result.statusCode)); else done(result); });
@@ -62,8 +65,13 @@ export function createTrajectoryApi({ root = null, catalogPath = null, trustedPr
         const result = await job({ operation: "upload", body: await body(req) }); json(res, result.duplicate ? 200 : 201, result.json);
       } else if (path === "/api/route-groups" && req.method === "GET") json(res, 200, (await job({ operation: "groups" })).json);
       else {
+        const inspection = path.match(/^\/api\/route-groups\/([a-f0-9]{64})\/uploads\/([a-f0-9]{64})\/stages\/(\d+)\/inspection$/);
         const match = path.match(/^\/api\/route-groups\/([a-f0-9]{64})\/stages\/(\d+)\/(routes|heatmap)$/);
         if (req.method !== "GET") throw problem("method not allowed", 405);
+        if (inspection) {
+          json(res, 200, (await job({ operation: "inspection", group: inspection[1], upload: inspection[2], stage: Number(inspection[3]) })).json);
+          return true;
+        }
         if (!match || !validHash(match[1])) throw problem("unknown route endpoint", 404);
         const limit = Number(url.searchParams.get("limit") ?? 200);
         if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw problem("limit must be 1..200");

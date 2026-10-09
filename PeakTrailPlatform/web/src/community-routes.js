@@ -1,4 +1,5 @@
 import { communityMapIdentity, communityPlayers, matchingCommunityGroups, normalizeCommunityStage, pendingCommunityMessage } from "./community-route-model.js";
+import { normalizeHistoricalInspection } from "./historical-route-link.js";
 
 const MAX_RESPONSE_BYTES = 30_000_000;
 const displayError = error => error?.message || "大家的路线暂时无法读取，请稍后刷新。";
@@ -11,7 +12,8 @@ export function createCommunityRoutes({ fetchImpl = globalThis.fetch?.bind(globa
   let state = freshState();
 
   function freshState() {
-    return { status: "idle", groups: [], group: null, stageIndex: null, difficulty: "", difficulties: [],
+    return { status: "idle", groups: [], group: null, pinnedGroupId: null, inspectionId: null, inspectionLoaded: false,
+      stageIndex: null, difficulty: "", difficulties: [],
       routes: [], heatmap: null, players: [], heightBands: [], heightBand: null, mode: "off",
       totalRouteCount: 0, truncated: false, unavailableCount: 0, message: "" };
   }
@@ -21,7 +23,7 @@ export function createCommunityRoutes({ fetchImpl = globalThis.fetch?.bind(globa
   function begin(kind) { invalidate(); request = new AbortController(); requestKind = kind; return { revision, signal: request.signal }; }
   function clearData() {
     hidden = new Set();
-    Object.assign(state, { routes: [], heatmap: null, players: [], heightBands: [], heightBand: null, totalRouteCount: 0, truncated: false });
+    Object.assign(state, { routes: [], heatmap: null, players: [], heightBands: [], heightBand: null, totalRouteCount: 0, truncated: false, inspectionLoaded: false });
   }
   function active(token) { return !disposed && token.revision === revision && mapPack !== null; }
   async function readApi(path, signal) {
@@ -41,6 +43,11 @@ export function createCommunityRoutes({ fetchImpl = globalThis.fetch?.bind(globa
   }
   function describeData() {
     state.status = state.totalRouteCount ? "ready" : "empty";
+    if (state.inspectionId) {
+      state.message = state.totalRouteCount ? `验收预览 · ${state.routes.length} 条玩家轨迹 · 未完整关卡不计公开路线或热力。`
+        : "验收预览 · 当前关卡没有录制轨迹；未完整关卡不计公开路线或热力。";
+      return;
+    }
     state.message = state.totalRouteCount ? state.truncated
       ? `本页展示 ${state.routes.length} / ${state.totalRouteCount} 条路线，热力统计全部有效路线。` : `${state.totalRouteCount} 条审核通过的完整关卡路线。`
       : "当前关卡和难度还没有公开的完整路线。";
@@ -62,6 +69,12 @@ export function createCommunityRoutes({ fetchImpl = globalThis.fetch?.bind(globa
     const base = `${apiBase}/${encodeURIComponent(group.id)}/stages/${stage}`;
     const filter = state.difficulty ? `?difficulty=${encodeURIComponent(state.difficulty)}` : "";
     try {
+      if (state.inspectionId) {
+        const body = await readApi(`${apiBase}/${encodeURIComponent(group.id)}/uploads/${state.inspectionId}/stages/${stage}/inspection`, token.signal);
+        if (!active(token)) return;
+        Object.assign(state, normalizeHistoricalInspection(body, group, mapPack, stage, state.inspectionId));
+        describeData(); emit(); return;
+      }
       const [routes, heat] = await Promise.all([readApi(`${base}/routes${filter}`, token.signal), readApi(`${base}/heatmap${filter}`, token.signal)]);
       if (!active(token)) return;
       Object.assign(state, normalizeCommunityStage(routes, heat, group, mapPack, stage));
@@ -78,39 +91,48 @@ export function createCommunityRoutes({ fetchImpl = globalThis.fetch?.bind(globa
     try {
       const { matching, unavailableCount, pendingReasons } = matchingCommunityGroups(await readApi(apiBase, token.signal), mapPack);
       if (!active(token)) return;
-      state.groups = matching; state.unavailableCount = unavailableCount;
+      state.groups = state.pinnedGroupId ? matching.filter(group => group.id === state.pinnedGroupId) : matching;
+      state.unavailableCount = unavailableCount;
       // Select one recorded layout, never concatenate several layouts merely
       // because their scene and game build share a name.
-      state.group = matching.find(group => group.id === previousId) || matching[0] || null;
+      state.group = state.groups.find(group => group.id === previousId) || state.groups[0] || null;
       state.difficulties = state.group?.difficulties || [];
       state.difficulty = state.difficulties.some(value => value.key === previousDifficulty) ? previousDifficulty : "";
       if (!state.group) {
         state.status = unavailableCount ? "mismatch" : "empty";
-        state.message = unavailableCount ? pendingCommunityMessage(pendingReasons) : "当前地图还没有审核通过的完整关卡路线。";
+        state.message = state.pinnedGroupId ? "这个历史路线组暂不可用，未切换到其他记录或今日路线。"
+          : unavailableCount ? pendingCommunityMessage(pendingReasons) : "当前地图还没有审核通过的完整关卡路线。";
         emit(); return;
       }
       await loadStage();
     } catch (error) { fail(error, token); }
   }
-  async function enterMap(nextMapPack, { stageIndex = null } = {}) {
+  async function enterMap(nextMapPack, { stageIndex = null, groupId = null, inspectionId = null, mode = null } = {}) {
     if (disposed) return;
+    if (groupId !== null && !/^[a-f0-9]{64}$/.test(groupId)) throw new Error("历史路线组无效。");
+    if (inspectionId !== null && (!groupId || !/^[a-f0-9]{64}$/.test(inspectionId))) throw new Error("历史验收投稿无效。");
     const identity = communityMapIdentity(nextMapPack);
     if (!identity) {
       invalidate(); mapPack = nextMapPack || null; state = freshState(); state.status = "mismatch";
       state.message = "当前地图缺少可靠的版本或关卡分支信息，暂不叠加玩家路线。"; emit(); return;
     }
-    if (identity === communityMapIdentity(mapPack)) {
+    if (identity === communityMapIdentity(mapPack) && groupId === state.pinnedGroupId && inspectionId === state.inspectionId) {
       mapPack = nextMapPack;
       await setStage(stageIndex);
+      if (mode !== null) await setMode(mode);
       return;
     }
     invalidate(); mapPack = nextMapPack; hidden = new Set(); state = freshState();
+    state.pinnedGroupId = groupId;
+    state.inspectionId = inspectionId;
+    if (mode === "routes" || (!inspectionId && mode === "heatmap")) state.mode = mode;
     state.stageIndex = Number.isInteger(stageIndex) && stageIndex >= 0 ? stageIndex : null;
     await refresh();
   }
   async function selectGroup(id) {
     if (disposed || !mapPack) return;
     const group = state.groups.find(value => value.id === id);
+    if (state.pinnedGroupId && id !== state.pinnedGroupId) return;
     if (!group || group === state.group) return;
     state.group = group; state.difficulties = group.difficulties;
     if (!group.difficulties.some(value => value.key === state.difficulty)) state.difficulty = "";
@@ -124,13 +146,14 @@ export function createCommunityRoutes({ fetchImpl = globalThis.fetch?.bind(globa
     if (state.group) await loadStage(); else emit();
   }
   async function setDifficulty(value) {
-    if (disposed || !mapPack) return;
+    if (disposed || !mapPack || state.inspectionId) return;
     const key = value === "" || state.difficulties.some(difficulty => difficulty.key === value) ? value : "";
     if (key === state.difficulty) return;
     state.difficulty = key; await loadStage();
   }
   async function setMode(value) {
     if (disposed || !["off", "routes", "heatmap"].includes(value) || state.mode === value) return;
+    if (state.inspectionId && value === "heatmap") return;
     state.mode = value;
     if (value === "off" && requestKind !== "groups") {
       const wasLoading = state.status === "loading";
@@ -142,7 +165,7 @@ export function createCommunityRoutes({ fetchImpl = globalThis.fetch?.bind(globa
       }
       emit(); return;
     }
-    if (state.group && state.heatmap !== null) { describeData(); emit(); }
+    if (state.group && (state.heatmap !== null || state.inspectionLoaded)) { describeData(); emit(); }
     else if (state.group && state.status !== "loading") await loadStage();
     else emit();
   }

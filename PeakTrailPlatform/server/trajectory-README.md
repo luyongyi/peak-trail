@@ -1,6 +1,6 @@
 # 历史轨迹收集（trajectory-v1）
 
-本模块接收回忆录 Mod 在本地重新提取的小包。它不接收 `.peakrun`、录像资源、库存、状态条、音频或世界物件。旧足迹直播接口默认关闭，回忆录上传、审核、路线与热力查询保持正常。新投稿默认 `pending`，不出现在公开查询中。
+本模块接收回忆录 Mod 在本地重新提取的小包。它不接收 `.peakrun`、录像资源、库存、状态条、音频或世界物件。旧足迹直播接口默认关闭，回忆录上传、路线与热力查询保持正常。通过白名单协议验证的新投稿自动 `approved`；公开路线与热力仍只使用完整的个人关卡尝试，并要求原生地图对齐证明。
 
 ## 本地运行
 
@@ -9,6 +9,8 @@ node PeakTrailPlatform/server/live-server.mjs --port 8787 --routes-dir C:/Users/
 ```
 
 `--routes-dir` / `PEAK_TRAJECTORY_DIR` 必须指向静态站点之外的私有目录；未配置时新接口返回 `503 route-storage-unconfigured`。数据包含昵称和精简 XYZ，不能加入 Git、静态发布目录或游戏资源包。
+
+服务默认从同一发布版本的 `site-dist/data/maps/catalog.json` 读取地图，连同其旁边的 `packs/`、原生路线和地标证据核验。源码目录 `data/maps/catalog.json` 仅是元数据，不能替代带完整模型资源的发布目录。API 测试可以显式传入 `catalogPath`，生产默认不会降级到其他发布版本或源码目录。
 
 ## 上传协议
 
@@ -51,7 +53,7 @@ players:
 成功返回 `201`（新包）或 `200`（重复包）：
 
 ```json
-{"uploadId":"<canonical-payload-sha256>","duplicate":false,"moderationStatus":"pending","mapCompatibility":"waiting-map","mapPackId":null,"stages":[{"playerKey":"<sha256>","stages":[{"index":0,"completion":"complete","routeCount":1}]}]}
+{"uploadId":"<canonical-payload-sha256>","groupId":"<recorded-map-group-sha256>","duplicate":false,"moderationStatus":"approved","mapCompatibility":"waiting-map","mapPackId":null,"stages":[{"playerKey":"<sha256>","stages":[{"index":0,"completion":"complete","routeCount":1}]}]}
 ```
 
 `completion` 为 `complete / partial / unknown`，按每个玩家独立计算。只有声明有原生状态证据、录到入口到出口、期间持续存活且没有缺口/传送的尝试才生成完整关路线。超过 1.5 秒采样缺口、异常位移、死亡、离开、warp/break 都中断当前尝试；队伍全局推进或 finish 不能替所有玩家补通关。入口容差 3 m 用于角色中心与原生平面的差异，半关开录不会成为完整路线。旧录像没有状态证据或门限时为 `unknown`，仍接受上传。
@@ -66,6 +68,10 @@ PRIVATE_DIR/routes/<uploadId>-pN-sN-aN.json.gz  完整个人关卡尝试
 
 blob/route 文件先落盘，索引以原子创建提交；服务重启重新读索引。公开状态只来源于提交的索引，损坏条目不会重新获得审批。失败写入会清理本次拥有的新文件；异常退出的孤立文件也计入容量，不会绕过配额。总存储按实际私有目录字节限制 2 GiB，最多 10,000 投稿、100,000 条路线；达到上限返回 503，由管理员决定清理策略，不自动删除用户历史。
 
+新投稿记录真实 `startedUtc`、`reviewedUtc` 与 `reviewMethod=automatic-contract-v1`。服务实例首次处理真实轨迹 worker 请求时，迁移以前未审核的 `pending` 投稿：先重新验证原精简 gzip 的完整白名单协议与内容 SHA，再核对索引身份、玩家、个人关卡判定及全部派生路线的实际坐标/断点；通过后原子改为 `approved`，从轨迹包恢复录制时间。损坏数据保留 `pending`；有 `reviewedUtc` 的人工保留、隐藏或拒绝均不自动改变。迁移每个服务实例只运行一次，后续普通查询不反复解压未通过的历史包。
+
+迁移提交和人工审核共用每条索引的独占 `.review-lock`，迁移在锁内重读当前状态，人工撤销不会被自动迁移覆盖；正常结束后删除锁。异常终止若遗留锁，该条迁移跳过、人工操作返回忙碌，不强抢仍可能在用的锁。管理员仅在确认无审核正在运行后处理遗留锁。所有原始简化轨迹和地图证据保持录制时原值。
+
 ```powershell
 node PeakTrailPlatform/server/route-admin.mjs --dir PRIVATE_DIR list
 node PeakTrailPlatform/server/route-admin.mjs --dir PRIVATE_DIR approve UPLOAD_SHA256
@@ -74,7 +80,7 @@ node PeakTrailPlatform/server/route-admin.mjs --dir PRIVATE_DIR reject UPLOAD_SH
 node PeakTrailPlatform/server/route-admin.mjs --dir PRIVATE_DIR pending UPLOAD_SHA256
 ```
 
-通过现有 SSH 管理身份执行，不提供公共审核写接口。公开查询每次读取当前审核状态，`hide/reject/pending` 在下一次请求中撤销路线及热力贡献。审核数据与站点部署版本分开保存，部署回滚不会回滚投稿状态。
+通过现有 SSH 管理身份执行，不提供公共审核写接口。人工操作记录 `reviewMethod=administrator`；公开查询每次读取当前审核状态，`hide/reject/pending` 在下一次请求中撤销路线、热力及验收预览。人工 `pending` 是明确保留，不会再次自动通过。审核数据与站点部署版本分开保存，部署回滚不会回滚投稿状态。
 
 内容 SHA 幂等防止重传；有共享对局、玩家 key 和共享时间原点时，重叠关卡尝试合并，优先采用 owner 观测及点数更多的记录。缺共享时钟时只在同一 `recordingId` 内去重；不同名字不作为不同人证据，同名也不合并不同 key。
 
@@ -84,11 +90,16 @@ node PeakTrailPlatform/server/route-admin.mjs --dir PRIVATE_DIR pending UPLOAD_S
 
 | 路径 | 结果 |
 | --- | --- |
-| `GET /api/route-groups` | `{groups:[{id,map,mapCompatibility,mapPackId,difficulties,stageSummaries:[{index,name,routeCount}]}]}` |
+| `GET /api/route-groups` | `{groups:[{id,map,firstStartedUtc,lastStartedUtc,mapCompatibility,mapPackId,difficulties,stageSummaries:[{index,name,routeCount}]}]}` |
 | `GET /api/route-groups/:id/stages/:index/routes?difficulty=KEY&limit=200` | `{groupId,stageIndex,mapCompatibility,mapPackId,totalRouteCount,routes:[{id,playerKey,name,difficulty,points,breaks}],truncated,pointCount}` |
 | `GET /api/route-groups/:id/stages/:index/heatmap?difficulty=KEY` | `{groupId,stageIndex,mapCompatibility,mapPackId,totalRouteCount,cellSizeCm:200,heightBandCm:200,cells:[[xIndex,yIndex,zIndex,count]],routeCount}` |
+| `GET /api/route-groups/:groupId/uploads/:uploadId/stages/:index/inspection` | `{groupId,uploadId,stageIndex,inspection:true,excludedFromAggregation:true,startedUtc,mapCompatibility,mapPackId,mapAlignment,coordinateSpace,routes:[{id,playerKey,name,difficulty,points,breaks,completion,completed}],totalRouteCount,pointCount,truncated}` |
 
 只有 `approved` 且个人关卡完整的数据进入公开结果。每次路线响应最多 200 条且最多 200,000 个点；达到任一上限会明确 `truncated:true`，不会把截断结果冒充全部统计。热力统计仍遍历该筛选条件下的完整有效路线，每条尝试在同一体素仅贡献一次；保留高度带，不把上下层混成一层；不会穿过不连续位移连线。格网最多 250,000 单元。
+
+验收预览是独立的只读查询，要求精确地图组和投稿 ID，而且投稿当前为 `approved`；隐藏、拒绝或人工保留返回 404。它只读取已经上传的精简白名单包，重新验证内容 SHA，按该关原生 Z 门限及角色中心 3 m 容差筛选真实坐标，不生成插值点。原 warp/break、生死、入离事件，以及采样缺口、异常位移和离关后重新进入都形成毫秒断点，不能跨传送连线。它可以展示 `partial/unknown` 的尝试，用于模型位置验收；`excludedFromAggregation:true` 明确表示不增加完整路线或热力统计。最多返回 200,000 个点，超出会标记 `truncated`。坐标使用与公开完整路线相同的严格地图对齐变换，网页仍拒绝未经证明的模型叠加。
+
+地图组的 `firstStartedUtc/lastStartedUtc` 来源于录制包的真实时间，不以上传时间替代。历史验收链接指定录制的地图组与投稿，仅切换这一访问页面，不更改当天的轮换服务数据。
 
 地图组依据录制的构建、场景、实际布局与分关信息，日期只是导航。目录存在对应 build/scene、原生分支匹配且真实布局证明通过时返回 `matched`；没有底图或证据冲突为 `waiting-map`。`mapPackId` 只标识用于显示的导出包，不作为统计组永久主键。
 
@@ -108,6 +119,6 @@ node PeakTrailPlatform/server/route-admin.mjs --dir PRIVATE_DIR pending UPLOAD_S
 node --test PeakTrailPlatform/tools/tests/map-alignment.test.mjs PeakTrailPlatform/tools/tests/trajectory-server.test.mjs
 ```
 
-包括真实 HTTP gzip 上传、白名单拒绝、10 Hz 上限、个人状态/断点、同名与同局合并、难度过滤、高度热力、默认待审核/隐藏撤销、持久化重启、解压上限与孤立文件容量。测试使用合成数据、loopback 和临时私有目录，不连接生产上传接口。
+包括真实 HTTP gzip 上传、白名单拒绝、10 Hz 上限、个人状态/断点、同名与同局合并、难度过滤、高度热力、自动通过及历史迁移、损坏内容不迁移、人工保留/隐藏/拒绝、审核锁、真实录制日期、隔离验收预览、持久化重启、解压上限与孤立文件容量。测试使用合成数据、loopback 和临时私有目录，不连接生产上传接口。
 
 对齐测试额外覆盖原位、整体平移/旋转、厘米量化、镜像/缩放/单关偏移拒绝、源场景 SHA 绑定、路线和热力统一空间、旧地标缺失保留及精确旧布局哈希兼容。网页校验响应的同一对齐证明 ID，防止切图或更新地标后叠加过期坐标。

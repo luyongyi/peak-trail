@@ -137,6 +137,25 @@ export function extractStageRoutes(trajectory, player, stage) {
   return { completion: routes.length ? "complete" : "partial", routes };
 }
 
+// A separate inspection view may show incomplete attempts. Keep every real
+// position and interruption; it must never contribute to public route counts.
+export function extractInspectionStage(trajectory, player, stage) {
+  if (!Number.isFinite(stage.enterZCm) || !Number.isFinite(stage.exitZCm)) throw problem("stage boundaries unavailable", 409);
+  const points = [], breaks = new Set(), interruptions = new Set(["join", "leave", "dead", "revive", "break", "warp"]);
+  let previousIndex = -1;
+  for (let index = 0; index < player.points.length; index += 1) {
+    const point = player.points[index];
+    if (point[3] < stage.enterZCm - 300 || point[3] > stage.exitZCm + 300) continue;
+    const previous = points.at(-1);
+    if (previous && (index !== previousIndex + 1 || discontinuity(previous, point))) breaks.add(point[0]);
+    points.push(point); previousIndex = index;
+  }
+  if (points.length) for (const event of player.events) {
+    if (interruptions.has(event.kind) && event.tMs >= points[0][0] && event.tMs <= points.at(-1)[0]) breaks.add(event.tMs);
+  }
+  return { points, breaks: [...breaks].sort((a, b) => a - b), completion: extractStageRoutes(trajectory, player, stage).completion };
+}
+
 export function routeDedupeKey(trajectory, playerKey, stageIndex, startMs, endMs) {
   // A shared run without a shared clock is insufficient to compare separate recordings.
   const shared = trajectory.runKey && trajectory.timeOriginMs !== undefined;

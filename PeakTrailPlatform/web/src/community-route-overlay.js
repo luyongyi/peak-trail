@@ -91,8 +91,10 @@ export class CommunityRouteOverlay {
         group.name = "community-route";
         group.userData = { routeId: route.id, playerKey: route.playerKey, stageIndex: input.stageIndex };
         for (const [opacity, depthFunc, width, order] of [[.2, THREE.GreaterDepth, 2, 21], [.85, THREE.LessEqualDepth, 2.8, 22]]) {
+          // Screen-space ribbons keep their winding after the world Z mirror,
+          // while Three reverses its front-face rule for that negative matrix.
           const material = new LineMaterial({ color, linewidth: width, worldUnits: false, transparent: true, opacity,
-            depthTest: true, depthFunc, depthWrite: false });
+            depthTest: true, depthFunc, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true });
           material.resolution.set(this.width, this.height);
           this.lineMaterials.add(material);
           const line = new LineSegments2(geometry, material);

@@ -62,6 +62,26 @@ test("approved-map layer uses real centimeter XYZ, one world Z mirror, and the s
   overlay.dispose();
 });
 
+test("screen-space route ribbons remain drawable beneath the negative Unity world mirror", () => {
+  const scene = sceneFixture();
+  assert.equal(scene.setCommunityOverlay(dto()), true);
+  scene.worldRoot.updateMatrixWorld(true);
+  const [occluded, visible] = scene.communityOverlay.players.get("route-a").group.children;
+  for (const line of [occluded, visible]) {
+    assert.ok(line.isMesh, "Three applies its determinant-dependent front-face rule to this ribbon mesh");
+    assert.ok(line.matrixWorld.determinant() < 0, "the real scene's world mirror reverses the front-face rule");
+    assert.equal(line.material.worldUnits, false, "the shader expands the ribbon in screen space after projection");
+    assert.equal(line.material.side, THREE.DoubleSide, "screen-space winding must not be culled by the mirrored front-face rule");
+    assert.equal(line.material.forceSinglePass, true, "a transparent double-sided ribbon should draw once per depth layer");
+    assert.equal(line.material.depthTest, true);
+    assert.equal(line.material.depthWrite, false);
+  }
+  assert.equal(occluded.material.depthFunc, THREE.GreaterDepth);
+  assert.equal(visible.material.depthFunc, THREE.LessEqualDepth);
+  assert.deepEqual(position(visible.geometry.attributes.instanceStart, 0), [1, 2, 3], "drawing does not change route coordinates");
+  scene.communityOverlay.dispose();
+});
+
 test("per-player visibility updates in place without allocating new geometry or altering heatmap statistics", () => {
   const overlay = new CommunityRouteOverlay(), input = dto();
   input.routes.push({ ...input.routes[0], id: "route-b", playerKey: "player-b" });

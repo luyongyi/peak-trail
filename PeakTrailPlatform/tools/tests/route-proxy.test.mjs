@@ -28,6 +28,14 @@ test("development route proxy is read-only, preserves filtering, and cannot prox
     assert.equal((await fetch(`${origin}/api/route-groups/test/stages/0/heatmap`, { method: "HEAD" })).status, 200);
     assert.equal(requests.length, 2);
     assert.ok(requests.every(request => request.method === "GET"));
+    const inspection = `/api/route-groups/${"a".repeat(64)}/uploads/${"b".repeat(64)}/stages/3/inspection`;
+    const preview = await fetch(origin + inspection);
+    assert.equal(preview.status, 200);
+    assert.equal((await preview.json()).url, inspection);
+    assert.equal((await fetch(origin + inspection, { method: "POST", body: "private-recording" })).status, 405);
+    assert.equal((await fetch(origin + inspection.replace("b".repeat(64), "bad-upload"))).status, 404);
+    assert.equal(requests.length, 3);
+    assert.ok(requests.every(request => request.method === "GET"));
   } finally { await close(proxy); await close(upstream); }
 });
 

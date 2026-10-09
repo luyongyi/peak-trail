@@ -43,6 +43,62 @@ function server(groups = [group()]) {
   return { calls, fetchImpl };
 }
 
+test("inspection reads only its approved upload, keeps partial paths separate and never requests heatmap aggregates", async () => {
+  const calls = [], chosen = group(), uploadId = hash("d");
+  const fetchImpl = async path => {
+    calls.push(path);
+    if (path === "/api/route-groups") return response({ groups: [chosen] });
+    const match = path.match(new RegExp(`^/api/route-groups/${chosen.id}/uploads/${uploadId}/stages/(\\d+)/inspection`));
+    assert.ok(match, `only inspection requests are permitted: ${path}`);
+    return response({ ...routeBody(chosen, Number(match[1])), inspection: true, uploadId, excludedFromAggregation: true,
+      routes: [{ id: "partial", name: "未完火山", completion: "partial", completed: false,
+        points: [[0, 0, 100, 0], [100, 100, 100, 100], [200, 9000, 100, 100]], breaks: [200] }] });
+  };
+  const controller = createCommunityRoutes({ fetchImpl });
+  await controller.enterMap(map(), { stageIndex: 3, groupId: chosen.id, inspectionId: uploadId, mode: "routes" });
+  assert.equal(controller.getSnapshot().inspectionId, uploadId); assert.equal(controller.getSnapshot().mode, "routes");
+  assert.equal(controller.getSnapshot().routes[0].completed, false); assert.deepEqual(controller.getSnapshot().routes[0].breaks, [200]);
+  assert.equal(controller.getSnapshot().heatmap, null); assert.match(controller.getSnapshot().message, /验收预览.*未完整/);
+  const count = calls.length; await controller.setMode("heatmap");
+  assert.equal(controller.getSnapshot().mode, "routes"); assert.equal(calls.length, count);
+  await controller.setDifficulty("a:3;c:false;m:false");
+  assert.equal(controller.getSnapshot().difficulty, ""); assert.equal(calls.length, count);
+  await controller.setMode("off"); await controller.setMode("routes"); assert.equal(calls.length, count);
+  await controller.setStage(1); await controller.refresh();
+  assert.equal(controller.getSnapshot().inspectionId, uploadId);
+  assert.ok(calls.filter(path => path !== "/api/route-groups").every(path => path.includes(uploadId) && path.includes("/inspection")));
+  controller.dispose();
+});
+
+test("historical navigation pins one public group across refresh and stage changes", async () => {
+  const historic = group(), other = group({ id: hash("e") });
+  const fake = server([other, historic]), controller = createCommunityRoutes({ fetchImpl: fake.fetchImpl });
+  await controller.enterMap(map(), { stageIndex: 3, groupId: historic.id, mode: "routes" });
+  assert.equal(controller.getSnapshot().pinnedGroupId, historic.id);
+  assert.equal(controller.getSnapshot().group.id, historic.id);
+  assert.equal(controller.getSnapshot().mode, "routes");
+  assert.equal(controller.getSnapshot().routes.length, 2);
+  await controller.selectGroup(other.id);
+  await controller.setStage(1); await controller.refresh();
+  assert.equal(controller.getSnapshot().group.id, historic.id);
+  assert.deepEqual(controller.getSnapshot().groups.map(value => value.id), [historic.id]);
+  assert.ok(fake.calls.filter(value => value.path !== "/api/route-groups").every(value => value.path.includes(historic.id)));
+  controller.dispose();
+});
+
+test("removed historical groups clear their overlay without substituting another matching layout", async () => {
+  const historic = group(), other = group({ id: hash("e") });
+  const groups = [historic, other], fake = server(groups), controller = createCommunityRoutes({ fetchImpl: fake.fetchImpl });
+  await controller.enterMap(map(), { stageIndex: 3, groupId: historic.id, mode: "routes" });
+  groups.shift(); const count = fake.calls.length; await controller.refresh();
+  assert.equal(controller.getSnapshot().group, null); assert.equal(controller.getSnapshot().routes.length, 0);
+  assert.match(controller.getSnapshot().message, /历史路线组暂不可用/);
+  assert.deepEqual(fake.calls.slice(count).map(value => value.path), ["/api/route-groups"]);
+  await controller.enterMap(map(), { stageIndex: 3 });
+  assert.equal(controller.getSnapshot().pinnedGroupId, null); assert.equal(controller.getSnapshot().group.id, other.id);
+  assert.equal(controller.getSnapshot().mode, "off"); controller.dispose();
+});
+
 test("community identity requires a verified map build, scene, pack and canonical branch", () => {
   assert.ok(communityMapIdentity(map()));
   assert.deepEqual(mapRouteStages(map()).map(stage => stage.name), ["Shore", "Roots", "Alpine", "Volcano", "Kiln", "Void"]);

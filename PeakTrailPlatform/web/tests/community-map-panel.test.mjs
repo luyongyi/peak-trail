@@ -42,12 +42,20 @@ function stageResponse(id, stageIndex, heat = false) {
 }
 function fixture({ groups = [group()], enabled = true, stageIndex = 0, deferStage = null } = {}) {
   const elements = Object.fromEntries(ids.map(id => [id, node()]));
+  const heatOption = node("option");
+  elements.communityMode.querySelector = selector => selector === 'option[value="heatmap"]' ? heatOption : null;
   const root = { getElementById: id => elements[id], createElement: node };
   const calls = [], deferred = [], firstScene = { overlays: [], setCommunityOverlay(value) { this.overlays.push(value); } };
   let context = { enabled, mapPack: map(), stageIndex }, scene = firstScene;
   const fetchImpl = async (path, options) => {
     calls.push({ path, ...options });
     if (path === "/api/route-groups") return response({ groups });
+    const inspectionMatch = path.match(/\/([a-f0-9]{64})\/uploads\/([a-f0-9]{64})\/stages\/(\d+)\/inspection/);
+    if (inspectionMatch) {
+      const body = stageResponse(inspectionMatch[1], Number(inspectionMatch[3]));
+      return response({ ...body, inspection: true, uploadId: inspectionMatch[2], excludedFromAggregation: true,
+        routes: body.routes.map(route => ({ ...route, completion: "partial", completed: false })) });
+    }
     const match = path.match(/\/([a-f0-9]{64})\/stages\/(\d+)\/(routes|heatmap)/);
     assert.ok(match, `unexpected API path ${path}`);
     const body = stageResponse(match[1], Number(match[2]), match[3] === "heatmap");
@@ -58,7 +66,7 @@ function fixture({ groups = [group()], enabled = true, stageIndex = 0, deferStag
   async function change(id, value) { elements[id].value = value; elements[id].dispatch("change"); await settle(); }
   async function toggle() { elements.communityToggle.dispatch("click"); await settle(); }
   async function open() { panel.sync(); await toggle(); }
-  return { elements, calls, deferred, panel, firstScene, change, toggle, open,
+  return { elements, heatOption, calls, deferred, panel, firstScene, change, toggle, open,
     get context() { return context; }, set context(value) { context = value; }, get scene() { return scene; }, set scene(value) { scene = value; } };
 }
 
@@ -83,6 +91,24 @@ test("the integrated panel stays hidden and performs no requests on the homepage
   f.panel.dispose();
 });
 
+test("inspection UI labels partial paths and disables the heatmap option without changing normal map defaults", async () => {
+  const f = fixture({ stageIndex: 3 });
+  f.context = { ...f.context, routeGroupId: group().id, inspectionId: hash("d") };
+  await f.panel.openHistorical();
+  assert.equal(f.elements.communityMode.value, "routes"); assert.equal(f.heatOption.disabled, true); assert.equal(f.heatOption.hidden, true);
+  assert.equal(f.elements.communityDifficulty.disabled, true);
+  assert.match(f.elements.communityStatus.textContent, /验收预览.*未完整/);
+  assert.match(f.elements.communityLegend.textContent, /未完整关卡不计/);
+  assert.match(f.elements.communityPlayers.children[0].children[2].textContent, /（未完整）$/);
+  const requests = f.calls.length; await f.change("communityMode", "heatmap");
+  assert.equal(f.calls.length, requests); assert.equal(f.scene.overlays.at(-1).mode, "routes");
+  assert.equal(f.elements.communityMode.value, "routes");
+  f.context = { ...f.context, inspectionId: null, routeGroupId: null }; f.panel.sync(); await settle();
+  assert.equal(f.elements.communityPanel.hidden, true); assert.equal(f.heatOption.hidden, false); assert.equal(f.heatOption.disabled, false);
+  assert.equal(f.elements.communityDifficulty.disabled, false);
+  f.panel.dispose();
+});
+
 test("default map exploration stays closed and makes no group or stage requests until the topbar toggle is opened", async () => {
   const f = fixture(); f.panel.sync(); await settle();
   assert.equal(f.calls.length, 0); assert.equal(f.elements.communityPanel.hidden, true); assert.equal(f.elements.communityLayerControl.hidden, true);
@@ -94,6 +120,24 @@ test("default map exploration stays closed and makes no group or stage requests 
   assert.equal(f.calls.length, 1); assert.equal(f.calls[0].path, "/api/route-groups");
   assert.equal(f.elements.communityMode.value, "off"); assert.equal(f.elements.communityLayerControl.hidden, false);
   assert.equal(f.scene.overlays.at(-1).mode, "off"); assert.equal(f.elements.communityToggle.attributes["aria-expanded"], "true");
+  f.panel.dispose();
+});
+
+test("an explicit historical context opens routes pinned to its group while normal exploration stays closed", async () => {
+  const historic = group(), other = group(hash("d"), hash("e"));
+  const f = fixture({ groups: [other, historic], stageIndex: 3 });
+  f.context = { ...f.context, routeGroupId: historic.id };
+  await f.panel.openHistorical();
+  assert.equal(f.elements.communityPanel.hidden, false);
+  assert.equal(f.elements.communityMode.value, "routes");
+  assert.equal(f.elements.communityGroup.value, historic.id); assert.equal(f.elements.communityGroup.disabled, true);
+  assert.equal(f.scene.overlays.at(-1).mode, "routes"); assert.equal(f.scene.overlays.at(-1).stageIndex, 3);
+  f.context = { ...f.context, stageIndex: 1 }; f.panel.sync(); await settle();
+  assert.equal(f.scene.overlays.at(-1).stageIndex, 1);
+  assert.ok(f.calls.filter(value => value.path !== "/api/route-groups").every(value => value.path.includes(historic.id)));
+  f.context = { ...f.context, routeGroupId: null }; f.panel.sync(); await settle();
+  assert.equal(f.elements.communityPanel.hidden, true); assert.equal(f.elements.communityMode.value, "off");
+  assert.equal(f.scene.overlays.at(-1).mode, "off");
   f.panel.dispose();
 });
 

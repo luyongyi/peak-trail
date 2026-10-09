@@ -8,7 +8,7 @@ export function createCommunityMapPanel({ getContext, getScene, root = document,
   const elements = Object.fromEntries(["appShell", "communityToggle", "communityLayerControl", "communityMode", "communityPanel", "communityRefresh",
     "communityStatus", "communityFilters", "communityGroupField", "communityGroup", "communityDifficulty",
     "communityHeight", "communityLegend", "communityPlayers"].map(id => [id, $(id)]));
-  let contextMap = null, contextStage, opened = false, disposed = false;
+  let contextMap = null, contextStage, contextGroup = null, contextInspection = null, opened = false, disposed = false;
   const listeners = [];
   const controller = createCommunityRoutes({ onChange: render, fetchImpl });
   function option(value, text) {
@@ -45,6 +45,8 @@ export function createCommunityMapPanel({ getContext, getScene, root = document,
     if (disposed) return;
     visibility();
     elements.communityMode.value = snapshot.mode;
+    const heatOption = elements.communityMode.querySelector?.('option[value="heatmap"]');
+    if (heatOption) { heatOption.disabled = Boolean(snapshot.inspectionId); heatOption.hidden = Boolean(snapshot.inspectionId); }
     const active = opened && snapshot.mode !== "off";
     elements.communityStatus.dataset.state = snapshot.status;
     elements.communityStatus.textContent = active ? snapshot.message || "选择一个关卡查看大家的路线。"
@@ -52,10 +54,14 @@ export function createCommunityMapPanel({ getContext, getScene, root = document,
     elements.communityRefresh.disabled = snapshot.status === "loading";
     elements.communityFilters.hidden = !active || !snapshot.group;
     elements.communityGroupField.hidden = snapshot.groups.length < 2;
+    elements.communityGroup.disabled = Boolean(snapshot.pinnedGroupId);
     elements.communityGroup.replaceChildren(...snapshot.groups.map((group, index) => option(group.id, communityGroupLabel(group, index))));
     elements.communityGroup.value = snapshot.group?.id || "";
     elements.communityDifficulty.replaceChildren(option("", "全部难度"), ...snapshot.difficulties.map(value => option(value.key, value.label || "难度未知")));
     elements.communityDifficulty.value = snapshot.difficulty;
+    elements.communityDifficulty.disabled = Boolean(snapshot.inspectionId);
+    const difficultyField = elements.communityDifficulty.closest?.("label");
+    if (difficultyField) difficultyField.hidden = Boolean(snapshot.inspectionId);
     elements.communityHeight.replaceChildren(option("", "全部高度"), ...snapshot.heightBands.map(band => {
       const step = (snapshot.heatmap?.heightBandCm || 200) / 100;
       return option(band, `${band * step}–${(band + 1) * step} 米`);
@@ -65,7 +71,7 @@ export function createCommunityMapPanel({ getContext, getScene, root = document,
     const visible = snapshot.players.filter(player => player.visible).length;
     elements.communityLegend.textContent = snapshot.mode === "heatmap"
       ? `${snapshot.totalRouteCount} 条完整路线 · 每条路线在同一空间格只计一次\n浅黄 → 深红：经过路线逐渐增多\n透视展示 · 可按高度层筛选`
-      : `${visible} / ${snapshot.players.length} 条可见路线 · 断点不连接`;
+      : `${snapshot.inspectionId ? "验收预览 · " : ""}${visible} / ${snapshot.players.length} 条可见轨迹 · 断点不连接${snapshot.inspectionId ? " · 未完整关卡不计公开路线或热力" : ""}`;
     elements.communityPlayers.replaceChildren();
     if (active && snapshot.mode === "routes") for (const player of snapshot.players) {
       const label = root.createElement("label"); label.className = "community-player";
@@ -73,7 +79,9 @@ export function createCommunityMapPanel({ getContext, getScene, root = document,
       check.setAttribute("aria-label", `显示 ${player.name} 的路线`);
       check.addEventListener("change", () => { if (interactive()) controller.setPlayerVisible(player.id, check.checked); });
       const dot = root.createElement("i"); dot.style.backgroundColor = player.color; dot.setAttribute("aria-hidden", "true");
-      const name = root.createElement("span"); name.textContent = player.name;
+      const name = root.createElement("span");
+      const recordedRoute = snapshot.inspectionId ? snapshot.routes.find(route => route.id === player.id) : null;
+      name.textContent = `${player.name}${recordedRoute ? recordedRoute.completed ? "（完整）" : "（未完整）" : ""}`;
       label.append(check, dot, name); elements.communityPlayers.append(label);
     }
     applyOverlay(snapshot);
@@ -85,9 +93,15 @@ export function createCommunityMapPanel({ getContext, getScene, root = document,
     if (opened) { close(); return; }
     opened = true; visibility(); render(controller.getSnapshot());
     const context = getContext();
-    void controller.enterMap(context.mapPack, { stageIndex: context.stageIndex });
+    void controller.enterMap(context.mapPack, { stageIndex: context.stageIndex, groupId: context.routeGroupId || null, inspectionId: context.inspectionId || null });
   });
-  listen(elements.communityMode, "change", () => { if (interactive()) void controller.setMode(elements.communityMode.value); });
+  listen(elements.communityMode, "change", () => {
+    if (!interactive()) return;
+    if (getContext().inspectionId && elements.communityMode.value === "heatmap") {
+      elements.communityMode.value = controller.getSnapshot().mode; return;
+    }
+    void controller.setMode(elements.communityMode.value);
+  });
   listen(elements.communityRefresh, "click", () => { if (interactive()) void controller.refresh(); });
   listen(elements.communityGroup, "change", () => { if (interactive()) void controller.selectGroup(elements.communityGroup.value); });
   listen(elements.communityDifficulty, "change", () => { if (interactive()) void controller.setDifficulty(elements.communityDifficulty.value); });
@@ -97,12 +111,12 @@ export function createCommunityMapPanel({ getContext, getScene, root = document,
     const context = getContext();
     const enabled = Boolean(context.enabled && context.mapPack);
     if (!enabled) {
-      if (contextMap !== null || opened) { contextMap = null; contextStage = undefined; close({ clear: true }); }
+      if (contextMap !== null || opened) { contextMap = null; contextStage = undefined; contextGroup = contextInspection = null; close({ clear: true }); }
       else { visibility(); if (restore) getScene()?.setCommunityOverlay({ mode: "off" }); }
       return;
     }
-    if (context.mapPack.mapPackId !== contextMap) {
-      contextMap = context.mapPack.mapPackId; contextStage = context.stageIndex;
+    if (context.mapPack.mapPackId !== contextMap || (context.routeGroupId || null) !== contextGroup || (context.inspectionId || null) !== contextInspection) {
+      contextMap = context.mapPack.mapPackId; contextStage = context.stageIndex; contextGroup = context.routeGroupId || null; contextInspection = context.inspectionId || null;
       close({ clear: true });
     } else if (context.stageIndex !== contextStage) {
       contextStage = context.stageIndex;
@@ -111,11 +125,18 @@ export function createCommunityMapPanel({ getContext, getScene, root = document,
     if (restore && !opened) getScene()?.setCommunityOverlay({ mode: "off" });
     visibility();
   }
+  async function openHistorical() {
+    if (disposed || !enabledContext() || !getContext().routeGroupId) return;
+    sync();
+    opened = true; visibility(); render(controller.getSnapshot());
+    const context = getContext();
+    await controller.enterMap(context.mapPack, { stageIndex: context.stageIndex, groupId: context.routeGroupId, inspectionId: context.inspectionId || null, mode: "routes" });
+  }
   function dispose() {
     if (disposed) return;
     close({ clear: true });
     elements.communityToggle.hidden = true;
     disposed = true; listeners.forEach(remove => remove()); controller.dispose();
   }
-  return { sync, dispose };
+  return { sync, openHistorical, dispose };
 }

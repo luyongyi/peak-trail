@@ -29,6 +29,7 @@ import { createDailyRefreshClock, createDailySourceReader, dailySourceUrls } fro
 import { bindCameraTouchControls } from "./camera-touch.js";
 import { FEATURES, shouldPollLive } from "./features.js";
 import { createCommunityMapPanel } from "./community-map-panel.js";
+import { historicalRouteUrl, loadHistoricalRouteLink, parseHistoricalRouteLink } from "./historical-route-link.js";
 
 const $ = (id) => document.getElementById(id);
 const elements = {
@@ -127,11 +128,13 @@ const elements = {
   dismissError: $("dismissError"),
   dailyScene: $("dailyScene"),
   dailyCountdown: $("dailyCountdown"),
+  dailyCard: $("dailyCard"),
 };
 
 const state = {
   workspaceMode: "home",
   mapPack: null,
+  historicalRoute: null,
   trace: null,
   traceCollection: null,
   replayCollection: null,
@@ -433,7 +436,7 @@ function renderSegmentNavigation() {
   const activeIndex = chapters.findIndex((option) => option.segment === state.selectedSegment);
   const active = options.find((option) => option.segment === state.selectedSegment);
   const isOverview = state.selectedSegment === null;
-  elements.routeSummary.textContent = state.routeView?.message || "关卡分支未确认";
+  elements.routeSummary.textContent = [state.historicalRoute?.title, state.routeView?.message || "关卡分支未确认"].filter(Boolean).join(" · ");
   elements.segmentOrdinal.textContent = isOverview
     ? `共 ${chapters.length} 关`
     : active?.isVoid ? "额外区域 · 天底" : `第 ${activeIndex + 1} / ${chapters.length} 关`;
@@ -522,6 +525,7 @@ function chooseSegment(segment, mode = "manual") {
   state.mapViewIntent = null;
   state.segmentSelectionMode = mode;
   state.selectedSegment = normalized;
+  if (state.historicalRoute && normalized !== null) updateHistoricalRouteUrl(normalized);
   renderSegmentNavigation();
   updateSceneMeta();
   if ((changed || clearedViewIntent) && viewer) {
@@ -585,7 +589,8 @@ function syncGameAssetsForTrace(trace, selectionRevision) {
 
 let viewer;
 const communityMapPanel = createCommunityMapPanel({
-  getContext: () => ({ enabled: state.workspaceMode === "explore", mapPack: state.mapPack, stageIndex: state.selectedSegment }),
+  getContext: () => ({ enabled: state.workspaceMode === "explore", mapPack: state.mapPack, stageIndex: state.selectedSegment,
+    routeGroupId: state.historicalRoute?.group.id || null, inspectionId: state.historicalRoute?.inspectionId || null }),
   getScene: () => viewer,
 });
 function syncCommunityContext(options) { communityMapPanel.sync(options); }
@@ -940,6 +945,7 @@ async function openHomeChapter(map, segment, presentedView, intent = null) {
   if (!available || current.mapEntry?.mapPackId !== presentedView.mapEntry?.mapPackId) return;
   if (intent?.destinationId && (!destination?.available || destination.segment !== segment
       || (destination.viewIntent || null) !== (intent.viewIntent || null))) return;
+  if (state.historicalRoute) { state.historicalRoute = null; clearHistoricalRouteUrl(); updateDailyCountdown(); }
   const revision = ++state.traceSelectionRevision;
   ++state.mapRequestRevision;
   if (state.trace && state.traceCollection === state.replayCollection) state.lastReplaySessionId = state.trace.manifest.sessionId;
@@ -983,6 +989,56 @@ async function openHomeChapter(map, segment, presentedView, intent = null) {
   updateTraceUI();
   updateMapUI();
   updateCompatibilityUI(false);
+}
+
+// Historical shares resolve independently of today's card availability. Every
+// map and overlay request is pinned to this group's verified original layout.
+async function openHistoricalRoute(destination, revision) {
+  const { group, mapPack: map, stageIndex, title, inspectionId } = destination;
+  if (revision !== state.mapRequestRevision) { map.disposeAssets?.(); return; }
+  const selectionRevision = ++state.traceSelectionRevision;
+  disconnectLive(true);
+  elements.liveStateRow.hidden = true;
+  state.workspaceMode = "explore";
+  setSourceMode("replay");
+  setPlaying(false);
+  clearTimeout(state.toastTimer);
+  elements.eventToast.classList.remove("is-visible");
+  state.trace = null;
+  state.traceCollection = state.replayCollection;
+  state.currentTime = 0;
+  state.lastEventTime = -1;
+  const previous = state.mapPack;
+  state.mapPack = map;
+  state.mapSourceKind = "historical-route";
+  state.historicalRoute = { group, title, inspectionId };
+  updateDailyCountdown();
+  state.dailyMapStatus = null;
+  resetSegmentNavigation(null);
+  state.selectedSegment = stageIndex;
+  state.segmentSelectionMode = "manual";
+  state.compatibility = assessCompatibility(null, map);
+  syncGameAssetsForTrace(null, selectionRevision);
+  updateTraceUI(); updateMapUI(); updateCompatibilityUI(false);
+  syncWorkspaceState(); dismissGate();
+  viewer?.resize(); viewer?.fitView();
+  await renderData();
+  if (selectionRevision !== state.traceSelectionRevision) return;
+  if (previous !== map) previous?.disposeAssets?.();
+  updateHistoricalRouteUrl(stageIndex);
+  await communityMapPanel.openHistorical();
+}
+
+function updateHistoricalRouteUrl(stageIndex) {
+  if (!state.historicalRoute) return;
+  window.history.replaceState(null, "", historicalRouteUrl(window.location.href, state.historicalRoute.group.id, stageIndex, state.historicalRoute.inspectionId || null));
+}
+
+function clearHistoricalRouteUrl() {
+  const url = new URL(window.location.href);
+  url.searchParams.delete("routeGroup"); url.searchParams.delete("stage");
+  url.searchParams.delete("inspection");
+  window.history.replaceState(null, "", url.href);
 }
 
 // ============ 调试模式：客户端自产演示数据，进入完整直播界面 ============
@@ -1568,13 +1624,14 @@ function syncWorkspaceState() {
   shell.classList.toggle("has-trace", Boolean(state.trace));
   shell.dataset.workspaceMode = state.workspaceMode;
   shell.dataset.replayState = replayEmpty ? "empty" : state.trace ? "ready" : "explore";
-  if (state.workspaceMode === "explore") elements.modeChip.textContent = "地图";
+  if (state.workspaceMode === "explore") elements.modeChip.textContent = state.historicalRoute
+    ? state.historicalRoute.inspectionId ? "验收预览" : "历史路线" : "地图";
   syncCommunityContext();
 }
 
 function updateMapUI() {
   const pack = state.mapPack;
-  const automatic = ["daily", "archive"].includes(state.mapSourceKind);
+  const automatic = ["daily", "archive", "historical-route"].includes(state.mapSourceKind);
   elements.mapSourceButton.classList.toggle("is-loaded", Boolean(pack));
   elements.mapSourceName.textContent = pack
     ? pack.sceneName
@@ -1972,7 +2029,7 @@ async function applyDailyStatus() {
   try {
     const daily = await dailyReader.read();
     if (!daily) {
-      if (!state.daily) {
+      if (!state.daily && !updateDailyCard()) {
         elements.dailyScene.textContent = "本地模式";
         elements.dailyCountdown.textContent = "未同步轮换";
       }
@@ -1986,11 +2043,10 @@ async function applyDailyStatus() {
     }
     state.daily = daily;
     void homePage.update(daily);
-    elements.dailyScene.textContent = daily.sceneName || `Level ${daily.mapSlot ?? daily.levelIndex ?? "?"}`;
+    updateDailyCard();
     if (!isDailyMapFresh(daily)) {
-      elements.dailyCountdown.textContent = Number.isFinite(Date.parse(daily.nextChangeAtUtc))
-        ? "轮换数据已过期"
-        : "更新时间无效";
+      if (!state.historicalRoute) elements.dailyCountdown.textContent = Number.isFinite(Date.parse(daily.nextChangeAtUtc))
+        ? "轮换数据已过期" : "更新时间无效";
       await expireDailyStatus(daily);
       return;
     }
@@ -2030,7 +2086,7 @@ async function applyDailyStatus() {
       }
     }
   } catch {
-    if (!state.daily) {
+    if (!state.daily && !updateDailyCard()) {
       elements.dailyScene.textContent = "本地模式";
       elements.dailyCountdown.textContent = "未同步轮换";
     }
@@ -2213,7 +2269,28 @@ async function syncDailyMap(daily, refreshCatalog = false) {
   }
 }
 
+function updateDailyCard() {
+  const history = state.historicalRoute;
+  if (history) {
+    const formatter = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" });
+    const dates = [...new Set([history.group.firstStartedUtc, history.group.lastStartedUtc]
+      .filter(value => typeof value === "string" && Number.isFinite(Date.parse(value)))
+      .map(value => formatter.format(new Date(value))))];
+    const rotation = Number.isInteger(history.group.map.levelIndex) ? `轮换 ${history.group.map.levelIndex}` : "";
+    elements.dailyCard?.setAttribute("title", "历史录制地图");
+    elements.dailyScene.textContent = `历史 ${history.group.map.scene}`;
+    elements.dailyCountdown.textContent = [dates.join(" – "), rotation].filter(Boolean).join(" · ") || "历史录制地图";
+    return true;
+  }
+  elements.dailyCard?.setAttribute("title", "今日轮换");
+  elements.dailyScene.textContent = state.daily
+    ? state.daily.sceneName || `Level ${state.daily.mapSlot ?? state.daily.levelIndex ?? "?"}` : "正在获取…";
+  if (!state.daily?.nextChangeAtUtc) elements.dailyCountdown.textContent = "未同步轮换";
+  return false;
+}
+
 function updateDailyCountdown() {
+  if (updateDailyCard()) return;
   if (!state.daily?.nextChangeAtUtc) return;
   const remaining = new Date(state.daily.nextChangeAtUtc).getTime() - Date.now();
   if (!Number.isFinite(remaining)) {
@@ -2232,6 +2309,7 @@ function updateDailyCountdown() {
 }
 
 async function expireDailyStatus(daily) {
+  if (state.mapSourceKind === "historical-route") return;
   // A boundary callback may still hold the previous observation while a manual
   // refresh has already installed the next one. Never clear that newer map.
   if (daily !== state.daily || isDailyMapFresh(daily)) return;
@@ -2276,6 +2354,7 @@ elements.gateLive.addEventListener("click", () => {
 });
 elements.backToGate.addEventListener("click", () => {
   elements.importMenu.open = false;
+  if (state.historicalRoute) { state.historicalRoute = null; clearHistoricalRouteUrl(); updateDailyCountdown(); }
   showGate();
 });
 elements.gateDebug.addEventListener("click", () => {
@@ -2579,9 +2658,36 @@ async function bootstrap() {
   updateRangeFill(elements.heightScale);
   requestAnimationFrame(playbackLoop);
   await bootstrapMapFromQuery();
+  await bootstrapHistoricalRouteFromQuery();
   await loadDailyStatus();
   setInterval(updateDailyCountdown, 30_000);
   setInterval(() => void dailyClock.wake(), 5 * 60_000);
+}
+
+async function bootstrapHistoricalRouteFromQuery() {
+  let link;
+  try { link = parseHistoricalRouteLink(window.location.search); }
+  catch (error) { showError("历史路线未打开", error.message, 0); return; }
+  if (!link) return;
+  const revision = ++state.mapRequestRevision;
+  state.manualMapLoads++;
+  setSourceLoading("map", true);
+  try {
+    const destination = await loadHistoricalRouteLink(link, {
+      readGroups: async () => {
+        const response = await fetch("/api/route-groups", { cache: "no-store", headers: { Accept: "application/json" } });
+        if (!response.ok) throw new Error(`历史路线服务暂不可用（HTTP ${response.status}）。`);
+        if (!response.headers.get("content-type")?.includes("application/json")) throw new Error("历史路线服务返回格式无效。");
+        if (Number(response.headers.get("content-length")) > 30_000_000) throw new Error("历史路线列表过大。");
+        const text = await response.text();
+        if (text.length > 30_000_000) throw new Error("历史路线列表过大。");
+        return JSON.parse(text);
+      },
+      readCatalog: () => ensureMapCatalog(), loadMapPack: loadMapPackUrl,
+    });
+    await openHistoricalRoute(destination, revision);
+  } catch (error) { if (revision === state.mapRequestRevision) showError("历史路线未打开", error.message, 0); }
+  finally { state.manualMapLoads--; setSourceLoading("map", false); }
 }
 
 window.dispatchEvent(new Event("peaktrail-ready"));
