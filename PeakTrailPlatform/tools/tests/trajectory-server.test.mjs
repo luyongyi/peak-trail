@@ -9,8 +9,10 @@ import { EventEmitter } from "node:events";
 import { setImmediate as nextTurn, setTimeout as pause } from "node:timers/promises";
 import { createLiveServer } from "../../server/live-server.mjs";
 import { createTrajectoryApi } from "../../server/trajectory-api.mjs";
-import { digest, groupId, validateTrajectory, extractStageRoutes, extractInspectionStage, aggregateHeatmap } from "../../server/trajectory-contract.mjs";
+import { digest, groupId, validateTrajectory, extractStageRoutes, extractInspectionStage, playerSummitCompleted, aggregateHeatmap } from "../../server/trajectory-contract.mjs";
 import { moderate, ingestUpload, mapMatch, autoApprovePending } from "../../server/trajectory-store.mjs";
+import { routeEdges } from "../../web/src/route-collection-model.js";
+import { makeTeamMetadata } from "../../server/team-index.mjs";
 
 function fixture(change = {}) {
   return { format: "trajectory-v1", recordingId: digest("recording-1"), runKey: digest("run-1"), timeOriginMs: 1000000,
@@ -271,6 +273,57 @@ test("native final finish keeps proven terminal completion and leaves unproven w
   assert.equal(extractInspectionStage(raw, legacy, stage).gameCompleted, null);
 });
 
+test("only a living native summit event proves a win, never a final exit or a ghost", () => {
+  const raw = fixture(), player = raw.players[0], stage = raw.map.stages[1];
+  player.events = [{ tMs: 0, kind: "game-stage", stageIndex: 0 }, { tMs: 950, kind: "checkpoint", stageIndex: 0 },
+    { tMs: 950, kind: "game-stage", stageIndex: 1 }, { tMs: 2000, kind: "finish", stageIndex: 1 }];
+  assert.equal(playerSummitCompleted(raw, player), false, "old finish also meant crossing a Z gate");
+  const won = structuredClone(player); won.points = won.points.slice(0, 19);
+  won.events.push({ tMs: 2000, kind: "summit", stageIndex: 1 });
+  assert.equal(playerSummitCompleted(raw, won), true);
+  assert.equal(extractInspectionStage(raw, won, stage).completion, "partial");
+  assert.equal(extractInspectionStage(raw, won, stage).gameCompleted, true, "a real win does not invent missing route points");
+  const ghost = structuredClone(won); ghost.events.splice(3, 0, { tMs: 1500, kind: "dead" });
+  assert.equal(playerSummitCompleted(raw, ghost), false);
+  assert.equal(extractInspectionStage(raw, ghost, stage).gameCompleted, null);
+  const simultaneous = structuredClone(won); simultaneous.events.push({ tMs: 2000, kind: "dead" });
+  assert.equal(playerSummitCompleted(raw, simultaneous), false, "event ordering on one death tick cannot create a living finisher");
+  const revived = structuredClone(ghost); revived.events.splice(4, 0, { tMs: 1800, kind: "revive" });
+  assert.equal(playerSummitCompleted(raw, revived), true);
+  const legacy = structuredClone(won); legacy.evidence = "legacy-unknown";
+  assert.equal(playerSummitCompleted(raw, legacy), false);
+  const invalid = fixture(); invalid.players[0].events = [{ tMs: 100, kind: "summit", stageIndex: 0 }];
+  assert.throws(() => validateTrajectory(invalid), /native final-stage evidence/);
+});
+
+test("rejoining never revives a dead member, but living reconnects and explicit revival resume correctly", () => {
+  for (const nativeTimeline of [false, true]) {
+    const raw = fixture(), player = raw.players[0], stage = raw.map.stages[1];
+    const timeline = nativeTimeline ? [{ tMs: 0, kind: "game-stage", stageIndex: 0 }, { tMs: 900, kind: "game-stage", stageIndex: 1 }] : [];
+    const summit = { tMs: 2000, kind: "summit", stageIndex: 1 };
+    const events = values => [...timeline, ...values, summit].sort((a,b) => a.tMs - b.tMs);
+    player.events = events([{ tMs: 100, kind: "dead" }, { tMs: 200, kind: "leave" }, { tMs: 300, kind: "join" }]);
+    assert.equal(playerSummitCompleted(raw, player), false);
+    assert.equal(extractStageRoutes(raw, player, stage).completion, "partial");
+    assert.deepEqual(extractInspectionStage(raw, player, stage).points, [], "reconnected ghost positions stay excluded");
+    const revived = structuredClone(player);
+    revived.events = events([{ tMs: 100, kind: "dead" }, { tMs: 200, kind: "leave" }, { tMs: 300, kind: "join" }, { tMs: 700, kind: "revive" }]);
+    assert.equal(playerSummitCompleted(raw, revived), true);
+    assert.equal(extractStageRoutes(raw, revived, stage).completion, "complete");
+    assert.ok(extractInspectionStage(raw, revived, stage).points.every(point => point[0] >= 700));
+    const livingReconnect = structuredClone(player);
+    livingReconnect.events = events([{ tMs: 200, kind: "leave" }, { tMs: 300, kind: "join" }]);
+    assert.equal(playerSummitCompleted(raw, livingReconnect), true);
+    assert.equal(extractStageRoutes(raw, livingReconnect, stage).completion, "complete");
+    assert.ok(extractInspectionStage(raw, livingReconnect, stage).points.length > 0);
+    const stillAbsent = structuredClone(player);
+    stillAbsent.events = events([{ tMs: 100, kind: "dead" }, { tMs: 200, kind: "leave" }, { tMs: 700, kind: "revive" }]);
+    assert.equal(playerSummitCompleted(raw, stillAbsent), false);
+    assert.equal(extractStageRoutes(raw, stillAbsent, stage).completion, "partial");
+    assert.deepEqual(extractInspectionStage(raw, stillAbsent, stage).points, []);
+  }
+});
+
 test("checkpoint after the last sample cannot erase a late death or manufacture a distant endpoint", () => {
   const raw = nativeCheckpointFixture(), stage = raw.map.stages[0], original = raw.players[0];
   original.points = original.points.slice(0,16);
@@ -431,8 +484,49 @@ test("inspection retains real interruptions, sampling gaps, excessive movement a
     [400,2000,0,3000],[500,2000,0,400],[2200,2000,0,500],[2300,2000,0,600]];
   player.events = [{ tMs: 250, kind: "warp" }, { tMs: 2000, kind: "dead" }, { tMs: 2250, kind: "revive" }];
   const result = extractInspectionStage(raw, player, stage);
-  assert.deepEqual(result.points, player.points.filter(point => point[3] <= 1300));
-  assert.deepEqual(result.breaks, [200,250,500,2000,2200,2250]); assert.equal(result.completion, "partial");
+  assert.deepEqual(result.points, player.points.filter(point => point[3] <= 1300 && point[0] !== 2200));
+  assert.deepEqual(result.breaks, [200,250,500,2000,2250,2300]); assert.equal(result.completion, "partial");
+});
+
+test("inspection keeps the actual death sample, drops ghost motion, and resumes after revival without bridging", () => {
+  const raw = fixture(), player = raw.players[0], stage = raw.map.stages[0];
+  player.points = Array.from({ length: 11 }, (_, i) => [i * 100, i * 10, 0, 100]);
+  player.events = [{ tMs: 300, kind: "dead" }, { tMs: 800, kind: "revive" }];
+  const result = extractInspectionStage(raw, player, stage);
+  assert.deepEqual(result.points.map(point => point[0]), [0,100,200,300,800,900,1000]);
+  assert.deepEqual(result.breaks, [800]);
+  player.events = [{ tMs: 300, kind: "dead" }];
+  assert.deepEqual(extractInspectionStage(raw, player, stage).points.map(point => point[0]), [0,100,200,300]);
+  player.events = [{ tMs: 0, kind: "dead" }, { tMs: 400, kind: "join" }];
+  assert.deepEqual(extractInspectionStage(raw, player, stage).points, [], "join alone cannot revive an initially dead member");
+  player.points = [[0,0,0,100],[100,10,0,100],[200,20,0,100],[300,30,0,100]];
+  player.events = [{ tMs: 100, kind: "dead" }, { tMs: 200, kind: "revive" }];
+  assert.deepEqual(routeEdges(extractInspectionStage(raw, player, stage)).map(([a,b]) => [a[0],b[0]]), [[0,100],[200,300]],
+    "the real terminal segment renders and the death-to-revival segment never does");
+  player.events = [{ tMs: 100, kind: "dead" }, { tMs: 100, kind: "break" },
+    { tMs: 200, kind: "revive" }, { tMs: 200, kind: "break" }];
+  assert.deepEqual(routeEdges(extractInspectionStage(raw, player, stage)).map(([a,b]) => [a[0],b[0]]), [[0,100],[200,300]],
+    "old exporters paired life changes with a generic break, which must not erase the terminal death segment");
+  player.events.splice(2, 0, { tMs: 100, kind: "warp" });
+  assert.deepEqual(routeEdges(extractInspectionStage(raw, player, stage)).map(([a,b]) => [a[0],b[0]]), [[200,300]],
+    "an explicit warp coinciding with death still interrupts the terminal segment");
+});
+
+test("version 1 team metadata with old ghost points remains reviewable without rewriting its accepted payload", async () => {
+  await isolated(async ({ root, base }) => {
+    const raw = fixture(); raw.players[0].events = [{ tMs: 500, kind: "dead" }];
+    const upload = await post(base, raw), path = join(root, "index", `${upload.body.uploadId}.json`);
+    const entry = JSON.parse(await readFile(path, "utf8"));
+    entry.team = makeTeamMetadata(validateTrajectory(raw).trajectory, { version: 1 });
+    entry.moderationStatus = "pending"; delete entry.reviewedUtc; delete entry.reviewMethod;
+    await writeFile(path, JSON.stringify(entry));
+    assert.deepEqual(await autoApprovePending(root), { approved: 1, invalid: 0, busy: 0 });
+    const stored = JSON.parse(await readFile(path, "utf8"));
+    assert.equal(stored.team.version, 1); assert.equal(stored.moderationStatus, "approved");
+    const team = (await get(base, "/api/route-teams")).body.teams[0];
+    const current = (await get(base, `/api/route-teams/${team.id}/stages/0/routes`)).body;
+    assert.equal(current.routes[0].points.at(-1)[0], 500); assert.deepEqual(current.routes[0].breaks, []);
+  });
 });
 
 test("inspection uses the same verified landmark transform and refuses damaged approved stored coordinates", async () => {

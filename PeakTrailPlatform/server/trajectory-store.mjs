@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { setTimeout as pause } from "node:timers/promises";
 import { LIMITS, problem, digest, validHash, validateTrajectory, difficultyInfo, groupId,
-  extractStageRoutes, extractInspectionStage, routeDedupeKey, dedupeRoutes, aggregateHeatmap } from "./trajectory-contract.mjs";
+  extractStageRoutes, extractInspectionStage, playerSummitCompleted, routeDedupeKey, dedupeRoutes, aggregateHeatmap } from "./trajectory-contract.mjs";
 import { fitMapAlignment, alignedRoutePoints, validateMapAlignment } from "./map-alignment.mjs";
 import { TEAM_LIMITS, makeTeamMetadata, inspectTeamStage, teamIdentity, collectTeams, teamDescriptor, memberMatches, sourceOrder } from "./team-index.mjs";
 
@@ -133,7 +133,7 @@ export async function mapMatch(map, catalogPath) {
     return waiting(reason);
   } catch { return waiting("source-evidence-unavailable"); }
 }
-export async function ingestUpload(root, compressed, catalogPath) {
+export async function ingestUpload(root, compressed, catalogPath, { minimalReceipt = false } = {}) {
   if (compressed.byteLength > LIMITS.compressedBytes) throw problem("compressed body exceeds 12 MiB", 413);
   let decoded;
   try { decoded = gunzipSync(compressed, { maxOutputLength: LIMITS.decodedBytes }); }
@@ -143,7 +143,7 @@ export async function ingestUpload(root, compressed, catalogPath) {
   const { trajectory, totalPoints } = validateTrajectory(raw);
   const canonical = JSON.stringify(trajectory), id = digest(canonical), path = join(root, "index", `${id}.json`);
   await setup(root);
-  try { const existing = await readJson(path); return uploadReceipt(existing, true, catalogPath); } catch (error) { if (error.code !== "ENOENT") throw problem("existing upload index is damaged", 503); }
+  try { const existing = await readJson(path); return uploadReceipt(existing, true, catalogPath, minimalReceipt); } catch (error) { if (error.code !== "ENOENT") throw problem("existing upload index is damaged", 503); }
   const index = await loadIndex(root);
   const occupiedBytes = await physicalBytes(root);
   if (index.length >= LIMITS.uploads || occupiedBytes + compressed.byteLength * 3 > LIMITS.storedBytes) throw problem("route storage capacity reached", 503);
@@ -184,15 +184,18 @@ export async function ingestUpload(root, compressed, catalogPath) {
     for (const { filename, bytes } of routeFiles) { const routePath = join(root, "routes", filename); if (await atomicBytes(routePath, bytes)) created.push(routePath); }
     await atomicJson(path, entry, true);
   } catch (error) {
-    if (error.code === "EEXIST") return uploadReceipt(await readJson(path), true, catalogPath);
+    if (error.code === "EEXIST") return uploadReceipt(await readJson(path), true, catalogPath, minimalReceipt);
     let committed = false; try { committed = (await readJson(path)).id === id; } catch { /* no committed index */ }
     if (!committed) for (const file of created) await unlink(file).catch(() => {});
     throw error;
   }
-  return uploadReceipt(entry, false, catalogPath);
+  return uploadReceipt(entry, false, catalogPath, minimalReceipt);
 }
-async function uploadReceipt(entry, duplicate, catalogPath) {
-  return { uploadId: entry.id, groupId: entry.groupId, duplicate, moderationStatus: entry.moderationStatus, ...(await mapMatch(entry.map, catalogPath)),
+async function uploadReceipt(entry, duplicate, catalogPath, minimal = false) {
+  const match = await mapMatch(entry.map, catalogPath);
+  if (minimal) return { uploadId: entry.id, groupId: entry.groupId, duplicate, moderationStatus: entry.moderationStatus,
+    mapCompatibility: match.mapCompatibility };
+  return { uploadId: entry.id, groupId: entry.groupId, duplicate, moderationStatus: entry.moderationStatus, ...match,
     stages: entry.players.map((player) => ({ playerKey: player.key, stages: player.stages })) };
 }
 
@@ -227,7 +230,8 @@ async function validatePendingEntry(root, entry) {
     players.push({ key: player.key, name: player.name, owner: player.owner, evidence: player.evidence, stages });
   }
   if (!isDeepStrictEqual(entry.players, players) || !isDeepStrictEqual(entry.routes, routes)) throw problem("stored route metadata disagrees with complete individual attempts");
-  if (entry.team !== undefined && !isDeepStrictEqual(entry.team, makeTeamMetadata(trajectory))) throw problem("stored team metadata disagrees with its trajectory");
+  if (entry.team !== undefined && (![1, 2].includes(entry.team.version)
+    || !isDeepStrictEqual(entry.team, makeTeamMetadata(trajectory, { version: entry.team.version })))) throw problem("stored team metadata disagrees with its trajectory");
   return trajectory.startedUtc;
 }
 
@@ -405,29 +409,45 @@ async function readInspectionTrajectory(root, entry) {
 }
 
 async function hydrateLegacyTeam(root, team) {
-  const legacy = team.entries.filter(entry => entry.team?.version !== 1).sort((a, b) => b.pointCount - a.pointCount || a.id.localeCompare(b.id));
-  team.metadataTruncated = legacy.length > TEAM_LIMITS.sources;
+  const legacy = team.entries.filter(entry => entry.team?.version !== 2).sort((a, b) => b.pointCount - a.pointCount || a.id.localeCompare(b.id));
   // This is restricted to one explicitly selected team. Search never opens raw
   // blobs, and old indexes are not rewritten or migrated across unrelated teams.
-  for (const entry of legacy.slice(0, TEAM_LIMITS.sources)) {
+  for (const entry of legacy) {
     const trajectory = await readInspectionTrajectory(root, entry), metadata = makeTeamMetadata(trajectory);
+    const members = new Map(metadata.members.map(member => [member.key, member]));
     for (const sources of team.members.values()) for (const source of sources) {
-      if (source.entry.id === entry.id) source.metadata = metadata.members.find(member => member.key === source.player.key);
+      if (source.entry.id === entry.id) source.metadata = members.get(source.player.key);
     }
   }
 }
 
-export async function queryTeamRoutes(root, catalogPath, teamId, stage) {
-  if (!validHash(teamId) || !Number.isInteger(stage) || stage < 0 || stage >= LIMITS.stages) throw problem("invalid team/stage");
+export async function queryTeamRoutes(root, catalogPath, teamId, stage, { cursor = "" } = {}) {
+  if (!validHash(teamId) || !Number.isInteger(stage) || stage < 0 || stage >= LIMITS.stages
+    || (cursor && !validHash(cursor))) throw problem("invalid team/stage/cursor");
   const team = collectTeams(await loadIndex(root)).get(teamId);
   if (!team || !team.map.stages.some(value => value.index === stage)) throw problem("unknown public team/stage", 404);
   await hydrateLegacyTeam(root, team);
+  const descriptor = teamDescriptor(team);
   const base = { teamId, groupId: team.groupId, stageIndex: stage, timeBasis: "recording-ms",
+    teamRevision: digest(team.entries.map(entry => entry.id).sort()),
+    summitCompleted: descriptor.summitCompleted, finisherKeys: descriptor.finisherKeys,
+    stageCompleted: descriptor.stageSummaries.find(value => value.index === stage).completed,
     ...(await mapMatch(team.map, catalogPath)) };
   base.coordinateSpace = base.mapAlignment.status === "verified" ? "canonical-map-world-cm" : "recording-world-cm";
   const allMembers = [...team.members].sort(([a], [b]) => a.localeCompare(b));
-  const selections = allMembers.slice(0, TEAM_LIMITS.members).map(([key, sources]) => ({ key,
-    source: [...sources].sort((a, b) => sourceOrder(a, b, stage))[0] }));
+  const after = cursor ? allMembers.findIndex(([key]) => key === cursor) + 1 : 0;
+  if (cursor && !after) throw problem("unknown team page cursor");
+  const selections = []; let estimatedPoints = 0, estimatedBytes = 0;
+  for (let index = after; index < allMembers.length; index += 1) {
+    const [key, sources] = allMembers[index], source = [...sources].sort((a, b) => sourceOrder(a, b, stage))[0];
+    const summary = source.metadata?.stages?.find(value => value.index === stage);
+    const points = summary?.pointCount ?? 0, bytes = 1024 + points * 64 + (summary?.breakCount ?? 0) * 12;
+    // Pages contain whole members. The browser follows every cursor, so no late
+    // member loses its route because an earlier member used the point budget.
+    if (selections.length && (estimatedPoints + points > LIMITS.queryPoints || estimatedBytes + bytes > TEAM_LIMITS.pageBytes)) break;
+    if (points > LIMITS.queryPoints || bytes > TEAM_LIMITS.pageBytes) throw problem("individual team route exceeds page capacity", 413);
+    selections.push({ key, source }); estimatedPoints += points; estimatedBytes += bytes;
+  }
   // Only chosen member observations are decompressed, never the entire searchable
   // index. Read one source at a time and never concatenate multiple recordings.
   const byUpload = new Map();
@@ -436,21 +456,21 @@ export async function queryTeamRoutes(root, catalogPath, teamId, stage) {
     if (!byUpload.has(id)) byUpload.set(id, []);
     byUpload.get(id).push(selection);
   }
-  if (byUpload.size > TEAM_LIMITS.sources) throw problem("team source capacity exceeded", 413);
-  const routes = []; let pointCount = 0, truncated = allMembers.length > selections.length || Boolean(team.metadataTruncated);
+  const routes = []; let pointCount = 0;
   for (const group of byUpload.values()) {
     const entry = group[0].source.entry, trajectory = await readInspectionTrajectory(root, entry);
     const selected = trajectory.map.stages.find(value => value.index === stage);
+    const players = new Map(trajectory.players.map(player => [player.key, player]));
     for (const { key } of group) {
-      const player = trajectory.players.find(value => value.key === key);
+      const player = players.get(key);
       if (!player || !selected) throw problem("stored team member unavailable", 503);
       const extracted = inspectTeamStage(trajectory, player, selected);
-      const points = extracted.points.slice(0, Math.max(0, LIMITS.queryPoints - pointCount));
-      if (points.length < extracted.points.length) truncated = true;
+      const points = extracted.points;
       pointCount += points.length;
       routes.push({ id: digest({ teamId, upload: entry.id, playerKey: key, stage }), playerKey: key, name: player.name,
         uploadId: entry.id, difficulty: entry.difficulty, completion: extracted.completion,
         completed: extracted.completion === "complete", gameCompleted: extracted.gameCompleted,
+        summitCompleted: playerSummitCompleted(trajectory, player),
         timeBasis: "recording-ms", ...(trajectory.runKey === team.scope && trajectory.timeOriginMs !== undefined
           ? { timeOriginMs: trajectory.timeOriginMs } : {}),
         points: alignedRoutePoints(points, base.mapAlignment),
@@ -458,5 +478,6 @@ export async function queryTeamRoutes(root, catalogPath, teamId, stage) {
     }
   }
   routes.sort((a, b) => a.playerKey.localeCompare(b.playerKey));
-  return { ...base, routes, totalRouteCount: allMembers.length, pointCount, truncated };
+  return { ...base, routes, totalRouteCount: allMembers.length, pointCount, truncated: false,
+    nextCursor: after + selections.length < allMembers.length ? selections.at(-1).key : null };
 }

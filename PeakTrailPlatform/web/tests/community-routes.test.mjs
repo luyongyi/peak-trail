@@ -431,3 +431,76 @@ test("team capacity limits are disclosed instead of presenting truncated observa
   assert.match(controller.getSnapshot().message, /部分成员或轨迹尚未显示/);
   controller.dispose();
 });
+
+test("large modded lobbies retain every member, independent visibility, captain choice and team summit success", async () => {
+  const members = Array.from({ length: 257 }, (_, index) => ({ playerKey: index.toString(16).padStart(64, "0"), name: `队员 ${index + 1}` }));
+  const selected = team({ members, summitCompleted: true, finisherKeys: [members.at(-1).playerKey] });
+  assert.equal(normalizeCommunityTeams({ teams: [selected] }).teams[0].members.length, 257);
+  const routes = members.map((member, index) => ({ ...member, id: `route-${index}`, points: [[0, index, 0, 0], [100, index + 100, 0, 0]], breaks: [],
+    completed: index === 256, gameCompleted: index === 256, summitCompleted: index === 256 }));
+  const fake = teamServer(), controller = createCommunityRoutes({ fetchImpl: (path, options) => path.startsWith(`/api/route-teams/${selected.id}/stages/`)
+    ? Promise.resolve(response(teamStage(0, { routes, totalRouteCount: routes.length, summitCompleted: true, finisherKeys: selected.finisherKeys }))) : fake.fetchImpl(path, options) });
+  await controller.enterMap(map(), { groupId: group().id, teamId: selected.id, stageIndex: 0, mode: "team" });
+  let snapshot = controller.getSnapshot();
+  assert.equal(snapshot.players.length, 257); assert.equal(snapshot.routes.length, 257);
+  assert.equal(snapshot.summitCompleted, true); assert.match(snapshot.message, /257 位队员.*本队已登顶/);
+  assert.equal(snapshot.routes[0].completed, false, "one finisher does not fabricate other members' complete trajectories");
+  controller.setReferencePlayer(members.at(-1).playerKey); controller.setAllPlayersVisible(false);
+  controller.setPlayerVisible(members.at(-1).playerKey, true); snapshot = controller.getSnapshot();
+  assert.equal(snapshot.referencePlayerKey, members.at(-1).playerKey);
+  assert.deepEqual(snapshot.players.filter(player => player.visible).map(player => player.id), [members.at(-1).playerKey]);
+  controller.dispose();
+});
+
+test("team pages are collected completely beyond the old aggregate point budget and remain usable as heat", async () => {
+  const first = { ...teamStage().routes[0], points: Array.from({ length: 100001 }, (_, index) => [index * 100, index, 0, 0]) };
+  const second = { ...teamStage().routes[1], points: Array.from({ length: 100001 }, (_, index) => [index * 100, index, 0, 200]) };
+  const fake = teamServer(), calls = [], controller = createCommunityRoutes({ fetchImpl: (path, options) => {
+    calls.push(path);
+    if (path.startsWith(`/api/route-teams/${team().id}/stages/`)) {
+      const cursor = new URL(path, "https://example.invalid").searchParams.get("cursor");
+      assert.ok(cursor === null || cursor === first.playerKey);
+      return Promise.resolve(response(teamStage(0, { routes: [cursor ? second : first], nextCursor: cursor ? null : first.playerKey })));
+    }
+    return fake.fetchImpl(path, options);
+  } });
+  await controller.enterMap(map(), { groupId: group().id, teamId: team().id, stageIndex: 0, mode: "team" });
+  assert.equal(controller.getSnapshot().status, "ready");
+  assert.equal(controller.getSnapshot().routes.reduce((count, route) => count + route.points.length, 0), 200002);
+  assert.equal(controller.getSnapshot().players.length, 2);
+  assert.equal(calls.filter(path => path.includes("cursor=")).length, 1);
+  await controller.setMode("heatmap");
+  assert.equal(controller.getSnapshot().status, "ready"); assert.equal(controller.getSnapshot().routes.length, 2);
+  assert.equal(controller.getSnapshot().heatmap.cells.length, 3);
+  controller.dispose();
+});
+
+test("invalid or incomplete pagination never presents missing teammates as a complete team", async () => {
+  for (const override of [{ nextCursor: hash("7") }, { nextCursor: null, totalRouteCount: 10 }]) {
+    const fake = teamServer(), controller = createCommunityRoutes({ fetchImpl: (path, options) => path.startsWith(`/api/route-teams/${team().id}/stages/`)
+      ? Promise.resolve(response(teamStage(0, override))) : fake.fetchImpl(path, options) });
+    await controller.enterMap(map(), { groupId: group().id, teamId: team().id, stageIndex: 0, mode: "team" });
+    assert.equal(controller.getSnapshot().status, "error"); assert.equal(controller.getSnapshot().players.length, 0);
+    assert.match(controller.getSnapshot().message, /分页无效|尚未完整返回/); controller.dispose();
+  }
+});
+
+test("source revisions bind all team pages even when member counts and completion flags are unchanged", async () => {
+  const paths = teamStage().routes;
+  for (const revisions of [[hash("a"), hash("b")], [undefined, hash("a")], [hash("a"), undefined], [hash("a"), hash("a")]]) {
+    const fake = teamServer(), controller = createCommunityRoutes({ fetchImpl: (path, options) => {
+      if (!path.startsWith(`/api/route-teams/${team().id}/stages/`)) return fake.fetchImpl(path, options);
+      const second = new URL(path, "https://example.invalid").searchParams.has("cursor");
+      return Promise.resolve(response(teamStage(0, { routes: [paths[Number(second)]],
+        nextCursor: second ? null : paths[0].playerKey, teamRevision: revisions[Number(second)] })));
+    } });
+    await controller.enterMap(map(), { groupId: group().id, teamId: team().id, stageIndex: 0, mode: "team" });
+    if (revisions[0] === revisions[1]) {
+      assert.equal(controller.getSnapshot().status, "ready"); assert.equal(controller.getSnapshot().players.length, 2);
+    } else {
+      assert.equal(controller.getSnapshot().status, "error"); assert.match(controller.getSnapshot().message, /队伍记录已更新/);
+      assert.equal(controller.getSnapshot().routes.length, 0, "mixed revisions never reach the overlay");
+    }
+    controller.dispose();
+  }
+});

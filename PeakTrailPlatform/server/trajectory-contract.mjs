@@ -2,10 +2,10 @@ import { createHash } from "node:crypto";
 import { validateMapAlignment } from "./map-alignment.mjs";
 
 export const LIMITS = Object.freeze({ compressedBytes: 12 * 1024 * 1024, decodedBytes: 64 * 1024 * 1024,
-  durationMs: 4 * 60 * 60 * 1000, players: 16, stages: 16, gapMs: 1500, uploads: 10_000,
+  durationMs: 4 * 60 * 60 * 1000, stages: 16, gapMs: 1500, uploads: 10_000,
   storedBytes: 2 * 1024 * 1024 * 1024, queryPoints: 200_000, heatCells: 250_000 });
 const HASH = /^[a-f0-9]{64}$/;
-const KINDS = new Set(["join", "leave", "dead", "revive", "break", "warp", "finish", "game-stage", "checkpoint"]);
+const KINDS = new Set(["join", "leave", "dead", "revive", "break", "warp", "finish", "summit", "game-stage", "checkpoint"]);
 const INTERRUPTIONS = new Set(["join", "leave", "dead", "revive", "break", "warp"]);
 export function problem(message, statusCode = 400) { return Object.assign(new Error(message), { statusCode }); }
 export function digest(value) { return createHash("sha256").update(typeof value === "string" ? value : JSON.stringify(value)).digest("hex"); }
@@ -73,7 +73,8 @@ export function validateTrajectory(raw) {
   result.difficulty = { ascent: raw.difficulty.ascent === null ? null : integer(raw.difficulty.ascent, -100, 1000, "ascent"),
     custom: nullableBool(raw.difficulty.custom, "custom"), mini: nullableBool(raw.difficulty.mini, "mini") };
   const keys = new Set(); let totalPoints = 0;
-  result.players = array(raw.players, LIMITS.players, "players", 1).map((player) => {
+  // Payload bytes and worker resources bound the request, not a vanilla lobby size.
+  result.players = array(raw.players, Number.MAX_SAFE_INTEGER, "players", 1).map((player) => {
     object(player, ["key", "name", "owner", "evidence", "points", "events"], ["key", "name", "owner", "evidence", "points", "events"], "player");
     if (!validHash(player.key) || keys.has(player.key)) throw problem("player.key: unique SHA256 required"); keys.add(player.key);
     if (typeof player.owner !== "boolean" || !["native-state", "legacy-unknown"].includes(player.evidence)) throw problem("player owner/evidence invalid");
@@ -93,6 +94,10 @@ export function validateTrajectory(raw) {
       if (!KINDS.has(event.kind) || value.tMs < eventTime) throw problem("events must be ordered with supported kind"); eventTime = value.tMs;
       if (Object.hasOwn(event, "stageIndex")) { value.stageIndex = integer(event.stageIndex, 0, LIMITS.stages - 1, "event stage"); if (!indices.has(value.stageIndex)) throw problem("event references absent stage"); }
       if (["game-stage", "checkpoint"].includes(value.kind) && value.stageIndex === undefined) throw problem("native stage event requires stageIndex");
+      if (value.kind === "summit" && (player.evidence !== "native-state"
+        || value.stageIndex !== result.map.stages.filter(stage => stage.name !== "Void").at(-1)?.index)) {
+        throw problem("summit requires native final-stage evidence");
+      }
       return value;
     });
     validateNativeStageEvents(events, result.map.stages, player.evidence);
@@ -121,6 +126,32 @@ export function difficultyInfo(raw) {
   const key = `a${raw.ascent ?? "unknown"}-c${raw.custom === null ? "unknown" : Number(raw.custom)}-m${raw.mini === null ? "unknown" : Number(raw.mini)}`;
   return { key, ...raw, label: `${raw.ascent === null ? "难度未知" : `Ascent ${raw.ascent}`}${raw.custom ? " · 自定义" : ""}${raw.mini ? " · Mini" : ""}` };
 }
+
+// `finish` in old exports also meant crossing a geometric exit. Only the new
+// native win event proves a summit, and a ghost cannot finish on behalf of itself.
+function applyLifeEvent(state, event) {
+  if (event.kind === "dead") state.dead = true;
+  if (event.kind === "revive") state.dead = false;
+  if (event.kind === "leave") state.present = false;
+  if (event.kind === "join") state.present = true;
+}
+function living(state) { return state.present && !state.dead; }
+export function playerSummitCompleted(trajectory, player) {
+  if (player.evidence !== "native-state") return false;
+  const final = trajectory.map.stages.filter(stage => stage.name !== "Void").at(-1)?.index;
+  const life = { dead: false, present: true };
+  for (let index = 0; index < player.events.length;) {
+    const time = player.events[index].tMs; let summit = false, interrupted = false;
+    while (index < player.events.length && player.events[index].tMs === time) {
+      const event = player.events[index++];
+      applyLifeEvent(life, event);
+      if (["dead", "leave"].includes(event.kind)) interrupted = true;
+      if (event.kind === "summit" && event.stageIndex === final) summit = true;
+    }
+    if (summit && living(life) && !interrupted) return true;
+  }
+  return false;
+}
 export function groupId(map) { return digest({ buildId: map.buildId, scene: map.scene, layoutKey: map.layoutKey ?? null, route: map.route, stages: map.stages,
   ...(map.alignment ? { alignment: map.alignment } : {}) }); }
 
@@ -137,14 +168,13 @@ function disruptedBetween(player, start, end) {
   return false;
 }
 function nativeIntervals(trajectory, player) {
-  const intervals = []; let alive = true;
+  const intervals = [], life = { dead: false, present: true };
   for (let index = 0; index < player.events.length;) {
-    const begin = index, time = player.events[index].tMs, aliveBefore = alive;
+    const begin = index, time = player.events[index].tMs, lifeBefore = { ...life };
     let changed = null, checkpoint = null, disrupted = false;
     while (index < player.events.length && player.events[index].tMs === time) {
       const event = player.events[index++];
-      if (["dead", "leave"].includes(event.kind)) alive = false;
-      if (["revive", "join"].includes(event.kind)) alive = true;
+      applyLifeEvent(life, event);
       disrupted ||= INTERRUPTIONS.has(event.kind);
       if (event.kind === "game-stage") changed = event;
       if (event.kind === "checkpoint") checkpoint = event;
@@ -152,10 +182,10 @@ function nativeIntervals(trajectory, player) {
     if (changed) {
       const previous = intervals.at(-1), completed = Boolean(previous && checkpoint && checkpoint.stageIndex === previous.stageIndex
         && changed.stageIndex === previous.stageIndex + 1 && trajectory.map.stages[changed.stageIndex]?.name !== "Void"
-        && trajectory.map.stages[previous.stageIndex]?.name !== "Void" && alive && !disrupted);
+        && trajectory.map.stages[previous.stageIndex]?.name !== "Void" && living(life) && !disrupted);
       if (previous) { previous.end = time; previous.exitCheckpoint = completed; }
       intervals.push({ stageIndex: changed.stageIndex, start: time, end: trajectory.durationMs + 1,
-        entryCheckpoint: completed, exitCheckpoint: false, aliveBeforeStart: aliveBefore, startEventIndex: begin });
+        entryCheckpoint: completed, exitCheckpoint: false, lifeBeforeStart: lifeBefore, startEventIndex: begin });
     }
   }
   return intervals.length ? intervals : null;
@@ -177,9 +207,10 @@ function intervalIndices(player, interval) {
   return { begin, end };
 }
 function gameCompletion(trajectory, player, stage, intervals, complete) {
+  const final = trajectory.map.stages.filter(value => value.name !== "Void").at(-1);
+  if (stage.index === final?.index && playerSummitCompleted(trajectory, player)) return true;
   if (!intervals || player.evidence !== "native-state") return null;
   if (complete || intervals.some(interval => interval.stageIndex === stage.index && interval.exitCheckpoint)) return true;
-  const final = trajectory.map.stages.filter(value => value.name !== "Void").at(-1);
   // Old final Win evidence is a finish, not a fictitious checkpoint to Void.
   if (stage.index === final?.index && player.events.some(event => event.kind === "finish" && event.stageIndex === stage.index)) return null;
   return false;
@@ -188,27 +219,28 @@ function extractNativeStageRoutes(trajectory, player, stage, intervals) {
   const routes = [];
   for (const interval of intervals.filter(value => value.stageIndex === stage.index)) {
     const { begin, end } = intervalIndices(player, interval);
-    let start = -1, alive = interval.aliveBeforeStart, eventIndex = interval.startEventIndex, previous = null;
+    const life = { ...interval.lifeBeforeStart };
+    let start = -1, eventIndex = interval.startEventIndex, previous = null;
     for (let index = begin; index < end; index += 1) {
       const point = player.points[index]; let blocked = false;
       while (eventIndex < player.events.length && player.events[eventIndex].tMs <= point[0]) {
         const event = player.events[eventIndex++];
-        if (["dead", "leave"].includes(event.kind)) { alive = false; start = -1; blocked = true; }
-        if (["revive", "join"].includes(event.kind)) { alive = true; start = -1; blocked = true; }
+        applyLifeEvent(life, event);
+        if (["dead", "leave", "revive", "join"].includes(event.kind)) { start = -1; blocked = true; }
         if (["break", "warp"].includes(event.kind)) { start = -1; blocked = true; }
         // Events before this interval establish state without invalidating its
         // first observation as though the old disruption happened on this tick.
         if (index === begin && event.tMs < point[0]) blocked = false;
       }
       if (previous && discontinuity(previous, point)) { start = -1; blocked = true; }
-      if (alive && !blocked && start < 0) {
+      if (living(life) && !blocked && start < 0) {
         const entry = index === begin && interval.entryCheckpoint && Math.abs(point[0] - interval.start) <= LIMITS.gapMs;
         const near = point[0] >= interval.start && Math.abs(point[3] - stage.enterZCm) <= 300 && point[3] < stage.exitZCm;
         const crossed = previous && previous[3] <= stage.enterZCm && point[3] >= stage.enterZCm && point[3] < stage.exitZCm;
         if (entry || near) start = index;
         else if (crossed) start = index - 1;
       }
-      if (alive && !blocked && start >= 0 && point[3] >= stage.exitZCm && index > start) {
+      if (living(life) && !blocked && start >= 0 && point[3] >= stage.exitZCm && index > start) {
         const points = player.points.slice(start, index+1);
         routes.push({ points, startMs: points[0][0], endMs: points.at(-1)[0], breaks: [] }); start = -1;
       }
@@ -228,24 +260,25 @@ export function extractStageRoutes(trajectory, player, stage) {
   const intervals = nativeIntervals(trajectory, player);
   if (intervals) return extractNativeStageRoutes(trajectory, player, stage, intervals);
   const direction = Math.sign(stage.exitZCm - stage.enterZCm), enter = stage.enterZCm * direction, exit = stage.exitZCm * direction;
-  const routes = []; let start = -1, alive = true, eventIndex = 0, previous = null, blocked = false;
+  const routes = [], life = { dead: false, present: true };
+  let start = -1, eventIndex = 0, previous = null, blocked = false;
   for (let index = 0; index < player.points.length; index += 1) {
     const point = player.points[index]; blocked = false;
     while (eventIndex < player.events.length && player.events[eventIndex].tMs <= point[0]) {
       const event = player.events[eventIndex++];
-      if (["dead", "leave"].includes(event.kind)) { alive = false; start = -1; blocked = true; }
-      if (["revive", "join"].includes(event.kind)) { alive = true; start = -1; blocked = true; }
+      applyLifeEvent(life, event);
+      if (["dead", "leave", "revive", "join"].includes(event.kind)) { start = -1; blocked = true; }
       if (["break", "warp"].includes(event.kind)) { start = -1; blocked = true; }
     }
     const broken = previous && discontinuity(previous, point);
     if (broken) { start = -1; blocked = true; }
-    if (alive && !blocked && start < 0) {
+    if (living(life) && !blocked && start < 0) {
       const z = point[3] * direction;
       // A recording already far past the entrance cannot acquire a complete path.
       if (Math.abs(z - enter) <= 300 && z < exit) start = index;
       else if (previous && previous[3] * direction <= enter && z >= enter && z < exit) start = index - 1;
     }
-    if (alive && !blocked && start >= 0 && point[3] * direction >= exit && index > start) {
+    if (living(life) && !blocked && start >= 0 && point[3] * direction >= exit && index > start) {
       const points = player.points.slice(start, index + 1);
       if (points.length >= 2) routes.push({ points, startMs: points[0][0], endMs: point[0], breaks: [] });
       if (routes.length > 1024) throw problem("too many stage attempts");
@@ -258,7 +291,7 @@ export function extractStageRoutes(trajectory, player, stage) {
 
 // A separate inspection view may show incomplete attempts. Keep every real
 // position and interruption; it must never contribute to public route counts.
-export function extractInspectionStage(trajectory, player, stage) {
+export function extractInspectionStage(trajectory, player, stage, { includeInactive = false } = {}) {
   const intervals = nativeIntervals(trajectory, player), selected = new Set();
   if (intervals) for (const interval of intervals.filter(value => value.stageIndex === stage.index)) {
     const { begin, end } = intervalIndices(player, interval);
@@ -266,15 +299,32 @@ export function extractInspectionStage(trajectory, player, stage) {
   }
   else if (!Number.isFinite(stage.enterZCm) || !Number.isFinite(stage.exitZCm)) throw problem("stage boundaries unavailable", 409);
   const points = [], breaks = new Set();
-  let previousIndex = -1;
+  const life = { dead: false, present: true };
+  let previousIndex = -1, eventIndex = 0;
   for (let index = 0; index < player.points.length; index += 1) {
     const point = player.points[index];
+    let terminalDeath = false;
+    while (eventIndex < player.events.length && player.events[eventIndex].tMs <= point[0]) {
+      const event = player.events[eventIndex++];
+      if (event.kind === "dead") terminalDeath ||= living(life) && event.tMs > 0 && event.tMs === point[0];
+      applyLifeEvent(life, event);
+    }
+    if (!includeInactive && !living(life) && !terminalDeath) continue;
     if (intervals ? !selected.has(index) : point[3] < stage.enterZCm - 300 || point[3] > stage.exitZCm + 300) continue;
     const previous = points.at(-1);
     if (previous && (index !== previousIndex + 1 || discontinuity(previous, point))) breaks.add(point[0]);
     points.push(point); previousIndex = index;
   }
+  const terminalDeaths = new Set(), warpTimes = new Set();
+  if (!includeInactive && points.length) for (const event of player.events) {
+    if (event.kind === "dead" && points[lowerPoint(points, event.tMs)]?.[0] === event.tMs) terminalDeaths.add(event.tMs);
+    if (event.kind === "warp") warpTimes.add(event.tMs);
+  }
   if (points.length) for (const event of player.events) {
+    // The terminal death sample belongs to the preceding living segment. A
+    // revive/join (or the removed ghost samples) breaks the next living segment.
+    // Preserve the old break shape only when auditing version 1 stored metadata.
+    if (!includeInactive && ["dead", "break"].includes(event.kind) && terminalDeaths.has(event.tMs) && !warpTimes.has(event.tMs)) continue;
     if (INTERRUPTIONS.has(event.kind) && event.tMs >= points[0][0] && event.tMs <= points.at(-1)[0]) breaks.add(event.tMs);
   }
   const completion = extractStageRoutes(trajectory, player, stage).completion;

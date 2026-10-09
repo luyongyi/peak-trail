@@ -103,7 +103,7 @@ export class CommunityRouteOverlay {
     this.clear();
     const local = point => [point[1] / 100 - origin.x, point[2] / 100 - origin.y, point[3] / 100 - origin.z];
     if (input.mode === "routes") {
-      const routes = normalizeRoutes({ routes: input.routes || [] }).routes;
+      const routes = normalizeRoutes({ routes: input.routes || [] }, { maximumPoints: Infinity }).routes;
       const heightBandCm = input.heatmap?.heightBandCm || 200;
       routes.forEach(route => {
         const positions = [], endpoints = [];

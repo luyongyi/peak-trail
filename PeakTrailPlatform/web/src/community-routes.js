@@ -1,5 +1,6 @@
 import { communityMapIdentity, communityPlayers, matchingCommunityGroups, normalizeCommunityStage, normalizeCommunityTeams, normalizeCommunityTeamStage, pendingCommunityMessage } from "./community-route-model.js";
 import { historicalInspectionStatus, normalizeHistoricalInspection } from "./historical-route-link.js";
+import { heightBands } from "./route-collection-model.js";
 
 const MAX_RESPONSE_BYTES = 30_000_000;
 const displayError = error => error?.message || "大家的路线暂时无法读取，请稍后刷新。";
@@ -17,7 +18,7 @@ export function createCommunityRoutes({ fetchImpl = globalThis.fetch?.bind(globa
       stageIndex: null, difficulty: "", difficulties: [],
       routes: [], heatmap: null, players: [], heightBands: [], heightBand: null, mode: "off",
       teamId: null, teamLoaded: false, teams: [], teamSearchStatus: "idle", teamSearchMessage: "", searchMember: "", searchAllMaps: false,
-      countBy: "team", referencePlayerKey: null,
+      countBy: "team", referencePlayerKey: null, summitCompleted: false, stageCompleted: false, finisherKeys: [],
       totalRouteCount: 0, truncated: false, unavailableCount: 0, message: "" };
   }
   function getSnapshot() { return { ...state, mapPackId: mapPack?.mapPackId || null, players: communityPlayers(state.routes, hidden) }; }
@@ -25,7 +26,7 @@ export function createCommunityRoutes({ fetchImpl = globalThis.fetch?.bind(globa
   function invalidate() { request?.abort(); request = null; requestKind = null; revision++; }
   function begin(kind) { invalidate(); request = new AbortController(); requestKind = kind; return { revision, signal: request.signal }; }
   function clearData() {
-    Object.assign(state, { routes: [], heatmap: null, players: [], heightBands: [], heightBand: null, totalRouteCount: 0, truncated: false, inspectionLoaded: false, teamLoaded: false });
+    Object.assign(state, { routes: [], heatmap: null, players: [], heightBands: [], heightBand: null, totalRouteCount: 0, truncated: false, inspectionLoaded: false, teamLoaded: false, summitCompleted: false, stageCompleted: false, finisherKeys: [] });
   }
   function active(token) { return !disposed && token.revision === revision && mapPack !== null; }
   async function readApi(path, signal) {
@@ -55,12 +56,40 @@ export function createCommunityRoutes({ fetchImpl = globalThis.fetch?.bind(globa
       state.status = recorded.length ? "ready" : "empty";
       state.message = recorded.length ? `本队 ${members.length} 位队员 · ${recorded.length} 位有本关轨迹 · ${historicalInspectionStatus(state.routes.filter(route => route.points.length))} · 不完整线路不计入热力。`
         : `本队 ${members.length} 位队员 · 本关暂无录制轨迹。`;
+      if (state.summitCompleted) state.message += " 本队已登顶（任一队员完成即全队完成）。";
       if (state.truncated) state.message += " 已达到显示上限，部分成员或轨迹尚未显示。";
       return;
     }
     state.message = state.totalRouteCount ? state.truncated
       ? `本页展示 ${state.routes.length} / ${state.totalRouteCount} 条路线，热力统计全部有效路线。` : `${state.totalRouteCount} 条审核通过的完整关卡路线。`
       : "当前关卡和难度还没有公开的完整路线。";
+  }
+  async function loadWholeTeamStage(group, stage, token) {
+    const path = `${teamApiBase}/${state.teamId}/stages/${stage}/routes`;
+    const routes = [], ids = new Set(), cursors = new Set();
+    let cursor = null, first = null;
+    for (;;) {
+      const body = await readApi(`${path}${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`, token.signal);
+      if (!active(token)) return null;
+      // Each page is bounded by bytes/points, never by lobby size. Validate map
+      // and member identity before combining pages into the complete team.
+      normalizeCommunityTeamStage(body, group, mapPack, stage, state.teamId);
+      if (!first) first = body;
+      else if (body.teamRevision !== first.teamRevision || body.totalRouteCount !== first.totalRouteCount || body.summitCompleted !== first.summitCompleted || body.stageCompleted !== first.stageCompleted
+        || JSON.stringify(body.finisherKeys || []) !== JSON.stringify(first.finisherKeys || [])) throw new Error("队伍记录已更新，请刷新后重新读取。");
+      for (const route of body.routes) {
+        if (ids.has(route.id)) throw new Error("队员路线分页重复，请刷新后重新读取。");
+        ids.add(route.id); routes.push(route);
+      }
+      if (routes.length > first.totalRouteCount) throw new Error("队伍记录已更新，请刷新后重新读取。");
+      if (body.nextCursor === null || body.nextCursor === undefined) break;
+      if (!/^[a-f0-9]{64}$/.test(body.nextCursor) || cursors.has(body.nextCursor)
+        || body.routes.at(-1)?.playerKey !== body.nextCursor) throw new Error("队员路线分页无效，请刷新后重新读取。");
+      cursor = body.nextCursor; cursors.add(cursor);
+      state.message = `正在读取本队全部轨迹…（${routes.length} / ${first.totalRouteCount} 位队员）`; emit();
+    }
+    if (!first.truncated && Number.isSafeInteger(first.totalRouteCount) && routes.length !== first.totalRouteCount) throw new Error("队员路线尚未完整返回，请刷新后重新读取。");
+    return { ...first, routes, nextCursor: null };
   }
   async function loadStage() {
     if (disposed || !mapPack) return;
@@ -91,14 +120,14 @@ export function createCommunityRoutes({ fetchImpl = globalThis.fetch?.bind(globa
         describeData(); emit(); return;
       }
       if (state.teamId) {
-        const body = await readApi(`${teamApiBase}/${state.teamId}/stages/${stage}/routes`, token.signal);
-        if (!active(token)) return;
-        Object.assign(state, normalizeCommunityTeamStage(body, group, mapPack, stage, state.teamId));
+        const body = await loadWholeTeamStage(group, stage, token);
+        if (!active(token) || !body) return;
+        Object.assign(state, normalizeCommunityTeamStage(body, group, mapPack, stage, state.teamId, { maximumPoints: Infinity }));
         if (state.mode === "heatmap") {
           const heat = await readApi(`${base}/heatmap${heatFilter}`, token.signal);
           if (!active(token)) return;
-          const normalized = normalizeCommunityStage({ ...body, totalRouteCount: body.routes.length }, heat, group, mapPack, stage);
-          state.heatmap = normalized.heatmap; state.heightBands = normalized.heightBands;
+          const normalized = normalizeCommunityStage({ ...body, routes: [] }, heat, group, mapPack, stage);
+          state.heatmap = normalized.heatmap; state.heightBands = heightBands(state.routes, normalized.heatmap, normalized.heatmap.heightBandCm);
         }
         if (!state.routes.some(route => route.playerKey === state.referencePlayerKey)) state.referencePlayerKey = null;
         describeData(); emit(); return;

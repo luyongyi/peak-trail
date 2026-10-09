@@ -19,22 +19,25 @@ export function normalizeRouteGroups(value) {
   });
 }
 
-export function normalizeRoutes(value) {
+export function normalizeRoutes(value, { maximumPoints = MAX_POINTS } = {}) {
   let pointCount = 0;
   const ids = new Set();
-  const routes = checkArray(value?.routes, 200, "路线").map(route => {
+  // Counts are not a proxy for data size: a large lobby may have hundreds of
+  // short or empty member paths. Network pages retain a point budget, while a
+  // verified collection assembled from those pages may exceed one page.
+  const routes = checkArray(value?.routes, Infinity, "路线").map(route => {
     if (typeof route?.id !== "string" || !route.id || ids.has(route.id)) throw new Error("路线身份无效");
     ids.add(route.id);
-    const points = checkArray(route.points, MAX_POINTS, "轨迹坐标");
+    const points = checkArray(route.points, maximumPoints, "轨迹坐标");
     pointCount += points.length;
-    if (pointCount > MAX_POINTS) throw new Error("轨迹坐标超过单页上限");
+    if (pointCount > maximumPoints) throw new Error("轨迹坐标超过单页上限");
     let previous = -1;
     for (const point of points) {
       if (!Array.isArray(point) || point.length !== 4 || !point.every(finiteInteger)
         || point[0] < 0 || point[0] <= previous || point.slice(1).some(v => Math.abs(v) > 2_147_483_647)) throw new Error("轨迹时间或坐标无效");
       previous = point[0];
     }
-    const breaks = checkArray(route.breaks || [], MAX_POINTS, "轨迹断点");
+    const breaks = checkArray(route.breaks || [], maximumPoints, "轨迹断点");
     if (breaks.some(t => !finiteInteger(t) || t < 0)) throw new Error("轨迹断点无效");
     return { ...route, name: typeof route.name === "string" && route.name.trim() ? route.name : "登山者", points,
       breaks: [...breaks].sort((a, b) => a - b) };

@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { gzipSync } from "node:zlib";
 import { createLiveServer } from "../../server/live-server.mjs";
 import { digest } from "../../server/trajectory-contract.mjs";
-import { moderate } from "../../server/trajectory-store.mjs";
+import { moderate, ingestUpload } from "../../server/trajectory-store.mjs";
 
 function fixture(run = "first", date = "2026-10-08T12:00:00Z") {
   return { format: "trajectory-v1", recordingId: digest(`recording-${run}`), runKey: digest(`run-${run}`), timeOriginMs: -2000,
@@ -43,7 +43,7 @@ async function isolated(action) {
       "content-type": "application/json", "content-encoding": "gzip" }, body: gzipSync(JSON.stringify(raw)) });
     assert.equal(response.status, 201); return response.json();
   };
-  try { await action({ root, base, get, post }); }
+  try { await action({ root, catalogPath, base, get, post }); }
   finally { live.server.closeAllConnections(); await new Promise(done => live.server.close(done)); await rm(root, { recursive: true, force: true }); }
 }
 
@@ -71,7 +71,7 @@ test("four members remain independently selectable, same names stay distinct and
     assert.equal(ownerB.uploadId, second.uploadId); assert.ok(ownerB.points.every(point => point[1] === 70));
     assert.equal(ownerA.points[0][0], 0); assert.equal(ownerA.timeOriginMs, -2000);
     const dead = view.body.routes.find(route => route.playerKey === raw.players[2].key);
-    assert.equal(dead.completed, false); assert.ok(dead.breaks.includes(500));
+    assert.equal(dead.completed, false); assert.equal(dead.points.at(-1)[0], 500); assert.deepEqual(dead.breaks, []);
     const next = await get(`/api/route-teams/${team.id}/stages/1/routes`);
     assert.equal(next.body.routes.length, 4);
     assert.equal(next.body.routes.find(route => route.playerKey === raw.players[3].key).points.length, 0);
@@ -187,5 +187,116 @@ test("team search has bounded validated filters, deterministic limits and does n
       `/api/route-groups/${all.teams[0].groupId}/stages/0/routes?team=bad`]) assert.equal((await get(path)).status, 400, path);
     assert.equal((await get(`/api/route-teams/${all.teams[0].id}/stages/99/routes`)).status, 400);
     assert.equal((await get(`/api/route-teams/${digest("missing")}`)).status, 404);
+  });
+});
+
+test("expanded lobbies upload and expose every member, while one true finisher completes the team only", async () => {
+  await isolated(async ({ post, get }) => {
+    const raw = fixture("expanded");
+    raw.players = Array.from({ length: 70 }, (_, index) => ({ ...structuredClone(raw.players[0]),
+      key: digest(`expanded-player-${index}`), name: `扩展队员${index}`, owner: index === 0,
+      events: index === 69 ? [{ tMs: 1900, kind: "summit", stageIndex: 1 }] : [{ tMs: 500, kind: "dead" }] }));
+    raw.players[69].points = raw.players[69].points.slice(0, 19);
+    const upload = await post(raw), list = (await get("/api/route-teams?member=扩展队员69")).body;
+    assert.equal(list.teams.length, 1); const team = list.teams[0];
+    assert.equal(team.members.length, 70); assert.equal(team.membersTruncated, undefined);
+    assert.equal(team.summitCompleted, true); assert.deepEqual(team.finisherKeys, [raw.players[69].key]);
+    assert.equal(team.stageSummaries[1].completed, true);
+    const view = (await get(`/api/route-teams/${team.id}/stages/0/routes`)).body;
+    assert.equal(view.routes.length, 70); assert.equal(view.totalRouteCount, 70); assert.equal(view.nextCursor, null);
+    assert.equal(view.truncated, false); assert.equal(view.summitCompleted, true);
+    const dead = view.routes.find(route => route.playerKey === raw.players[0].key);
+    assert.equal(dead.points.at(-1)[0], 500); assert.ok(dead.points.every(point => point[0] <= 500));
+    assert.equal(dead.gameCompleted, null); assert.equal(dead.completed, false); assert.equal(dead.summitCompleted, false);
+    const final = (await get(`/api/route-teams/${team.id}/stages/1/routes`)).body;
+    const winner = final.routes.find(route => route.playerKey === raw.players[69].key);
+    assert.equal(final.routes.length, 70); assert.equal(final.stageCompleted, true);
+    assert.equal(winner.gameCompleted, true); assert.equal(winner.completed, false);
+    assert.ok(final.routes.filter(route => route !== winner).every(route => route.points.length === 0));
+    const heat = (await get(`/api/route-groups/${upload.groupId}/stages/1/heatmap?countBy=team`)).body;
+    assert.equal(heat.routeCount, 0); assert.deepEqual(heat.cells, [], "a team win never turns dead or incomplete paths into heat");
+  });
+});
+
+test("team pages retain all members and their complete point sequences beyond the response point budget", async () => {
+  await isolated(async ({ post, get }) => {
+    const raw = fixture("large-pages"); raw.durationMs = 400_000;
+    const points = Array.from({ length: 4001 }, (_, i) => [i * 100, 0, 0, Math.min(i, 500)]);
+    raw.players = Array.from({ length: 65 }, (_, index) => ({ key: digest(`page-member-${index}`), name: `分页队员${index}`,
+      owner: index === 0, evidence: "native-state", points, events: [] }));
+    await post(raw); const team = (await get("/api/route-teams?member=分页队员64")).body.teams[0];
+    assert.equal(team.members.length, 65);
+    const pages = []; let cursor = "", routes = [];
+    do {
+      const page = await get(`/api/route-teams/${team.id}/stages/0/routes${cursor ? `?cursor=${cursor}` : ""}`);
+      assert.equal(page.status, 200); pages.push(page.body); routes.push(...page.body.routes);
+      assert.equal(page.body.truncated, false); assert.equal(page.body.totalRouteCount, 65);
+      assert.ok(page.body.pointCount <= 200_000); cursor = page.body.nextCursor;
+    } while (cursor);
+    assert.equal(pages.length, 2); assert.equal(routes.length, 65);
+    assert.equal(pages[0].teamRevision, pages[1].teamRevision); assert.match(pages[0].teamRevision, /^[a-f0-9]{64}$/);
+    assert.equal(new Set(routes.map(route => route.playerKey)).size, 65);
+    assert.ok(routes.every(route => route.points.length === 4001));
+    assert.equal(routes.reduce((count, route) => count + route.points.length, 0), 260_065);
+    assert.equal((await get(`/api/route-teams/${team.id}/stages/0/routes?cursor=bad`)).status, 400);
+    assert.equal((await get(`/api/route-teams/${team.id}/stages/0/routes?cursor=${digest("not-a-member")}`)).status, 400);
+    const newer = structuredClone(raw); newer.recordingId = digest("same-team-new-observation"); await post(newer);
+    const changed = (await get(`/api/route-teams/${team.id}/stages/0/routes?cursor=${pages[0].nextCursor}`)).body;
+    assert.equal(changed.totalRouteCount, 65); assert.notEqual(changed.teamRevision, pages[0].teamRevision,
+      "a changed approved source set is detectable even when the member count remains identical");
+  });
+});
+
+test("minimal upload receipts stay bounded independently of member count and duplicate retries retain identity", async () => {
+  await isolated(async ({ base, get }) => {
+    const raw = fixture("minimal-receipt");
+    raw.players = Array.from({ length: 1000 }, (_, index) => ({ key: digest(`minimal-member-${index}`), name: `成员${index}`,
+      owner: index === 0, evidence: "native-state", points: [], events: [{ tMs: 0, kind: "dead" }] }));
+    const send = () => fetch(`${base}/api/route-uploads`, { method: "POST", headers: {
+      "content-type": "application/json", "content-encoding": "gzip", prefer: "return=minimal" }, body: gzipSync(JSON.stringify(raw)) });
+    const first = await send(), receipt = await first.json();
+    assert.equal(first.status, 201); assert.equal(first.headers.get("preference-applied"), "return=minimal");
+    assert.deepEqual(Object.keys(receipt).sort(), ["duplicate","groupId","mapCompatibility","moderationStatus","uploadId"]);
+    assert.ok(Buffer.byteLength(JSON.stringify(receipt)) < 1024);
+    const duplicate = await send(), repeated = await duplicate.json();
+    assert.equal(duplicate.status, 200); assert.equal(repeated.uploadId, receipt.uploadId); assert.equal(repeated.duplicate, true);
+    const teams = (await get("/api/route-teams?member=成员999")).body.teams;
+    assert.equal(teams.length, 1); assert.equal(teams[0].members.length, 1000);
+    const preflight = await fetch(`${base}/api/route-uploads`, { method: "OPTIONS" });
+    assert.match(preflight.headers.get("access-control-allow-headers"), /prefer/);
+  });
+});
+
+test("upload rate protection publishes Retry-After so a large multipart job can wait and continue", async () => {
+  await isolated(async ({ base }) => {
+    const raw = fixture("retry-after"), body = gzipSync(JSON.stringify(raw));
+    for (let index = 0; index < 20; index += 1) {
+      const response = await fetch(`${base}/api/route-uploads`, { method: "POST", headers: {
+        "content-type": "application/json", "content-encoding": "gzip", prefer: "return=minimal" }, body });
+      assert.equal(response.status, index === 0 ? 201 : 200); await response.arrayBuffer();
+    }
+    const limited = await fetch(`${base}/api/route-uploads`, { method: "POST", headers: {
+      "content-type": "application/json", "content-encoding": "gzip" }, body });
+    assert.equal(limited.status, 429); assert.equal(limited.headers.get("retry-after"), "60");
+    assert.equal((await limited.json()).retryAfterSeconds, 60);
+  });
+});
+
+test("more than 64 source recordings merge without member loss and legacy hydration visits every source", async () => {
+  await isolated(async ({ root, catalogPath, get }) => {
+    for (let index = 0; index < 65; index += 1) {
+      const raw = fixture("many-sources"); raw.recordingId = digest(`source-recording-${index}`);
+      raw.players = [{ ...raw.players[0], key: digest(`source-member-${index}`), name: `独立来源${index}`, events: [] }];
+      const upload = await ingestUpload(root, gzipSync(JSON.stringify(raw)), catalogPath);
+      const path = join(root, "index", `${upload.uploadId}.json`), entry = JSON.parse(await readFile(path, "utf8"));
+      delete entry.team; await writeFile(path, JSON.stringify(entry));
+    }
+    const team = (await get("/api/route-teams?member=独立来源64")).body.teams[0];
+    assert.equal(team.members.length, 65);
+    const detail = (await get(`/api/route-teams/${team.id}`)).body.team;
+    assert.equal(detail.stageSummaries[0].memberCount, 65); assert.equal(detail.metadataTruncated, undefined);
+    const view = await get(`/api/route-teams/${team.id}/stages/0/routes`);
+    assert.equal(view.status, 200); assert.equal(view.body.routes.length, 65);
+    assert.ok(view.body.routes.every(route => route.points.length > 0)); assert.equal(view.body.truncated, false);
   });
 });

@@ -11,7 +11,7 @@ export function createTrajectoryApi({ root = null, catalogPath = null, trustedPr
   catalogPath = catalogPath ?? fileURLToPath(new URL("../site-dist/data/maps/catalog.json", import.meta.url));
   let active = 0, uploading = false, closed = false, migratedPending = false, tail = Promise.resolve(); const workers = new Set(), rate = new Map();
   const headers = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff",
-    "access-control-allow-origin": "*", "access-control-allow-methods": "GET, POST, OPTIONS", "access-control-allow-headers": "content-type,content-encoding,x-trajectory-format" };
+    "access-control-allow-origin": "*", "access-control-allow-methods": "GET, POST, OPTIONS", "access-control-allow-headers": "content-type,content-encoding,x-trajectory-format,prefer" };
   function json(res, code, value) { if (!res.destroyed && !res.writableEnded) { res.writeHead(code, headers); res.end(typeof value === "string" ? value : JSON.stringify(value)); } }
   function runJob(data) {
     if (closed) return Promise.reject(problem("trajectory service stopped", 503));
@@ -56,14 +56,21 @@ export function createTrajectoryApi({ root = null, catalogPath = null, trustedPr
       && path !== "/api/route-teams" && !path.startsWith("/api/route-teams/")) return false;
     if (req.method === "OPTIONS") { res.writeHead(204, headers).end(); return true; }
     if (!root) { json(res, 503, { error: "route-storage-unconfigured" }); return true; }
-    if (limited(req) || active >= 4 || (req.method === "POST" && uploading)) { json(res, 429, { error: "route-service-busy", retryAfterSeconds: 5 }); return true; }
+    const rateLimited = limited(req);
+    if (rateLimited || active >= 4 || (req.method === "POST" && uploading)) {
+      const retryAfterSeconds = rateLimited ? 60 : 5; res.setHeader("retry-after", String(retryAfterSeconds));
+      json(res, 429, { error: "route-service-busy", retryAfterSeconds }); return true;
+    }
     active += 1;
     if (req.method === "POST") uploading = true;
     try {
       if (path === "/api/route-uploads" && req.method === "POST") {
         if (String(req.headers["content-type"] ?? "").split(";")[0].toLowerCase() !== "application/json" || req.headers["content-encoding"] !== "gzip") throw problem("gzip application/json required", 415);
         if (req.headers["x-trajectory-format"] && req.headers["x-trajectory-format"] !== "trajectory-v1") throw problem("unsupported trajectory format", 415);
-        const result = await job({ operation: "upload", body: await body(req) }); json(res, result.duplicate ? 200 : 201, result.json);
+        const minimalReceipt = String(req.headers.prefer ?? "").split(",").some(value => value.trim().toLowerCase() === "return=minimal");
+        const result = await job({ operation: "upload", body: await body(req), minimalReceipt });
+        if (minimalReceipt) res.setHeader("preference-applied", "return=minimal");
+        json(res, result.duplicate ? 200 : 201, result.json);
       } else if (path === "/api/route-groups" && req.method === "GET") json(res, 200, (await job({ operation: "groups" })).json);
       else if (path === "/api/route-teams" && req.method === "GET") {
         const member = url.searchParams.get("member") ?? "", group = url.searchParams.get("group") ?? "";
@@ -83,7 +90,9 @@ export function createTrajectoryApi({ root = null, catalogPath = null, trustedPr
           return true;
         }
         if (teamStage) {
-          json(res, 200, (await job({ operation: "team-routes", team: teamStage[1], stage: Number(teamStage[2]) })).json);
+          const cursor = url.searchParams.get("cursor") ?? "";
+          if (cursor && !validHash(cursor)) throw problem("invalid team page cursor");
+          json(res, 200, (await job({ operation: "team-routes", team: teamStage[1], stage: Number(teamStage[2]), cursor })).json);
           return true;
         }
         if (inspection) {

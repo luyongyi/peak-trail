@@ -113,7 +113,7 @@ export function buildTeamRouteSegments(input, { visiblePlayers = null, reference
   heightBandCm = 200, toleranceCm = 75, heightToleranceCm = 25, simplifyCm = 20 } = {}) {
   if (![toleranceCm, heightToleranceCm, simplifyCm].every(value => Number.isFinite(value) && value >= 0 && value <= 100)) throw new Error("Invalid team corridor tolerance");
   const visible = visiblePlayers == null ? null : new Set(visiblePlayers);
-  const routes = normalizeRoutes({ routes: input || [] }).routes.filter(route => !visible || visible.has(route.id) || visible.has(route.playerKey));
+  const routes = normalizeRoutes({ routes: input || [] }, { maximumPoints: Infinity }).routes.filter(route => !visible || visible.has(route.id) || visible.has(route.playerKey));
   routes.sort((a, b) => Number(b.playerKey === referencePlayerKey) - Number(a.playerKey === referencePlayerKey)
     || String(a.playerKey || a.id).localeCompare(String(b.playerKey || b.id)) || a.id.localeCompare(b.id));
   const representatives = [], cells = new Map(); let comparisons = 0;

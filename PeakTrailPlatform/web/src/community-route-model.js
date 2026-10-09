@@ -96,12 +96,12 @@ export function communityPlayers(routes, hidden = new Set()) {
 }
 
 export function normalizeCommunityTeams(value) {
-  if (!Array.isArray(value?.teams) || value.teams.length > 50) throw new Error("队伍列表格式无效。");
+  if (!Array.isArray(value?.teams)) throw new Error("队伍列表格式无效。");
   const ids = new Set();
   return { teams: value.teams.map(team => {
     if (!HASH.test(team?.id || "") || ids.has(team.id) || !HASH.test(team.groupId || "")
       || !Number.isFinite(Date.parse(team.startedUtc)) || !team.map || typeof team.map.scene !== "string"
-      || !Array.isArray(team.members) || team.members.length > 64 || !Array.isArray(team.stageSummaries) || team.stageSummaries.length > 64
+      || !Array.isArray(team.members) || !Array.isArray(team.stageSummaries) || team.stageSummaries.length > 64
       || team.stageSummaries.some(stage => !Number.isInteger(stage?.index) || stage.index < 0 || typeof stage.name !== "string"
         || !Number.isSafeInteger(stage.memberCount) || stage.memberCount < 0 || !Number.isSafeInteger(stage.completedCount) || stage.completedCount < 0)) throw new Error("队伍身份无效。");
     ids.add(team.id);
@@ -110,28 +110,37 @@ export function normalizeCommunityTeams(value) {
       if (!HASH.test(member?.playerKey || "") || typeof member.name !== "string") throw new Error("队员身份无效。");
       members.set(member.playerKey, { playerKey: member.playerKey, name: member.name || "登山者" });
     }
+    if (team.summitCompleted !== undefined && typeof team.summitCompleted !== "boolean"
+      || team.finisherKeys !== undefined && (!Array.isArray(team.finisherKeys) || team.finisherKeys.some(key => !HASH.test(key) || !members.has(key)))) throw new Error("队伍登顶状态无效。");
     return { ...team, members: [...members.values()] };
   }), truncated: Boolean(value.truncated) };
 }
 
-export function normalizeCommunityTeamStage(value, group, mapPack, stageIndex, teamId) {
+export function normalizeCommunityTeamStage(value, group, mapPack, stageIndex, teamId, { maximumPoints } = {}) {
   if (value?.teamId !== teamId || value.groupId !== group.id || value.stageIndex !== stageIndex
     || value.mapCompatibility !== "matched" || value.mapPackId !== mapPack.mapPackId
     || !verifiedAlignment(value.mapAlignment) || value.mapAlignment.id !== group.mapAlignment?.id
     || value.coordinateSpace !== "canonical-map-world-cm" || !matchesCommunityGroup(group, mapPack)) {
     throw new Error("这支队伍的路线与当前地图不一致，请打开对应地图。");
   }
-  const response = normalizeRoutes(value);
+  const response = normalizeRoutes(value, { maximumPoints });
   if (response.routes.some(route => !HASH.test(route.playerKey || "") || typeof route.completed !== "boolean"
-    || ![true, false, null, undefined].includes(route.gameCompleted))) throw new Error("队员路线格式无效。");
+    || ![true, false, null, undefined].includes(route.gameCompleted)
+    || route.summitCompleted !== undefined && typeof route.summitCompleted !== "boolean")) throw new Error("队员路线格式无效。");
+  if (value.summitCompleted !== undefined && typeof value.summitCompleted !== "boolean"
+    || value.stageCompleted !== undefined && typeof value.stageCompleted !== "boolean"
+    || value.teamRevision !== undefined && !HASH.test(value.teamRevision)
+    || !Number.isSafeInteger(value.totalRouteCount) || value.totalRouteCount < 0
+    || value.finisherKeys !== undefined && (!Array.isArray(value.finisherKeys) || value.finisherKeys.some(key => !HASH.test(key)))) throw new Error("队伍登顶状态无效。");
   return { routes: response.routes, heatmap: null, totalRouteCount: response.totalRouteCount, truncated: Boolean(response.truncated),
+    summitCompleted: value.summitCompleted === true, stageCompleted: value.stageCompleted === true || response.routes.some(route => route.gameCompleted === true), finisherKeys: value.finisherKeys || [],
     teamLoaded: true, heightBands: heightBands(response.routes, null) };
 }
 
 export function communityTeamLabel(team) {
   const date = new Date(team.startedUtc).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
   const difficulty = typeof team.difficulty === "string" ? team.difficulty : team.difficulty?.label || team.difficulty?.key || "难度未知";
-  return `${date} · ${team.map.scene} · ${difficulty} · ${team.members.map(member => member.name).join("、")}`;
+  return `${date} · ${team.map.scene} · ${difficulty}${team.summitCompleted ? " · 本队已登顶" : ""} · ${team.members.map(member => member.name).join("、")}`;
 }
 
 export function communityGroupLabel(group, index = 0) {

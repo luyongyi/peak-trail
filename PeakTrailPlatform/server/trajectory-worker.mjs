@@ -6,11 +6,11 @@ try {
   const { operation, root, catalogPath } = workerData;
   if (workerData.migratePending) await autoApprovePending(root);
   migrationComplete = true;
-  const result = operation === "upload" ? await ingestUpload(root, Buffer.from(workerData.body), catalogPath)
+  const result = operation === "upload" ? await ingestUpload(root, Buffer.from(workerData.body), catalogPath, { minimalReceipt: workerData.minimalReceipt })
     : operation === "groups" ? await listGroups(root, catalogPath)
       : operation === "teams" ? await listTeams(root, workerData)
       : operation === "team" ? await queryTeam(root, catalogPath, workerData.team)
-      : operation === "team-routes" ? await queryTeamRoutes(root, catalogPath, workerData.team, workerData.stage)
+      : operation === "team-routes" ? await queryTeamRoutes(root, catalogPath, workerData.team, workerData.stage, { cursor: workerData.cursor })
       : operation === "inspection" ? await queryInspection(root, catalogPath, workerData.group, workerData.upload, workerData.stage)
       : await queryRoutes(root, catalogPath, workerData.group, workerData.stage, workerData.difficulty, workerData.limit, operation === "heatmap", { team: workerData.team, countBy: workerData.countBy });
   parentPort.postMessage({ json: JSON.stringify(result), duplicate: result.duplicate, migrationComplete });

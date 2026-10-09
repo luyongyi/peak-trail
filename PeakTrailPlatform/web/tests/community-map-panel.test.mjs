@@ -56,9 +56,11 @@ function fixture({ groups = [group()], enabled = true, stageIndex = 0, deferStag
     if (teamMatch) {
       const selected = teams.find(team => team.id === teamMatch[1]);
       const body = stageResponse(selected.groupId, Number(teamMatch[2]));
-      return response({ ...body, teamId: selected.id, routes: body.routes.map((route, index) => ({ ...route,
+      const routes = selected.members.map((member, index) => ({ ...body.routes[index % body.routes.length], id: `member-${index}`,
         playerKey: selected.members[index].playerKey, name: selected.members[index].name, completed: index === 0, gameCompleted: index === 0,
-        ...(teamRouteStates?.[index] || {}) })) });
+        ...(teamRouteStates?.[index] || {}) }));
+      return response({ ...body, teamId: selected.id, routes, totalRouteCount: routes.length,
+        summitCompleted: selected.summitCompleted === true, finisherKeys: selected.finisherKeys || [] });
     }
     const inspectionMatch = path.match(/\/([a-f0-9]{64})\/uploads\/([a-f0-9]{64})\/stages\/(\d+)\/inspection/);
     if (inspectionMatch) {
@@ -397,4 +399,23 @@ test("team member counts distinguish partial observations and empty members with
     }
     f.panel.dispose();
   }
+});
+
+test("modded lobby panels show all 257 members, including empty paths, and let the last member be captain", async () => {
+  const members = Array.from({ length: 257 }, (_, index) => ({ playerKey: index.toString(16).padStart(64, "0"), name: `队员 ${index + 1}` }));
+  const selected = sampleTeam({ members, summitCompleted: true, finisherKeys: [members.at(-1).playerKey] });
+  const f = fixture({ teams: [selected], teamRouteStates: members.map((_, index) => ({ completed: index === 256, gameCompleted: index === 256,
+    ...(index === 0 ? { points: [] } : {}) })) });
+  f.context = { ...f.context, routeGroupId: group().id, teamId: selected.id }; await f.panel.openHistorical();
+  assert.equal(f.elements.communityPlayers.children.length, 257);
+  assert.match(f.elements.communityPlayers.children[0].children[2].textContent, /本关无记录/);
+  assert.equal(f.elements.communityReference.children.length, 258);
+  assert.equal(f.elements.communityReference.children.at(-1).value, members.at(-1).playerKey);
+  assert.match(f.elements.communityStatus.textContent, /本队 257 位队员.*本队已登顶/);
+  await f.change("communityReference", members.at(-1).playerKey);
+  assert.equal(f.scene.overlays.at(-1).referencePlayerKey, members.at(-1).playerKey);
+  const lastCheck = f.elements.communityPlayers.children.at(-1).children[0]; lastCheck.checked = false; lastCheck.dispatch("change");
+  assert.equal(f.scene.overlays.at(-1).visiblePlayers.size, 256);
+  assert.equal(f.scene.overlays.at(-1).visiblePlayers.has(members.at(-1).playerKey), false);
+  f.panel.dispose();
 });

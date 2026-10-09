@@ -121,3 +121,18 @@ test("invalid tolerances and malformed observations fail instead of manufacturin
   for (const toleranceCm of [-1, 101, NaN, Infinity]) assert.throws(() => buildTeamRouteSegments([], { toleranceCm }), /tolerance/);
   assert.throws(() => buildTeamRouteSegments([route(a, [], { points: [[100, 0, 0, 0], [100, 1, 0, 0]] })]), /轨迹时间/);
 });
+
+test("more than 200 members retain shared corridor membership without a lobby-size cutoff", () => {
+  const players = Array.from({ length: 257 }, (_, index) => index.toString(16).padStart(64, "0"));
+  const segments = buildTeamRouteSegments(players.map(player => route(player, [[0, 0, 0], [1000, 0, 0]])));
+  assert.equal(segments.length, 1); assert.deepEqual(segments[0].members, [...players].sort());
+});
+
+test("a reference member's path ending at death is never extended along the surviving finisher", () => {
+  const dead = route(a, [[0, 0, 0], [300, 0, 0]]), survivor = route(b, [[0, 0, 20], [300, 0, 20], [1000, 0, 20]]);
+  const segments = buildTeamRouteSegments([dead, survivor], { referencePlayerKey: a });
+  assert.ok(segments.some(segment => hasMembers(segment, [a, b]) && segment.end[1] === 300));
+  assert.ok(segments.some(segment => hasMembers(segment, [b]) && segment.start[1] === 300 && segment.end[1] === 1000));
+  assert.ok(segments.filter(segment => segment.members.includes(a)).every(segment => segment.start[1] <= 300 && segment.end[1] <= 300));
+  assert.deepEqual(dead.points.at(-1), [100, 300, 0, 0]);
+});
