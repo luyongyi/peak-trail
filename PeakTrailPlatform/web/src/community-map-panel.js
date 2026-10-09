@@ -1,5 +1,6 @@
 import { createCommunityRoutes } from "./community-routes.js";
 import { communityGroupLabel } from "./community-route-model.js";
+import { historicalInspectionRouteStatus } from "./historical-route-link.js";
 
 // The same map/camera remains in place while a small history layer is selected.
 // This panel never enters replay, opens sockets, or creates a render loop.
@@ -71,7 +72,7 @@ export function createCommunityMapPanel({ getContext, getScene, root = document,
     const visible = snapshot.players.filter(player => player.visible).length;
     elements.communityLegend.textContent = snapshot.mode === "heatmap"
       ? `${snapshot.totalRouteCount} 条完整路线 · 每条路线在同一空间格只计一次\n浅黄 → 深红：经过路线逐渐增多\n透视展示 · 可按高度层筛选`
-      : `${snapshot.inspectionId ? "验收预览 · " : ""}${visible} / ${snapshot.players.length} 条可见轨迹 · 断点不连接${snapshot.inspectionId ? " · 未完整关卡不计公开路线或热力" : ""}`;
+      : `${snapshot.inspectionId ? "验收预览 · " : ""}${visible} / ${snapshot.players.length} 条可见轨迹 · 断点不连接${snapshot.inspectionId ? " · 不参与公开路线与热力统计" : ""}`;
     elements.communityPlayers.replaceChildren();
     if (active && snapshot.mode === "routes") for (const player of snapshot.players) {
       const label = root.createElement("label"); label.className = "community-player";
@@ -81,7 +82,7 @@ export function createCommunityMapPanel({ getContext, getScene, root = document,
       const dot = root.createElement("i"); dot.style.backgroundColor = player.color; dot.setAttribute("aria-hidden", "true");
       const name = root.createElement("span");
       const recordedRoute = snapshot.inspectionId ? snapshot.routes.find(route => route.id === player.id) : null;
-      name.textContent = `${player.name}${recordedRoute ? recordedRoute.completed ? "（完整）" : "（未完整）" : ""}`;
+      name.textContent = `${player.name}${recordedRoute ? `（${historicalInspectionRouteStatus(recordedRoute)}）` : ""}`;
       label.append(check, dot, name); elements.communityPlayers.append(label);
     }
     applyOverlay(snapshot);

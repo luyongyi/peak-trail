@@ -1,5 +1,5 @@
 import { communityMapIdentity, communityPlayers, matchingCommunityGroups, normalizeCommunityStage, pendingCommunityMessage } from "./community-route-model.js";
-import { normalizeHistoricalInspection } from "./historical-route-link.js";
+import { historicalInspectionStatus, normalizeHistoricalInspection } from "./historical-route-link.js";
 
 const MAX_RESPONSE_BYTES = 30_000_000;
 const displayError = error => error?.message || "大家的路线暂时无法读取，请稍后刷新。";
@@ -44,8 +44,8 @@ export function createCommunityRoutes({ fetchImpl = globalThis.fetch?.bind(globa
   function describeData() {
     state.status = state.totalRouteCount ? "ready" : "empty";
     if (state.inspectionId) {
-      state.message = state.totalRouteCount ? `验收预览 · ${state.routes.length} 条玩家轨迹 · 未完整关卡不计公开路线或热力。`
-        : "验收预览 · 当前关卡没有录制轨迹；未完整关卡不计公开路线或热力。";
+      state.message = state.totalRouteCount ? `验收预览 · ${state.routes.length} 条玩家轨迹 · ${historicalInspectionStatus(state.routes)} · 不计入公开路线或热力统计。`
+        : "验收预览 · 当前关卡没有录制轨迹；不计入公开路线或热力统计。";
       return;
     }
     state.message = state.totalRouteCount ? state.truncated

@@ -57,6 +57,17 @@ test("inspection data proves both public identities and preserves partial paths 
   const result = normalizeHistoricalInspection(body, group(), map(), 3, hash("d"));
   assert.deepEqual(result.routes[0].points, body.routes[0].points); assert.deepEqual(result.routes[0].breaks, [200]);
   assert.equal(result.routes[0].completed, false); assert.equal(result.heatmap, null); assert.equal(result.inspectionLoaded, true);
+  assert.equal(result.routes[0].gameCompleted, null, "older uploads with no native progress evidence remain unknown");
+  for (const gameCompleted of [true, false, null]) {
+    const normalized = normalizeHistoricalInspection({ ...body, routes: [{ ...body.routes[0], gameCompleted }] }, group(), map(), 3, hash("d"));
+    assert.equal(normalized.routes[0].gameCompleted, gameCompleted);
+    assert.equal(normalized.routes[0].completed, false, "native progress cannot change the continuous-route result");
+    assert.deepEqual(normalized.routes[0].points, body.routes[0].points);
+    assert.deepEqual(normalized.routes[0].breaks, [200]);
+  }
+  for (const gameCompleted of ["true", 1, {}, []]) {
+    assert.throws(() => normalizeHistoricalInspection({ ...body, routes: [{ ...body.routes[0], gameCompleted }] }, group(), map(), 3, hash("d")), /完成状态/);
+  }
   for (const changes of [{ uploadId: hash("e") }, { groupId: hash("f") }, { stageIndex: 2 }, { inspection: false }, { excludedFromAggregation: false },
     { coordinateSpace: "recording-world-cm" }, { mapAlignment: { ...body.mapAlignment, id: hash("8") } }, { mapPackId: `sha256-${hash("e")}` }]) {
     assert.throws(() => normalizeHistoricalInspection({ ...body, ...changes }, group(), map(), 3, hash("d")), /不一致/);

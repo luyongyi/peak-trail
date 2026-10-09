@@ -40,7 +40,7 @@ function stageResponse(id, stageIndex, heat = false) {
       points: [[0, 0, 100, 0], [100, 100, 300, 100]], breaks: [] },
       { id: "two", name: "登山者", points: [[0, 200, 100, 0], [100, 300, 100, 100]], breaks: [] }] };
 }
-function fixture({ groups = [group()], enabled = true, stageIndex = 0, deferStage = null } = {}) {
+function fixture({ groups = [group()], enabled = true, stageIndex = 0, deferStage = null, inspectionRouteStates = null } = {}) {
   const elements = Object.fromEntries(ids.map(id => [id, node()]));
   const heatOption = node("option");
   elements.communityMode.querySelector = selector => selector === 'option[value="heatmap"]' ? heatOption : null;
@@ -53,8 +53,11 @@ function fixture({ groups = [group()], enabled = true, stageIndex = 0, deferStag
     const inspectionMatch = path.match(/\/([a-f0-9]{64})\/uploads\/([a-f0-9]{64})\/stages\/(\d+)\/inspection/);
     if (inspectionMatch) {
       const body = stageResponse(inspectionMatch[1], Number(inspectionMatch[3]));
+      const routes = inspectionRouteStates ? inspectionRouteStates.map((state, index) => ({ ...body.routes[index % body.routes.length],
+        id: `inspection-${index}`, name: "Mylu", completion: "partial", completed: false, gameCompleted: null, ...state }))
+        : body.routes.map(route => ({ ...route, completion: "partial", completed: false, gameCompleted: null }));
       return response({ ...body, inspection: true, uploadId: inspectionMatch[2], excludedFromAggregation: true,
-        routes: body.routes.map(route => ({ ...route, completion: "partial", completed: false })) });
+        totalRouteCount: routes.length, routes });
     }
     const match = path.match(/\/([a-f0-9]{64})\/stages\/(\d+)\/(routes|heatmap)/);
     assert.ok(match, `unexpected API path ${path}`);
@@ -91,15 +94,15 @@ test("the integrated panel stays hidden and performs no requests on the homepage
   f.panel.dispose();
 });
 
-test("inspection UI labels partial paths and disables the heatmap option without changing normal map defaults", async () => {
+test("inspection UI preserves unknown progress and disables the heatmap option without changing normal map defaults", async () => {
   const f = fixture({ stageIndex: 3 });
   f.context = { ...f.context, routeGroupId: group().id, inspectionId: hash("d") };
   await f.panel.openHistorical();
   assert.equal(f.elements.communityMode.value, "routes"); assert.equal(f.heatOption.disabled, true); assert.equal(f.heatOption.hidden, true);
   assert.equal(f.elements.communityDifficulty.disabled, true);
-  assert.match(f.elements.communityStatus.textContent, /验收预览.*未完整/);
-  assert.match(f.elements.communityLegend.textContent, /未完整关卡不计/);
-  assert.match(f.elements.communityPlayers.children[0].children[2].textContent, /（未完整）$/);
+  assert.match(f.elements.communityStatus.textContent, /验收预览.*缺少原生切关证据/);
+  assert.match(f.elements.communityLegend.textContent, /不参与公开路线与热力统计/);
+  assert.match(f.elements.communityPlayers.children[0].children[2].textContent, /线路未完整（缺少原生切关证据）/);
   const requests = f.calls.length; await f.change("communityMode", "heatmap");
   assert.equal(f.calls.length, requests); assert.equal(f.scene.overlays.at(-1).mode, "routes");
   assert.equal(f.elements.communityMode.value, "routes");
@@ -107,6 +110,35 @@ test("inspection UI labels partial paths and disables the heatmap option without
   assert.equal(f.elements.communityPanel.hidden, true); assert.equal(f.heatOption.hidden, false); assert.equal(f.heatOption.disabled, false);
   assert.equal(f.elements.communityDifficulty.disabled, false);
   f.panel.dispose();
+});
+
+test("inspection snapshots distinguish game completion from continuous route coverage and keep short Kiln paths visible", async () => {
+  const cases = [
+    { gameCompleted: true, completed: false, completion: "partial", breaks: [100], text: "已完成本关 · 线路有断点", stageIndex: 3 },
+    { gameCompleted: true, completed: true, completion: "complete", text: "已完成本关 · 完整线路", stageIndex: 3 },
+    { gameCompleted: false, completed: false, completion: "partial", text: "本关尚未完成", stageIndex: 4,
+      points: [[1912400, 0, 86100, 195700], [1917700, -350, 86200, 195920]] },
+    { gameCompleted: null, completed: false, completion: "partial", text: "线路未完整（缺少原生切关证据）", stageIndex: 3 },
+    { gameCompleted: null, completed: true, completion: "complete", text: "完整线路（缺少原生切关证据）", stageIndex: 3 },
+  ];
+  for (const { text, stageIndex, ...state } of cases) {
+    const f = fixture({ stageIndex, inspectionRouteStates: [state] });
+    f.context = { ...f.context, routeGroupId: group().id, inspectionId: hash("d") };
+    await f.panel.openHistorical();
+    const player = f.elements.communityPlayers.children[0];
+    assert.equal(player.children[2].textContent, `Mylu（${text}）`);
+    assert.equal(player.children[0].checked, true);
+    assert.equal(f.elements.communityStatus.textContent,
+      `验收预览 · 1 条玩家轨迹 · ${text} · 不计入公开路线或热力统计。`);
+    const overlay = f.scene.overlays.at(-1);
+    assert.equal(overlay.mode, "routes"); assert.equal(overlay.stageIndex, stageIndex);
+    assert.equal(overlay.routes[0].gameCompleted, state.gameCompleted);
+    assert.equal(overlay.routes[0].completed, state.completed);
+    assert.deepEqual(overlay.routes[0].breaks, state.breaks || []);
+    assert.deepEqual(overlay.routes[0].points, state.points || stageResponse(group().id, stageIndex).routes[0].points);
+    assert.ok(f.calls.every(call => !call.path.includes("/heatmap")), "inspection makes no aggregation requests");
+    f.panel.dispose();
+  }
 });
 
 test("default map exploration stays closed and makes no group or stage requests until the topbar toggle is opened", async () => {

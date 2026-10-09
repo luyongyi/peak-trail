@@ -41,7 +41,7 @@ players:
   [{key: 按 runKey/recordingId 作用域散列的玩家身份,
     name, owner: bool, evidence: native-state | legacy-unknown,
     points: [[tMs,xCm,yCm,zCm]],
-    events: [{tMs,kind: join|leave|dead|revive|break|warp|finish,stageIndex?}]}]
+    events: [{tMs,kind: join|leave|dead|revive|break|warp|finish|game-stage|checkpoint,stageIndex?}]}]
 ```
 
 最多 16 人；每人每 100 ms 桶最多一个真实点，不插值补点；整数厘米保留 XYZ。`stages` 必须连续编号且名字与 `route` 一致。原生关卡门限必须成对且 `exitZCm > enterZCm`；旧录像可以同时缺失。昵称仅在玩家头信息中写一次，同名玩家凭哈希 key 区分。
@@ -57,6 +57,10 @@ players:
 ```
 
 `completion` 为 `complete / partial / unknown`，按每个玩家独立计算。只有声明有原生状态证据、录到入口到出口、期间持续存活且没有缺口/传送的尝试才生成完整关路线。超过 1.5 秒采样缺口、异常位移、死亡、离开、warp/break 都中断当前尝试；队伍全局推进或 finish 不能替所有玩家补通关。入口容差 3 m 用于角色中心与原生平面的差异，半关开录不会成为完整路线。旧录像没有状态证据或门限时为 `unknown`，仍接受上传。
+
+新导出器可补充每个玩家的 `game-stage` 时间线：首次观察和原生 `World.Segment` 映射关卡变化时记录 `{tMs,kind:"game-stage",stageIndex}`，用于按实际切关时间分配坐标。相邻普通关卡正常推进时，仅本人在切关边界持续存活、在场且没有传送或生命周期中断，才能在同一 `tMs` 添加上一关的 `{kind:"checkpoint",stageIndex}`；事件同毫秒的排列先后不限。服务器要求 checkpoint 与唯一的相邻普通关卡变化精确匹配，拒绝缺关卡编号、重复、错时间、跨关跳跃、Void 转换及未知原生状态的 checkpoint。
+
+原版点燃篝火可在下一关标题平面之前推进关卡，因此个人 checkpoint 可以成为完整线路的真实终点；不修改地图原生 Z 门限或布局哈希。服务器仍要求该玩家亲自录到入口、连续存活、无断点地走到 checkpoint。本人上一关 checkpoint 可证明下一关的原生入口；首次半途观察到 game-stage 只用于分关。关卡变化位于两个 10 Hz 点之间时保留相邻的真实采样点，不插值或跨不连续区间补点。已上传旧包没有时间线时完全沿用原 Z 门限规则，需从完整录像重新导出才能恢复缺失的篝火证据。
 
 ## 私有存储与审核
 
@@ -82,7 +86,7 @@ node PeakTrailPlatform/server/route-admin.mjs --dir PRIVATE_DIR pending UPLOAD_S
 
 通过现有 SSH 管理身份执行，不提供公共审核写接口。人工操作记录 `reviewMethod=administrator`；公开查询每次读取当前审核状态，`hide/reject/pending` 在下一次请求中撤销路线、热力及验收预览。人工 `pending` 是明确保留，不会再次自动通过。审核数据与站点部署版本分开保存，部署回滚不会回滚投稿状态。
 
-内容 SHA 幂等防止重传；有共享对局、玩家 key 和共享时间原点时，重叠关卡尝试合并，优先采用 owner 观测及点数更多的记录。缺共享时钟时只在同一 `recordingId` 内去重；不同名字不作为不同人证据，同名也不合并不同 key。
+内容 SHA 幂等防止重传；有共享对局、玩家 key 和共享时间原点时，重叠关卡尝试合并，优先采用 owner 观测；owner 身份相同则优先有原生分关时间线的记录，再比较点数。新的派生路线索引仅在存在 game-stage 时添加 `nativeProgress:true`，旧索引保持原字段形状。重新导出纠正的原生分关路线因此优先于同一人旧平面分关的更长路线，两份投稿均保留。缺共享时钟时只在同一 `recordingId` 内去重；不同名字不作为不同人证据，同名也不合并不同 key。
 
 游戏原生 `RunId` RPC 同步晚于录制启动时，共享时间原点可能为负（例如 -2000 ms）；原岸边坐标仍保留，不通过裁掉前段消除负值。点时间始终为录制内非负时间，跨生产者去重仅使用 `timeOriginMs + tMs`。
 
@@ -93,11 +97,13 @@ node PeakTrailPlatform/server/route-admin.mjs --dir PRIVATE_DIR pending UPLOAD_S
 | `GET /api/route-groups` | `{groups:[{id,map,firstStartedUtc,lastStartedUtc,mapCompatibility,mapPackId,difficulties,stageSummaries:[{index,name,routeCount}]}]}` |
 | `GET /api/route-groups/:id/stages/:index/routes?difficulty=KEY&limit=200` | `{groupId,stageIndex,mapCompatibility,mapPackId,totalRouteCount,routes:[{id,playerKey,name,difficulty,points,breaks}],truncated,pointCount}` |
 | `GET /api/route-groups/:id/stages/:index/heatmap?difficulty=KEY` | `{groupId,stageIndex,mapCompatibility,mapPackId,totalRouteCount,cellSizeCm:200,heightBandCm:200,cells:[[xIndex,yIndex,zIndex,count]],routeCount}` |
-| `GET /api/route-groups/:groupId/uploads/:uploadId/stages/:index/inspection` | `{groupId,uploadId,stageIndex,inspection:true,excludedFromAggregation:true,startedUtc,mapCompatibility,mapPackId,mapAlignment,coordinateSpace,routes:[{id,playerKey,name,difficulty,points,breaks,completion,completed}],totalRouteCount,pointCount,truncated}` |
+| `GET /api/route-groups/:groupId/uploads/:uploadId/stages/:index/inspection` | `{groupId,uploadId,stageIndex,inspection:true,excludedFromAggregation:true,startedUtc,mapCompatibility,mapPackId,mapAlignment,coordinateSpace,routes:[{id,playerKey,name,difficulty,points,breaks,completion,completed,gameCompleted}],totalRouteCount,pointCount,truncated}` |
 
 只有 `approved` 且个人关卡完整的数据进入公开结果。每次路线响应最多 200 条且最多 200,000 个点；达到任一上限会明确 `truncated:true`，不会把截断结果冒充全部统计。热力统计仍遍历该筛选条件下的完整有效路线，每条尝试在同一体素仅贡献一次；保留高度带，不把上下层混成一层；不会穿过不连续位移连线。格网最多 250,000 单元。
 
-验收预览是独立的只读查询，要求精确地图组和投稿 ID，而且投稿当前为 `approved`；隐藏、拒绝或人工保留返回 404。它只读取已经上传的精简白名单包，重新验证内容 SHA，按该关原生 Z 门限及角色中心 3 m 容差筛选真实坐标，不生成插值点。原 warp/break、生死、入离事件，以及采样缺口、异常位移和离关后重新进入都形成毫秒断点，不能跨传送连线。它可以展示 `partial/unknown` 的尝试，用于模型位置验收；`excludedFromAggregation:true` 明确表示不增加完整路线或热力统计。最多返回 200,000 个点，超出会标记 `truncated`。坐标使用与公开完整路线相同的严格地图对齐变换，网页仍拒绝未经证明的模型叠加。
+验收预览是独立的只读查询，要求精确地图组和投稿 ID，而且投稿当前为 `approved`；隐藏、拒绝或人工保留返回 404。它只读取已经上传的精简白名单包，重新验证内容 SHA，有 game-stage 时按原生分关时间筛选真实坐标；旧包回退到该关原生 Z 门限及角色中心 3 m 容差，不生成插值点。原 warp/break、生死、入离事件，以及采样缺口、异常位移和离关后重新进入都形成毫秒断点，不能跨传送连线。它可以展示 `partial/unknown` 的尝试，用于模型位置验收；`excludedFromAggregation:true` 明确表示不增加完整路线或热力统计。最多返回 200,000 个点，超出会标记 `truncated`。坐标使用与公开完整路线相同的严格地图对齐变换，网页仍拒绝未经证明的模型叠加。
+
+预览的 `gameCompleted` 与 `completed` 分开：前者是有原生状态及时间线时个人 checkpoint 所证明的游戏通关，后者表示录到了可聚合的完整连续线路。曾发生传送、死亡或半途开录仍可能后来正常点燃篝火，显示 `gameCompleted:true,completed:false`，不会伪造完整热力。无原生个人状态或旧时间线时 `gameCompleted:null`；有时间线但没有本关完成证据时为 false。原有最终关 finish 保留，只有可验证的完整终点轨迹才显示 true，无法验证的 finish 显示 null，不虚构进入 Void 的 checkpoint。
 
 地图组的 `firstStartedUtc/lastStartedUtc` 来源于录制包的真实时间，不以上传时间替代。历史验收链接指定录制的地图组与投稿，仅切换这一访问页面，不更改当天的轮换服务数据。
 
@@ -119,6 +125,6 @@ node PeakTrailPlatform/server/route-admin.mjs --dir PRIVATE_DIR pending UPLOAD_S
 node --test PeakTrailPlatform/tools/tests/map-alignment.test.mjs PeakTrailPlatform/tools/tests/trajectory-server.test.mjs
 ```
 
-包括真实 HTTP gzip 上传、白名单拒绝、10 Hz 上限、个人状态/断点、同名与同局合并、难度过滤、高度热力、自动通过及历史迁移、损坏内容不迁移、人工保留/隐藏/拒绝、审核锁、真实录制日期、隔离验收预览、持久化重启、解压上限与孤立文件容量。测试使用合成数据、loopback 和临时私有目录，不连接生产上传接口。
+包括真实 HTTP gzip 上传、白名单拒绝、10 Hz 上限、个人状态/断点、同名与同局合并、难度过滤、高度热力、自动通过及历史迁移、损坏内容不迁移、人工保留/隐藏/拒绝、审核锁、真实录制日期、隔离验收预览、持久化重启、解压上限与孤立文件容量。原生分关额外覆盖篝火早于标题 54 m、两采样点之间切关、多人死亡/传送/晚加入、最终关 finish、旧索引兼容，以及新旧投稿并存时的分关去重优先级。测试使用合成数据、loopback 和临时私有目录，不连接生产上传接口。
 
 对齐测试额外覆盖原位、整体平移/旋转、厘米量化、镜像/缩放/单关偏移拒绝、源场景 SHA 绑定、路线和热力统一空间、旧地标缺失保留及精确旧布局哈希兼容。网页校验响应的同一对齐证明 ID，防止切图或更新地标后叠加过期坐标。

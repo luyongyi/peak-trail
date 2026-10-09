@@ -166,6 +166,7 @@ export async function ingestUpload(root, compressed, catalogPath) {
         if (routeFiles.length > 4096 || storedBytes > LIMITS.compressedBytes * 4) throw problem("derived route capacity exceeded", 413);
         entry.routes.push({ id: digest(filename), file: filename, uploadId: id, playerKey: player.key, name: player.name, owner: player.owner,
           stageIndex: stage.index, pointCount: route.points.length, difficulty: entry.difficulty,
+          ...(player.events.some(event => event.kind === "game-stage") ? { nativeProgress: true } : {}),
           dedupe: routeDedupeKey(trajectory, player.key, stage.index, route.startMs, route.endMs) });
       }
     }
@@ -212,6 +213,7 @@ async function validatePendingEntry(root, entry) {
         const route = extracted.routes[attempt], filename = `${entry.id}-p${playerIndex}-s${stage.index}-a${attempt}.json.gz`;
         routes.push({ id: digest(filename), file: filename, uploadId: entry.id, playerKey: player.key, name: player.name, owner: player.owner,
           stageIndex: stage.index, pointCount: route.points.length, difficulty: entry.difficulty,
+          ...(player.events.some(event => event.kind === "game-stage") ? { nativeProgress: true } : {}),
           dedupe: routeDedupeKey(trajectory, player.key, stage.index, route.startMs, route.endMs) });
         if (routes.length > 4096) throw problem("stored route index exceeds capacity");
         const bytes = await readFile(join(root, "routes", filename));
@@ -350,6 +352,7 @@ export async function queryInspection(root, catalogPath, group, upload, stage) {
     pointCount += points.length;
     routes.push({ id: digest({ upload, playerKey: player.key, stage, inspection: true }), playerKey: player.key, name: player.name,
       difficulty: entry.difficulty, completion: extracted.completion, completed: extracted.completion === "complete",
+      gameCompleted: extracted.gameCompleted,
       points: alignedRoutePoints(points, base.mapAlignment), breaks: extracted.breaks.filter(value => value <= points.at(-1)[0]) });
   }
   return { ...base, routes, totalRouteCount, truncated, pointCount };

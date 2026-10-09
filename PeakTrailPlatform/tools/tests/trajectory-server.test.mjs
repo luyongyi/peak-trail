@@ -9,7 +9,7 @@ import { EventEmitter } from "node:events";
 import { setImmediate as nextTurn, setTimeout as pause } from "node:timers/promises";
 import { createLiveServer } from "../../server/live-server.mjs";
 import { createTrajectoryApi } from "../../server/trajectory-api.mjs";
-import { digest, validateTrajectory, extractStageRoutes, extractInspectionStage, aggregateHeatmap } from "../../server/trajectory-contract.mjs";
+import { digest, groupId, validateTrajectory, extractStageRoutes, extractInspectionStage, aggregateHeatmap } from "../../server/trajectory-contract.mjs";
 import { moderate, ingestUpload, mapMatch, autoApprovePending } from "../../server/trajectory-store.mjs";
 
 function fixture(change = {}) {
@@ -24,6 +24,15 @@ function fixture(change = {}) {
       ] } },
     difficulty: { ascent: 1, custom: false, mini: false }, players: [{ key: digest("run1-player1"), name: "同名", owner: true, evidence: "native-state",
       points: Array.from({ length: 21 }, (_, index) => [index * 100, 0, 0, index * 100]), events: [] }], ...change };
+}
+function nativeCheckpointFixture() {
+  const raw = fixture({ durationMs: 2100 });
+  raw.map.stages[0].exitZCm = 10000; raw.map.stages[1].enterZCm = 10000; raw.map.stages[1].exitZCm = 20000;
+  raw.map.alignment.landmarks[1].positionCm[2] = 10000; raw.map.alignment.landmarks[2].positionCm[2] = 20000;
+  raw.players[0].points = Array.from({ length: 22 }, (_, i) => [i * 100, 0, 0, i <= 15 ? Math.round(i * 4600 / 15) : 4600 + (i - 15) * 20]);
+  raw.players[0].events = [{ tMs: 0, kind: "game-stage", stageIndex: 0 },
+    { tMs: 1550, kind: "checkpoint", stageIndex: 0 }, { tMs: 1550, kind: "game-stage", stageIndex: 1 }];
+  return raw;
 }
 async function start(root = null, catalogPath = null) {
   const live = createLiveServer({ trajectoryDir: root, catalogPath });
@@ -171,6 +180,108 @@ test("completion belongs to each living continuous player, never a team progress
   assert.equal(extractStageRoutes(raw, gap, stage).completion, "partial");
 });
 
+test("native campfire checkpoint completes 54 metres before the next title plane without changing map identity", () => {
+  const raw = nativeCheckpointFixture(), { trajectory } = validateTrajectory(raw), player = trajectory.players[0], stage = trajectory.map.stages[0];
+  const result = extractStageRoutes(trajectory, player, stage), inspection = extractInspectionStage(trajectory, player, stage);
+  assert.equal(result.completion, "complete"); assert.equal(inspection.gameCompleted, true);
+  assert.deepEqual(result.routes[0].points, player.points.slice(0,17), "both actual 10 Hz samples bracketing 1550 ms remain");
+  assert.equal(result.routes[0].points.at(-2)[3], stage.exitZCm - 5400);
+  assert.ok(result.routes[0].points.every(point => point[3] < stage.exitZCm));
+  const legacy = structuredClone(raw); legacy.players[0].events = [];
+  const old = validateTrajectory(legacy).trajectory;
+  assert.equal(extractStageRoutes(old, old.players[0], old.map.stages[0]).completion, "partial");
+  assert.deepEqual(trajectory.map, old.map); assert.equal(groupId(trajectory.map), groupId(old.map));
+  assert.equal(extractInspectionStage(old, old.players[0], old.map.stages[0]).gameCompleted, null);
+});
+
+test("native stage time windows assign the short final Kiln footage before its title Z to Kiln", () => {
+  const raw = nativeCheckpointFixture(), player = raw.players[0];
+  const shore = extractInspectionStage(raw, player, raw.map.stages[0]), next = extractInspectionStage(raw, player, raw.map.stages[1]);
+  assert.deepEqual(shore.points, player.points.slice(0,17));
+  assert.deepEqual(next.points, player.points.slice(15));
+  assert.ok(next.points.every(point => point[3] < raw.map.stages[1].enterZCm - 300));
+  assert.equal(next.completion, "partial"); assert.equal(next.gameCompleted, false);
+  const unknown = structuredClone(player); unknown.evidence = "legacy-unknown"; unknown.events = unknown.events.filter(event => event.kind !== "checkpoint");
+  assert.equal(extractInspectionStage(raw, unknown, raw.map.stages[1]).gameCompleted, null);
+});
+
+test("personal entry, life and continuity remain required despite a game's native checkpoint", () => {
+  const raw = nativeCheckpointFixture(), original = raw.players[0], stage = raw.map.stages[0];
+  for (const kind of ["warp", "break", "dead", "leave"]) {
+    const player = structuredClone(original); player.events.splice(1, 0, { tMs: 1000, kind });
+    assert.equal(extractStageRoutes(raw, player, stage).completion, "partial", kind);
+    assert.equal(extractInspectionStage(raw, player, stage).gameCompleted, ["dead", "leave"].includes(kind) ? false : true, kind);
+  }
+  const gap = structuredClone(original); gap.points = [gap.points[0], ...gap.points.slice(16)];
+  assert.equal(extractStageRoutes(raw, gap, stage).completion, "partial");
+  const late = structuredClone(original); late.points = late.points.slice(8); late.events[0].tMs = 800; late.events.unshift({ tMs: 800, kind: "join" });
+  assert.equal(extractStageRoutes(raw, late, stage).completion, "partial");
+  assert.equal(extractInspectionStage(raw, late, stage).gameCompleted, true);
+  const onlyFinish = structuredClone(original); onlyFinish.events = onlyFinish.events.filter(event => event.kind !== "checkpoint");
+  onlyFinish.events.splice(1, 0, { tMs: 1550, kind: "finish", stageIndex: 0 });
+  assert.equal(extractStageRoutes(raw, onlyFinish, stage).completion, "partial");
+});
+
+test("own prior campfire proves a native entry before the title plane but initial mid-record stage does not", () => {
+  const raw = nativeCheckpointFixture(); delete raw.map.alignment;
+  raw.durationMs = 3100;
+  raw.map.route.push("Kiln"); raw.map.stages.push({ index: 2, name: "Kiln", enterZCm: 20000, exitZCm: 30000 });
+  raw.players[0].points = Array.from({ length: 32 }, (_, i) => [i * 100, 0, 0,
+    i <= 15 ? Math.round(i * 4600 / 15) : i <= 27 ? 4600 + Math.round((i-15) * 10000 / 12) : 14600 + (i-27) * 20]);
+  raw.players[0].events.push({ tMs: 2750, kind: "game-stage", stageIndex: 2 }, { tMs: 2750, kind: "checkpoint", stageIndex: 1 });
+  const { trajectory } = validateTrajectory(raw), player = trajectory.players[0];
+  assert.equal(extractStageRoutes(trajectory, player, trajectory.map.stages[1]).completion, "complete");
+  const mid = structuredClone(player); mid.points = mid.points.slice(24);
+  mid.events = [{ tMs: 2400, kind: "join" }, { tMs: 2400, kind: "game-stage", stageIndex: 1 },
+    { tMs: 2750, kind: "game-stage", stageIndex: 2 }, { tMs: 2750, kind: "checkpoint", stageIndex: 1 }];
+  assert.equal(extractStageRoutes(trajectory, mid, trajectory.map.stages[1]).completion, "partial");
+  assert.equal(extractInspectionStage(trajectory, mid, trajectory.map.stages[1]).gameCompleted, true);
+});
+
+test("native timeline and checkpoints reject missing, duplicate, unmatched and nonordinary evidence", () => {
+  const raw = nativeCheckpointFixture();
+  for (const mutate of [
+    value => { delete value.players[0].events[0].stageIndex; },
+    value => { delete value.players[0].events[1].stageIndex; },
+    value => { value.players[0].events[1].tMs = 1549; },
+    value => { value.players[0].events[1].stageIndex = 1; },
+    value => { value.players[0].events.splice(2,0,structuredClone(value.players[0].events[1])); },
+    value => { value.players[0].events[0].stageIndex = 1; },
+    value => { value.players[0].events[2].tMs = 0; value.players[0].events[1].tMs = 0; },
+    value => { value.players[0].evidence = "legacy-unknown"; },
+    value => { delete value.map.alignment; value.map.route[1] = "Void"; value.map.stages[1].name = "Void"; },
+  ]) { const invalid = structuredClone(raw); mutate(invalid); assert.throws(() => validateTrajectory(invalid), /native stage|checkpoint|ordered/); }
+  const jump = fixture(); jump.map.route.push("Alpine"); jump.map.stages.push({ index: 2, name: "Alpine", enterZCm: 2000, exitZCm: 3000 }); delete jump.map.alignment;
+  jump.players[0].events = [{ tMs: 0, kind: "game-stage", stageIndex: 0 }, { tMs: 1000, kind: "checkpoint", stageIndex: 0 }, { tMs: 1000, kind: "game-stage", stageIndex: 2 }];
+  assert.throws(() => validateTrajectory(jump), /matching adjacent/);
+  const initial = nativeCheckpointFixture(); initial.players[0].events = [{ tMs: 0, kind: "game-stage", stageIndex: 1 }];
+  assert.doesNotThrow(() => validateTrajectory(initial));
+});
+
+test("native final finish keeps proven terminal completion and leaves unproven wins unknown", () => {
+  const raw = fixture(), player = raw.players[0], stage = raw.map.stages[1];
+  player.events = [{ tMs: 0, kind: "game-stage", stageIndex: 0 }, { tMs: 950, kind: "checkpoint", stageIndex: 0 },
+    { tMs: 950, kind: "game-stage", stageIndex: 1 }, { tMs: 2000, kind: "finish", stageIndex: 1 }];
+  const validated = validateTrajectory(raw).trajectory;
+  assert.equal(extractInspectionStage(validated, validated.players[0], stage).gameCompleted, true);
+  const partial = structuredClone(player); partial.points = partial.points.slice(0,19);
+  assert.equal(extractInspectionStage(raw, partial, stage).completion, "partial");
+  assert.equal(extractInspectionStage(raw, partial, stage).gameCompleted, null);
+  const legacy = structuredClone(player); legacy.evidence = "legacy-unknown"; legacy.events = legacy.events.filter(event => event.kind !== "checkpoint");
+  assert.equal(extractInspectionStage(raw, legacy, stage).gameCompleted, null);
+});
+
+test("checkpoint after the last sample cannot erase a late death or manufacture a distant endpoint", () => {
+  const raw = nativeCheckpointFixture(), stage = raw.map.stages[0], original = raw.players[0];
+  original.points = original.points.slice(0,16);
+  assert.equal(extractStageRoutes(raw, original, stage).completion, "complete", "last point 50 ms before the real checkpoint is retained");
+  const dead = structuredClone(original); dead.events.splice(1,0,{ tMs: 1520, kind: "dead" });
+  assert.equal(extractStageRoutes(raw, dead, stage).completion, "partial");
+  assert.equal(extractInspectionStage(raw, dead, stage).gameCompleted, false);
+  const distant = structuredClone(original); distant.points = distant.points.slice(0,1);
+  assert.equal(extractStageRoutes(raw, distant, stage).completion, "partial", "a checkpoint never synthesizes skipped positions");
+});
+
 test("heatmap counts each route once per voxel, retains height and never bridges discontinuities", () => {
   const cells = aggregateHeatmap([[[0, 0, 0, 0], [100, 0, 0, 10], [200, 0, 0, 20]], [[0, 0, 400, 0], [100, 0, 400, 20]]]);
   assert.deepEqual(cells, [[0, 0, 0, 1], [0, 2, 0, 1]]);
@@ -216,7 +327,8 @@ async function legacyPending(root, id) {
 
 test("historical untouched pending submissions migrate after restart using their recording date", async () => {
   await isolated(async ({ root, base, catalogPath, close }) => {
-    const upload = await post(base, fixture()); await legacyPending(root, upload.body.uploadId);
+    const upload = await post(base, fixture()), old = await legacyPending(root, upload.body.uploadId);
+    assert.ok(old.routes.every(route => !Object.hasOwn(route, "nativeProgress")), "old metadata stays byte-shape compatible");
     await close(); const restarted = await start(root, catalogPath);
     try {
       const groups = (await get(restarted.base, "/api/route-groups")).body.groups;
@@ -351,6 +463,69 @@ test("two people with the same name stay separate, dead player has no complete r
     const partial = await post(base, raw2); assert.equal(partial.body.stages[0].stages[0].completion, "partial");
     await moderate(root, partial.body.uploadId, "approved");
     assert.equal((await get(base, `/api/route-groups/${group.id}/stages/0/routes`)).body.routes.length, 2);
+  });
+});
+
+test("native checkpoints approve only each continuous personal route and inspection distinguishes game completion", async () => {
+  await isolated(async ({ root, base }) => {
+    const raw = nativeCheckpointFixture(), original = raw.players[0];
+    for (const [label, kind] of [["传送", "warp"], ["死亡", "dead"], ["晚加入", "join"]]) {
+      const player = structuredClone(original); player.key = digest(label); player.name = label; player.owner = false;
+      if (kind === "join") { player.points = player.points.slice(8); player.events[0].tMs = 800; player.events.unshift({ tMs: 800, kind }); }
+      else player.events.splice(1,0,{ tMs: 1000, kind });
+      raw.players.push(player);
+    }
+    const upload = await post(base, raw); assert.equal(upload.status, 201); assert.equal(upload.body.moderationStatus, "approved");
+    const prefix = `/api/route-groups/${upload.body.groupId}`, inspection = (await get(base, `${prefix}/uploads/${upload.body.uploadId}/stages/0/inspection`)).body;
+    const byName = new Map(inspection.routes.map(route => [route.name, route]));
+    assert.deepEqual([byName.get("同名").completed, byName.get("同名").gameCompleted], [true,true]);
+    assert.deepEqual([byName.get("传送").completed, byName.get("传送").gameCompleted], [false,true]);
+    assert.deepEqual(byName.get("传送").breaks, [1000]);
+    assert.deepEqual([byName.get("死亡").completed, byName.get("死亡").gameCompleted], [false,false]);
+    assert.deepEqual([byName.get("晚加入").completed, byName.get("晚加入").gameCompleted], [false,true]);
+    assert.equal((await get(base, `${prefix}/stages/0/routes`)).body.routes.length, 1);
+    assert.equal((await get(base, `${prefix}/stages/0/heatmap`)).body.routeCount, 1);
+    const entry = JSON.parse(await readFile(join(root, "index", `${upload.body.uploadId}.json`), "utf8"));
+    assert.ok(entry.routes.every(route => route.nativeProgress === true));
+    const kiln = (await get(base, `${prefix}/uploads/${upload.body.uploadId}/stages/1/inspection`)).body.routes.find(route => route.name === "同名");
+    assert.deepEqual(kiln.points, original.points.slice(15)); assert.equal(kiln.gameCompleted, false);
+  });
+});
+
+test("same owner's corrected native phase wins over a longer old Z-gate route without deleting either upload", async () => {
+  await isolated(async ({ root, base }) => {
+    const old = fixture(); old.players[0].name = "旧平面分关";
+    const corrected = fixture({ recordingId: digest("native-reexport") }); corrected.players[0].name = "原生篝火分关";
+    corrected.players[0].events = [{ tMs: 0, kind: "game-stage", stageIndex: 0 },
+      { tMs: 550, kind: "checkpoint", stageIndex: 0 }, { tMs: 550, kind: "game-stage", stageIndex: 1 }];
+    const a = await post(base, old), b = await post(base, corrected); assert.equal(a.body.groupId, b.body.groupId);
+    const routes = (await get(base, `/api/route-groups/${b.body.groupId}/stages/0/routes`)).body.routes;
+    assert.equal(routes.length, 1); assert.equal(routes[0].name, "原生篝火分关"); assert.deepEqual(routes[0].points, corrected.players[0].points.slice(0,7));
+    const heat = (await get(base, `/api/route-groups/${b.body.groupId}/stages/0/heatmap`)).body;
+    assert.equal(heat.routeCount, 1); assert.deepEqual(heat.cells, aggregateHeatmap([routes[0].points]));
+    const entries = await Promise.all([a,b].map(async upload => JSON.parse(await readFile(join(root, "index", `${upload.body.uploadId}.json`), "utf8"))));
+    assert.ok(entries[0].routes.every(route => !Object.hasOwn(route, "nativeProgress")));
+    assert.ok(entries[1].routes.every(route => route.nativeProgress === true));
+    assert.equal((await readdir(join(root, "uploads"))).length, 2); assert.equal((await readdir(join(root, "index"))).length, 2);
+    assert.equal((await get(base, `/api/route-groups/${a.body.groupId}/uploads/${a.body.uploadId}/stages/0/inspection`)).status, 200);
+    await legacyPending(root, b.body.uploadId);
+    assert.equal((await autoApprovePending(root)).approved, 1, "new native metadata also validates during historical migration");
+  });
+});
+
+test("owner preference stays ahead of native phase evidence while distinct clocks and players stay separate", async () => {
+  await isolated(async ({ base }) => {
+    const owner = fixture(); owner.players[0].name = "本人旧录像";
+    const remote = fixture({ recordingId: digest("remote-native") }); remote.players[0].owner = false; remote.players[0].name = "队友原生观测";
+    remote.players[0].events = [{ tMs: 0, kind: "game-stage", stageIndex: 0 },
+      { tMs: 550, kind: "checkpoint", stageIndex: 0 }, { tMs: 550, kind: "game-stage", stageIndex: 1 }];
+    const a = await post(base, owner); await post(base, remote);
+    const path = `/api/route-groups/${a.body.groupId}/stages/0/routes`;
+    assert.equal((await get(base, path)).body.routes[0].name, "本人旧录像");
+    const anotherAttempt = structuredClone(remote); anotherAttempt.recordingId = digest("native-attempt-2"); anotherAttempt.timeOriginMs += 10_000;
+    const anotherPlayer = structuredClone(remote); anotherPlayer.recordingId = digest("native-player-2"); anotherPlayer.players[0].key = digest("another-player");
+    await post(base, anotherAttempt); await post(base, anotherPlayer);
+    assert.equal((await get(base, path)).body.routes.length, 3);
   });
 });
 

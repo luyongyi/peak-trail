@@ -51,14 +51,16 @@ test("inspection reads only its approved upload, keeps partial paths separate an
     const match = path.match(new RegExp(`^/api/route-groups/${chosen.id}/uploads/${uploadId}/stages/(\\d+)/inspection`));
     assert.ok(match, `only inspection requests are permitted: ${path}`);
     return response({ ...routeBody(chosen, Number(match[1])), inspection: true, uploadId, excludedFromAggregation: true,
-      routes: [{ id: "partial", name: "未完火山", completion: "partial", completed: false,
+      routes: [{ id: "partial", name: "Mylu", completion: "partial", completed: false, gameCompleted: true,
         points: [[0, 0, 100, 0], [100, 100, 100, 100], [200, 9000, 100, 100]], breaks: [200] }] });
   };
   const controller = createCommunityRoutes({ fetchImpl });
   await controller.enterMap(map(), { stageIndex: 3, groupId: chosen.id, inspectionId: uploadId, mode: "routes" });
   assert.equal(controller.getSnapshot().inspectionId, uploadId); assert.equal(controller.getSnapshot().mode, "routes");
   assert.equal(controller.getSnapshot().routes[0].completed, false); assert.deepEqual(controller.getSnapshot().routes[0].breaks, [200]);
-  assert.equal(controller.getSnapshot().heatmap, null); assert.match(controller.getSnapshot().message, /验收预览.*未完整/);
+  assert.equal(controller.getSnapshot().heatmap, null);
+  assert.equal(controller.getSnapshot().routes[0].gameCompleted, true);
+  assert.match(controller.getSnapshot().message, /验收预览.*已完成本关 · 线路有断点/);
   const count = calls.length; await controller.setMode("heatmap");
   assert.equal(controller.getSnapshot().mode, "routes"); assert.equal(calls.length, count);
   await controller.setDifficulty("a:3;c:false;m:false");

@@ -78,18 +78,29 @@ test("future, expired and previous-rotation cache timestamps require a fresh ups
 test("preview /api/daily resolves and coalesces independently of a live relay; methods and failures stay bounded", async () => {
   const daily = await resolveDaily({ now: () => START, fetchImpl: async () => response(payload()) });
   let calls = 0, fail = false, now = START;
-  let release;
+  let release, resolverEntered, bothRequestsEntered;
   const gate = new Promise(resolve => { release = resolve; });
+  const enteredResolver = new Promise(resolve => { resolverEntered = resolve; });
+  const enteredBothRequests = new Promise(resolve => { bothRequestsEntered = resolve; });
   const api = createDailyApi({ now: () => now,
-    resolver: async () => { calls += 1; await gate; if (fail) throw new Error("offline"); return daily; } });
-  const server = createServer(async (req, res) => { if (!await api.handle(req, res)) res.writeHead(404).end(); });
+    resolver: async () => { calls += 1; resolverEntered(); await gate; if (fail) throw new Error("offline"); return daily; } });
+  let arrived = 0;
+  const server = createServer(async (req, res) => {
+    const handling = api.handle(req, res);
+    if (req.url === "/api/daily" && req.method === "GET" && ++arrived === 2) bothRequestsEntered();
+    if (!await handling) res.writeHead(404).end();
+  });
   const origin = await listen(server);
+  let concurrent;
   try {
-    const a = fetch(`${origin}/api/daily`), b = fetch(`${origin}/api/daily`);
-    await new Promise(resolve => setTimeout(resolve, 25));
+    concurrent = Promise.all([fetch(`${origin}/api/daily`), fetch(`${origin}/api/daily`)]);
+    // Both actual HTTP handlers have entered the blocked resolver/cache read.
+    // Scheduling speed cannot substitute for the overlap being exercised.
+    await Promise.all([enteredResolver, enteredBothRequests]);
+    assert.equal(arrived, 2);
     assert.equal(calls, 1);
     release();
-    const both = await Promise.all([a, b]);
+    const both = await concurrent;
     for (const item of both) {
       assert.equal(item.status, 200);
       assert.equal(item.headers.get("cache-control"), "no-store");
@@ -107,7 +118,11 @@ test("preview /api/daily resolves and coalesces independently of a live relay; m
     fail = false;
     assert.equal((await fetch(`${origin}/api/daily`)).status, 200);
     assert.equal(calls, 3, "failures do not poison the next retry");
-  } finally { await close(server); }
+  } finally {
+    release();
+    await concurrent?.catch(() => {});
+    await close(server);
+  }
 });
 
 function runUpdater(script, env) {

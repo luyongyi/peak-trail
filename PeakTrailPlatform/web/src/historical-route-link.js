@@ -76,9 +76,30 @@ export function normalizeHistoricalInspection(raw, group, mapPack, stageIndex, i
   }
   const response = normalizeRoutes(raw);
   if (response.routes.some(route => !["complete", "partial", "unknown"].includes(route.completion)
-    || typeof route.completed !== "boolean" || route.completed !== (route.completion === "complete"))) {
+    || typeof route.completed !== "boolean" || route.completed !== (route.completion === "complete")
+    || route.gameCompleted !== null && route.gameCompleted !== undefined && typeof route.gameCompleted !== "boolean")) {
     throw new Error("验收预览的关卡完成状态无效。");
   }
-  return { routes: response.routes, heatmap: null, totalRouteCount: response.totalRouteCount, truncated: Boolean(response.truncated),
+  const routes = response.routes.map(route => ({ ...route, gameCompleted: route.gameCompleted ?? null }));
+  return { routes, heatmap: null, totalRouteCount: response.totalRouteCount, truncated: Boolean(response.truncated),
     heightBands: heightBands(response.routes, null, 200), inspectionLoaded: true };
+}
+
+// Native game progress and a continuous recorded path are independent facts.
+// Missing evidence must never be presented as a player failing the chapter.
+export function historicalInspectionRouteStatus(route) {
+  if (route.gameCompleted === true) return route.completed ? "已完成本关 · 完整线路" : "已完成本关 · 线路有断点";
+  if (route.gameCompleted === false) return "本关尚未完成";
+  return `${route.completed ? "完整线路" : "线路未完整"}（缺少原生切关证据）`;
+}
+
+export function historicalInspectionStatus(routes) {
+  if (routes.length === 1) return historicalInspectionRouteStatus(routes[0]);
+  const completed = routes.filter(route => route.gameCompleted === true).length;
+  const unfinished = routes.filter(route => route.gameCompleted === false).length;
+  const unknown = routes.length - completed - unfinished;
+  const full = routes.filter(route => route.completed).length;
+  return [completed && `已完成本关 ${completed} 人`, unfinished && `本关尚未完成 ${unfinished} 人`,
+    unknown && `${unknown} 人缺少原生切关证据`, full && `${full} 条完整线路`,
+    routes.length - full && `仅有部分线路 ${routes.length - full} 条`].filter(Boolean).join(" · ");
 }
