@@ -300,15 +300,22 @@ export function extractInspectionStage(trajectory, player, stage, { includeInact
   else if (!Number.isFinite(stage.enterZCm) || !Number.isFinite(stage.exitZCm)) throw problem("stage boundaries unavailable", 409);
   const points = [], breaks = new Set();
   const life = { dead: false, present: true };
-  let previousIndex = -1, eventIndex = 0;
+  let previousIndex = -1, eventIndex = 0, observedLiving = false, livingSince = null;
   for (let index = 0; index < player.points.length; index += 1) {
     const point = player.points[index];
     let terminalDeath = false;
     while (eventIndex < player.events.length && player.events[eventIndex].tMs <= point[0]) {
       const event = player.events[eventIndex++];
-      if (event.kind === "dead") terminalDeath ||= living(life) && event.tMs > 0 && event.tMs === point[0];
+      if (event.kind === "dead") terminalDeath ||= (observedLiving || livingSince !== null && livingSince < event.tMs)
+        && living(life) && event.tMs > 0 && event.tMs === point[0];
+      // A same-tick dead join is not a death endpoint. An earlier living join or
+      // revival is evidence even when its sample was replaced in the 100 ms bucket.
+      if (["dead", "leave", "join", "revive"].includes(event.kind)) observedLiving = false;
       applyLifeEvent(life, event);
+      if (!living(life)) livingSince = null;
+      else if (["join", "revive"].includes(event.kind)) livingSince = event.tMs;
     }
+    if (living(life)) observedLiving = true;
     if (!includeInactive && !living(life) && !terminalDeath) continue;
     if (intervals ? !selected.has(index) : point[3] < stage.enterZCm - 300 || point[3] > stage.exitZCm + 300) continue;
     const previous = points.at(-1);

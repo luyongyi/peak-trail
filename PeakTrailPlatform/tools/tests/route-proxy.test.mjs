@@ -10,6 +10,10 @@ test("development route proxy is read-only, preserves filtering, and cannot prox
   const requests = [];
   const upstream = createServer((request, response) => {
     requests.push({ url: request.url, method: request.method });
+    if (request.url.includes("?cursor=")) {
+      response.writeHead(429, { "Content-Type": "application/json", "Retry-After": "35" }).end(JSON.stringify({ error: "route-service-busy" }));
+      return;
+    }
     response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ groups: [], url: request.url }));
   });
   const base = await listen(upstream);
@@ -46,6 +50,9 @@ test("development route proxy is read-only, preserves filtering, and cannot prox
     assert.equal((await fetch(`${origin}/api/route-teams/not-a-hash`)).status, 404);
     assert.equal((await fetch(`${origin}/api/route-teams/${teamId}/private`)).status, 404);
     assert.equal(requests.length, 7);
+    const limited = await fetch(`${origin}/api/route-teams/${teamId}/stages/3/routes?cursor=${"d".repeat(64)}`);
+    assert.equal(limited.status, 429);
+    assert.equal(limited.headers.get("retry-after"), "35", "paginated local previews must respect the actual server cooldown");
   } finally { await close(proxy); await close(upstream); }
 });
 

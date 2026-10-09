@@ -4,10 +4,18 @@ import { heightBands } from "./route-collection-model.js";
 
 const MAX_RESPONSE_BYTES = 30_000_000;
 const displayError = error => error?.message || "大家的路线暂时无法读取，请稍后刷新。";
+function waitForRetry(milliseconds, signal) {
+  return new Promise((resolve, reject) => {
+    const abort = () => { clearTimeout(timer); signal?.removeEventListener("abort", abort); reject(new DOMException("Aborted", "AbortError")); };
+    if (signal?.aborted) { reject(new DOMException("Aborted", "AbortError")); return; }
+    const timer = setTimeout(() => { signal?.removeEventListener("abort", abort); resolve(); }, milliseconds);
+    signal?.addEventListener("abort", abort, { once: true });
+  });
+}
 
 // The controller is activated only by enterMap. There are no timers, sockets,
 // upload calls, or requests from the landing page.
-export function createCommunityRoutes({ fetchImpl = globalThis.fetch?.bind(globalThis), onChange = () => {}, apiBase = "/api/route-groups", teamApiBase = "/api/route-teams" } = {}) {
+export function createCommunityRoutes({ fetchImpl = globalThis.fetch?.bind(globalThis), onChange = () => {}, apiBase = "/api/route-groups", teamApiBase = "/api/route-teams", retryDelay = waitForRetry } = {}) {
   let disposed = false, revision = 0, request = null, requestKind = null, mapPack = null;
   let searchRequest = null, searchRevision = 0;
   let hidden = new Set();
@@ -29,9 +37,22 @@ export function createCommunityRoutes({ fetchImpl = globalThis.fetch?.bind(globa
     Object.assign(state, { routes: [], heatmap: null, players: [], heightBands: [], heightBand: null, totalRouteCount: 0, truncated: false, inspectionLoaded: false, teamLoaded: false, summitCompleted: false, stageCompleted: false, finisherKeys: [] });
   }
   function active(token) { return !disposed && token.revision === revision && mapPack !== null; }
-  async function readApi(path, signal) {
+  async function readApi(path, signal, { retryRate = false } = {}) {
     if (typeof fetchImpl !== "function") throw new Error("浏览器无法读取大家的路线。");
-    const response = await fetchImpl(path, { signal, headers: { Accept: "application/json" }, cache: "no-store" });
+    let response;
+    for (let retries = 0; ; retries++) {
+      response = await fetchImpl(path, { signal, headers: { Accept: "application/json" }, cache: "no-store" });
+      if (response.status !== 429 || !retryRate || retries >= 8) break;
+      if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+      const header = response.headers.get("retry-after");
+      const seconds = header?.trim() && Number.isFinite(Number(header)) ? Number(header) : (Date.parse(header) - Date.now()) / 1000;
+      const milliseconds = Math.ceil(Math.max(1, Math.min(300, Number.isFinite(seconds) ? seconds : 60)) * 1000);
+      await response.body?.cancel();
+      if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+      state.message = `路线服务繁忙，${Math.ceil(milliseconds / 1000)} 秒后继续读取本队轨迹…`; emit();
+      await retryDelay(milliseconds, signal);
+      if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+    }
     if (!response.ok) throw new Error(`大家的路线暂不可用（HTTP ${response.status}）`);
     if (!response.headers.get("content-type")?.includes("application/json")) throw new Error("路线服务尚未启用，请稍后再试。");
     if (Number(response.headers.get("content-length")) > MAX_RESPONSE_BYTES) throw new Error("路线响应过大，请选择更具体的难度。");
@@ -69,7 +90,7 @@ export function createCommunityRoutes({ fetchImpl = globalThis.fetch?.bind(globa
     const routes = [], ids = new Set(), cursors = new Set();
     let cursor = null, first = null;
     for (;;) {
-      const body = await readApi(`${path}${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`, token.signal);
+      const body = await readApi(`${path}${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`, token.signal, { retryRate: true });
       if (!active(token)) return null;
       // Each page is bounded by bytes/points, never by lobby size. Validate map
       // and member identity before combining pages into the complete team.

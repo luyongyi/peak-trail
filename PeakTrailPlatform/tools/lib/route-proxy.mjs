@@ -27,6 +27,7 @@ export async function proxyRouteRead(request, response, base) {
     response.writeHead(upstream.status, {
       "Content-Type": upstream.headers.get("content-type") || "application/json; charset=utf-8",
       "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff",
+      ...(upstream.headers.has("retry-after") ? { "Retry-After": upstream.headers.get("retry-after") } : {}),
     });
     if (request.method === "HEAD" || !upstream.body) { await upstream.body?.cancel(); response.end(); }
     else {

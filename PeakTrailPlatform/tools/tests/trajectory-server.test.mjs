@@ -512,6 +512,41 @@ test("inspection keeps the actual death sample, drops ghost motion, and resumes 
     "an explicit warp coinciding with death still interrupts the terminal segment");
 });
 
+test("an already-dead first observation or reconnect has no fictitious terminal living point", () => {
+  for (const nativeTimeline of [false, true]) {
+    const raw = fixture(), player = raw.players[0], stage = raw.map.stages[0];
+    player.points = [[300,0,0,100],[400,10,0,100],[500,20,0,100]];
+    player.events = [{ tMs: 300, kind: "join" }, { tMs: 300, kind: "dead" }];
+    if (nativeTimeline) player.events.push({ tMs: 300, kind: "game-stage", stageIndex: 0 });
+    assert.deepEqual(extractInspectionStage(raw, player, stage).points, []);
+    assert.equal(makeTeamMetadata(raw).members[0].stages[0].pointCount, 0);
+    player.points.unshift([0,0,0,100]);
+    player.events.unshift({ tMs: 100, kind: "leave" });
+    assert.deepEqual(extractInspectionStage(raw, player, stage).points.map(point => point[0]), nativeTimeline ? [] : [0],
+      "an earlier living presence cannot turn an already-dead reconnect into a new death sample");
+    player.events = [{ tMs: 0, kind: "join" }, { tMs: 300, kind: "dead" }];
+    if (nativeTimeline) player.events.unshift({ tMs: 0, kind: "game-stage", stageIndex: 0 });
+    assert.deepEqual(extractInspectionStage(raw, player, stage).points.map(point => point[0]), [0,300],
+      "a real living sample still proves the terminal death observation");
+    assert.deepEqual(routeEdges(extractInspectionStage(raw, player, stage)).map(([a,b]) => [a[0],b[0]]), [[0,300]]);
+  }
+});
+
+test("same-bucket death retains a proven living join or revival even when the earlier sample was replaced", () => {
+  const raw = fixture(), player = raw.players[0], stage = raw.map.stages[0];
+  player.points = [[50,0,0,100]];
+  player.events = [{ tMs: 0, kind: "join" }, { tMs: 50, kind: "dead" }];
+  assert.deepEqual(extractInspectionStage(raw, player, stage).points, player.points);
+  assert.equal(makeTeamMetadata(raw).members[0].stages[0].pointCount, 1);
+  player.events = [{ tMs: 50, kind: "join" }, { tMs: 50, kind: "dead" }];
+  assert.deepEqual(extractInspectionStage(raw, player, stage).points, [], "same-tick initially dead is still not a living interval");
+  player.points = [[350,0,0,100]];
+  player.events = [{ tMs: 0, kind: "dead" }, { tMs: 300, kind: "revive" }, { tMs: 350, kind: "dead" }];
+  assert.deepEqual(extractInspectionStage(raw, player, stage).points, player.points);
+  player.events = [{ tMs: 0, kind: "dead" }, { tMs: 100, kind: "leave" }, { tMs: 300, kind: "join" }, { tMs: 350, kind: "dead" }];
+  assert.deepEqual(extractInspectionStage(raw, player, stage).points, [], "a dead reconnect has no living interval without revival");
+});
+
 test("version 1 team metadata with old ghost points remains reviewable without rewriting its accepted payload", async () => {
   await isolated(async ({ root, base }) => {
     const raw = fixture(); raw.players[0].events = [{ tMs: 500, kind: "dead" }];

@@ -504,3 +504,53 @@ test("source revisions bind all team pages even when member counts and completio
     controller.dispose();
   }
 });
+
+test("team rate limits wait for Retry-After and resume each cursor without dropping or duplicating members", async () => {
+  const paths = teamStage().routes, fake = teamServer(), counts = new Map(), requests = [], delays = [];
+  const controller = createCommunityRoutes({ retryDelay: async (milliseconds, signal) => { delays.push(milliseconds); assert.equal(signal.aborted, false); },
+    fetchImpl: (path, options) => {
+      if (!path.startsWith(`/api/route-teams/${team().id}/stages/`)) return fake.fetchImpl(path, options);
+      requests.push(path); const count = counts.get(path) || 0; counts.set(path, count + 1);
+      const second = new URL(path, "https://example.invalid").searchParams.has("cursor");
+      if (count === 0) return Promise.resolve(new Response("{}", { status: 429, headers: {
+        "Content-Type": "application/json", "Retry-After": second ? new Date(Date.now() + 3000).toUTCString() : "2" } }));
+      return Promise.resolve(response(teamStage(0, { routes: [paths[Number(second)]], nextCursor: second ? null : paths[0].playerKey })));
+    } });
+  await controller.enterMap(map(), { groupId: group().id, teamId: team().id, stageIndex: 0, mode: "team" });
+  assert.equal(controller.getSnapshot().status, "ready"); assert.equal(controller.getSnapshot().players.length, 2);
+  assert.equal(controller.getSnapshot().routes.length, 2); assert.equal(delays.length, 2);
+  assert.equal(delays[0], 2000); assert.ok(delays[1] >= 1000 && delays[1] <= 3000);
+  assert.equal(requests[0], requests[1]); assert.equal(requests[2], requests[3]);
+  assert.notEqual(requests[1], requests[2]); controller.dispose();
+});
+
+test("clearing a team cancels the default rate-limit timer and never fetches its cursor again", async () => {
+  const fake = teamServer(), calls = [], states = [], controller = createCommunityRoutes({ onChange: state => states.push(state), fetchImpl: (path, options) => {
+    calls.push(path);
+    return path.startsWith(`/api/route-teams/${team().id}/stages/`)
+      ? Promise.resolve(new Response("{}", { status: 429, headers: { "Retry-After": "60" } })) : fake.fetchImpl(path, options);
+  } });
+  const loading = controller.enterMap(map(), { groupId: group().id, teamId: team().id, stageIndex: 0, mode: "team" });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.match(controller.getSnapshot().message, /60 秒后继续读取/);
+  controller.clear(); const count = states.length; await loading;
+  assert.equal(calls.filter(path => path.startsWith(`/api/route-teams/${team().id}/stages/`)).length, 1);
+  assert.equal(controller.getSnapshot().mapPackId, null); assert.equal(controller.getSnapshot().players.length, 0);
+  assert.equal(states.length, count); controller.dispose();
+});
+
+test("team busy retries remain bounded while bad requests fail immediately and normal route reads never wait", async () => {
+  for (const status of [429, 400]) {
+    const fake = teamServer(), waits = [], requests = [], controller = createCommunityRoutes({ retryDelay: async milliseconds => { waits.push(milliseconds); }, fetchImpl: (path, options) => {
+      if (!path.startsWith(`/api/route-teams/${team().id}/stages/`)) return fake.fetchImpl(path, options);
+      requests.push(path); return Promise.resolve(new Response("{}", { status, headers: { "Retry-After": "1" } }));
+    } });
+    await controller.enterMap(map(), { groupId: group().id, teamId: team().id, stageIndex: 0, mode: "team" });
+    assert.equal(controller.getSnapshot().status, "error");
+    assert.equal(requests.length, status === 429 ? 9 : 1); assert.equal(waits.length, status === 429 ? 8 : 0); controller.dispose();
+  }
+  const fake = server(), controller = createCommunityRoutes({ retryDelay: () => { throw new Error("ordinary requests must not wait"); }, fetchImpl: (path, options) => path.includes("/stages/")
+    ? Promise.resolve(new Response("{}", { status: 429 })) : fake.fetchImpl(path, options) });
+  await controller.enterMap(map(), { stageIndex: 0 }); await controller.setMode("routes");
+  assert.equal(controller.getSnapshot().status, "error"); controller.dispose();
+});
