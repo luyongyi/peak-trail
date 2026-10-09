@@ -2728,7 +2728,7 @@ async function openCommunityTeam(team) {
   const sameMap = team.map?.scene === state.mapPack?.sceneName && String(team.map?.buildId) === String(state.mapPack?.gameBuildId)
     && (!team.mapPackId || team.mapPackId === state.mapPack?.mapPackId);
   const stageIndex = (state.historicalRoute?.group.id === team.groupId || sameMap)
-    && team.stageSummaries?.some(stage => stage.index === state.selectedSegment && stage.memberCount > 0)
+    && team.stageSummaries?.some(stage => stage.index === state.selectedSegment)
     ? state.selectedSegment : null;
   await navigateHistoricalRoute({ groupId: team.groupId, teamId: team.id, stageIndex });
 }

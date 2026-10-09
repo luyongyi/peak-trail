@@ -383,6 +383,9 @@ test("a real lightweight search summary preserves the current chapter before its
   await open(summary);
   assert.deepEqual(links.at(-1), { groupId: summary.groupId, teamId: summary.id, stageIndex: 0 },
     "a same-map search does not jump to the team's last chapter and reset the current camera");
+  await open({ ...summary, stageSummaries: summary.stageSummaries.map(stage => ({ ...stage, memberCount: 0 })) });
+  assert.equal(links.at(-1).stageIndex, 0,
+    "an empty chapter or unknown legacy member count preserves the selected chapter for the verified lookup");
   await open({ ...summary, map: { ...summary.map, buildId: "25306743" } });
   assert.equal(links.at(-1).stageIndex, null, "another build must choose its own observed chapter");
   await open({ ...summary, map: { ...summary.map, scene: "Level_9" } });
