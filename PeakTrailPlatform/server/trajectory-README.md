@@ -85,12 +85,22 @@ players:
 ## 私有存储与审核
 
 ```text
-PRIVATE_DIR/index/<uploadId>.json       小型索引与审核状态
-PRIVATE_DIR/uploads/<uploadId>.json.gz  重建后的白名单轨迹
-PRIVATE_DIR/routes/<uploadId>-pN-sN-aN.json.gz  完整个人关卡尝试
+PRIVATE_DIR/index/<uploadId>.json       索引、审核状态、完整尝试和关卡查看的源范围引用
+PRIVATE_DIR/uploads/<uploadId>.json.gz  新投稿为内部 trajectory-storage-v2 manifest；旧白名单轨迹仍可读
+PRIVATE_DIR/point-blocks/<sha256>.pack   同玩家身份每次新增坐标块的不可变打包文件
+PRIVATE_DIR/point-bases/context-<sha256>.json  逻辑块 SHA 到 pack 范围和 plain 基块的引用索引
+PRIVATE_DIR/routes/<uploadId>-pN-sN-aN.json.gz  旧完整尝试仍可读；新投稿不再重复写坐标
 ```
 
-blob/route 文件先落盘，索引以原子创建提交；服务重启重新读索引。公开状态只来源于提交的索引，损坏条目不会重新获得审批。失败写入会清理本次拥有的新文件；异常退出的孤立文件也计入容量，不会绕过配额。总存储按实际私有目录字节限制 2 GiB，最多 10,000 投稿、100,000 条路线；达到上限返回 503，由管理员决定清理策略，不自动删除用户历史。
+坐标块和 manifest 先落盘，索引以原子创建提交；服务重启重新读索引。公开状态只来源于提交的索引，损坏条目不会重新获得审批。失败时清理本次独占的上传文件，共享块保留，避免误删其他已提交投稿的引用；所有孤立文件及基块索引仍计入容量。总存储按实际私有目录字节限制 2 GiB，最多 10,000 投稿、100,000 条路线；达到上限返回 503，由管理员决定清理策略，不自动删除用户历史。
+
+新存储以证明共享的 run/clock、地图、难度和玩家身份隔离，按绝对 60 秒时窗分块。同内容直接共享；同身份、时窗和点数的不同观测可对一个 plain 基块进行 int32 XOR 无损差分，仅当含元信息的压缩文件确实更小时采用。差分最多一层，读时验证身份、时窗、长度及重建逻辑 SHA。名字、owner、必要事件、原始时间和互补观测独立保留，不会因为近似重叠而删除。静止点区间保留原采样时间和全部厘米坐标。新写入展开上限为 932,067 点，manifest 不超过原有 64 MiB decoded / 12 MiB compressed；旧 v1 数据读路径不追加展开点数上限。
+
+同一玩家身份在一次上传中的新增块合并为不可变 pack，避免大量小文件各占 4 KiB 的磁盘碎片。每个 pack 最多 48 MiB，单条 gzip 记录最多 128 KiB；身份索引最多 4 MiB，记录 offset/length、压缩记录 SHA 和原逻辑块 SHA。读取 seek 到目标记录，检查真实文件边界、范围不重叠、记录 SHA 和展开后的逻辑 SHA，无需读取整包。pack 创建或复用时核验整包 SHA，已经存在的 pack 永不改写。服务原有单 worker 串行队列负责跨 worker 写入，模块内 Promise 队列负责同进程调用的合并；没有新增持久锁，进程崩溃只会留下仍计配额的孤立 pack/临时文件。离线工具仅写全新独立目录，不支持另一个服务同时写同一私有库。
+
+完整路线和关卡查看都只引用源坐标范围，不保存另一份坐标。关卡索引另外保存精确 spans、原断点、完成证据及逻辑 SHA，并绑定 manifest SHA；查看只展开所需玩家和关卡块。关卡引用元信息最多 4 MiB，完整新索引最多 12 MiB。每次请求最多缓存 24,000 个已解码点、4 MiB manifest 和 4 MiB pack 引用索引，不跨请求缓存审核状态。
+
+离线准备工具 `node tools/prepare-trajectory-storage.mjs --prepare OFFLINE_SOURCE_COPY NEW_DESTINATION` 只读取旧库副本，在不存在的独立目的目录生成新布局。它验证原 upload/route/team 身份、审核字段、全部坐标/事件/尝试和前后文件 SHA，生成 `migration-verification.json`；原副本不变，不切换服务、不删除任何旧文件。辅助或孤立源文件在报告中保留记录，不自动复制为公开投稿。生产私有库不自动做存储迁移。
 
 新投稿记录真实 `startedUtc`、`reviewedUtc` 与 `reviewMethod=automatic-contract-v1`。服务实例首次处理真实轨迹 worker 请求时，迁移以前未审核的 `pending` 投稿：先重新验证原精简 gzip 的完整白名单协议与内容 SHA，再核对索引身份、玩家、个人关卡判定及全部派生路线的实际坐标/断点；通过后原子改为 `approved`，从轨迹包恢复录制时间。损坏数据保留 `pending`；有 `reviewedUtc` 的人工保留、隐藏或拒绝均不自动改变。迁移每个服务实例只运行一次，后续普通查询不反复解压未通过的历史包。
 

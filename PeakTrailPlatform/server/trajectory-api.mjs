@@ -66,7 +66,7 @@ export function createTrajectoryApi({ root = null, catalogPath = null, trustedPr
     try {
       if (path === "/api/route-uploads" && req.method === "POST") {
         if (String(req.headers["content-type"] ?? "").split(";")[0].toLowerCase() !== "application/json" || req.headers["content-encoding"] !== "gzip") throw problem("gzip application/json required", 415);
-        if (req.headers["x-trajectory-format"] && req.headers["x-trajectory-format"] !== "trajectory-v1") throw problem("unsupported trajectory format", 415);
+        if (req.headers["x-trajectory-format"] && !["trajectory-v1", "trajectory-v2"].includes(req.headers["x-trajectory-format"])) throw problem("unsupported trajectory format", 415);
         const minimalReceipt = String(req.headers.prefer ?? "").split(",").some(value => value.trim().toLowerCase() === "return=minimal");
         const result = await job({ operation: "upload", body: await body(req), minimalReceipt });
         if (minimalReceipt) res.setHeader("preference-applied", "return=minimal");
