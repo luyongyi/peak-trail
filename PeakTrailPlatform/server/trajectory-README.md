@@ -142,9 +142,19 @@ node PeakTrailPlatform/server/route-admin.mjs --dir PRIVATE_DIR pending UPLOAD_S
 ## 验证
 
 ```powershell
-node --test PeakTrailPlatform/tools/tests/map-alignment.test.mjs PeakTrailPlatform/tools/tests/trajectory-server.test.mjs
+node --test PeakTrailPlatform/tools/tests/map-alignment.test.mjs PeakTrailPlatform/tools/tests/trajectory-server.test.mjs PeakTrailPlatform/tools/tests/trajectory-index.test.mjs
 ```
 
 包括真实 HTTP gzip 上传、白名单拒绝、10 Hz 上限、个人状态/断点、同名与同局合并、难度过滤、高度热力、自动通过及历史迁移、损坏内容不迁移、人工保留/隐藏/拒绝、审核锁、真实录制日期、隔离验收预览、持久化重启、解压上限与孤立文件容量。原生分关额外覆盖篝火早于标题 54 m、两采样点之间切关、多人死亡/传送/晚加入、最终关 finish 与明确 summit 区分、旧索引兼容，以及新旧投稿并存时的分关去重优先级。扩展队伍覆盖 70 人上传、65 个独立旧来源、260,065 点完整翻页、1,000 人精简 receipt、生死区间剔除、死亡末段实际渲染，以及队伍登顶不伪造个人完整热力。测试使用合成数据、loopback 和临时私有目录，不连接生产上传接口。
 
 对齐测试额外覆盖原位、整体平移/旋转、厘米量化、镜像/缩放/单关偏移拒绝、源场景 SHA 绑定、路线和热力统一空间、旧地标缺失保留及精确旧布局哈希兼容。网页校验响应的同一对齐证明 ID，防止切图或更新地标后叠加过期坐标。
+
+索引读取在现有单个 worker 内按每批最多 16 个小文件并发进行，避免每次上传和查询都串行等待整库。批次和结果顺序保持一致；每个请求仍重新读取当前索引，管理员隐藏、拒绝或删除的记录不会因缓存继续公开。损坏条目仍省略，不从原始轨迹重建审批。全量 gzip/JSON 数据、派生路线和热力计算没有增加并发，也没有改变 `trajectory-v1` 上传字段。
+
+可运行本地合成索引基准：
+
+```powershell
+node PeakTrailPlatform/tools/benchmark-trajectory-index.mjs 5000 5
+```
+
+脚本只创建临时合成索引，预热后交替测量旧串行算法和当前实现，每轮严格比较完整结果与顺序，最后清理自己的临时目录。2026-10-15 的 Windows / Node 24.18.0 本机测量中，5,000 条索引、5 轮中位耗时从 2,418.76 ms 降到 651.14 ms（3.71 倍）。这是索引读取阶段的本地结果，不是整体上传、网页加载或服务器环境的加速承诺。
