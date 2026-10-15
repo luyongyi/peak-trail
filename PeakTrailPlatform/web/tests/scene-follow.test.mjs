@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import * as THREE from "../../vendor/three/0.180.0/build/three.module.js";
 import { ReplayCamera } from "../src/replay-camera.js";
+import { fitPerspectivePoints } from "../src/camera-framing.js";
 import { chooseRecordedInteriorPose, isInteriorLayer } from "../src/camera-placement.js";
 import { latestLifeEventBefore, MARKER_LIFE_EVENT_TYPES } from "../src/protocol.js";
 import { pointInBounds } from "../src/trail-spatial.js";
@@ -15,7 +16,7 @@ import { fitSurveyCamera } from "../src/survey-camera-fit.js";
 const source = (await readFile(new URL("../src/scene.js", import.meta.url), "utf8"))
   .replace(/^import .*;\r?\n/gm, "")
   .replace("export class TrailScene", "class TrailScene");
-const ports = { THREE, chooseRecordedInteriorPose, isInteriorLayer, latestLifeEventBefore,
+const ports = { THREE, fitPerspectivePoints, chooseRecordedInteriorPose, isInteriorLayer, latestLifeEventBefore,
   MARKER_LIFE_EVENT_TYPES, pointInBounds, FOLLOW_DISTANCE, FOLLOW_MIN_DISTANCE, FOLLOW_MAX_DISTANCE,
   FOLLOW_INTERIOR_DISTANCE, FOLLOW_INTERIOR_MIN_DISTANCE, FOLLOW_INTERIOR_MAX_DISTANCE, followLayerAtPosition,
   fitSurveyCamera,

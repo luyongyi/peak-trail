@@ -2,12 +2,14 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import * as THREE from "../../vendor/three/0.180.0/build/three.module.js";
-import { fitSurveyCamera } from "../src/survey-camera-fit.js";
+import { fitPerspectivePoints } from "../src/camera-framing.js";
+import { collectCameraParts, selectCameraSubjectParts } from "../src/camera-subject.js";
 import { isInteriorLayer } from "../src/camera-placement.js";
 
 const source = (await readFile(new URL("../src/scene.js", import.meta.url), "utf8"))
   .replace(/^import .*;\r?\n/gm, "").replace("export class TrailScene", "class TrailScene");
-const Scene = new Function("THREE", "fitSurveyCamera", "isInteriorLayer", `${source}\nreturn TrailScene;`)(THREE, fitSurveyCamera, isInteriorLayer);
+const ports = { THREE, fitPerspectivePoints, collectCameraParts, selectCameraSubjectParts, isInteriorLayer };
+const Scene = new Function(...Object.keys(ports), `${source}\nreturn TrailScene;`)(...Object.values(ports));
 const layers = [
   { id: "shore", segment: 0, name: "Shore_Segment", biome: "Shore", minX: -230, maxX: 230, minY: -127, maxY: 295, minZ: -540, maxZ: 340 },
   { id: "temple", segment: 4, name: "Temple_Segment", biome: "Swamp", minX: -120, maxX: 120, minY: 800, maxY: 1233, minZ: 2000, maxZ: 2400 },
@@ -35,8 +37,8 @@ function assertInFrame(scene, layer) {
   scene.camera.updateMatrixWorld(true);
   for (const x of [layer.minX, layer.maxX]) for (const y of [layer.minY, layer.maxY]) for (const z of [layer.minZ, layer.maxZ]) {
     const ndc = new THREE.Vector3(x - scene.origin.x, (y - scene.origin.y) * scene.heightScale, -(z - scene.origin.z)).project(scene.camera);
-    assert.ok(Math.abs(ndc.x) <= 1 / 1.08 + 1e-9, `X ${ndc.x}`);
-    assert.ok(Math.abs(ndc.y) <= 1 / 1.08 + 1e-9, `Y ${ndc.y}`);
+    assert.ok(Math.abs(ndc.x) <= 1 / 1.14 + 1e-9, `X ${ndc.x}`);
+    assert.ok(Math.abs(ndc.y) <= 1 / 1.14 + 1e-9, `Y ${ndc.y}`);
     assert.ok(ndc.z >= -1 && ndc.z <= 1, `Z ${ndc.z}`);
   }
 }
@@ -70,6 +72,22 @@ test("resize refits an untouched preset without invalidating the pending source-
   assertInFrame(scene, layers[0]);
   finish(); await loading;
   assert.equal(scene.cameraSelectionRevision, revision + 1);
+  assertInFrame(scene, layers[0]);
+});
+
+test("a hidden viewer gets finite framing and refits when its real viewport becomes visible", async () => {
+  const { scene, container, finish } = fixture();
+  container.clientWidth = 0; container.clientHeight = 0;
+  const loading = scene.setData({ mapPack, trace: null, useMap: true, activeSegment: 0 });
+  assert.ok(scene.camera.position.toArray().every(Number.isFinite));
+  assert.equal(scene.surveyPreset, "overview");
+  const revision = scene.cameraSelectionRevision;
+  container.clientWidth = 360; container.clientHeight = 900;
+  scene.resize();
+  assert.equal(scene.camera.aspect, 0.4);
+  assert.equal(scene.cameraSelectionRevision, revision, "becoming visible is not a user camera choice");
+  assertInFrame(scene, layers[0]);
+  finish(); await loading;
   assertInFrame(scene, layers[0]);
 });
 

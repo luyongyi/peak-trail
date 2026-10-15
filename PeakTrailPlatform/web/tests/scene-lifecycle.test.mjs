@@ -6,6 +6,7 @@ import { latestLifeEventBefore, MARKER_LIFE_EVENT_TYPES } from "../src/protocol.
 import { chooseRecordedInteriorPose, isInteriorLayer } from "../src/camera-placement.js";
 import { ReplayCamera } from "../src/replay-camera.js";
 import { nadirCameraBounds } from "../src/nadir-camera-bounds.js";
+import { collectCameraParts, selectCameraSubjectParts } from "../src/camera-subject.js";
 import * as THREE from "../../vendor/three/0.180.0/build/three.module.js";
 
 // Exercise the actual scene methods without a browser/WebGL context. Only the
@@ -35,8 +36,8 @@ function model() {
 function fixture(selected = 0) {
   const requests = [];
   const load = (layer, signal, gameBuildId) => new Promise((resolve, reject) => requests.push({ layer: layer.id, signal, gameBuildId, resolve, reject }));
-  const TrailScene = new Function("THREE", "loadGameGeometry", "cancelAnimationFrame", "layoutPortraitLabels", "clusterPlayerEntries", "latestLifeEventBefore", "MARKER_LIFE_EVENT_TYPES", "isInteriorLayer", "chooseRecordedInteriorPose", "nadirCameraBounds", `${source}\nreturn TrailScene;`)(
-    THREE, load, () => {}, layoutPortraitLabels, clusterPlayerEntries, latestLifeEventBefore, MARKER_LIFE_EVENT_TYPES, isInteriorLayer, chooseRecordedInteriorPose, nadirCameraBounds,
+  const TrailScene = new Function("THREE", "loadGameGeometry", "cancelAnimationFrame", "layoutPortraitLabels", "clusterPlayerEntries", "latestLifeEventBefore", "MARKER_LIFE_EVENT_TYPES", "isInteriorLayer", "chooseRecordedInteriorPose", "nadirCameraBounds", "collectCameraParts", "selectCameraSubjectParts", `${source}\nreturn TrailScene;`)(
+    THREE, load, () => {}, layoutPortraitLabels, clusterPlayerEntries, latestLifeEventBefore, MARKER_LIFE_EVENT_TYPES, isInteriorLayer, chooseRecordedInteriorPose, nadirCameraBounds, collectCameraParts, selectCameraSubjectParts,
   );
   const layers = [
     { id: "A", segment: 0, biome: "shore" },
@@ -55,6 +56,7 @@ function fixture(selected = 0) {
     freeCamera: { mode: "orbit", setMode(value) { this.mode = value; }, focus() {}, dispose() {} }, worldRenderer: { dispose() {} }, fogDepthPass: { dispose() {} },
     emitMapStatus(...args) { this.statuses.push(args); }, setTime() {}, fitView() { ++this.cameraSelectionRevision; },
     nadirGeometryBounds() { return null; },
+    cameraSubjectParts() { return null; },
   });
   scene.terrainRoot.children = layers.map(group);
   return { scene, requests };
@@ -184,6 +186,24 @@ test("Nadir lazy-load refit respects current selection and later user camera cho
     requests[0].resolve(model()); await flush();
     assert.equal(fits, action === "camera" ? 1 : 2);
     if (action === "leave") { requests[1].resolve(model()); await flush(); assert.equal(fits, 2); }
+  }
+});
+
+test("outdoor subject refit after loading preserves later user camera choices", async () => {
+  for (const action of ["stay", "leave", "camera"]) {
+    const { scene, requests } = fixture();
+    scene.cameraSubjectParts = () => scene.terrainRoot.children.find((entry) => entry.userData.segment === scene.activeSegment)?.userData.loaded
+      ? [{ bounds: { min: [0, 0, 0], max: [10, 10, 10] } }] : null;
+    let fits = 0; scene.fitView = () => { fits++; scene.cameraSelectionRevision++; };
+    scene.setActiveSegment(1);
+    if (action === "leave") scene.setActiveSegment(2);
+    if (action === "camera") scene.cameraSelectionRevision++;
+    requests[0].resolve(model()); await flush();
+    assert.equal(fits, action === "stay" ? 2 : action === "leave" ? 2 : 1);
+    if (action === "leave") {
+      requests[1].resolve(model()); await flush();
+      assert.equal(fits, 3, "only the final selected chapter gets its geometry refit");
+    }
   }
 });
 

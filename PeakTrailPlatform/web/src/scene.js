@@ -18,7 +18,8 @@ import { SourceWaterRenderer } from "./source-water-renderer.js";
 import { nadirCameraBounds } from "./nadir-camera-bounds.js";
 import { CommunityRouteOverlay } from "./community-route-overlay.js";
 import { EnclosureContextRenderer } from "./enclosure-context-renderer.js";
-import { fitSurveyCamera } from "./survey-camera-fit.js";
+import { fitPerspectivePoints } from "./camera-framing.js";
+import { collectCameraParts, selectCameraSubjectParts } from "./camera-subject.js";
 
 function collectWaterDepthEntries(root, heightScale) {
   const entries = [];
@@ -231,7 +232,10 @@ export class TrailScene {
     this.controls.maxPolarAngle = Math.PI * 0.495;
     this.controls.target.set(0, 0, 0);
     this.freeCamera = new ReplayCamera({ THREE, camera: this.camera, controls: this.controls, canvas,
-      onModeChange: (mode) => this.canvas.dispatchEvent(new CustomEvent("cameramodechange", { detail: { mode, help: REPLAY_CAMERA_HELP } })) });
+      onModeChange: (mode) => {
+        this.surveyPreset = null;
+        this.canvas.dispatchEvent(new CustomEvent("cameramodechange", { detail: { mode, help: REPLAY_CAMERA_HELP } }));
+      } });
     this.worldRenderer = new WorldRenderer(canvas);
     this.sourceWater = new SourceWaterRenderer();
     this.enclosureContext = new EnclosureContextRenderer({ THREE, loadGeometry: loadGameGeometry, disposeObject });
@@ -616,6 +620,8 @@ export class TrailScene {
           if (group.userData.segment === selected || !group.userData.loaded) continue;
           disposeObject(group);
           group.userData.loaded = false;
+          delete group.userData.cameraSubjectParts;
+          delete group.userData.nadirCameraBounds;
           this.geometryLoads.delete(group.userData.mapLayer.id);
         }
       }
@@ -1375,6 +1381,7 @@ export class TrailScene {
           || selectionRevision !== this.geometrySelectionToken || cameraRevision !== this.cameraSelectionRevision) return;
       if (this.summitCameraBounds() || this.nadirGeometryBounds() || this.enclosureContext?.bounds) this.fitView();
       else if (this.trace && isInteriorLayer(this.selectedLayer(), this.mapPack?.route)) this.enterInteriorView(false);
+      else if (this.cameraSubjectParts()?.length) this.fitView();
     });
   }
 
@@ -1466,6 +1473,41 @@ export class TrailScene {
     };
   }
 
+  cameraSubjectParts() {
+    if (!this.useMap || this.mapPack?.identityVersion !== 3) return null;
+    const groups = this.terrainRoot.children.filter((group) => this.isGeometryLayerRequested(group.userData.mapLayer));
+    if (!groups.length || groups.some((group) => !group.userData.loaded)) return null;
+    return groups.flatMap((group) => {
+      if (!group.userData.cameraSubjectParts) {
+        const parts = collectCameraParts(THREE, group, this.origin);
+        // Each chapter keeps its own subject, even in the mountain overview.
+        // Interior shells and the explicit Void view retain their full extents.
+        const layer = group.userData.mapLayer;
+        group.userData.cameraSubjectParts = isInteriorLayer(layer, this.mapPack.route)
+          || String(layer.biome).toLowerCase() === "void" ? parts : selectCameraSubjectParts(parts);
+      }
+      return group.userData.cameraSubjectParts;
+    });
+  }
+
+  cameraFitPoints() {
+    const special = this.summitCameraBounds() || this.nadirGeometryBounds();
+    const parts = !special && this.cameraSubjectParts();
+    const bounds = special || this.viewBounds();
+    const boxes = parts?.length ? parts.map((part) => part.bounds) : bounds ? [bounds] : [];
+    // Adjacent exit landmarks are display context outside the chapter group.
+    // Include them separately without restoring the outliers omitted above.
+    const context = this.useMap && this.enclosureContext?.bounds;
+    if (context) boxes.push(context);
+    const points = [];
+    for (const box of boxes) {
+      for (const x of [box.min[0], box.max[0]]) for (const y of [box.min[1], box.max[1]]) for (const z of [box.min[2], box.max[2]]) {
+        points.push([x - this.origin.x, (y - this.origin.y) * this.heightScale, -(z - this.origin.z)]);
+      }
+    }
+    return points;
+  }
+
   enterInteriorView(focus = true) {
     this.setFollowTarget(null);
     this.surveyPreset = null;
@@ -1541,24 +1583,42 @@ export class TrailScene {
   }
 
   applySurveyPreset(preset) {
-    const frame = fitSurveyCamera({ bounds: this.cameraFitBounds(), origin: this.origin.toArray(),
-      heightScale: this.heightScale, aspect: this.camera.aspect, verticalFovDegrees: this.camera.fov,
-      ...(preset === "top" ? { direction: [0, 1, 0], up: [0, 0, -1] } : {}) });
-    if (!frame) return;
+    const top = preset === "top";
+    // OrbitControls caches the Y-up orbit axis. A tiny Z offset gives the top
+    // view a stable north direction without changing that axis after creation.
+    const up = [0, 1, 0];
+    // Keep the sea in front and later, taller chapters behind the route.
+    const points = this.cameraFitPoints();
+    const fit = fitPerspectivePoints(points, {
+      aspect: this.camera.aspect, fov: this.camera.fov,
+      direction: top ? [0, 1, 0.000001] : [0.52, 0.85, 0.62], up,
+    });
+    if (!fit) return;
+    // A preset must not inherit the last drag's residual rotation or pan.
     const damping = this.controls.enableDamping;
+    const autoRotate = this.controls.autoRotate;
     this.controls.enableDamping = false;
+    this.controls.autoRotate = false;
     this.controls.update();
-    this.camera.up.fromArray(frame.up);
-    this.camera.position.fromArray(frame.position);
-    this.controls.target.fromArray(frame.target);
-    this.camera.near = frame.near;
-    this.camera.far = frame.far;
-    this.controls.minDistance = frame.minDistance;
-    this.controls.maxDistance = frame.maxDistance;
+    this.camera.up.fromArray(up);
+    this.camera.position.fromArray(fit.position);
+    this.controls.target.fromArray(fit.target);
+    this.camera.lookAt(this.controls.target);
+    // Leave room to zoom in and freely explore the retained outlying geometry.
+    const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
+    for (const point of points) for (let axis = 0; axis < 3; axis++) {
+      min[axis] = Math.min(min[axis], point[axis]); max[axis] = Math.max(max[axis], point[axis]);
+    }
+    const diagonal = Math.hypot(...max.map((value, axis) => value - min[axis]));
+    this.camera.near = Math.min(fit.near, Math.max(0.01, fit.distance / 10000));
+    this.controls.minDistance = Math.max(0.05, Math.min(2, fit.distance / 100, diagonal / 100));
+    this.controls.maxDistance = Math.max(20, fit.distance * 4, diagonal * 4);
+    this.camera.far = Math.max(2000, this.controls.maxDistance + diagonal, fit.far);
     this.camera.updateProjectionMatrix();
-    // The first update flushed old pan/zoom; this one applies the exact frame.
     this.controls.update();
     this.controls.enableDamping = damping;
+    this.controls.autoRotate = autoRotate;
+    this.surveyPreset = preset;
   }
 
   dispose() {
