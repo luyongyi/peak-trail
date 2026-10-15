@@ -1,7 +1,7 @@
 # PEAK Trail 快速验收
 
-网站当前下载为 **PEAK 回忆录 Mod 0.8.0 实验版**，DLL 为 `PeakReplayLab.dll`，
-已公开为 [v0.8.0 GitHub prerelease](https://github.com/luyongyi/peak-memories/releases/tag/v0.8.0)。它在游戏内录制与回放；网页内嵌地图，展示审核通过的个人完整关卡轨迹。
+网站当前下载为 **PEAK 回忆录 Mod 0.8.36 实验版**，DLL 为 `PeakReplayLab.dll`，
+已公开为 [v0.8.36 GitHub 发布](https://github.com/luyongyi/peak-memories/releases/tag/v0.8.36)。它在游戏内录制与回放；网页内嵌地图，展示审核通过的个人完整关卡轨迹。
 普通玩家不需要采集地图，也不需要安装 Blender。源码与正式发布记录见
 [peak-memories](https://github.com/luyongyi/peak-memories)。
 

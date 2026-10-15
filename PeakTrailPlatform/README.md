@@ -1,7 +1,7 @@
 # PEAK Trail Platform
 
 PEAK Trail Platform provides daily 3D maps and approved community paths. Its
-current player download is the published Peak Memories 0.8.3 experimental prerelease
+current player download is the published Peak Memories 0.8.36 release
 of `PeakReplayLab.dll` from the separately maintained
 [peak-memories repository](https://github.com/luyongyi/peak-memories). Recording
 and replay take place inside PEAK. The public web focuses on memoir community
