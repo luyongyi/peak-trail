@@ -13,6 +13,7 @@ import { digest, groupId, validateTrajectory, extractStageRoutes, extractInspect
 import { moderate, ingestUpload, mapMatch, autoApprovePending } from "../../server/trajectory-store.mjs";
 import { routeEdges } from "../../web/src/route-collection-model.js";
 import { makeTeamMetadata } from "../../server/team-index.mjs";
+import { readStoredTrajectory, sourceRoute } from "../../server/trajectory-storage.mjs";
 
 function fixture(change = {}) {
   return { format: "trajectory-v1", recordingId: digest("recording-1"), runKey: digest("run-1"), timeOriginMs: 1000000,
@@ -372,15 +373,27 @@ test("default memoir service automatically approves valid uploads while old live
   });
 });
 
-async function legacyPending(root, id) {
+async function legacyPending(root, id, materializeV1 = false) {
   const path = join(root, "index", `${id}.json`), entry = JSON.parse(await readFile(path, "utf8"));
+  if (materializeV1) {
+    const { trajectory } = await readStoredTrajectory(root, id);
+    await writeFile(join(root, "uploads", `${id}.json.gz`), gzipSync(JSON.stringify(trajectory)));
+    for (let index = 0; index < entry.routes.length; index += 1) {
+      const route = entry.routes[index], playerIndex = trajectory.players.findIndex(player => player.key === route.playerKey);
+      const attempt = entry.routes.slice(0, index).filter(value => value.playerKey === route.playerKey && value.stageIndex === route.stageIndex).length;
+      const data = sourceRoute(trajectory, route), file = `${id}-p${playerIndex}-s${route.stageIndex}-a${attempt}.json.gz`;
+      await writeFile(join(root, "routes", file), gzipSync(JSON.stringify(data))); delete route.source; route.file = file;
+    }
+    delete entry.storageManifestSha256;
+    delete entry.inspectionSources;
+  }
   entry.moderationStatus = "pending"; delete entry.reviewedUtc; delete entry.reviewMethod; delete entry.startedUtc;
   await writeFile(path, JSON.stringify(entry)); return entry;
 }
 
 test("historical untouched pending submissions migrate after restart using their recording date", async () => {
   await isolated(async ({ root, base, catalogPath, close }) => {
-    const upload = await post(base, fixture()), old = await legacyPending(root, upload.body.uploadId);
+    const upload = await post(base, fixture()), old = await legacyPending(root, upload.body.uploadId, true);
     assert.ok(old.routes.every(route => !Object.hasOwn(route, "nativeProgress")), "old metadata stays byte-shape compatible");
     await close(); const restarted = await start(root, catalogPath);
     try {
@@ -422,7 +435,7 @@ test("automatic migration fails closed on altered payload, index or derived rout
   await isolated(async ({ root, base }) => {
     for (const [i, damage] of ["gzip", "sha", "private-field", "index", "route", "missing-route"].entries()) {
       const raw = fixture({ recordingId: digest(`damaged-${i}`) }), upload = await post(base, raw);
-      const entry = await legacyPending(root, upload.body.uploadId), indexPath = join(root, "index", `${entry.id}.json`);
+      const entry = await legacyPending(root, upload.body.uploadId, true), indexPath = join(root, "index", `${entry.id}.json`);
       const uploadPath = join(root, "uploads", `${entry.id}.json.gz`), routePath = join(root, "routes", entry.routes[0].file);
       if (damage === "gzip") await writeFile(uploadPath, "damaged gzip");
       if (damage === "sha") { raw.players[0].name = "changed"; await writeFile(uploadPath, gzipSync(JSON.stringify(raw))); }

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { validateMapAlignment } from "./map-alignment.mjs";
+import { decodeTrajectoryPointRuns, MAX_EXPANDED_POINTS } from "./trajectory-point-runs.mjs";
 
 export const LIMITS = Object.freeze({ compressedBytes: 12 * 1024 * 1024, decodedBytes: 64 * 1024 * 1024,
   durationMs: 4 * 60 * 60 * 1000, stages: 16, gapMs: 1500, uploads: 10_000,
@@ -31,9 +32,11 @@ function array(value, max, label, min = 0) { if (!Array.isArray(value) || value.
 export function validateTrajectory(raw) {
   object(raw, ["format", "recordingId", "runKey", "timeOriginMs", "startedUtc", "durationMs", "sampleHz", "coordinateUnit", "map", "difficulty", "players"],
     ["format", "recordingId", "startedUtc", "durationMs", "sampleHz", "coordinateUnit", "map", "difficulty", "players"], "trajectory");
-  if (raw.format !== "trajectory-v1" || raw.sampleHz !== 10 || raw.coordinateUnit !== "cm") throw problem("unsupported trajectory format/rate/coordinates");
+  if (!["trajectory-v1", "trajectory-v2"].includes(raw.format) || raw.sampleHz !== 10 || raw.coordinateUnit !== "cm") throw problem("unsupported trajectory format/rate/coordinates");
   if (!validHash(raw.recordingId)) throw problem("recordingId: SHA256 required");
-  const result = { format: raw.format, recordingId: raw.recordingId,
+  // The canonical identity remains v1. Wire/storage compression cannot change
+  // existing upload IDs, moderation, stage selection or heatmap semantics.
+  const result = { format: "trajectory-v1", recordingId: raw.recordingId,
     startedUtc: text(raw.startedUtc, 40, "startedUtc"), durationMs: integer(raw.durationMs, 0, LIMITS.durationMs, "durationMs"), sampleHz: 10, coordinateUnit: "cm" };
   if (!/^\d{4}-\d{2}-\d{2}T.*Z$/.test(result.startedUtc) || !Number.isFinite(Date.parse(result.startedUtc))) throw problem("startedUtc: UTC timestamp required");
   if (Object.hasOwn(raw, "runKey")) { if (!validHash(raw.runKey)) throw problem("runKey: SHA256 required"); result.runKey = raw.runKey; }
@@ -73,13 +76,16 @@ export function validateTrajectory(raw) {
   result.difficulty = { ascent: raw.difficulty.ascent === null ? null : integer(raw.difficulty.ascent, -100, 1000, "ascent"),
     custom: nullableBool(raw.difficulty.custom, "custom"), mini: nullableBool(raw.difficulty.mini, "mini") };
   const keys = new Set(); let totalPoints = 0;
+  const expansionBudget = { points: 0, maxPoints: MAX_EXPANDED_POINTS };
   // Payload bytes and worker resources bound the request, not a vanilla lobby size.
   result.players = array(raw.players, Number.MAX_SAFE_INTEGER, "players", 1).map((player) => {
     object(player, ["key", "name", "owner", "evidence", "points", "events"], ["key", "name", "owner", "evidence", "points", "events"], "player");
     if (!validHash(player.key) || keys.has(player.key)) throw problem("player.key: unique SHA256 required"); keys.add(player.key);
     if (typeof player.owner !== "boolean" || !["native-state", "legacy-unknown"].includes(player.evidence)) throw problem("player owner/evidence invalid");
     let lastTime = -1, lastBucket = -1;
-    const points = array(player.points, Math.floor(result.durationMs / 100) + 1, "points").map((point) => {
+    const sourcePoints = raw.format === "trajectory-v2" ? decodeTrajectoryPointRuns(player.points,
+      { durationMs: result.durationMs, maxPoints: Math.floor(result.durationMs / 100) + 1, budget: expansionBudget }) : player.points;
+    const points = array(sourcePoints, Math.floor(result.durationMs / 100) + 1, "points").map((point) => {
       if (!Array.isArray(point) || point.length !== 4) throw problem("point: [tMs,xCm,yCm,zCm] required");
       const t = integer(point[0], 0, result.durationMs, "point time"), bucket = Math.floor(t / 100);
       if (t <= lastTime || bucket === lastBucket) throw problem("points must be ordered and at most one per 100ms bucket");
@@ -103,6 +109,8 @@ export function validateTrajectory(raw) {
     validateNativeStageEvents(events, result.map.stages, player.evidence);
     return { key: player.key, name: text(player.name, 100, "player.name", true), owner: player.owner, evidence: player.evidence, points, events };
   }).sort((a, b) => a.key.localeCompare(b.key));
+  if (raw.format === "trajectory-v2" && Buffer.byteLength(JSON.stringify(result), "utf8") > LIMITS.decodedBytes)
+    throw problem("point-run expanded trajectory byte limit exceeded", 413);
   return { trajectory: result, totalPoints };
 }
 

@@ -1,6 +1,6 @@
 import { mkdir, readdir, readFile, writeFile, rename, link, unlink, stat, open } from "node:fs/promises";
 import { join, dirname } from "node:path";
-import { gzipSync, gunzipSync } from "node:zlib";
+import { gunzipSync } from "node:zlib";
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { setTimeout as pause } from "node:timers/promises";
@@ -8,6 +8,8 @@ import { LIMITS, problem, digest, validHash, validateTrajectory, difficultyInfo,
   extractStageRoutes, extractInspectionStage, playerSummitCompleted, routeDedupeKey, dedupeRoutes, aggregateHeatmap } from "./trajectory-contract.mjs";
 import { fitMapAlignment, alignedRoutePoints, validateMapAlignment } from "./map-alignment.mjs";
 import { TEAM_LIMITS, makeTeamMetadata, inspectTeamStage, teamIdentity, collectTeams, teamDescriptor, memberMatches, sourceOrder } from "./team-index.mjs";
+import { planTrajectoryStorage, missingPointBlockBytes, writePointBlocks, readStoredTrajectory, routeSource, sourceRoute, createReferencedRouteReader, makeInspectionSources } from "./trajectory-storage.mjs";
+import { MAX_EXPANDED_POINTS } from "./trajectory-point-runs.mjs";
 
 async function setup(root) { for (const child of ["index", "uploads", "routes"]) await mkdir(join(root, child), { recursive: true, mode: 0o700 }); }
 async function readJson(path) { return JSON.parse(await readFile(path, "utf8")); }
@@ -42,8 +44,8 @@ async function withReviewLock(path, action, wait = false) {
 }
 async function physicalBytes(root) {
   let bytes = 0;
-  for (const child of ["index", "uploads", "routes"]) {
-    const files = await readdir(join(root, child));
+  for (const child of ["index", "uploads", "routes", "point-blocks", "point-bases"]) {
+    const files = await readdir(join(root, child)).catch(error => { if (error.code === "ENOENT") return []; throw error; });
     for (let start = 0; start < files.length; start += 32) {
       const sizes = await Promise.all(files.slice(start, start + 32).map(async (file) => (await stat(join(root, child, file))).size));
       for (const size of sizes) bytes += size;
@@ -151,14 +153,16 @@ export async function ingestUpload(root, compressed, catalogPath, { minimalRecei
   const canonical = JSON.stringify(trajectory), id = digest(canonical), path = join(root, "index", `${id}.json`);
   await setup(root);
   try { const existing = await readJson(path); return uploadReceipt(existing, true, catalogPath, minimalReceipt); } catch (error) { if (error.code !== "ENOENT") throw problem("existing upload index is damaged", 503); }
+  if (totalPoints > MAX_EXPANDED_POINTS) throw problem("trajectory expanded point capacity exceeded", 413);
   const index = await loadIndex(root);
   const occupiedBytes = await physicalBytes(root);
-  if (index.length >= LIMITS.uploads || occupiedBytes + compressed.byteLength * 3 > LIMITS.storedBytes) throw problem("route storage capacity reached", 503);
-  const stored = gzipSync(canonical, { level: 6 });
-  let storedBytes = stored.byteLength;
-  const routeFiles = [];
+  if (index.length >= LIMITS.uploads || occupiedBytes >= LIMITS.storedBytes) throw problem("route storage capacity reached", 503);
+  const storage = planTrajectoryStorage(trajectory), stored = storage.stored;
+  let storedBytes = stored.byteLength + await missingPointBlockBytes(root, storage);
   const receivedUtc = new Date().toISOString();
   const entry = { version: 1, id, groupId: groupId(trajectory.map), recordingId: trajectory.recordingId, receivedUtc, startedUtc: trajectory.startedUtc,
+    storageManifestSha256: storage.manifestSha256,
+    inspectionSources: makeInspectionSources(trajectory, storage.manifestSha256),
     moderationStatus: "approved", reviewedUtc: receivedUtc, reviewMethod: "automatic-contract-v1",
     map: trajectory.map, difficulty: difficultyInfo(trajectory.difficulty), durationMs: trajectory.durationMs,
     playerCount: trajectory.players.length, pointCount: totalPoints, players: [], routes: [], storedBytes: 0,
@@ -170,10 +174,8 @@ export async function ingestUpload(root, compressed, catalogPath, { minimalRecei
       stages.push({ index: stage.index, completion: extracted.completion, routeCount: extracted.routes.length });
       for (let attempt = 0; attempt < extracted.routes.length; attempt += 1) {
         const route = extracted.routes[attempt], filename = `${id}-p${playerIndex}-s${stage.index}-a${attempt}.json.gz`;
-        const bytes = gzipSync(JSON.stringify({ points: route.points, breaks: route.breaks }), { level: 6 });
-        routeFiles.push({ filename, bytes }); storedBytes += bytes.byteLength;
-        if (routeFiles.length > 4096 || storedBytes > LIMITS.compressedBytes * 4) throw problem("derived route capacity exceeded", 413);
-        entry.routes.push({ id: digest(filename), file: filename, uploadId: id, playerKey: player.key, name: player.name, owner: player.owner,
+        if (entry.routes.length >= 4096 || storedBytes > LIMITS.compressedBytes * 4) throw problem("derived route capacity exceeded", 413);
+        entry.routes.push({ id: digest(filename), source: routeSource(player, route, storage.manifestSha256), uploadId: id, playerKey: player.key, name: player.name, owner: player.owner,
           stageIndex: stage.index, pointCount: route.points.length, difficulty: entry.difficulty,
           ...(player.events.some(event => event.kind === "game-stage") ? { nativeProgress: true } : {}),
           dedupe: routeDedupeKey(trajectory, player.key, stage.index, route.startMs, route.endMs) });
@@ -181,14 +183,21 @@ export async function ingestUpload(root, compressed, catalogPath, { minimalRecei
     }
     entry.players.push({ key: player.key, name: player.name, owner: player.owner, evidence: player.evidence, stages });
   }
-  entry.storedBytes = storedBytes + Buffer.byteLength(JSON.stringify(entry));
+  entry.storedBytes = storedBytes;
+  for (;;) {
+    const indexBytes = Buffer.byteLength(`${JSON.stringify(entry)}\n`);
+    if (indexBytes > LIMITS.compressedBytes) throw problem("trajectory index metadata capacity exceeded", 413);
+    const exact = storedBytes + indexBytes;
+    if (entry.storedBytes === exact) break;
+    entry.storedBytes = exact;
+  }
   if (occupiedBytes + entry.storedBytes > LIMITS.storedBytes) throw problem("route storage capacity reached", 503);
   if (index.reduce((sum, other) => sum + other.routes.length, 0) + entry.routes.length > 100_000) throw problem("route index capacity reached", 503);
   const created = [];
   try {
+    await writePointBlocks(root, storage);
     const uploadPath = join(root, "uploads", `${id}.json.gz`);
     if (await atomicBytes(uploadPath, stored)) created.push(uploadPath);
-    for (const { filename, bytes } of routeFiles) { const routePath = join(root, "routes", filename); if (await atomicBytes(routePath, bytes)) created.push(routePath); }
     await atomicJson(path, entry, true);
   } catch (error) {
     if (error.code === "EEXIST") return uploadReceipt(await readJson(path), true, catalogPath, minimalReceipt);
@@ -207,14 +216,13 @@ async function uploadReceipt(entry, duplicate, catalogPath, minimal = false) {
 }
 
 async function validatePendingEntry(root, entry) {
-  const stored = await readFile(join(root, "uploads", `${entry.id}.json.gz`));
-  if (stored.byteLength > LIMITS.compressedBytes) throw problem("stored upload exceeds capacity");
-  const raw = JSON.parse(gunzipSync(stored, { maxOutputLength: LIMITS.decodedBytes }).toString("utf8"));
-  const { trajectory, totalPoints } = validateTrajectory(raw);
+  const { trajectory, totalPoints, manifestSha256 } = await readStoredTrajectory(root, entry.id);
   if (digest(JSON.stringify(trajectory)) !== entry.id || entry.groupId !== groupId(trajectory.map)
     || entry.recordingId !== trajectory.recordingId || !isDeepStrictEqual(entry.map, trajectory.map)
     || !isDeepStrictEqual(entry.difficulty, difficultyInfo(trajectory.difficulty)) || entry.durationMs !== trajectory.durationMs
     || entry.playerCount !== trajectory.players.length || entry.pointCount !== totalPoints) throw problem("stored upload index disagrees with its trajectory");
+  if (entry.storageManifestSha256 !== undefined && entry.storageManifestSha256 !== manifestSha256) throw problem("stored manifest disagrees with its approved index");
+  if (entry.inspectionSources !== undefined && !isDeepStrictEqual(entry.inspectionSources, makeInspectionSources(trajectory, manifestSha256))) throw problem("stored inspection sources disagree with complete trajectory");
   const players = [], routes = [];
   for (let playerIndex = 0; playerIndex < trajectory.players.length; playerIndex += 1) {
     const player = trajectory.players[playerIndex], stages = [];
@@ -223,11 +231,16 @@ async function validatePendingEntry(root, entry) {
       stages.push({ index: stage.index, completion: extracted.completion, routeCount: extracted.routes.length });
       for (let attempt = 0; attempt < extracted.routes.length; attempt += 1) {
         const route = extracted.routes[attempt], filename = `${entry.id}-p${playerIndex}-s${stage.index}-a${attempt}.json.gz`;
-        routes.push({ id: digest(filename), file: filename, uploadId: entry.id, playerKey: player.key, name: player.name, owner: player.owner,
+        const storedRoute = entry.routes[routes.length], referenced = storedRoute?.source !== undefined;
+        routes.push({ id: digest(filename), ...(referenced ? { source: routeSource(player, route, storedRoute.source.version === 2 ? manifestSha256 : undefined) } : { file: filename }), uploadId: entry.id, playerKey: player.key, name: player.name, owner: player.owner,
           stageIndex: stage.index, pointCount: route.points.length, difficulty: entry.difficulty,
           ...(player.events.some(event => event.kind === "game-stage") ? { nativeProgress: true } : {}),
           dedupe: routeDedupeKey(trajectory, player.key, stage.index, route.startMs, route.endMs) });
         if (routes.length > 4096) throw problem("stored route index exceeds capacity");
+        if (referenced) {
+          if (!isDeepStrictEqual(sourceRoute(trajectory, storedRoute), { points: route.points, breaks: route.breaks })) throw problem("stored source range disagrees with complete individual attempt");
+          continue;
+        }
         const bytes = await readFile(join(root, "routes", filename));
         if (bytes.byteLength > LIMITS.compressedBytes) throw problem("stored route exceeds capacity");
         const data = JSON.parse(gunzipSync(bytes, { maxOutputLength: LIMITS.decodedBytes }).toString("utf8"));
@@ -241,6 +254,10 @@ async function validatePendingEntry(root, entry) {
     || !isDeepStrictEqual(entry.team, makeTeamMetadata(trajectory, { version: entry.team.version })))) throw problem("stored team metadata disagrees with its trajectory");
   return trajectory.startedUtc;
 }
+
+// An explicit offline preparation tool uses the same complete semantic audit as
+// pending review. It never grants approval or changes the supplied entry.
+export async function verifyStoredEntry(root, entry) { return validatePendingEntry(root, entry); }
 
 // Upgrade only original, unreviewed submissions. An explicit administrative hold,
 // rejection or hide remains authoritative, including during a concurrent upgrade.
@@ -300,7 +317,11 @@ export async function listGroups(root, catalogPath) {
   }
   return { groups: groups.sort((a, b) => a.id.localeCompare(b.id)) };
 }
-async function readRoute(root, route) {
+async function readRoute(root, route, loadSource, readReference) {
+  if (route.source !== undefined) {
+    try { return route.source.version === 2 ? await readReference(route) : sourceRoute(await loadSource(route.uploadId), route); }
+    catch { throw problem("stored source route unavailable", 503); }
+  }
   if (!/^[a-f0-9]{64}-p\d+-s\d+-a\d+\.json\.gz$/.test(route.file)) throw problem("damaged route file reference", 503);
   try { return JSON.parse(gunzipSync(await readFile(join(root, "routes", route.file)), { maxOutputLength: LIMITS.decodedBytes }).toString("utf8")); }
   catch { throw problem("stored route unavailable", 503); }
@@ -315,8 +336,16 @@ export async function queryRoutes(root, catalogPath, group, stage, difficulty, l
     && (!team || route.teamId === team));
   const base = { groupId: group, stageIndex: stage, ...(await mapMatch(chosen.map, catalogPath)), totalRouteCount: candidates.length };
   base.coordinateSpace = base.mapAlignment.status === "verified" ? "canonical-map-world-cm" : "recording-world-cm";
+  // A bounded, request-local single-source cache avoids repeated expansion of a
+  // player's attempts without retaining an entire store of decoded recordings.
+  let cachedId, cachedTrajectory;
+  const loadSource = async id => {
+    if (cachedId !== id) { cachedTrajectory = (await readStoredTrajectory(root, id)).trajectory; cachedId = id; }
+    return cachedTrajectory;
+  };
+  const readReference = createReferencedRouteReader(root);
   const readAligned = async route => {
-    const data = await readRoute(root, route);
+    const data = await readRoute(root, route, loadSource, readReference);
     return { ...data, points: alignedRoutePoints(data.points, base.mapAlignment) };
   };
   if (heat) {
@@ -357,11 +386,11 @@ export async function queryInspection(root, catalogPath, group, upload, stage) {
   catch { throw problem("unknown approved inspection upload", 404); }
   if (entry.version !== 1 || entry.id !== upload || entry.groupId !== group || entry.moderationStatus !== "approved") throw problem("unknown approved inspection upload", 404);
   let trajectory;
+  const sourceReader = createReferencedRouteReader(root);
   try {
-    const bytes = await readFile(join(root, "uploads", `${upload}.json.gz`));
-    if (bytes.byteLength > LIMITS.compressedBytes) throw new Error("stored upload exceeds capacity");
-    ({ trajectory } = validateTrajectory(JSON.parse(gunzipSync(bytes, { maxOutputLength: LIMITS.decodedBytes }).toString("utf8"))));
-    if (digest(JSON.stringify(trajectory)) !== upload || groupId(trajectory.map) !== group || !isDeepStrictEqual(entry.map, trajectory.map)
+    if (entry.storageManifestSha256) trajectory = await sourceReader.metadata(entry);
+    else ({ trajectory } = await readStoredTrajectory(root, upload));
+    if ((!entry.storageManifestSha256 && digest(JSON.stringify(trajectory)) !== upload) || groupId(trajectory.map) !== group || !isDeepStrictEqual(entry.map, trajectory.map)
       || !isDeepStrictEqual(entry.difficulty, difficultyInfo(trajectory.difficulty))) throw new Error("stored inspection identity mismatch");
   } catch { throw problem("stored inspection trajectory unavailable", 503); }
   const selected = trajectory.map.stages.find(value => value.index === stage);
@@ -370,8 +399,10 @@ export async function queryInspection(root, catalogPath, group, upload, stage) {
     startedUtc: trajectory.startedUtc, ...(await mapMatch(trajectory.map, catalogPath)) };
   base.coordinateSpace = base.mapAlignment.status === "verified" ? "canonical-map-world-cm" : "recording-world-cm";
   const routes = []; let pointCount = 0, totalRouteCount = 0, truncated = false;
-  for (const player of trajectory.players) {
-    const extracted = extractInspectionStage(trajectory, player, selected);
+  for (const metadata of trajectory.players) {
+    const scoped = Array.isArray(entry.inspectionSources);
+    const player = entry.storageManifestSha256 && !scoped ? await sourceReader.player(entry, metadata.key) : metadata;
+    const extracted = scoped ? await sourceReader.inspection(entry, metadata.key, stage) : extractInspectionStage(trajectory, player, selected);
     if (!extracted.points.length) continue;
     totalRouteCount += 1;
     const points = extracted.points.slice(0, Math.max(0, LIMITS.queryPoints - pointCount));
@@ -406,9 +437,7 @@ export async function queryTeam(root, catalogPath, teamId) {
 
 async function readInspectionTrajectory(root, entry) {
   try {
-    const bytes = await readFile(join(root, "uploads", `${entry.id}.json.gz`));
-    if (bytes.byteLength > LIMITS.compressedBytes) throw new Error("stored upload exceeds capacity");
-    const { trajectory } = validateTrajectory(JSON.parse(gunzipSync(bytes, { maxOutputLength: LIMITS.decodedBytes }).toString("utf8")));
+    const { trajectory } = await readStoredTrajectory(root, entry.id);
     if (digest(JSON.stringify(trajectory)) !== entry.id || groupId(trajectory.map) !== entry.groupId
       || !isDeepStrictEqual(entry.map, trajectory.map) || !isDeepStrictEqual(entry.difficulty, difficultyInfo(trajectory.difficulty))) throw new Error("stored team identity mismatch");
     return trajectory;
@@ -464,14 +493,16 @@ export async function queryTeamRoutes(root, catalogPath, teamId, stage, { cursor
     byUpload.get(id).push(selection);
   }
   const routes = []; let pointCount = 0;
+  const sourceReader = createReferencedRouteReader(root);
   for (const group of byUpload.values()) {
-    const entry = group[0].source.entry, trajectory = await readInspectionTrajectory(root, entry);
+    const entry = group[0].source.entry, trajectory = entry.storageManifestSha256 ? await sourceReader.metadata(entry) : await readInspectionTrajectory(root, entry);
     const selected = trajectory.map.stages.find(value => value.index === stage);
     const players = new Map(trajectory.players.map(player => [player.key, player]));
     for (const { key } of group) {
-      const player = players.get(key);
+      const scoped = Array.isArray(entry.inspectionSources);
+      const player = entry.storageManifestSha256 && !scoped ? await sourceReader.player(entry, key) : players.get(key);
       if (!player || !selected) throw problem("stored team member unavailable", 503);
-      const extracted = inspectTeamStage(trajectory, player, selected);
+      const extracted = scoped ? await sourceReader.inspection(entry, key, stage, { allowUnavailable: true }) : inspectTeamStage(trajectory, player, selected);
       const points = extracted.points;
       pointCount += points.length;
       routes.push({ id: digest({ teamId, upload: entry.id, playerKey: key, stage }), playerKey: key, name: player.name,
