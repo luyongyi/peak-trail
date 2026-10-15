@@ -132,7 +132,7 @@ for (const [filename, evidence] of trajectorySidecars) await writeFile(resolve(o
 await mkdir(resolve(outputDirectory, "schema"), { recursive: true });
 await mkdir(dirname(resolve(outputDirectory, downloadRelease.downloadPath)), { recursive: true });
 await mkdir(resolve(outputDirectory, "data", downloadOptions.product), { recursive: true });
-await writeFile(resolve(outputDirectory, downloadRelease.downloadPath), downloadBytes);
+await assetWriter.stageImmutableBytes(downloadBytes, resolve(outputDirectory, downloadRelease.downloadPath));
 await writeFile(resolve(outputDirectory, "data", downloadOptions.product, "release.json"), JSON.stringify(downloadRelease, null, 2) + "\n");
 await Promise.all([
   cp(resolve(webDirectory, "index.html"), resolve(outputDirectory, "index.html")),
@@ -158,7 +158,7 @@ for (const pack of mapPacks) {
     await mkdir(dirname(destination), { recursive: true });
     // Manifests are enriched below and must never share a writable inode with
     // an earlier release. Only allowlisted geometry/texture/height bytes pool.
-    if (/\.json$/i.test(reference)) await cp(resolve(pack.sourceDirectory, reference), destination);
+    if (reference === "map-pack.json") await cp(resolve(pack.sourceDirectory, reference), destination);
     else await assetWriter.stageImmutable(resolve(pack.sourceDirectory, reference), destination);
   }
   // Route evidence is additive metadata and is not part of geometry identity.
@@ -180,7 +180,9 @@ if (enclosureFiles.size) {
 for (const reference of gameAssets.files) {
   const destination = resolve(outputDirectory, "data", "game-assets", reference);
   await mkdir(dirname(destination), { recursive: true });
-  if (/\.json$/i.test(reference)) await cp(resolve(gameAssetsDirectory, reference), destination);
+  // Catalogs describe each release; explicitly allowlisted static models can
+  // also be JSON and share bytes just like textures and geometry.
+  if (reference === "catalog.json" || /^\d+\/catalog\.json$/.test(reference)) await cp(resolve(gameAssetsDirectory, reference), destination);
   else await assetWriter.stageImmutable(resolve(gameAssetsDirectory, reference), destination);
 }
 await writeFile(resolve(outputDirectory, ".nojekyll"), "", "utf8");

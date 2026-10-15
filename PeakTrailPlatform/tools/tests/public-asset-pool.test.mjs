@@ -30,6 +30,92 @@ test("local default copies assets and never alters source or shares its inode", 
   assert.deepEqual(writer.stats(), { enabled: false, linkedFiles: 0, reusedBytes: 0, newBytes: 0, uniqueCreatedBlobs: 0 });
 });
 
+test("local buffer staging preserves the initial bytes without sharing caller mutations", async t => {
+  const { root } = await fixture(t);
+  const writer = await createPublicAssetWriter();
+  const input = Buffer.from("verified local DLL");
+  const expected = Buffer.from(input);
+  const destination = resolve(root, "PeakReplayLab.dll");
+  const pending = writer.stageImmutableBytes(input, destination);
+  input.fill(0);
+  await pending;
+  assert.deepEqual(await readFile(destination), expected);
+  assert.equal(writer.stats().enabled, false);
+});
+
+test("verified buffer downloads share one read-only blob on repeat and with file inputs", async t => {
+  const { root, pool, source, bytes, blob } = await fixture(t);
+  const firstWriter = await createPublicAssetWriter(pool);
+  const first = resolve(root, "release1", "downloads", "memories", "0.8.35", "PeakReplayLab.dll");
+  await firstWriter.stageImmutableBytes(bytes, first);
+  assert.equal(firstWriter.stats().newBytes, bytes.length);
+  assert.equal((await stat(first)).mode & 0o222, 0);
+  const secondWriter = await createPublicAssetWriter(pool);
+  const second = resolve(root, "release2", "downloads", "memories", "0.8.35", "PeakReplayLab.dll");
+  await secondWriter.stageImmutableBytes(Buffer.from(bytes), second);
+  const fileDestination = resolve(root, "release3", "resource.bin");
+  await secondWriter.stageImmutable(source, fileDestination);
+  sameInode(await stat(first), await stat(second));
+  sameInode(await stat(first), await stat(fileDestination));
+  sameInode(await stat(first), await stat(blob));
+  assert.deepEqual(secondWriter.stats(), { enabled: true, linkedFiles: 2, reusedBytes: bytes.length * 2, newBytes: 0, uniqueCreatedBlobs: 0 });
+  assert.deepEqual(await readdir(resolve(pool, ".temp")), []);
+});
+
+test("buffer snapshot prevents async caller mutation from changing the hash or published bytes", async t => {
+  const { root, pool } = await fixture(t);
+  const writer = await createPublicAssetWriter(pool);
+  const input = Buffer.alloc(1024 * 1024, 11);
+  const expected = Buffer.from(input);
+  const destination = resolve(root, "release", "PeakReplayLab.dll");
+  const pending = writer.stageImmutableBytes(input, destination);
+  input.fill(99);
+  await pending;
+  assert.deepEqual(await readFile(destination), expected);
+  assert.deepEqual(await readdir(resolve(pool, "blobs")), [sha256(expected)]);
+});
+
+test("buffer staging rejects a corrupt existing blob without replacing it", async t => {
+  const { root, pool, bytes, blob } = await fixture(t);
+  const writer = await createPublicAssetWriter(pool);
+  const corrupt = Buffer.alloc(bytes.length, 8);
+  await writeFile(blob, corrupt, { mode: 0o444 });
+  const before = await stat(blob);
+  const destination = resolve(root, "release", "PeakReplayLab.dll");
+  await assert.rejects(writer.stageImmutableBytes(bytes, destination), /blob.*digest/i);
+  sameInode(before, await stat(blob));
+  assert.deepEqual(await readFile(blob), corrupt);
+  await assert.rejects(stat(destination), { code: "ENOENT" });
+  assert.deepEqual(await readdir(resolve(pool, ".temp")), []);
+});
+
+test("buffer staging rejects invalid inputs and never overwrites an existing destination", async t => {
+  const { root, pool, bytes } = await fixture(t);
+  const writer = await createPublicAssetWriter(pool);
+  const destination = resolve(root, "existing.dll");
+  for (const invalid of ["bytes", new Uint8Array([1]), null])
+    await assert.rejects(writer.stageImmutableBytes(invalid, destination), /must be a Buffer/);
+  assert.deepEqual(await readdir(resolve(pool, "blobs")), []);
+  await writeFile(destination, "keep earlier destination");
+  await assert.rejects(writer.stageImmutableBytes(bytes, destination), { code: "EEXIST" });
+  assert.equal(await readFile(destination, "utf8"), "keep earlier destination");
+});
+
+test("interrupted buffer staging leaves existing releases intact and removes temporary files", async t => {
+  const { root, pool, bytes, blob } = await fixture(t);
+  const writer = await createPublicAssetWriter(pool);
+  await writer.stageImmutableBytes(bytes, resolve(root, "release1", "PeakReplayLab.dll"));
+  const before = await stat(blob);
+  const controller = new AbortController();
+  const pending = writer.stageImmutableBytes(Buffer.alloc(8 * 1024 * 1024, 3),
+    resolve(root, "release2", "PeakReplayLab.dll"), { signal: controller.signal });
+  setImmediate(() => controller.abort());
+  await assert.rejects(pending, { name: "AbortError" });
+  sameInode(before, await stat(blob));
+  assert.deepEqual(await readFile(blob), bytes);
+  assert.deepEqual(await readdir(resolve(pool, ".temp")), []);
+});
+
 test("two releases and different source paths share one content-addressed immutable inode", async t => {
   const { root, pool, source, bytes, blob } = await fixture(t);
   const source2 = resolve(root, "other-path.bin");
@@ -152,7 +238,8 @@ test("concurrent same-digest publishers atomically keep one blob and all release
   const { root, pool, source, bytes, blob } = await fixture(t);
   const writers = await Promise.all(Array.from({ length: 8 }, () => createPublicAssetWriter(pool)));
   const destinations = writers.map((_, i) => resolve(root, `release${i}`, "asset.png"));
-  await Promise.all(writers.map((writer, i) => writer.stageImmutable(source, destinations[i])));
+  await Promise.all(writers.map((writer, i) => i % 2
+    ? writer.stageImmutableBytes(bytes, destinations[i]) : writer.stageImmutable(source, destinations[i])));
   const identity = await stat(blob);
   for (const destination of destinations) { sameInode(identity, await stat(destination)); assert.deepEqual(await readFile(destination), bytes); }
   assert.equal(identity.nlink, 9);
@@ -201,5 +288,7 @@ test("cross-filesystem links fail explicitly instead of making duplicate copies"
   const writer = await createPublicAssetWriter(pool);
   const destination = resolve(destinationRoot, "asset.png");
   await assert.rejects(writer.stageImmutable(source, destination), /same filesystem.*EXDEV/);
+  await assert.rejects(stat(destination), { code: "ENOENT" });
+  await assert.rejects(writer.stageImmutableBytes(Buffer.from("verified DLL"), destination), /same filesystem.*EXDEV/);
   await assert.rejects(stat(destination), { code: "ENOENT" });
 });
