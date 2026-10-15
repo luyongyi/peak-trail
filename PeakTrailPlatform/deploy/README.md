@@ -18,6 +18,8 @@ account, and establishes this ownership layout (example paths are fixed in the r
     maps/enclosures/                   if the current catalog references them
   state/                               writable by peakdeploy; readable by web server
     releases/                          writable by peakdeploy
+    public-assets/blobs/<sha256>        one verified inode per immutable public resource
+    public-assets/.temp/                exclusive, short-lived resource import files
     current -> releases/.../PeakTrailPlatform/site-dist
 ```
 
@@ -96,10 +98,64 @@ Do not grant this key to pull-request jobs or untrusted branches.
 
 There is one deployment lock. If a process is killed, an administrator checks for
 active deployments before manually removing the empty `.deploy-lock` directory.
-Old/failed releases are deliberately retained for investigation/rollback; plan disk
-capacity and administrator-reviewed cleanup (each complete release is about 1 GB).
-The receiver does not delete releases or shared assets. For rollback, an administrator
-can atomically change `current` to a previously verified release while no deploy runs.
+After a healthy publication, automatic retention keeps `current`, the three newest
+other successful releases and the newest failed release. Cleanup runs under that
+same lock. New releases have a private `.deployment-state.json` receipt outside
+`site-dist`; building, failed and successful states are recorded atomically. A
+successful legacy release is recognized only when its receiver-generated name,
+detached `.git/HEAD` and public `release.json` commit all agree. Unknown directories,
+unrecognized legacy failures and interrupted `building` releases are retained for
+operator review and counted in the storage log. An interrupted build is never
+assumed dead merely because it is old. This conservative exception can still grow
+after repeated hard kills and must be reviewed when releasing a stale lock.
+
+Before deleting a recognized expired release, the receiver rechecks current and
+the release identity, ownership and canonical tree. Symlinks, special entries and
+unexpected hard links prevent deletion. Only public resource links to an inode in
+the fixed pool are accepted. Shared source assets and private route/upload storage
+are never cleanup targets. Current anomalies or activation/rollback failure prevent
+cleanup. A cleanup error, or a successful-state receipt write error after health
+has passed, warns without rolling back the healthy publication; a receipt error
+also skips maintenance. For rollback, an administrator can atomically change
+`current` to a previously verified release while no deployment runs.
+
+### Shared public resources and storage accounting
+
+The root-owned receiver supplies the fixed
+`PEAK_TRAIL_PUBLIC_ASSET_POOL=/srv/peak-trail/state/public-assets` only to its trusted
+server build. Staging imports explicitly allowed immutable resources by SHA-256,
+then hard-links them into each release at the existing public paths. Unchanged
+resources therefore share physical storage across releases, while catalogs,
+enriched map manifests, route/fog sidecars and release metadata remain independent.
+Ordinary local/Pages builds remain self-contained copies. Do not give `peakdeploy`
+write access to `/srv/peak-trail/shared/assets`, and do not edit a linked release
+resource in place: it shares its inode with other releases. The deploy account
+already has authority to execute trusted main-branch builds; read-only blob modes
+are protection against accidental writes, not a sandbox against that account.
+
+Pool GC scans only plain, owned SHA-256 blob files and strictly named
+`.temp/<pid>-<UUID>` files. An unreferenced blob must have one hard link and be at
+least one hour old before it is removed. Linked current, rollback, failed and
+pending resources survive automatically. Old temporary names are unlinked after
+the same grace period even if they share an inode, which handles a process killed
+between atomic blob publication and temporary-name removal. GC never follows a
+symlink or traverses arbitrary pool subdirectories.
+
+Each successful deployment logs retention counts, pool bytes and logical release
+bytes, plus unique inode bytes/allocated blocks across recognized managed releases
+and the pool. These are server logs, not public metadata. Logical bytes can count
+the same linked resource repeatedly; unique allocated bytes are the useful
+comparison for two identical-resource deployments. Unknown/unsafe trees and
+shared source/private storage are excluded from these managed metrics, so use
+filesystem free-space measurements as the overall capacity check.
+
+Updating Git alone does not update the installed root-owned receiver. Review and
+atomically install the exact tested `deploy/receiver.mjs` with an administrator,
+keeping a rollback copy, then deploy the matching main commit. The receiver stays
+self-contained and does not import cleanup helpers from its writable checkout.
+This change requires no new sudo capability, source-asset permission, Nginx or
+private-storage change. Pool and releases must be on the same filesystem for
+hard links; the server staging fails explicitly if that invariant is unavailable.
 
 ### Optional live-service activation
 

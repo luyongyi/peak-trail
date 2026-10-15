@@ -280,5 +280,8 @@ web/data/maps/catalog.json
 data/maps/packs/<map-pack-id>/...
 ```
 
-地图包先用 `PeakTrailPlatform/tools/register-map-pack.mjs` 登记。然后上传生成的
+地图包先用 `PeakTrailPlatform/tools/register-map-pack.mjs` 登记。Pages 部署上传生成的
 `PeakTrailPlatform/site-dist/`；所有资源都使用相对路径，支持仓库子路径部署。
+服务器日常发布只提交代码，新增资源单独补充到共享源目录，不重复上传整份
+`site-dist`。服务器资源池按内容哈希复用不可变文件，保留原来的公开路径；配置和
+生成清单仍独立保存。详见 [服务器部署说明](../deploy/README.md)。
