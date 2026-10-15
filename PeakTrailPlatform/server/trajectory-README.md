@@ -151,6 +151,8 @@ node PeakTrailPlatform/server/route-admin.mjs --dir PRIVATE_DIR pending UPLOAD_S
 
 ## 验证
 
+私有库离线迁移时，管理员可在配置的 routes-dir 根目录建立 `.migration-maintenance` 标记。标记存在期间上传返回 503，GET 查询继续服务，但不会触发待审核记录的自动迁移。服务在读取请求体前、读完后和真正启动上传 worker 前检查标记，已排队的上传也会被阻止。只有完成备份、停服切换及只读验收后才能移除标记；服务不会按时间自行清除它。标记不是公开写入接口，也不会自动转换或删除历史数据。
+
 ```powershell
 node --test PeakTrailPlatform/tools/tests/map-alignment.test.mjs PeakTrailPlatform/tools/tests/trajectory-server.test.mjs PeakTrailPlatform/tools/tests/trajectory-index.test.mjs
 ```

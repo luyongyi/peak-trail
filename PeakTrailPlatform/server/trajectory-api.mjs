@@ -1,5 +1,6 @@
 import { Worker } from "node:worker_threads";
-import { resolve } from "node:path";
+import { lstat } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { LIMITS, problem, validHash } from "./trajectory-contract.mjs";
 
@@ -13,10 +14,20 @@ export function createTrajectoryApi({ root = null, catalogPath = null, trustedPr
   const headers = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff",
     "access-control-allow-origin": "*", "access-control-allow-methods": "GET, POST, OPTIONS", "access-control-allow-headers": "content-type,content-encoding,x-trajectory-format,prefer" };
   function json(res, code, value) { if (!res.destroyed && !res.writableEnded) { res.writeHead(code, headers); res.end(typeof value === "string" ? value : JSON.stringify(value)); } }
-  function runJob(data) {
-    if (closed) return Promise.reject(problem("trajectory service stopped", 503));
+  async function maintenanceActive() {
+    // Presence of any entry is a durable administrator-controlled write barrier.
+    // Never follow a link, expire the marker, or treat an unreadable state as open.
+    try { await lstat(join(root, ".migration-maintenance")); return true; }
+    catch (error) { if (error.code === "ENOENT") return false; throw problem("route-maintenance-state-unavailable", 503); }
+  }
+  async function runJob(data) {
+    if (closed) throw problem("trajectory service stopped", 503);
+    const maintenance = data.operation === "upload" || !migratedPending ? await maintenanceActive() : false;
+    if (data.operation === "upload" && maintenance) throw problem("route-storage-maintenance", 503);
+    if (closed) throw problem("trajectory service stopped", 503);
+    const migrationDeferred = !migratedPending && maintenance;
     return new Promise((done, reject) => {
-      const worker = workerFactory(new URL("./trajectory-worker.mjs", import.meta.url), { workerData: { ...data, root, catalogPath, migratePending: !migratedPending }, resourceLimits: { maxOldGenerationSizeMb: 384 } });
+      const worker = workerFactory(new URL("./trajectory-worker.mjs", import.meta.url), { workerData: { ...data, root, catalogPath, migratePending: !migratedPending && !migrationDeferred }, resourceLimits: { maxOldGenerationSizeMb: 384 } });
       workers.add(worker);
       let result, failure;
       // Neither terminate() nor the error event guarantees that the thread's heap
@@ -25,7 +36,7 @@ export function createTrajectoryApi({ root = null, catalogPath = null, trustedPr
       worker.once("message", (message) => { result = message; });
       worker.once("error", (error) => { clearTimeout(timeout); failure ??= problem(`trajectory worker failed: ${error.message}`, 503); });
       worker.once("exit", (code) => { clearTimeout(timeout); workers.delete(worker);
-        if (result?.migrationComplete === true && code === 0 && !failure) migratedPending = true;
+        if (!migrationDeferred && result?.migrationComplete === true && code === 0 && !failure) migratedPending = true;
         if (failure) reject(failure);
         else if (code !== 0 || !result) reject(problem("trajectory worker stopped", 503));
         else if (result.error) reject(problem(result.error, result.statusCode)); else done(result); });
@@ -65,10 +76,13 @@ export function createTrajectoryApi({ root = null, catalogPath = null, trustedPr
     if (req.method === "POST") uploading = true;
     try {
       if (path === "/api/route-uploads" && req.method === "POST") {
+        if (await maintenanceActive()) throw problem("route-storage-maintenance", 503);
         if (String(req.headers["content-type"] ?? "").split(";")[0].toLowerCase() !== "application/json" || req.headers["content-encoding"] !== "gzip") throw problem("gzip application/json required", 415);
         if (req.headers["x-trajectory-format"] && !["trajectory-v1", "trajectory-v2"].includes(req.headers["x-trajectory-format"])) throw problem("unsupported trajectory format", 415);
         const minimalReceipt = String(req.headers.prefer ?? "").split(",").some(value => value.trim().toLowerCase() === "return=minimal");
-        const result = await job({ operation: "upload", body: await body(req), minimalReceipt });
+        const uploadBody = await body(req);
+        if (await maintenanceActive()) throw problem("route-storage-maintenance", 503);
+        const result = await job({ operation: "upload", body: uploadBody, minimalReceipt });
         if (minimalReceipt) res.setHeader("preference-applied", "return=minimal");
         json(res, result.duplicate ? 200 : 201, result.json);
       } else if (path === "/api/route-groups" && req.method === "GET") json(res, 200, (await job({ operation: "groups" })).json);
