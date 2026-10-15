@@ -284,3 +284,69 @@ test("stale atomic-publication temporary hard links are unlinked without touchin
   assert.equal(await readFile(publicFile, "utf8"), "published before temporary unlink");
   assert.equal(await lstat(linked).then(entry => entry.nlink), 2);
 });
+
+test("pinned DLL and static model JSON pool links survive current and rollbacks while an expired release is removed", linux, async t => {
+  const root = await temporary(t);
+  const memories = await blob(root, "MZ verified memories assembly");
+  const recorder = await blob(root, "MZ verified recorder assembly");
+  const model = await blob(root, JSON.stringify({ vertices: [0, 0, 0], triangles: [0, 0, 0] }));
+  const items = [];
+  for (let index = 1; index <= 5; index++) {
+    const item = await release(root, index);
+    for (const [relative, source] of [["downloads/memories/0.8.35/PeakReplayLab.dll", memories], ["downloads/recorder/1.2.3/PeakTrailRecorder.dll", recorder], ["data/game-assets/25306743/models/player.json", model]]) {
+      const path = join(item.site, relative);
+      await mkdir(dirname(path), { recursive: true });
+      await link(source, path);
+    }
+    items.push(item);
+  }
+  await publishAtomically(root, items[4].site);
+  const result = await withDeployLock(root, () => maintainDeploymentStorage(root, { now }));
+  assert.equal(result.removedReleases, 1);
+  assert.equal(result.protectedExpiredReleases, 0);
+  assert.equal(result.retainedSuccessful, 4);
+  assert.equal(await exists(items[0].directory), false);
+  for (const item of items.slice(1)) {
+    assert.equal(await readFile(join(item.site, "downloads/memories/0.8.35/PeakReplayLab.dll"), "utf8"), "MZ verified memories assembly");
+    assert.equal(await readFile(join(item.site, "downloads/recorder/1.2.3/PeakTrailRecorder.dll"), "utf8"), "MZ verified recorder assembly");
+  }
+  assert.equal((await lstat(memories)).nlink, 5);
+  assert.equal((await lstat(recorder)).nlink, 5);
+  assert.equal((await lstat(model)).nlink, 5);
+});
+
+test("other download paths and mutable release metadata cannot masquerade as approved DLL pool links", linux, async t => {
+  const root = await temporary(t);
+  const shared = await blob(root, "MZ not approved for these paths");
+  const invalidPaths = [
+    "downloads/memories/0.8.35/Other.dll",
+    "downloads/memories/0.8.35/PeakTrailRecorder.dll",
+    "downloads/recorder/1.2.3/PeakReplayLab.dll",
+    "downloads/other/0.8.35/PeakReplayLab.dll",
+    "downloads/memories/latest/PeakReplayLab.dll",
+    "downloads/memories/00.8.35/PeakReplayLab.dll",
+    "downloads/memories/0.8.35/PeakReplayLab.dll.json",
+    "downloads/memories/0.8.35/PeakReplayLab.dll/config.json",
+    "downloads/memories/0.8.35/release.json",
+    "data/memories/release.json",
+    "data/maps/packs/sha256-fixture/map-pack.json",
+    "data/game-assets/catalog.json",
+    "data/game-assets/25306743/catalog.json",
+  ];
+  const unsafe = [];
+  for (const [index, relative] of invalidPaths.entries()) {
+    const item = await release(root, index + 1);
+    const path = join(item.site, relative);
+    await mkdir(dirname(path), { recursive: true });
+    await link(shared, path);
+    unsafe.push(item);
+  }
+  const current = await release(root, 100);
+  for (let index = 101; index <= 103; index++) await release(root, index);
+  await publishAtomically(root, current.site);
+  const result = await withDeployLock(root, () => maintainDeploymentStorage(root, { now }));
+  assert.equal(result.removedReleases, 0);
+  assert.equal(result.protectedExpiredReleases, invalidPaths.length);
+  for (const item of unsafe) assert.ok(await exists(item.directory));
+  assert.equal(await realpath(join(root, "current")), current.site);
+});

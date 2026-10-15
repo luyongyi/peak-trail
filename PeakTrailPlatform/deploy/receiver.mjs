@@ -341,7 +341,11 @@ async function inspectReleaseTree(release, poolInodes) {
       if (metadata.isDirectory()) await inspect(path);
       else if (metadata.isFile()) {
         const reference = relative(release, path).split(sep).join("/");
-        const publicAsset = /^PeakTrailPlatform\/site-dist\/data\/(?:maps\/(?:packs|enclosures)\/|game-assets\/|home-art\/)/.test(reference);
+        const mutableAssetMetadata = /^PeakTrailPlatform\/site-dist\/data\/maps\/packs\/[^/]+\/map-pack\.json$/.test(reference)
+          || /^PeakTrailPlatform\/site-dist\/data\/game-assets\/(?:[^/]+\/)?catalog\.json$/.test(reference);
+        const publicAsset = (!mutableAssetMetadata && /^PeakTrailPlatform\/site-dist\/data\/(?:maps\/(?:packs|enclosures)\/|game-assets\/|home-art\/)/.test(reference))
+          // Keep these names/version forms identical to the two pinned download descriptors.
+          || /^PeakTrailPlatform\/site-dist\/downloads\/(?:memories\/(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\/PeakReplayLab\.dll|recorder\/\d+\.\d+\.\d+\/PeakTrailRecorder\.dll)$/.test(reference);
         if (metadata.nlink > 1 && (!publicAsset || !poolInodes.has(inodeKey(metadata)))) throw new Error("Release contains an unexpected hard link");
         files.push({ path, metadata });
       } else throw new Error("Release contains a special filesystem entry");

@@ -125,7 +125,16 @@ The root-owned receiver supplies the fixed
 `PEAK_TRAIL_PUBLIC_ASSET_POOL=/srv/peak-trail/state/public-assets` only to its trusted
 server build. Staging imports explicitly allowed immutable resources by SHA-256,
 then hard-links them into each release at the existing public paths. Unchanged
-resources therefore share physical storage across releases, while catalogs,
+resources therefore share physical storage across releases. The already verified,
+SHA-256-pinned download DLL is also shared at its exact descriptor path:
+`downloads/memories/<version>/PeakReplayLab.dll` or
+`downloads/recorder/<version>/PeakTrailRecorder.dll`. No other download filename,
+configuration or release metadata is eligible for a shared download link. Existing
+artifact provenance, size, hash and assembly verification still runs before pool
+staging; the pool is not an alternative trust source. Static checksummed model JSON
+is eligible alongside binary models. The receiver rejects shared links for each
+`map-pack.json` and both the top-level and per-build game-asset `catalog.json`.
+Catalogs,
 enriched map manifests, route/fog sidecars and release metadata remain independent.
 Ordinary local/Pages builds remain self-contained copies. Do not give `peakdeploy`
 write access to `/srv/peak-trail/shared/assets`, and do not edit a linked release

@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { constants } from "node:fs";
-import { chmod, copyFile, link, lstat, mkdir, open, realpath, unlink } from "node:fs/promises";
+import { chmod, copyFile, link, lstat, mkdir, open, realpath, unlink, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, parse, relative, resolve, sep } from "node:path";
 
 // Private, receiver-owned storage. Public URLs retain their original paths;
@@ -9,6 +9,11 @@ export async function createPublicAssetWriter(poolDirectory) {
   const counters = { linkedFiles: 0, reusedBytes: 0, newBytes: 0, uniqueCreatedBlobs: 0 };
   if (poolDirectory === undefined) return {
     async stageImmutable(source, destination) { await copyFile(source, destination); },
+    async stageImmutableBytes(buffer, destination, { signal } = {}) {
+      const bytes = immutableBufferSnapshot(buffer);
+      signal?.throwIfAborted();
+      await writeFile(destination, bytes, { signal });
+    },
     stats: () => ({ enabled: false, ...counters }),
   };
   if (typeof poolDirectory !== "string" || !poolDirectory || !isAbsolute(poolDirectory)
@@ -21,26 +26,80 @@ export async function createPublicAssetWriter(poolDirectory) {
   const blobsIdentity = await lstat(blobs);
   const tempIdentity = await lstat(temporary);
 
-  return {
-    async stageImmutable(source, destination, { signal } = {}) {
-      signal?.throwIfAborted();
+  async function prepareDestination(destination, signal) {
+    signal?.throwIfAborted();
+    await assertDirectoryIdentity(root, rootIdentity);
+    await assertDirectoryIdentity(blobs, blobsIdentity);
+    await assertDirectoryIdentity(temporary, tempIdentity);
+    const destinationPath = resolve(destination);
+    if (!relative(root, destinationPath).startsWith(`..${sep}`)
+      && relative(root, destinationPath) !== ".." && !isAbsolute(relative(root, destinationPath)))
+      throw new Error("Public asset pool cannot stage inside its private storage");
+    await ensureDirectory(dirname(destinationPath));
+    return destinationPath;
+  }
+
+  async function publishAndLink({ digest, bytes, destinationPath, writeTemp, validateInput = async () => {}, signal }) {
+    // Each writer owns its temp. A failed copy cannot truncate a known blob.
+    const tempPath = resolve(temporary, `${process.pid}-${randomUUID()}`);
+    let tempHandle;
+    let created = false;
+    try {
       await assertDirectoryIdentity(root, rootIdentity);
       await assertDirectoryIdentity(blobs, blobsIdentity);
       await assertDirectoryIdentity(temporary, tempIdentity);
+      const blobPath = resolve(blobs, digest);
+      let existing;
+      try { existing = await lstat(blobPath); } catch (error) { if (error.code !== "ENOENT") throw error; }
+      // Repeated deployments only read and link known bytes; they never
+      // rewrite a temporary copy of the complete shared asset library.
+      if (!existing) {
+        tempHandle = await open(tempPath, "wx", 0o600);
+        await writeTemp(tempHandle);
+        await validateInput();
+        await tempHandle.sync();
+        await tempHandle.chmod(0o444);
+        await tempHandle.close(); tempHandle = undefined;
+        await assertDirectoryIdentity(blobs, blobsIdentity);
+        await assertDirectoryIdentity(temporary, tempIdentity);
+        try {
+          await link(tempPath, blobPath); // Atomic create, never replaces an existing name.
+          created = true;
+        } catch (error) { if (error.code !== "EEXIST") throw error; }
+      }
+      await verifyBlob(blobPath, digest, bytes, signal);
+      await assertDirectoryIdentity(blobs, blobsIdentity);
+      await validateInput();
+      try { await link(blobPath, destinationPath); }
+      catch (error) {
+        if (error.code === "EXDEV") throw new Error("Public asset pool and staged release must be on the same filesystem (EXDEV)", { cause: error });
+        throw error;
+      }
+      counters.linkedFiles++;
+      if (created) { counters.newBytes += bytes; counters.uniqueCreatedBlobs++; }
+      else counters.reusedBytes += bytes;
+    } finally {
+      await tempHandle?.close();
+      // Never chmod a published temp: it shares its inode with the blob.
+      try { await unlink(tempPath); }
+      catch (error) {
+        if (error.code !== "ENOENT") {
+          if (!created && process.platform === "win32" && error.code === "EPERM") {
+            await chmod(tempPath, 0o600); await unlink(tempPath);
+          } else throw error;
+        }
+      }
+    }
+  }
+
+  return {
+    async stageImmutable(source, destination, { signal } = {}) {
+      const destinationPath = await prepareDestination(destination, signal);
       const sourcePath = resolve(source);
-      const destinationPath = resolve(destination);
-      if (!relative(root, destinationPath).startsWith(`..${sep}`)
-        && relative(root, destinationPath) !== ".." && !isAbsolute(relative(root, destinationPath)))
-        throw new Error("Public asset pool cannot stage inside its private storage");
       await assertAncestors(sourcePath, false);
       const sourceBefore = await lstat(sourcePath);
       if (!sourceBefore.isFile() || sourceBefore.isSymbolicLink()) throw new Error("Public asset source must be a regular file without symlinks");
-      await ensureDirectory(dirname(destinationPath));
-      // Each writer owns its temp. A failed copy cannot truncate a known blob.
-      const tempPath = resolve(temporary, `${process.pid}-${randomUUID()}`);
       let sourceHandle;
-      let tempHandle;
-      let created = false;
       try {
         sourceHandle = await open(sourcePath, constants.O_RDONLY | (constants.O_NOFOLLOW || 0));
         const opened = await sourceHandle.stat();
@@ -53,58 +112,47 @@ export async function createPublicAssetWriter(poolDirectory) {
         if (!sameSnapshot(sourceBefore, sourceAfter) || !sameSnapshot(sourceAfter, pathAfter) || bytes !== opened.size)
           throw new Error("Public asset source changed during staging");
         const digest = hash.digest("hex");
-        const blobPath = resolve(blobs, digest);
-        await assertDirectoryIdentity(blobs, blobsIdentity);
-        let existing;
-        try { existing = await lstat(blobPath); } catch (error) { if (error.code !== "ENOENT") throw error; }
-        // Repeated deployments only read and link known bytes; they never
-        // rewrite a temporary copy of the complete shared asset library.
-        if (!existing) {
-          tempHandle = await open(tempPath, "wx", 0o600);
-          const copyHash = createHash("sha256");
-          const copied = await streamFile(sourceHandle, { hash: copyHash, destination: tempHandle, signal });
-          if (copied !== bytes || copyHash.digest("hex") !== digest
-            || !sameSnapshot(sourceBefore, await sourceHandle.stat()) || !sameSnapshot(sourceBefore, await lstat(sourcePath)))
-            throw new Error("Public asset source changed during staging");
-          await tempHandle.sync();
-          await tempHandle.chmod(0o444);
-          await tempHandle.close(); tempHandle = undefined;
-          await assertDirectoryIdentity(blobs, blobsIdentity);
-          try {
-            await link(tempPath, blobPath); // Atomic create, never replaces an existing name.
-            created = true;
-          } catch (error) { if (error.code !== "EEXIST") throw error; }
-        }
-        await verifyBlob(blobPath, digest, bytes, signal);
-        await assertDirectoryIdentity(blobs, blobsIdentity);
-        await assertAncestors(sourcePath, false);
-        if (!sameSnapshot(sourceBefore, await sourceHandle.stat()) || !sameSnapshot(sourceBefore, await lstat(sourcePath)))
-          throw new Error("Public asset source changed during staging");
-        try { await link(blobPath, destinationPath); }
-        catch (error) {
-          if (error.code === "EXDEV") throw new Error("Public asset pool and staged release must be on the same filesystem (EXDEV)", { cause: error });
-          throw error;
-        }
-        counters.linkedFiles++;
-        if (created) { counters.newBytes += bytes; counters.uniqueCreatedBlobs++; }
-        else counters.reusedBytes += bytes;
-      } finally {
-        await sourceHandle?.close();
-        await tempHandle?.close();
-        // Windows requires a writable temp to unlink; it can share a read-only
-        // blob inode after publication, so never chmod the temp at that point.
-        try { await unlink(tempPath); }
-        catch (error) {
-          if (error.code !== "ENOENT") {
-            if (!created && process.platform === "win32" && error.code === "EPERM") {
-              await chmod(tempPath, 0o600); await unlink(tempPath);
-            } else throw error;
-          }
-        }
-      }
+        await publishAndLink({ digest, bytes, destinationPath, signal,
+          async writeTemp(handle) {
+            const copyHash = createHash("sha256");
+            if (await streamFile(sourceHandle, { hash: copyHash, destination: handle, signal }) !== bytes || copyHash.digest("hex") !== digest)
+              throw new Error("Public asset source changed during staging");
+          },
+          async validateInput() {
+            await assertAncestors(sourcePath, false);
+            if (!sameSnapshot(sourceBefore, await sourceHandle.stat()) || !sameSnapshot(sourceBefore, await lstat(sourcePath)))
+              throw new Error("Public asset source changed during staging");
+          },
+        });
+      } finally { await sourceHandle?.close(); }
+    },
+    async stageImmutableBytes(buffer, destination, { signal } = {}) {
+      // Callers may retain/mutate the verified input. Capture bytes before the
+      // first await so the content address and publication use one snapshot.
+      const snapshot = immutableBufferSnapshot(buffer);
+      const digest = createHash("sha256").update(snapshot).digest("hex");
+      const destinationPath = await prepareDestination(destination, signal);
+      await publishAndLink({ digest, bytes: snapshot.length, destinationPath, signal,
+        async writeTemp(handle) { await writeBuffer(handle, snapshot, signal); },
+      });
     },
     stats: () => ({ enabled: true, ...counters }),
   };
+}
+
+function immutableBufferSnapshot(buffer) {
+  if (!Buffer.isBuffer(buffer)) throw new TypeError("Public asset bytes must be a Buffer");
+  return Buffer.from(buffer);
+}
+
+async function writeBuffer(handle, bytes, signal) {
+  for (let offset = 0; offset < bytes.length;) {
+    signal?.throwIfAborted();
+    const length = Math.min(256 * 1024, bytes.length - offset);
+    const { bytesWritten } = await handle.write(bytes, offset, length, offset);
+    if (!bytesWritten) throw new Error("Public asset temporary write made no progress");
+    offset += bytesWritten;
+  }
 }
 
 async function streamFile(handle, { hash, destination, signal }) {

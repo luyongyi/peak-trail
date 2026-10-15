@@ -88,7 +88,9 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
   const texture = Buffer.from("texture");
   const height = Buffer.alloc(16);
   const geometry = Buffer.from("geometry");
+  const geometryJson = Buffer.from('{"vertices":[1,2,3],"kind":"immutable map geometry"}');
   const item = Buffer.from("item icon");
+  const modelJson = Buffer.from('{"vertices":[4,5,6],"kind":"immutable game model"}');
   const manifest = {
     identityVersion: 3,
     mapPackId: packId,
@@ -101,7 +103,7 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
       biome,
       texture: "shore.png",
       height: "shore.height.f32",
-      geometry: "shore.glb.gz",
+      geometry: segment === 0 ? "shore.geometry.json" : "shore.glb.gz",
     })),
   };
   const manifestBytes = JSON.stringify(manifest);
@@ -172,8 +174,9 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
   const buildCatalog = {
     schemaVersion: 1,
     gameBuildId: "123",
-    items: [{ itemId: 1, icon: "icons/item.png" }],
-    assets: [{ path: "icons/item.png", bytes: item.length, sha256: sha256(item) }],
+    items: [{ itemId: 1, icon: "icons/item.png", model: "item-model.json" }],
+    assets: [{ path: "icons/item.png", bytes: item.length, sha256: sha256(item) },
+      { path: "item-model.json", bytes: modelJson.length, sha256: sha256(modelJson) }],
   };
   await Promise.all([
     writeFile(resolve(platform, "data", "maps", "catalog.json"), JSON.stringify({
@@ -194,9 +197,11 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
     writeFile(resolve(pack, "shore.png"), texture),
     writeFile(resolve(pack, "shore.height.f32"), height),
     writeFile(resolve(pack, "shore.glb.gz"), geometry),
+    writeFile(resolve(pack, "shore.geometry.json"), geometryJson),
     writeFile(resolve(secondPack, "shore.png"), texture),
     writeFile(resolve(secondPack, "shore.height.f32"), height),
     writeFile(resolve(secondPack, "shore.glb.gz"), geometry),
+    writeFile(resolve(secondPack, "shore.geometry.json"), geometryJson),
     writeFile(resolve(pack, "private-session.ndjson"), "must not publish"),
     writeFile(resolve(gameAssets, "catalog.json"), JSON.stringify({
       schemaVersion: 1,
@@ -204,6 +209,7 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
     })),
     writeFile(resolve(gameAssets, "123", "catalog.json"), JSON.stringify(buildCatalog)),
     writeFile(resolve(gameAssets, "123", "icons", "item.png"), item),
+    writeFile(resolve(gameAssets, "123", "item-model.json"), modelJson),
   ]);
 
   const recorderBytes = Buffer.from("MZ pinned recorder fixture");
@@ -295,13 +301,17 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
   const secondPoolStats = JSON.parse(secondPoolStage.stdout.match(/Public asset pool: (.+)/)[1]);
   assert.equal(secondPoolStats.newBytes, 0); assert.equal(secondPoolStats.uniqueCreatedBlobs, 0);
   assert.equal(secondPoolStats.linkedFiles, firstPoolStats.linkedFiles);
-  for (const reference of ['shore.png', 'shore.height.f32', 'shore.glb.gz']) {
+  for (const reference of ['shore.png', 'shore.height.f32', 'shore.glb.gz', 'shore.geometry.json']) {
     const old = await stat(resolve(priorRelease, 'data', 'maps', 'packs', packId, reference));
     for (const id of [packId, secondPackId]) assert.equal((await stat(resolve(staged, 'data', 'maps', 'packs', id, reference))).ino, old.ino);
   }
-  for (const reference of [`data/home-art/${HOME_ART_FILES[0]}`, `data/maps/enclosures/${enclosureFilename}`, 'data/game-assets/123/icons/item.png'])
+  for (const reference of [`data/home-art/${HOME_ART_FILES[0]}`, `data/maps/enclosures/${enclosureFilename}`, 'data/game-assets/123/icons/item.png',
+    'data/game-assets/123/item-model.json', recorderRelease.downloadPath])
     assert.equal((await stat(resolve(priorRelease, reference))).ino, (await stat(resolve(staged, reference))).ino);
-  for (const reference of [`data/maps/packs/${packId}/map-pack.json`, 'data/game-assets/catalog.json', 'data/game-assets/123/catalog.json'])
+  assert.deepEqual(await readFile(resolve(staged, recorderRelease.downloadPath)), recorderBytes);
+  assert.deepEqual(await readFile(resolve(staged, 'data/game-assets/123/item-model.json')), modelJson);
+  assert.deepEqual(await readFile(resolve(staged, `data/maps/packs/${packId}/shore.geometry.json`)), geometryJson);
+  for (const reference of [`data/maps/packs/${packId}/map-pack.json`, 'data/game-assets/catalog.json', 'data/game-assets/123/catalog.json', 'data/recorder/release.json'])
     assert.notEqual((await stat(resolve(priorRelease, reference))).ino, (await stat(resolve(staged, reference))).ino);
   const oldMetadataPath = resolve(priorRelease, 'data', 'maps', 'packs', packId, 'map-pack.json');
   assert.equal(JSON.parse(await readFile(oldMetadataPath, 'utf8')).route.segments[0].displayName, undefined);
