@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { access, copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { access, copyFile, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -59,6 +59,7 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
     copyFile(resolve(platformSource, "tools", "lib", "recorder-release.mjs"), resolve(tools, "lib", "recorder-release.mjs")),
     copyFile(resolve(platformSource, "tools", "lib", "memories-release.mjs"), resolve(tools, "lib", "memories-release.mjs")),
     copyFile(resolve(platformSource, "tools", "lib", "site-release.mjs"), resolve(tools, "lib", "site-release.mjs")),
+    copyFile(resolve(platformSource, "tools", "lib", "public-asset-pool.mjs"), resolve(tools, "lib", "public-asset-pool.mjs")),
     copyFile(resolve(platformSource, "web", "src", "map-fog.js"), resolve(platform, "web", "src", "map-fog.js")),
     copyFile(resolve(platformSource, "web", "src", "map-water.js"), resolve(platform, "web", "src", "map-water.js")),
     copyFile(resolve(platformSource, "web", "src", "map-enclosures.js"), resolve(platform, "web", "src", "map-enclosures.js")),
@@ -273,6 +274,42 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
     await assert.rejects(access(resolve(staged, 'data', 'maps', 'packs', id, enclosureFilename)), 'shared geometry must not be duplicated inside each pack');
   }
   assert.equal(await readFile(resolve(secondPack, 'map-pack.json'), 'utf8'), secondManifestBytes);
+
+  // Receiver-only server mode reuses bytes across map packs and releases,
+  // while enriched JSON always gets its own independently writable inode.
+  assert.notEqual((await stat(resolve(pack, 'shore.png'))).ino,
+    (await stat(resolve(staged, 'data', 'maps', 'packs', packId, 'shore.png'))).ino, 'default local staging copies');
+  const pool = resolve(repository, 'receiver-state', 'public-assets');
+  const pooledOptions = { env: { ...options.env, PEAK_TRAIL_PUBLIC_ASSET_POOL: pool } };
+  await assert.rejects(execFileAsync(process.execPath, [resolve(tools, 'stage-site.mjs')], pooledOptions), /only available for receiver server staging/);
+  const serverArgs = [resolve(tools, 'stage-site.mjs'), '--profile', 'server'];
+  const firstPoolStage = await execFileAsync(process.execPath, serverArgs, pooledOptions);
+  const firstPoolStats = JSON.parse(firstPoolStage.stdout.match(/Public asset pool: (.+)/)[1]);
+  assert.ok(firstPoolStats.newBytes > 0); assert.ok(firstPoolStats.reusedBytes > 0);
+  const priorRelease = resolve(platform, 'prior-release');
+  await rename(staged, priorRelease);
+  const updatedEvidence = structuredClone(evidence);
+  updatedEvidence.maps[0].route.segments[0].displayName = 'New route metadata';
+  await writeFile(evidencePath, JSON.stringify(updatedEvidence));
+  const secondPoolStage = await execFileAsync(process.execPath, serverArgs, pooledOptions);
+  const secondPoolStats = JSON.parse(secondPoolStage.stdout.match(/Public asset pool: (.+)/)[1]);
+  assert.equal(secondPoolStats.newBytes, 0); assert.equal(secondPoolStats.uniqueCreatedBlobs, 0);
+  assert.equal(secondPoolStats.linkedFiles, firstPoolStats.linkedFiles);
+  for (const reference of ['shore.png', 'shore.height.f32', 'shore.glb.gz']) {
+    const old = await stat(resolve(priorRelease, 'data', 'maps', 'packs', packId, reference));
+    for (const id of [packId, secondPackId]) assert.equal((await stat(resolve(staged, 'data', 'maps', 'packs', id, reference))).ino, old.ino);
+  }
+  for (const reference of [`data/home-art/${HOME_ART_FILES[0]}`, `data/maps/enclosures/${enclosureFilename}`, 'data/game-assets/123/icons/item.png'])
+    assert.equal((await stat(resolve(priorRelease, reference))).ino, (await stat(resolve(staged, reference))).ino);
+  for (const reference of [`data/maps/packs/${packId}/map-pack.json`, 'data/game-assets/catalog.json', 'data/game-assets/123/catalog.json'])
+    assert.notEqual((await stat(resolve(priorRelease, reference))).ino, (await stat(resolve(staged, reference))).ino);
+  const oldMetadataPath = resolve(priorRelease, 'data', 'maps', 'packs', packId, 'map-pack.json');
+  assert.equal(JSON.parse(await readFile(oldMetadataPath, 'utf8')).route.segments[0].displayName, undefined);
+  assert.equal(JSON.parse(await readFile(stagedManifestPath, 'utf8')).route.segments[0].displayName, 'New route metadata');
+  await writeFile(stagedManifestPath, 'changed generated metadata');
+  assert.deepEqual(JSON.parse(await readFile(oldMetadataPath, 'utf8')).route, route);
+  await writeFile(evidencePath, JSON.stringify(evidence));
+  await execFileAsync(process.execPath, [resolve(tools, 'stage-site.mjs')], options);
 
   const memoriesBytes = Buffer.from("MZ pinned memories staging fixture");
   const memoriesPath = resolve(repository, "local", "PeakReplayLab.dll");

@@ -11,6 +11,7 @@ import { fitMapAlignment, validateMapAlignment } from "../server/map-alignment.m
 import { createHash } from "node:crypto";
 import { HOME_ART_FILES } from "../web/src/home-art.js";
 import { checkSiteBudget, checkSiteDownloadReferences, loadSiteArtifact, readSiteRelease, siteReleaseOptions, readSiteStagingProfile } from "./lib/site-release.mjs";
+import { createPublicAssetWriter } from "./lib/public-asset-pool.mjs";
 
 const toolDirectory = dirname(fileURLToPath(import.meta.url));
 const platformDirectory = resolve(toolDirectory, "..");
@@ -33,6 +34,9 @@ const retiredEntryPage = `<!doctype html>
 
 export async function stageSite({ preview = false, argv = process.argv.slice(2), env = process.env } = {}) {
 const profile = await readSiteStagingProfile(resolve(toolDirectory, "site-build-profile.json"), argv, { preview });
+if (env.PEAK_TRAIL_PUBLIC_ASSET_POOL !== undefined && (profile !== "server" || preview))
+  throw new Error("Public asset pool is only available for receiver server staging");
+const assetWriter = await createPublicAssetWriter(env.PEAK_TRAIL_PUBLIC_ASSET_POOL);
 // Verify the one selected DLL before replacing a previously staged site.
 const downloadOptions = siteReleaseOptions(argv, env);
 const downloadRelease = await readSiteRelease(dataDirectory, downloadOptions.product);
@@ -146,13 +150,16 @@ await Promise.all([
   )),
 ]);
 await mkdir(resolve(outputDirectory, "data", "home-art"), { recursive: true });
-for (const file of HOME_ART_FILES) await cp(homeArtSources.get(file), resolve(outputDirectory, "data", "home-art", file));
+for (const file of HOME_ART_FILES) await assetWriter.stageImmutable(homeArtSources.get(file), resolve(outputDirectory, "data", "home-art", file));
 
 for (const pack of mapPacks) {
   for (const reference of pack.files) {
     const destination = resolve(outputDirectory, "data", "maps", "packs", pack.mapPackId, reference);
     await mkdir(dirname(destination), { recursive: true });
-    await cp(resolve(pack.sourceDirectory, reference), destination);
+    // Manifests are enriched below and must never share a writable inode with
+    // an earlier release. Only allowlisted geometry/texture/height bytes pool.
+    if (/\.json$/i.test(reference)) await cp(resolve(pack.sourceDirectory, reference), destination);
+    else await assetWriter.stageImmutable(resolve(pack.sourceDirectory, reference), destination);
   }
   // Route evidence is additive metadata and is not part of geometry identity.
   // Original canonical packs remain untouched; only the generated site is enriched.
@@ -168,12 +175,13 @@ for (const pack of mapPacks) {
 if (enclosureFiles.size) {
   const destination = resolve(outputDirectory, "data", "maps", "enclosures");
   await mkdir(destination, { recursive: true });
-  for (const file of enclosureFiles) await cp(resolve(mapEnclosuresDirectory, file), resolve(destination, file));
+  for (const file of enclosureFiles) await assetWriter.stageImmutable(resolve(mapEnclosuresDirectory, file), resolve(destination, file));
 }
 for (const reference of gameAssets.files) {
   const destination = resolve(outputDirectory, "data", "game-assets", reference);
   await mkdir(dirname(destination), { recursive: true });
-  await cp(resolve(gameAssetsDirectory, reference), destination);
+  if (/\.json$/i.test(reference)) await cp(resolve(gameAssetsDirectory, reference), destination);
+  else await assetWriter.stageImmutable(resolve(gameAssetsDirectory, reference), destination);
 }
 await writeFile(resolve(outputDirectory, ".nojekyll"), "", "utf8");
 
@@ -190,7 +198,9 @@ await measure(outputDirectory);
 checkSiteBudget(totalBytes, { preview, profile });
 console.log(`Staged ${preview ? "local preview (not a public release; GitHub Pages budget not applied)" : `${profile} public site`} at ${outputDirectory}`);
 console.log(`${fileCount} files, ${(totalBytes / 1_000_000).toFixed(1)} MB; ${catalog.mapPacks.length} map packs. No private recordings are staged.`);
-return { outputDirectory, release: downloadRelease, product: downloadOptions.product, preview, profile, fileCount, totalBytes };
+const publicAssetPool = assetWriter.stats();
+if (publicAssetPool.enabled) console.log(`Public asset pool: ${JSON.stringify(publicAssetPool)}`);
+return { outputDirectory, release: downloadRelease, product: downloadOptions.product, preview, profile, fileCount, totalBytes, publicAssetPool };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url))
