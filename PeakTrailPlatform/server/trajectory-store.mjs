@@ -56,11 +56,18 @@ export async function loadIndex(root) {
   const files = (await readdir(join(root, "index"))).filter((file) => /^[a-f0-9]{64}\.json$/.test(file));
   if (files.length > LIMITS.uploads) throw problem("storage index limit exceeded", 503);
   const entries = [];
-  for (const file of files) {
-    // Fail closed when an index entry is damaged; never rebuild public approval from blobs.
-    try { const entry = await readJson(join(root, "index", file));
-      if (entry.version === 1 && entry.id === file.slice(0, -5) && ["pending", "approved", "hidden", "rejected"].includes(entry.moderationStatus)) entries.push(entry);
-    } catch { /* a damaged private entry is omitted until an administrator repairs it */ }
+  // Overlap small-file I/O within the existing single worker, without opening
+  // the whole store at once. Promise.all preserves directory order. Each job
+  // rereads the current files so an administrator's hide/reject is not cached.
+  for (let start = 0; start < files.length; start += 16) {
+    const batch = await Promise.all(files.slice(start, start + 16).map(async file => {
+      // Fail closed when damaged; never rebuild approval from raw blobs.
+      try { const entry = await readJson(join(root, "index", file));
+        if (entry.version === 1 && entry.id === file.slice(0, -5) && ["pending", "approved", "hidden", "rejected"].includes(entry.moderationStatus)) return entry;
+      } catch { /* a damaged private entry is omitted until an administrator repairs it */ }
+      return null;
+    }));
+    for (const entry of batch) if (entry) entries.push(entry);
   }
   return entries;
 }
