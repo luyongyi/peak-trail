@@ -29,6 +29,7 @@ import { createDailyRefreshClock, createDailySourceReader, dailySourceUrls } fro
 import { bindCameraTouchControls } from "./camera-touch.js";
 import { FEATURES, shouldPollLive } from "./features.js";
 import { createCommunityMapPanel } from "./community-map-panel.js";
+import { createMapLootPanel } from "./map-loot-panel.js";
 import { historicalRouteUrl, loadHistoricalRouteLink, parseHistoricalRouteLink } from "./historical-route-link.js";
 
 const $ = (id) => document.getElementById(id);
@@ -595,7 +596,12 @@ const communityMapPanel = createCommunityMapPanel({
   getScene: () => viewer,
   onOpenTeam: openCommunityTeam,
 });
-function syncCommunityContext(options) { communityMapPanel.sync(options); }
+const mapLootPanel = createMapLootPanel({
+  getContext: () => ({ enabled: state.workspaceMode !== "home" && state.usingCompatibleMap,
+    mapPack: state.mapPack, layers: state.routeView?.layers || state.mapPack?.layers, stageIndex: state.selectedSegment }),
+  getScene: () => viewer,
+});
+function syncCommunityContext(options) { communityMapPanel.sync(options); mapLootPanel.sync(); }
 async function initializeViewer() {
   try {
     // File selection and replay controls must work even when the 3D dependency is slow
@@ -2613,6 +2619,7 @@ window.addEventListener("beforeunload", () => {
   window.removeEventListener("scroll", updatePhonePanelButton, true);
   disposeCameraTouch();
   communityMapPanel.dispose();
+  mapLootPanel.dispose();
   homePage.dispose();
   dailyClock.dispose();
   state.mapPack?.disposeAssets?.();

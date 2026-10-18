@@ -1,5 +1,14 @@
 # Offline PEAK map baker
 
+地图箱子、固定物件与真实豚豚崽的标记可从规范地图几何重新提取，无需启动游戏：
+
+```powershell
+node PeakTrailPlatform/tools/offline-maps/export-loot-from-geometry.mjs --packs C:/path/to/assets/maps/packs
+```
+
+导出器按 catalog 的活动构建生成 `data/maps/loot.<build>.json`，并核验原始几何摘要。
+材质鉴别、候选箱体的覆盖限制及各版本数据见 [地图标记说明](../../docs/map-loot-source.md)。
+
 The current preferred 3D path is [original triangle GLB export](MESH-CONTRACT.md).
 The height-field pipeline below remains a planar-reference/legacy export; it
 does not represent vertical cliffs, overhangs or trees as accurately as the GLBs.

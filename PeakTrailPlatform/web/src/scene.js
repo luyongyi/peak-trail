@@ -17,6 +17,7 @@ import { FollowTerrainQuery } from "./follow-terrain.js";
 import { SourceWaterRenderer } from "./source-water-renderer.js";
 import { nadirCameraBounds } from "./nadir-camera-bounds.js";
 import { CommunityRouteOverlay } from "./community-route-overlay.js";
+import { MapLootOverlay } from "./map-loot-overlay.js";
 import { EnclosureContextRenderer } from "./enclosure-context-renderer.js";
 import { fitPerspectivePoints } from "./camera-framing.js";
 import { collectCameraParts, selectCameraSubjectParts } from "./camera-subject.js";
@@ -255,9 +256,12 @@ export class TrailScene {
     this.trailRoot = new THREE.Group();
     this.gridRoot = new THREE.Group();
     this.communityOverlay = new CommunityRouteOverlay();
+    this.mapLootOverlay = new MapLootOverlay();
     this.worldRoot.add(this.gridRoot, this.sourceWater.root, this.terrainRoot, this.trailRoot, this.worldRenderer.root);
     this.worldRoot.add(this.communityOverlay.root);
     this.worldRoot.add(this.enclosureContext.root);
+    this.worldRoot.add(this.mapLootOverlay.root);
+    this.mapLootOverlay.setPixelRatio(this.renderer.getPixelRatio());
     // PEAK's world is Unity left-handed; three is right-handed. Rendering the raw
     // coordinates unchanged mirrors every horizontal view (a game-right landmark
     // appears game-left). Negating Z of the whole rendered world is the standard
@@ -309,7 +313,7 @@ export class TrailScene {
     this.updateCameraMarkerVisibility();
     this.fogDepthPass.render({ renderer: this.renderer, scene: this.scene, camera: this.camera,
       fogEntries: this.worldRenderer.entries.values(), depthEntries: this.waterDepthEntries,
-      hiddenRoots: [this.trailRoot, this.gridRoot, this.communityOverlay?.root].filter(Boolean) });
+      hiddenRoots: [this.trailRoot, this.gridRoot, this.communityOverlay?.root, this.mapLootOverlay?.root].filter(Boolean) });
     this.renderer.render(this.scene, this.camera);
     this.updatePlayerLabelPositions();
     this.worldRenderer.projectLabels(this.camera, this.viewportWidth, this.viewportHeight, true);
@@ -318,6 +322,7 @@ export class TrailScene {
 
   async setData({ mapPack, trace, useMap, activeSegment, viewIntent = null }) {
     this.communityOverlay?.clear();
+    this.mapLootOverlay?.clear();
     const retainReplayCamera = Boolean(trace && this.trace === trace);
     const retainedPreset = retainReplayCamera ? this.surveyPreset : null;
     const autoFrame = !retainReplayCamera || Boolean(retainedPreset);
@@ -1321,6 +1326,23 @@ export class TrailScene {
     }
   }
 
+  setMapLoot({ mapPackId, markers = [], types = null, enabled = false } = {}) {
+    if (!this.mapLootOverlay) return false;
+    if (!this.useMap || !enabled || mapPackId !== this.mapPack?.mapPackId) {
+      this.mapLootOverlay.clear();
+      return false;
+    }
+    this.syncMapLootContext();
+    this.mapLootOverlay.setData(markers);
+    this.mapLootOverlay.setFilters({ enabled: true, types });
+    return true;
+  }
+
+  syncMapLootContext() {
+    this.mapLootOverlay?.setContext({ origin: this.origin, heightScale: this.heightScale,
+      activeSegment: this.activeSegment, selectedLayerId: this.selectedLayer()?.id ?? null });
+  }
+
   setHeightScale(value) {
     const next = THREE.MathUtils.clamp(Number(value) || 1, 0.2, 5);
     const changed = next !== this.heightScale;
@@ -1342,6 +1364,7 @@ export class TrailScene {
     if (this.sourceWater) this.sourceWater.root.scale.y = this.heightScale;
     if (this.enclosureContext) this.enclosureContext.root.scale.y = this.heightScale;
     for (const entry of this.waterDepthEntries || []) entry.depthMaterial.uniforms.heightScale.value = this.heightScale;
+    this.syncMapLootContext();
   }
 
   setTrackVisibility(visible) {
@@ -1394,6 +1417,7 @@ export class TrailScene {
   }
 
   applyLayerVisibility() {
+    this.syncMapLootContext();
     this.followTerrainDirty = true;
     this.sourceWater?.setSegment(this.activeSegment);
     for (const mesh of this.terrainRoot.children) {
@@ -1634,6 +1658,7 @@ export class TrailScene {
     this.freeCamera.dispose();
     this.worldRenderer.dispose();
     this.communityOverlay?.dispose();
+    this.mapLootOverlay?.dispose();
     this.sourceWater?.dispose();
     this.enclosureContext?.dispose();
     this.waterDepthEntries = [];

@@ -64,6 +64,7 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
     copyFile(resolve(platformSource, "web", "src", "map-water.js"), resolve(platform, "web", "src", "map-water.js")),
     copyFile(resolve(platformSource, "web", "src", "map-enclosures.js"), resolve(platform, "web", "src", "map-enclosures.js")),
     copyFile(resolve(platformSource, "web", "src", "map-peak.js"), resolve(platform, "web", "src", "map-peak.js")),
+    copyFile(resolve(platformSource, "web", "src", "map-loot.js"), resolve(platform, "web", "src", "map-loot.js")),
     copyFile(resolve(platformSource, "web", "src", "home-art.js"), resolve(platform, "web", "src", "home-art.js")),
     writeFile(resolve(platform, "web", "index.html"), '<!doctype html><a href="./downloads/recorder/0.7.1/PeakTrailRecorder.dll" download>Download</a>'),
     writeFile(resolve(platform, "web", "guide.html"), '<!doctype html><title>Legacy install guide</title><a href="downloads/recorder/old/PeakTrailRecorder.dll">Old recorder</a>'),
@@ -99,6 +100,7 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
     mapSlot: 0,
     source: { sceneSha256: "b".repeat(64) },
     layers: [[0, "Shore"], [3, "Volcano"], [4, "Volcano"]].map(([segment, biome]) => ({
+      id: `layer-${segment}`,
       segment,
       biome,
       texture: "shore.png",
@@ -107,6 +109,12 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
     })),
   };
   const manifestBytes = JSON.stringify(manifest);
+  const lootEvidence = { schemaVersion: 1, gameBuildId: "123", types: [{ id: "chest-small", category: "chest", name: "小型行李箱" }],
+    maps: [{ mapPackId: packId, sceneName: manifest.sceneName, mapSlot: manifest.mapSlot, sourceSceneSha256: manifest.source.sceneSha256,
+      markers: [{ id: "crate-1", type: "chest-small", category: "chest", name: "小型行李箱", pos: [1, 2, 3], segment: 0,
+        layerId: "layer-0", placement: "randomized-candidate" }] }] };
+  const lootPath = resolve(platform, "data", "maps", "loot.123.json");
+  await writeFile(lootPath, JSON.stringify(lootEvidence));
   const secondManifest = { ...manifest, mapPackId: secondPackId, sceneName: 'Level_1', mapSlot: 1,
     source: { sceneSha256: 'c'.repeat(64) } };
   const secondManifestBytes = JSON.stringify(secondManifest);
@@ -225,6 +233,13 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
   const options = { env: { ...process.env, PEAK_TRAIL_ASSET_ROOT: assets, PEAK_TRAIL_DOWNLOAD_PRODUCT: "recorder", PEAK_TRAIL_RECORDER_DLL: recorderPath } };
   await execFileAsync(process.execPath, [resolve(tools, "stage-site.mjs")], options);
   const staged = resolve(platform, "site-dist");
+  assert.deepEqual(JSON.parse(await readFile(resolve(staged, "data", "maps", "loot.123.json"), "utf8")), lootEvidence);
+  await writeFile(resolve(staged, "preflight-marker.txt"), "keep on failure");
+  const invalidLoot = structuredClone(lootEvidence); invalidLoot.maps[0].sourceSceneSha256 = "0".repeat(64);
+  await writeFile(lootPath, JSON.stringify(invalidLoot));
+  await assert.rejects(execFileAsync(process.execPath, [resolve(tools, "stage-site.mjs")], options), /Map supply survey does not match/);
+  assert.equal(await readFile(resolve(staged, "preflight-marker.txt"), "utf8"), "keep on failure");
+  await writeFile(lootPath, JSON.stringify(lootEvidence));
   for (const name of ["guide.html", "routes.html"]) {
     const page = await readFile(resolve(staged, name), "utf8");
     assert.match(page, /旧足迹入口暂时下线/);

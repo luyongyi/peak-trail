@@ -7,6 +7,7 @@ import { normalizeMapFog } from "../web/src/map-fog.js";
 import { normalizeMapWater } from "../web/src/map-water.js";
 import { normalizeMapEnclosures } from "../web/src/map-enclosures.js";
 import { normalizeMapPeak } from "../web/src/map-peak.js";
+import { normalizeMapLoot } from "../web/src/map-loot.js";
 import { fitMapAlignment, validateMapAlignment } from "../server/map-alignment.mjs";
 import { createHash } from "node:crypto";
 import { HOME_ART_FILES } from "../web/src/home-art.js";
@@ -124,10 +125,31 @@ for (const entry of catalog.mapPacks) {
   mapPacks.push({ mapPackId, sourceDirectory, files, manifest, route, mapFog, mapWater, mapEnclosures, mapPeak });
 }
 
+// Supply and animal surveys must match each canonical map before publication.
+const lootCatalogs = new Map();
+for (const build of new Set(mapPacks.map(pack => String(pack.manifest.gameBuildId)))) {
+  if (!/^\d{1,20}$/.test(build)) continue;
+  let raw;
+  try {
+    const body = await readFile(resolve(mapsDirectory, `loot.${build}.json`), "utf8");
+    if (body.length > 24 * 1024 * 1024) throw new Error("Map supply survey exceeds size limit");
+    raw = JSON.parse(body);
+  } catch (error) { if (error.code === "ENOENT") continue; throw error; }
+  const entries = [];
+  for (const pack of mapPacks.filter(pack => String(pack.manifest.gameBuildId) === build)) {
+    if (!raw.maps?.some(entry => entry.mapPackId === pack.mapPackId)) continue;
+    if (!normalizeMapLoot(raw, pack.manifest)) throw new Error(`Map supply survey does not match ${pack.mapPackId}`);
+    entries.push(raw.maps.find(entry => entry.mapPackId === pack.mapPackId));
+  }
+  if (!entries.length) throw new Error(`Map supply survey has no matching maps for build ${build}`);
+  lootCatalogs.set(build, { schemaVersion: 1, gameBuildId: build, types: raw.types, maps: entries });
+}
+
 // site-dist is generated exclusively by this script and is safe to recreate.
 await rm(outputDirectory, { recursive: true, force: true });
 await mkdir(outputDirectory, { recursive: true });
 await mkdir(resolve(outputDirectory, "data", "maps"), { recursive: true });
+for (const [build, survey] of lootCatalogs) await writeFile(resolve(outputDirectory, "data", "maps", `loot.${build}.json`), JSON.stringify(survey) + "\n");
 for (const [filename, evidence] of trajectorySidecars) await writeFile(resolve(outputDirectory, "data", "maps", filename), JSON.stringify(evidence, null, 2) + "\n");
 await mkdir(resolve(outputDirectory, "schema"), { recursive: true });
 await mkdir(dirname(resolve(outputDirectory, downloadRelease.downloadPath)), { recursive: true });

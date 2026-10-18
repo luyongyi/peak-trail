@@ -204,7 +204,30 @@
               <span class="analysis-overlay-note"><i class="trail-key-visible"></i>可见轨迹 <i class="trail-key-occluded"></i>遮挡轨迹 · 淡色透视</span>
             </div>
             <div class="viewport-layer-actions">
-            <details class="view-menu">
+            <details class="map-loot-menu" id="mapLootMenu" name="map-tools" hidden>
+              <summary class="camera-text-button" title="箱子、固定物品与豚豚崽的光柱标记">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 4v10l-8 4-8-4V7l8-4Zm-8 4 8 4 8-4M12 11v10M8 5l8 4" /></svg>
+                <span>地图标记</span><output id="mapLootCount" hidden>0</output>
+              </summary>
+              <section class="map-loot-pop" aria-label="地图标记筛选">
+                <header class="map-loot-heading"><div><small>FIELD DISCOVERIES</small><strong>沿途的发现</strong></div><span class="map-loot-glyph" aria-hidden="true">◇</span></header>
+                <label class="map-loot-master"><span>标记光柱<small>短光柱 · 分类配色</small></span><input id="mapLootEnabled" type="checkbox" checked aria-label="显示地图标记光柱" /></label>
+                <p class="map-loot-status" id="mapLootStatus" role="status">正在读取本图标记…</p>
+                <button class="map-loot-retry" id="mapLootRetry" type="button" hidden>重新加载</button>
+                <div class="map-loot-section-heading"><span>箱子类型</span><div><button id="mapLootAll" type="button">全选</button><button id="mapLootNone" type="button">清空</button></div></div>
+                <div class="map-loot-types" id="mapLootTypes" role="group" aria-label="筛选箱子类型"></div>
+                <section class="map-loot-animal-section" id="mapLootAnimalSection" aria-label="生物位置" hidden>
+                  <div class="map-loot-section-heading"><span>生物位置</span><span id="mapLootAnimalCount">0</span></div>
+                  <div class="map-loot-animal-types" id="mapLootAnimalTypes" role="group" aria-label="筛选生物位置"></div>
+                </section>
+                <div class="map-loot-item-section">
+                  <label class="map-loot-item-toggle"><input id="mapLootItems" type="checkbox" /><span>固定地图物品</span><span id="mapLootItemCount">0</span></label>
+                  <div class="map-loot-item-types" id="mapLootItemTypes" role="group" aria-label="筛选固定地图物品"></div>
+                </div>
+                <p class="map-loot-footnote"><i aria-hidden="true"></i>地图参考点位 · 部分箱体可能为幻象或陷阱<br />实际生成、箱内物品与开箱状态以对局为准</p>
+              </section>
+            </details>
+            <details class="view-menu" name="map-tools">
               <summary class="camera-text-button">视角 ▾</summary>
               <div class="view-menu-pop">
               <div class="camera-actions" aria-label="视角控制">
