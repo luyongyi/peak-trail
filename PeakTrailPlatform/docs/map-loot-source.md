@@ -1,4 +1,4 @@
-# 箱子、固定资源与豚豚崽的地图标记
+# 箱子、固定资源与水豚的地图标记
 
 `data/maps/loot.25306743.json` 与 `data/maps/loot.25739797.json` 为两版各 21 张、
 合计 42 个规范地图包提供可按类型筛选的静态地图标记，当前活动版本为
@@ -7,56 +7,77 @@
 烘焙地形，也不改变地图包 ID。网页使用有限高度的光柱显示所选类型，
 固定物品／设施筛选默认关闭，可按需选择具体类型。
 
+## 中文显示名称
+
+显示名称统一来自 `data/maps/loot-labels.zh-CN.json`。官方词条读取当前游戏
+`resources.assets` 中 path ID 为 `1422` 的运行时 TextAsset
+`SerializedTermsData`，简体中文使用 `SimplifiedChinese` 列（索引 `9`）。
+物品按游戏原逻辑拼接 `NAME_` 与 `Item.UIData.itemName`，再转为大写查表；
+行李箱按 `Luggage.displayName`，固定攀爬设施按 `ClimbHandle.GetName()` 的
+`PICKAXE`／`PITONPROMPT` 词条，不直接翻译内部 prefab 或网格名称。
+
+清单的 `kind` 区分官方物品名、官方名称加地图描述、官方说明中的术语及
+多物品资源类别。“点”“生成点”“固定”等是地图说明，不是新增的游戏物品名。
+例如“行李箱（诱饵外观）”的官方基名只有“行李箱”；“蛋巢（好大蛋／小小蛋）”
+汇总两种真实物品；刺莓、莓蕉／菇莓等生长类别也不表示某局固定产出单一物品。
+水豚一名来自官方成就说明，未伪造单独的物品名称词条。
+
+未在当前物品 prefab 中找到精确匹配的四个备用别名 `AntiRopeSpool`、
+`Coconut`、`HealingRoot`、`PoisonDart` 不进入已认证名称清单；导出器拒绝
+未认证别名或按名称前缀推测的译名。这不表示游戏里没有相应类别的道具，
+而是不能跳过真实 prefab 的 `UIData` 链路将内部别名认作官方名称。
+本次名称同步不调整两版点位坐标、地图包和来源身份；旧版仍使用自身几何坐标。
+
 ## 覆盖范围
 
 下表只统计可从两版规范 GLB 独立认证的几何点位；当前版的场景组件补充另见下节。
 
 | 类型 ID | 显示名称 | 原始网格及必要材质 | 25306743 合计 | 25739797 合计 |
 | --- | --- | --- | ---: | ---: |
-| `chest-small` | 小型行李箱 | `Luggage_Small` | 1,890 | 1,877 |
-| `chest-large` | 大型行李箱 | `Luggage_large` | 805 | 781 |
-| `chest-epic` | 珍奇行李箱 | `Epic Luggage` | 275 | 290 |
-| `chest-ancient` | 古代行李箱 | `ancient Luggage` | 104 | 117 |
-| `chest-trick` | 恶作剧行李箱 | `Luggage_Trick` | 9 | 11 |
-| `item-bird-nest` | 鸟蛋巢 | `BirdNest` | 460 | 490 |
-| `item-shelf-shroom` | 攀爬菌台 | `ShelfShroom` | 3,131 | 3,310 |
-| `item-piton` | 固定岩钉 | `pickaxe` | 254 | 247 |
-| `item-napberry` | 睡眠浆果点 | `Nap Berry` | 66 | 66 |
-| `item-climbing-spike` | 固定攀爬钉 | `Spike` + `M_ClimbingSpike` | 1,411 | 1,319 |
-| `item-amulet-bird` | 海鸥护符点 | `Medallion_Bird` + `Tarnished Gold Medallion` | 21 | 21 |
-| `item-amulet-goat` | 山羊护符点 | `Medallion_Goat` + `Tarnished Gold Medallion` | 21 | 21 |
-| `item-amulet-turtle` | 乌龟护符点 | `Medallion_Turtle` + `Tarnished Gold Medallion` | 21 | 21 |
-| `item-amulet-bingbong` | Bing Bong护符点 | `Medallion_BingBong` + `Tarnished Gold Medallion` | 21 | 21 |
-| `animal-capybara` | 豚豚崽 | `Cube` + `M_Capybara` 材质 | 53 | 53 |
+| `chest-small` | 行李箱 | `Luggage_Small` | 1,890 | 1,877 |
+| `chest-large` | 大号行李箱 | `Luggage_large` | 805 | 781 |
+| `chest-epic` | 探险家行李箱 | `Epic Luggage` | 275 | 290 |
+| `chest-ancient` | 古老行李箱 | `ancient Luggage` | 104 | 117 |
+| `chest-trick` | 行李箱（诱饵外观） | `Luggage_Trick` | 9 | 11 |
+| `item-bird-nest` | 蛋巢（好大蛋／小小蛋） | `BirdNest` | 460 | 490 |
+| `item-shelf-shroom` | 踏板菇（固定） | `ShelfShroom` | 3,131 | 3,310 |
+| `item-piton` | 鹤嘴锄（固定） | `pickaxe` | 254 | 247 |
+| `item-napberry` | 晚安莓点 | `Nap Berry` | 66 | 66 |
+| `item-climbing-spike` | 岩钉（固定） | `Spike` + `M_ClimbingSpike` | 1,411 | 1,319 |
+| `item-amulet-bird` | 童军的进取点 | `Medallion_Bird` + `Tarnished Gold Medallion` | 21 | 21 |
+| `item-amulet-goat` | 童军的野心点 | `Medallion_Goat` + `Tarnished Gold Medallion` | 21 | 21 |
+| `item-amulet-turtle` | 童军的毅力点 | `Medallion_Turtle` + `Tarnished Gold Medallion` | 21 | 21 |
+| `item-amulet-bingbong` | 童军的盛情点 | `Medallion_BingBong` + `Tarnished Gold Medallion` | 21 | 21 |
+| `animal-capybara` | 水豚 | `Cube` + `M_Capybara` 材质 | 53 | 53 |
 
 旧版几何覆盖 3,083 处箱体模型位置、5,406 处资源／设施参考点和 53 只
-豚豚崽；当前版几何覆盖分别为 3,076、5,516、53，场景组件点位在此基础上补充。
+水豚；当前版几何覆盖分别为 3,076、5,516、53，场景组件点位在此基础上补充。
 当前版另外恢复 38 类、42,585 处场景组件参考点，其中包括 630 处全局物品点
 和 21 处终局雕像奖励点。合并后当前版共有 **47 类、48,101 处资源／设施点**，
-连同 5 类箱子和豚豚崽，共 **53 类、51,230 个标记**；旧版保持 15 类、
+连同 5 类箱子和水豚，共 **53 类、51,230 个标记**；旧版保持 15 类、
 8,542 个几何标记。两个版本合计 59,772 个标记。
 一个物理箱体只产生一个标记；箱盖、提手、卡扣等零件不重复计数。
-攀爬钉的 `Ring` 是同一设施的配件，不另行标点。旧版另有 250 个
-`Spike` + `M_Rock_ice` 地形变体，未将其误标为攀爬钉。
+岩钉的 `Ring` 是同一设施的配件，不另行标点。旧版另有 250 个
+`Spike` + `M_Rock_ice` 地形变体，未将其误标为岩钉。
 
-菌台是预放置的攀爬平台，不是可采集食品。两版每版各有 840 处
-`ShelfShroom` + `M_Petrified_Stone 1` 位于天底，属于石化菌台设施；
-Roots 的 `M_ShelfShroom_Dark` 也属于固定平台。鸟巢、菌台、岩钉与
-睡眠浆果点均不表示玩家是否已经采集、使用或触发。
+固定踏板菇是预放置的攀爬平台，不是可采集食品。两版每版各有 840 处
+`ShelfShroom` + `M_Petrified_Stone 1` 位于天底，属于石化踏板菇设施；
+森蕈（`Roots`）的 `M_ShelfShroom_Dark` 也属于固定平台。蛋巢、踏板菇、
+鹤嘴锄、岩钉与晚安莓点均不表示玩家是否已经采集、使用或触发。
 
 四种护符的静态点位具有 `FakeItem`、`TriggerOnFakeItemPickedUp`、
 `SpineCheck` 和 `PropSpawner_AmuletStatues` 的源场景身份，使用
 `placement: "randomized-candidate"`，表示护符交互／生成的参考位置。
 它们不是终局雕像上的护符展示模型，也不保证某局必定出现可拾取护符。
 
-每个版本均有 53 只豚豚崽，逐只标记原始身体模型的位置，覆盖该版本全部
-21 张地图：11 张 Alpine 地图各 3 只，10 张 Mesa 地图各 2 只，均属于
+每个版本均有 53 只水豚，逐只标记原始身体模型的位置，覆盖该版本全部
+21 张地图：11 张雪山（`Alpine`）地图各 3 只，10 张方山（`Mesa`）地图各 2 只，均属于
 第 3 关（segment 2）。
-豚豚崽网格的原名是通用的 `Cube`，因此必须同时匹配精确材质
-`M_Capybara`；不能把所有 `Cube` 当作动物。Mesa 中使用
+水豚网格的原名是通用的 `Cube`，因此必须同时匹配精确材质
+`M_Capybara`；不能把所有 `Cube` 当作动物。方山（`Mesa`）中使用
 `M_Capybara Mirage` 的海市蜃楼模型明确排除，也不把温泉水面当作动物。
 匹配后只对该材质对应的 primitive 计算包围盒，保留 GPU 实例变换，
-所以一个合并节点中的多只豚豚崽仍各自生成标记。动物标记在 `source`
+所以一个合并节点中的多只水豚仍各自生成标记。动物标记在 `source`
 中额外保存 `materialName: "M_Capybara"` 作为身份依据。
 
 箱体网格只能证明地图中存在对应外观的位置。真正的行李箱、海市蜃楼和
@@ -65,7 +86,7 @@ Roots 的 `M_ShelfShroom_Dark` 也属于固定平台。鸟巢、菌台、岩钉�
 某次游戏必定出现可开箱子，不推断箱内物品、开箱状态或陷阱触发情况。
 
 其余固定资源／设施几何标记使用 `placement: "fixed"`，含义是地图中的固定模型位置。
-豚豚崽同样使用 `placement: "fixed"`，代表源地图中的摆放位置，不反映
+水豚同样使用 `placement: "fixed"`，代表源地图中的摆放位置，不反映
 当前游戏内的交互或成就状态。
 
 ## 场景组件补充与限制
@@ -78,7 +99,7 @@ Roots 的 `M_ShelfShroom_Dark` 也属于固定平台。鸟巢、菌台、岩钉�
 `Spawner` 和终局 `ScoutStatue` 奖励点。
 单道具生成器必须引用经过用途审查且带有物品组件的 prefab；植物／物品池
 必须匹配已审查的池类型，并具有有效的启动生成条件与生成位置。
-浆果藤的生成位置来自活跃子碰撞体，地面蘑菇／药根与藤蔓分别核对其真实
+浆果藤的生成位置来自活跃子碰撞体，地面菇类／药用根茎与藤蔓分别核对其真实
 `SpawnList` 内容，不把继承字段中的普通物品池误当成它们的生成清单。
 这使当前版能够覆盖浆果、椰树、蘑菇等生长点，以及背包、蜂巢、工具等
 物品生成参考点，而不把所有同名植物或可生成生物当作补给。
@@ -87,13 +108,14 @@ Roots 的 `M_ShelfShroom_Dark` 也属于固定平台。鸟巢、菌台、岩钉�
 
 | 参考点 | 数量 |
 | --- | ---: |
-| 海岸／丛林浆果生长点 | 3,495／2,553 |
-| 椰树生长点 | 4,495 |
-| 藤蔓果实生长点 | 2,417 |
-| 蘑菇与药根生长点 | 6,146 |
-| 仙人掌果生长点 | 13,709 |
+| 脆莓生长点 | 3,495 |
+| 脆莓／火烧莓生长点 | 2,553 |
+| 椰子生长点 | 4,495 |
+| 莓蕉／菇莓生长点 | 2,417 |
+| 地面采集生成点 | 6,146 |
+| 刺莓生长点 | 13,709 |
 | 背包生成点 | 84 |
-| 蜂巢／蜂窝蜜生成点 | 38／117 |
+| 蜂巢生成点／蜂巢蜜生成点 | 38／117 |
 | 终局雕像奖励点 | 21 |
 
 这些是植株、控制器或奖励锚点的数量，不是预计生成的道具个数。
@@ -101,7 +123,7 @@ Roots 的 `M_ShelfShroom_Dark` 也属于固定平台。鸟巢、菌台、岩钉�
 
 组件点保存 `componentPathId`、组件类别、prefab 名称（若有）、源场景 SHA-256
 及生成条件。普通锚点是生成器／植株控制器的世界位置，不是每枚果子的实时位置。
-地面蘑菇／药根的实际生成还需沿局部向下方向进行地形射线投影，标记只表示
+地面菇类／药用根茎的实际生成还需沿局部向下方向进行地形射线投影，标记只表示
 原始生长参考点，不推测本局最终落点。相同类型、同一位置的重复控制器合并
 为一个参考点，并在来源中保留各控制器和条件。
 玩家数量、攀登条件、普通局限制、启动几率、物品池、数量与重复生成规则仍由
@@ -116,8 +138,8 @@ Roots 的 `M_ShelfShroom_Dark` 也属于固定平台。鸟巢、菌台、岩钉�
 
 终局雕像奖励使用 `ScoutStatue.gemSpot` 引用的真实场景 Transform 位置，
 而不是雕像根节点原点。来源记录 `anchor: "referenced-transform-world-position"`、
-`transformField: "gemSpot"` 和 `transformPathId`。该点先生成 Strange Gem，
-集齐四种护符后可在同一位置替换为 ScoutsHonor；标记保留初始物品与条件奖励
+`transformField: "gemSpot"` 和 `transformPathId`。该点先生成奇怪水晶（`Strange Gem`），
+集齐四种护符后可在同一位置替换为童军的荣耀（`ScoutsHonor`）；标记保留初始物品与条件奖励
 的区别。被关闭的终局绳索事件组件不因存在生成代码就加入物品点位。
 
 当前可读取的原始场景属于 `25739797`，其 21 张地图的源场景摘要均与该版
@@ -128,7 +150,7 @@ Roots 的 `M_ShelfShroom_Dark` 也属于固定平台。鸟巢、菌台、岩钉�
 
 网格用途有歧义时不扩大资源覆盖：`M_Scallop` 贝壳仅有场景网格／碰撞体，
 没有拾取或资源组件；`Cylinder` + `M_ShitStick` 的静态模型属于营火木柴；
-Void 的背包模型是石化装饰；通用蘑菇还可能是地形或危险物。
+天底（`Void`）的背包模型是石化装饰；通用蘑菇还可能是地形或危险物。
 这些模型不会仅凭外观变成可拾取补给点。
 
 仓库内的完整审查数据保留可追溯来源；网页发布时将每版完整文件拆为精简的
@@ -162,16 +184,16 @@ Unity 原始 XYZ 米制坐标，网页的 Z 轴转换由场景统一执行。
 不通过地图槽位或对齐矩阵把某一版坐标复用于另一版。对当前安装游戏的
 只读 prefab 的检查仅帮助确认同名模型的用途与歧义：`BirdNest` 位于具有
 `BerryBush` 的蛋巢下；`pickaxe` 位于具有 `ClimbHandle` 和 `ShittyPiton` 的
-固定岩钉下；`Spike` + `M_ClimbingSpike` 属于带有同类攀爬组件的设施；
-`ShelfShroom` 有预放置菌台变体；`Nap Berry` 同时用于物品与
+固定鹤嘴锄下；`Spike` + `M_ClimbingSpike` 属于带有同类攀爬组件的岩钉设施；
+`ShelfShroom` 有预放置踏板菇变体；`Nap Berry` 同时用于物品与
 `FakeNapBerry` / `OrbThatMakesYouSleepy` 场景点。几何坐标始终来自绑定版本
 的规范几何文件，组件坐标只来自摘要匹配的原始场景。
 
-豚豚崽的身份也通过只读游戏资源核对：真实 Alpine 温泉和 Mesa Oasis
+水豚的身份也通过只读游戏资源核对：真实雪山（`Alpine`）温泉和方山绿洲（`Mesa Oasis`）
 下的动物具有 `Capybara` 组件，其子模型是 `Cube`、材质为 `M_Capybara`；
 同一身体网格有 1,522 个顶点，包围盒与规范地图中的对应模型一致。
 `MirageOasis` 则具有 `MirageLuggage`，动物外观使用
-`M_Capybara Mirage`，不会进入真实豚豚崽标记。游戏 prefab 提供用途与
+`M_Capybara Mirage`，不会进入真实水豚标记。游戏 prefab 提供用途与
 模型身份的交叉验证，两份数据共 106 个动物坐标分别从对应版本的规范 GLB
 独立计算。
 
@@ -206,8 +228,8 @@ node PeakTrailPlatform/tools/stage-site.mjs
 测试检查两版全部 42 张地图的场景和几何摘要、类型与位置覆盖、重复模型去重、
 章节归属、父节点与非均匀缩放、静态批处理原点、压缩 GPU 实例，以及损坏
 几何数据的拒绝行为；新设施额外覆盖材质变体排除、护符候选语义和共享索引
-包围盒。豚豚崽额外验证精确材质匹配、海市蜃楼排除、混合材质 primitive
-不污染动物中心，以及 Alpine／Mesa 的逐图数量。组件合并验证每张地图的来源身份，
+包围盒。水豚额外验证精确材质匹配、海市蜃楼排除、混合材质 primitive
+不污染动物中心，以及雪山／方山的逐图数量。组件合并验证每张地图的来源身份，
 不能用其他版本或其他地图的数据补位。Python 测试额外覆盖藤蔓碰撞体生成点、
 地面生长投影条件、全局 scope、终局奖励引用锚点与重叠控制器去重。
 

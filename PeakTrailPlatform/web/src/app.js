@@ -211,7 +211,7 @@ const SEGMENT_NAMES_ZH = new Map([
   ["alpine", "雪山"],
   ["mesa", "方山"],
   ["volcano", "火山"],
-  ["swamp", "沼泽"],
+  ["swamp", "雾沼"],
 ]);
 
 function asSegment(value) {

@@ -256,8 +256,8 @@ test("the resource master switch also enables item types found only in other cha
 
 test("capybaras have their own default-on animal filter and never join fixed-item selection", async () => {
   const raw = catalog();
-  raw.types.push({ id: "animal-capybara", category: "animal", name: "豚豚崽", color: "#e6ac69" });
-  raw.maps[0].markers.push({ ...marker("capybara", "animal-capybara"), category: "animal", name: "豚豚崽" });
+  raw.types.push({ id: "animal-capybara", category: "animal", name: "水豚", color: "#e6ac69" });
+  raw.maps[0].markers.push({ ...marker("capybara", "animal-capybara"), category: "animal", name: "水豚" });
   const normalized = normalizeMapLoot(raw, pack()); assert.ok(normalized);
   const f = fixture(async () => normalized); f.panel.sync(); await settle();
   assert.equal(f.elements.mapLootCount.textContent, "2");

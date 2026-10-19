@@ -5,29 +5,37 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { MeshoptDecoder } from '../../vendor/three/0.180.0/examples/jsm/libs/meshopt_decoder.module.js';
 
+const localizedLabels = JSON.parse(await readFile(new URL('../../data/maps/loot-labels.zh-CN.json', import.meta.url), 'utf8'));
+if (localizedLabels.schemaVersion !== 1 || localizedLabels.locale !== 'zh-CN') throw new Error('Invalid native Chinese marker labels');
+function nativeMarkerName(id) {
+  const name = localizedLabels.labels[id]?.name;
+  if (typeof name !== 'string' || !name.trim()) throw new Error(`Missing native Chinese marker label: ${id}`);
+  return name;
+}
+
 // Exact body meshes, never lids, handles, clasps, decorative mushrooms, or
 // inferred nearby pickups. Identity proof is recorded in the survey notes.
 export const lootGeometryTypes = [
-  { id: 'chest-small', category: 'chest', name: '小型行李箱', color: '#65d9ed', meshName: 'Luggage_Small' },
-  { id: 'chest-large', category: 'chest', name: '大型行李箱', color: '#f2c777', meshName: 'Luggage_large' },
-  { id: 'chest-epic', category: 'chest', name: '珍奇行李箱', color: '#c69cff', meshName: 'Epic Luggage' },
-  { id: 'chest-ancient', category: 'chest', name: '古代行李箱', color: '#f09a72', meshName: 'ancient Luggage' },
-  { id: 'chest-trick', category: 'chest', name: '恶作剧行李箱', color: '#f08dbc', meshName: 'Luggage_Trick' },
-  { id: 'item-bird-nest', category: 'item', name: '鸟蛋巢', color: '#9ee3a7', meshName: 'BirdNest' },
-  { id: 'item-shelf-shroom', category: 'item', name: '攀爬菌台', color: '#75d8bb', meshName: 'ShelfShroom' },
-  { id: 'item-piton', category: 'item', name: '固定岩钉', color: '#9cb9dc', meshName: 'pickaxe' },
-  { id: 'item-napberry', category: 'item', name: '睡眠浆果点', color: '#b7b7f6', meshName: 'Nap Berry' },
-  { id: 'item-climbing-spike', category: 'item', name: '固定攀爬钉', color: '#c2dceb', meshName: 'Spike', materialName: 'M_ClimbingSpike' },
+  { id: 'chest-small', category: 'chest', color: '#65d9ed', meshName: 'Luggage_Small' },
+  { id: 'chest-large', category: 'chest', color: '#f2c777', meshName: 'Luggage_large' },
+  { id: 'chest-epic', category: 'chest', color: '#c69cff', meshName: 'Epic Luggage' },
+  { id: 'chest-ancient', category: 'chest', color: '#f09a72', meshName: 'ancient Luggage' },
+  { id: 'chest-trick', category: 'chest', color: '#f08dbc', meshName: 'Luggage_Trick' },
+  { id: 'item-bird-nest', category: 'item', color: '#9ee3a7', meshName: 'BirdNest' },
+  { id: 'item-shelf-shroom', category: 'item', color: '#75d8bb', meshName: 'ShelfShroom' },
+  { id: 'item-piton', category: 'item', color: '#9cb9dc', meshName: 'pickaxe' },
+  { id: 'item-napberry', category: 'item', color: '#b7b7f6', meshName: 'Nap Berry' },
+  { id: 'item-climbing-spike', category: 'item', color: '#c2dceb', meshName: 'Spike', materialName: 'M_ClimbingSpike' },
   // FakeAmulet's scene models mark AmuletSpawner reference sites. They are
   // candidate sites rather than a promise that the run produces an amulet.
-  { id: 'item-amulet-bird', category: 'item', name: '海鸥护符点', color: '#d7d4a1', meshName: 'Medallion_Bird', materialName: 'Tarnished Gold Medallion', placement: 'randomized-candidate' },
-  { id: 'item-amulet-goat', category: 'item', name: '山羊护符点', color: '#b6c9e0', meshName: 'Medallion_Goat', materialName: 'Tarnished Gold Medallion', placement: 'randomized-candidate' },
-  { id: 'item-amulet-turtle', category: 'item', name: '乌龟护符点', color: '#a7d1af', meshName: 'Medallion_Turtle', materialName: 'Tarnished Gold Medallion', placement: 'randomized-candidate' },
-  { id: 'item-amulet-bingbong', category: 'item', name: 'Bing Bong护符点', color: '#cfabe0', meshName: 'Medallion_BingBong', materialName: 'Tarnished Gold Medallion', placement: 'randomized-candidate' },
+  { id: 'item-amulet-bird', category: 'item', color: '#d7d4a1', meshName: 'Medallion_Bird', materialName: 'Tarnished Gold Medallion', placement: 'randomized-candidate' },
+  { id: 'item-amulet-goat', category: 'item', color: '#b6c9e0', meshName: 'Medallion_Goat', materialName: 'Tarnished Gold Medallion', placement: 'randomized-candidate' },
+  { id: 'item-amulet-turtle', category: 'item', color: '#a7d1af', meshName: 'Medallion_Turtle', materialName: 'Tarnished Gold Medallion', placement: 'randomized-candidate' },
+  { id: 'item-amulet-bingbong', category: 'item', color: '#cfabe0', meshName: 'Medallion_BingBong', materialName: 'Tarnished Gold Medallion', placement: 'randomized-candidate' },
   // The original body has the generic mesh name Cube. Require its exact
   // authenticated material; M_Capybara Mirage is a different mesa prop.
-  { id: 'animal-capybara', category: 'animal', name: '豚豚崽', color: '#e6ac69', meshName: 'Cube', materialName: 'M_Capybara' },
-];
+  { id: 'animal-capybara', category: 'animal', color: '#e6ac69', meshName: 'Cube', materialName: 'M_Capybara' },
+].map(type => ({ ...type, name: nativeMarkerName(type.id) }));
 
 const identity = () => [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');

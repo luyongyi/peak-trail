@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 const readJson = async path => JSON.parse(await readFile(new URL(path, import.meta.url), 'utf8'));
 const catalog = await readJson('../../data/maps/catalog.json');
+const localization = await readJson('../../data/maps/loot-labels.zh-CN.json');
 const builds = ['25306743', '25739797'];
 const surveys = await Promise.all(builds.map(async build => ({
   build,
@@ -53,6 +54,7 @@ test(`all ${build} markers retain authenticated geometry or component provenance
     assert.ok(['chest', 'item', 'animal'].includes(type.category));
     assert.match(type.color, /^#[0-9a-f]{6}$/i);
     assert.ok(type.name.length > 0);
+    assert.equal(type.name, localization.labels[type.id]?.name, `native Chinese label: ${type.id}`);
   }
   for (const map of survey.maps) {
     assert.equal(map.layers.length, 6);
@@ -154,6 +156,32 @@ test(`survey ${build} distinguishes candidate sites and preserves audited geomet
   assert.deepEqual(Object.fromEntries(counts), expectedCounts);
 });
 }
+
+test('marker labels use the game Chinese names and keep descriptive site categories explicit', () => {
+  assert.equal(localization.locale, 'zh-CN');
+  assert.equal(localization.source.textAsset, 'SerializedTermsData');
+  assert.equal(localization.source.language, 'SimplifiedChinese');
+  assert.equal(localization.source.languageIndex, 9);
+  assert.match(localization.source.sha256, hash);
+  for (const [id, key, name] of [
+    ['item-spawn-flare', 'NAME_FLARE', '照明棒生成点'],
+    ['item-spawn-healing-puff', 'NAME_REMEDY FUNGUS', '灵药菇生成点'],
+    ['item-spawn-warp-fungus', 'NAME_WARP FUNGUS', '曲迁菇生成点'],
+    ['item-napberry', 'NAME_NAPBERRY', '晚安莓点'],
+    ['item-piton', 'PICKAXE', '鹤嘴锄（固定）'],
+    ['item-climbing-spike', 'NAME_PITON', '岩钉（固定）'],
+    ['item-amulet-bird', 'NAME_AMULET_DOUBLEJUMP', '童军的进取点'],
+  ]) {
+    const label = localization.labels[id];
+    assert.equal(label.name, name);
+    assert.equal(label.terms[0].key, key);
+    assert.ok(label.name.includes(label.terms[0].zh));
+  }
+  assert.equal(localization.labels['item-cactus-growth'].kind, 'resource-group');
+  assert.equal(localization.labels['item-cactus-growth'].name, '刺莓生长点');
+  assert.equal(localization.labels['item-ground-forage'].kind, 'map-description');
+  assert.equal(localization.prefabTypes.AntiRopeSpool, undefined, 'unverified prefab aliases cannot get invented Chinese names');
+});
 
 test('current scene components restore the complete audited set of fixed spawn and growth reference sites', () => {
   const { survey } = surveys.find(entry => entry.build === '25739797');

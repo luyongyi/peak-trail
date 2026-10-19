@@ -1,0 +1,1074 @@
+{
+  "schemaVersion": 1,
+  "locale": "zh-CN",
+  "source": {
+    "gameBuildId": "25739797",
+    "assetFile": "resources.assets",
+    "textAsset": "SerializedTermsData",
+    "pathId": "1422",
+    "sha256": "13a7a854a997e6445b0b0c2d702748ed65e5f8edcc3e6cc317bfa1d860f0d342",
+    "language": "SimplifiedChinese",
+    "languageIndex": 9,
+    "lookup": "Item.UIData.itemName -> NAME_ + itemName; Luggage/ClimbHandle use their own GetName keys. Exact runtime dictionary strings, not translations of prefab names."
+  },
+  "prefabTypes": {
+    "AloeVera": "item-spawn-aloe",
+    "AncientIdol": "item-spawn-ancient-idol",
+    "Antidote": "item-spawn-antidote",
+    "Backpack": "item-spawn-backpack",
+    "Bandages": "item-spawn-bandages",
+    "Beehive": "item-spawn-beehive",
+    "BingBong": "item-spawn-bing-bong",
+    "Binoculars": "item-spawn-binoculars",
+    "BounceShroom": "item-spawn-bounce-shroom",
+    "Bugle": "item-spawn-bugle",
+    "CactusBall": "item-spawn-cactus-pickup",
+    "ChainShooter": "item-spawn-chain-shooter",
+    "ClimbingSpike": "item-spawn-climbing-spike-pickup",
+    "CloudFungus": "item-spawn-cloud-fungus",
+    "Compass": "item-spawn-compass",
+    "Cure-All": "item-spawn-cure-all",
+    "Dynamite": "item-spawn-dynamite",
+    "EarlyWorm": "item-spawn-early-worm",
+    "Egg": "item-spawn-egg-pickup",
+    "EggTurkey": "item-spawn-turkey-egg",
+    "FireWood": "item-spawn-firewood",
+    "FirstAidKit": "item-spawn-first-aid",
+    "Flare": "item-spawn-flare",
+    "Frisbee": "item-spawn-frisbee",
+    "Frog": "item-spawn-frog",
+    "Glizzy_CattailVariant": "item-spawn-cattail-food",
+    "Guidebook": "item-spawn-guidebook",
+    "GuidebookPageScroll Variant": "item-spawn-guidebook-scroll",
+    "HealingDart Variant": "item-spawn-healing-dart",
+    "HealingPuffShroom": "item-spawn-healing-puff",
+    "Item_Honeycomb": "item-spawn-honeycomb",
+    "Lantern": "item-spawn-lantern",
+    "MagicBean": "item-spawn-magic-bean",
+    "Mandrake": "item-spawn-mandrake",
+    "MedicinalRoot": "item-spawn-medicinal-root",
+    "Mushroom Normie": "item-spawn-mushroom",
+    "NestEgg": "item-spawn-large-egg-pickup",
+    "PortableStovetopItem": "item-spawn-portable-stove",
+    "RopeShooter": "item-spawn-rope-shooter",
+    "RopeShooterAnti": "item-spawn-anti-rope-shooter",
+    "RopeSpool": "item-spawn-rope-spool",
+    "Scorpion": "item-spawn-scorpion",
+    "ShelfShroom": "item-spawn-shelf-shroom-pickup",
+    "Shell Big": "item-spawn-shell",
+    "Stone": "item-spawn-stone",
+    "Torch": "item-spawn-torch",
+    "WarpFungus": "item-spawn-warp-fungus",
+    "Winterberry Yellow": "item-spawn-winterberry-yellow"
+  },
+  "labels": {
+    "animal-capybara": {
+      "name": "水豚",
+      "kind": "official-description-term",
+      "terms": [
+        {
+          "key": "DESC_ANIMAL SERENADING",
+          "en": "Play the bugle for a capybara.",
+          "zh": "为水豚演奏喇叭。"
+        }
+      ],
+      "description": "The official achievement description names the animal 水豚; no fabricated item-name key is used."
+    },
+    "chest-ancient": {
+      "name": "古老行李箱",
+      "kind": "official-name",
+      "terms": [
+        {
+          "key": "ANCIENT LUGGAGE",
+          "en": "ANCIENT LUGGAGE",
+          "zh": "古老行李箱"
+        }
+      ]
+    },
+    "chest-epic": {
+      "name": "探险家行李箱",
+      "kind": "official-name",
+      "terms": [
+        {
+          "key": "EXPLORER'S LUGGAGE",
+          "en": "EXPLORER'S LUGGAGE",
+          "zh": "探险家行李箱"
+        }
+      ]
+    },
+    "chest-large": {
+      "name": "大号行李箱",
+      "kind": "official-name",
+      "terms": [
+        {
+          "key": "BIG LUGGAGE",
+          "en": "BIG LUGGAGE",
+          "zh": "大号行李箱"
+        }
+      ]
+    },
+    "chest-small": {
+      "name": "行李箱",
+      "kind": "official-name",
+      "terms": [
+        {
+          "key": "LUGGAGE",
+          "en": "LUGGAGE",
+          "zh": "行李箱"
+        }
+      ]
+    },
+    "chest-trick": {
+      "name": "行李箱（诱饵外观）",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "LUGGAGE",
+          "en": "LUGGAGE",
+          "zh": "行李箱"
+        }
+      ],
+      "description": "LuggageTrick displays Luggage in the game; the parenthetical text describes the map model category, not an official item name or a live trap guarantee."
+    },
+    "item-amulet-bingbong": {
+      "name": "童军的盛情点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_AMULET_CLONE",
+          "en": "SCOUT'S GENEROSITY",
+          "zh": "童军的盛情"
+        }
+      ]
+    },
+    "item-amulet-bird": {
+      "name": "童军的进取点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_AMULET_DOUBLEJUMP",
+          "en": "SCOUT'S INITIATIVE",
+          "zh": "童军的进取"
+        }
+      ]
+    },
+    "item-amulet-goat": {
+      "name": "童军的野心点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_AMULET_INFINITESTAM",
+          "en": "SCOUT'S AMBITION",
+          "zh": "童军的野心"
+        }
+      ]
+    },
+    "item-amulet-turtle": {
+      "name": "童军的毅力点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_AMULET_HEALING",
+          "en": "SCOUT’S TENACITY",
+          "zh": "童军的毅力"
+        }
+      ]
+    },
+    "item-bird-nest": {
+      "name": "蛋巢（好大蛋／小小蛋）",
+      "kind": "resource-group",
+      "terms": [
+        {
+          "key": "NAME_BIG EGG",
+          "en": "BIG EGG",
+          "zh": "好大蛋"
+        },
+        {
+          "key": "NAME_SMALL EGG",
+          "en": "SMALL EGG",
+          "zh": "小小蛋"
+        }
+      ],
+      "description": "One geometry category covers two egg-nest prefabs. Egg nests are a map description; NAME_EGG refers to a different item."
+    },
+    "item-cactus-growth": {
+      "name": "刺莓生长点",
+      "kind": "resource-group",
+      "terms": [
+        {
+          "key": "NAME_RED PRICKLEBERRY",
+          "en": "RED PRICKLEBERRY",
+          "zh": "红刺莓"
+        },
+        {
+          "key": "NAME_GOLD PRICKLEBERRY",
+          "en": "GOLD PRICKLEBERRY",
+          "zh": "金刺莓"
+        }
+      ],
+      "description": "The internal Cactus spawn pool produces prickleberries, not the Cactus item."
+    },
+    "item-campfire-food": {
+      "name": "棉花糖／热狗肠生成点",
+      "kind": "resource-group",
+      "terms": [
+        {
+          "key": "NAME_MARSHMALLOW",
+          "en": "MARSHMALLOW",
+          "zh": "棉花糖"
+        },
+        {
+          "key": "NAME_HOT DOG",
+          "en": "HOT DOG",
+          "zh": "热狗肠"
+        }
+      ]
+    },
+    "item-climbing-spike": {
+      "name": "岩钉（固定）",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_PITON",
+          "en": "PITON",
+          "zh": "岩钉"
+        }
+      ]
+    },
+    "item-clusterberry-growth": {
+      "name": "葚莓生长点",
+      "kind": "resource-group",
+      "terms": [
+        {
+          "key": "NAME_BLACK CLUSTERBERRY",
+          "en": "BLACK CLUSTERBERRY",
+          "zh": "黑葚莓"
+        },
+        {
+          "key": "NAME_RED CLUSTERBERRY",
+          "en": "RED CLUSTERBERRY",
+          "zh": "红葚莓"
+        },
+        {
+          "key": "NAME_YELLOW CLUSTERBERRY",
+          "en": "YELLOW CLUSTERBERRY",
+          "zh": "黄葚莓"
+        }
+      ]
+    },
+    "item-coconut-growth": {
+      "name": "椰子生长点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_COCONUT",
+          "en": "COCONUT",
+          "zh": "椰子"
+        }
+      ]
+    },
+    "item-ground-forage": {
+      "name": "地面采集生成点",
+      "kind": "map-description",
+      "terms": [
+        {
+          "key": "NAME_MEDICINAL ROOT",
+          "en": "MEDICINAL ROOT",
+          "zh": "药用根茎"
+        },
+        {
+          "key": "NAME_CHUBBY SHROOM",
+          "en": "CHUBBY SHROOM",
+          "zh": "梨鲍菇"
+        },
+        {
+          "key": "NAME_CLUSTER SHROOM",
+          "en": "CLUSTER SHROOM",
+          "zh": "银针菇"
+        },
+        {
+          "key": "NAME_WEIRD SHROOM",
+          "en": "WEIRD SHROOM",
+          "zh": "诡异菇"
+        },
+        {
+          "key": "NAME_BUGLE SHROOM",
+          "en": "BUGLE SHROOM",
+          "zh": "喇叭菇"
+        },
+        {
+          "key": "NAME_BUTTON SHROOM",
+          "en": "BUTTON SHROOM",
+          "zh": "馒头菇"
+        },
+        {
+          "key": "NAME_RED SHROOMBERRY",
+          "en": "RED SHROOMBERRY",
+          "zh": "红菇莓"
+        },
+        {
+          "key": "NAME_YELLOW SHROOMBERRY",
+          "en": "YELLOW SHROOMBERRY",
+          "zh": "黄菇莓"
+        },
+        {
+          "key": "NAME_GREEN SHROOMBERRY",
+          "en": "GREEN SHROOMBERRY",
+          "zh": "绿菇莓"
+        },
+        {
+          "key": "NAME_BLUE SHROOMBERRY",
+          "en": "BLUE SHROOMBERRY",
+          "zh": "蓝菇莓"
+        },
+        {
+          "key": "NAME_PURPLE SHROOMBERRY",
+          "en": "PURPLE SHROOMBERRY",
+          "zh": "紫菇莓"
+        },
+        {
+          "key": "NAME_MANDRAKE",
+          "en": "MANDRAKE",
+          "zh": "曼德拉草"
+        }
+      ],
+      "description": "GroundPlaceSpawner reads a scene SpawnList containing multiple mushrooms, shroomberries, roots and mandrakes; this is a neutral map category, not a single official item."
+    },
+    "item-jungle-berry-growth": {
+      "name": "脆莓／火烧莓生长点",
+      "kind": "resource-group",
+      "terms": [
+        {
+          "key": "NAME_GREEN CRISPBERRY",
+          "en": "GREEN CRISPBERRY",
+          "zh": "绿脆莓"
+        },
+        {
+          "key": "NAME_RED CRISPBERRY",
+          "en": "RED CRISPBERRY",
+          "zh": "红脆莓"
+        },
+        {
+          "key": "NAME_YELLOW CRISPBERRY",
+          "en": "YELLOW CRISPBERRY",
+          "zh": "黄脆莓"
+        },
+        {
+          "key": "NAME_SCORCHBERRY",
+          "en": "SCORCHBERRY",
+          "zh": "火烧莓"
+        }
+      ]
+    },
+    "item-napberry": {
+      "name": "晚安莓点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_NAPBERRY",
+          "en": "NAPBERRY",
+          "zh": "晚安莓"
+        }
+      ]
+    },
+    "item-piton": {
+      "name": "鹤嘴锄（固定）",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "PICKAXE",
+          "en": "PICKAXE",
+          "zh": "鹤嘴锄"
+        }
+      ]
+    },
+    "item-redwood-growth": {
+      "name": "踏板菇／弹力菇／云雾菇生成点",
+      "kind": "resource-group",
+      "terms": [
+        {
+          "key": "NAME_SHELF FUNGUS",
+          "en": "SHELF FUNGUS",
+          "zh": "踏板菇"
+        },
+        {
+          "key": "NAME_BOUNCE FUNGUS",
+          "en": "BOUNCE FUNGUS",
+          "zh": "弹力菇"
+        },
+        {
+          "key": "NAME_CLOUD FUNGUS",
+          "en": "CLOUD FUNGUS",
+          "zh": "云雾菇"
+        }
+      ],
+      "description": "The internal Redwood pool selects among these fungi; Redwood is not a localized item name."
+    },
+    "item-scout-statue-reward": {
+      "name": "终局雕像奖励点",
+      "kind": "map-description",
+      "terms": [
+        {
+          "key": "NAME_STRANGE GEM",
+          "en": "STRANGE GEM",
+          "zh": "奇怪水晶"
+        },
+        {
+          "key": "NAME_SCOUTSHONOR",
+          "en": "SCOUT’S HONOR",
+          "zh": "童军的荣耀"
+        }
+      ],
+      "description": "The site first holds 奇怪水晶 and conditionally yields 童军的荣耀; this label describes the reward site without guaranteeing the conditional item."
+    },
+    "item-shelf-shroom": {
+      "name": "踏板菇（固定）",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_SHELF FUNGUS",
+          "en": "SHELF FUNGUS",
+          "zh": "踏板菇"
+        }
+      ]
+    },
+    "item-shore-berry-growth": {
+      "name": "脆莓生长点",
+      "kind": "resource-group",
+      "terms": [
+        {
+          "key": "NAME_GREEN CRISPBERRY",
+          "en": "GREEN CRISPBERRY",
+          "zh": "绿脆莓"
+        },
+        {
+          "key": "NAME_RED CRISPBERRY",
+          "en": "RED CRISPBERRY",
+          "zh": "红脆莓"
+        },
+        {
+          "key": "NAME_YELLOW CRISPBERRY",
+          "en": "YELLOW CRISPBERRY",
+          "zh": "黄脆莓"
+        }
+      ]
+    },
+    "item-spawn-aloe": {
+      "name": "芦荟生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_ALOE VERA",
+          "en": "ALOE VERA",
+          "zh": "芦荟"
+        }
+      ]
+    },
+    "item-spawn-ancient-idol": {
+      "name": "古老玩偶生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_ANCIENT IDOL",
+          "en": "ANCIENT IDOL",
+          "zh": "古老玩偶"
+        }
+      ]
+    },
+    "item-spawn-anti-rope-shooter": {
+      "name": "反重绳索炮生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_ANTI-ROPE CANNON",
+          "en": "ANTI-ROPE CANNON",
+          "zh": "反重绳索炮"
+        }
+      ]
+    },
+    "item-spawn-antidote": {
+      "name": "解毒剂生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_ANTIDOTE",
+          "en": "ANTIDOTE",
+          "zh": "解毒剂"
+        }
+      ]
+    },
+    "item-spawn-backpack": {
+      "name": "背包生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_BACKPACK",
+          "en": "BACKPACK",
+          "zh": "背包"
+        }
+      ]
+    },
+    "item-spawn-bandages": {
+      "name": "绷带生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_BANDAGES",
+          "en": "BANDAGES",
+          "zh": "绷带"
+        }
+      ]
+    },
+    "item-spawn-beehive": {
+      "name": "蜂巢生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_BEEHIVE",
+          "en": "BEEHIVE",
+          "zh": "蜂巢"
+        }
+      ]
+    },
+    "item-spawn-bing-bong": {
+      "name": "宾邦生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_BING BONG",
+          "en": "BING BONG",
+          "zh": "宾邦"
+        }
+      ]
+    },
+    "item-spawn-binoculars": {
+      "name": "望远镜生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_BINOCULARS",
+          "en": "BINOCULARS",
+          "zh": "望远镜"
+        }
+      ]
+    },
+    "item-spawn-bounce-shroom": {
+      "name": "弹力菇生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_BOUNCE FUNGUS",
+          "en": "BOUNCE FUNGUS",
+          "zh": "弹力菇"
+        }
+      ]
+    },
+    "item-spawn-bugle": {
+      "name": "喇叭生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_BUGLE",
+          "en": "BUGLE",
+          "zh": "喇叭"
+        }
+      ]
+    },
+    "item-spawn-cactus-pickup": {
+      "name": "仙人球生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_CACTUS",
+          "en": "CACTUS",
+          "zh": "仙人球"
+        }
+      ]
+    },
+    "item-spawn-cattail-food": {
+      "name": "热狗肠生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_HOT DOG",
+          "en": "HOT DOG",
+          "zh": "热狗肠"
+        }
+      ]
+    },
+    "item-spawn-chain-shooter": {
+      "name": "锁链发射器生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_CHAIN LAUNCHER",
+          "en": "CHAIN LAUNCHER",
+          "zh": "锁链发射器"
+        }
+      ]
+    },
+    "item-spawn-climbing-spike-pickup": {
+      "name": "岩钉生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_PITON",
+          "en": "PITON",
+          "zh": "岩钉"
+        }
+      ]
+    },
+    "item-spawn-cloud-fungus": {
+      "name": "云雾菇生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_CLOUD FUNGUS",
+          "en": "CLOUD FUNGUS",
+          "zh": "云雾菇"
+        }
+      ]
+    },
+    "item-spawn-compass": {
+      "name": "罗盘生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_COMPASS",
+          "en": "COMPASS",
+          "zh": "罗盘"
+        }
+      ]
+    },
+    "item-spawn-cure-all": {
+      "name": "万灵药生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_CURE-ALL",
+          "en": "CURE-ALL",
+          "zh": "万灵药"
+        }
+      ]
+    },
+    "item-spawn-dynamite": {
+      "name": "炸药生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_DYNAMITE",
+          "en": "DYNAMITE",
+          "zh": "炸药"
+        }
+      ]
+    },
+    "item-spawn-early-worm": {
+      "name": "早起虫儿生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_EARLYWORM",
+          "en": "THE EARLY WORM",
+          "zh": "早起虫儿"
+        }
+      ]
+    },
+    "item-spawn-egg-pickup": {
+      "name": "煎蛋生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_EGG",
+          "en": "EGG",
+          "zh": "煎蛋"
+        }
+      ]
+    },
+    "item-spawn-firewood": {
+      "name": "棍子生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_STICK",
+          "en": "STICK",
+          "zh": "棍子"
+        }
+      ]
+    },
+    "item-spawn-first-aid": {
+      "name": "急救箱生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_FIRST AID KIT",
+          "en": "FIRST AID KIT",
+          "zh": "急救箱"
+        }
+      ]
+    },
+    "item-spawn-flare": {
+      "name": "照明棒生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_FLARE",
+          "en": "FLARE",
+          "zh": "照明棒"
+        }
+      ]
+    },
+    "item-spawn-frisbee": {
+      "name": "飞盘生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_FRISBEE",
+          "en": "FLYING DISC",
+          "zh": "飞盘"
+        }
+      ]
+    },
+    "item-spawn-frog": {
+      "name": "青蛙生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_FROG",
+          "en": "FROG",
+          "zh": "青蛙"
+        }
+      ]
+    },
+    "item-spawn-guidebook": {
+      "name": "旅行指南生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_GUIDEBOOK",
+          "en": "GUIDEBOOK",
+          "zh": "旅行指南"
+        }
+      ]
+    },
+    "item-spawn-guidebook-scroll": {
+      "name": "卷轴生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_SCROLL",
+          "en": "SCROLL",
+          "zh": "卷轴"
+        }
+      ]
+    },
+    "item-spawn-healing-dart": {
+      "name": "吹箭筒生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_BLOWGUN",
+          "en": "BLOWGUN",
+          "zh": "吹箭筒"
+        }
+      ]
+    },
+    "item-spawn-healing-puff": {
+      "name": "灵药菇生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_REMEDY FUNGUS",
+          "en": "REMEDY FUNGUS",
+          "zh": "灵药菇"
+        }
+      ]
+    },
+    "item-spawn-honeycomb": {
+      "name": "蜂巢蜜生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_HONEYCOMB",
+          "en": "HONEYCOMB",
+          "zh": "蜂巢蜜"
+        }
+      ]
+    },
+    "item-spawn-lantern": {
+      "name": "提灯生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_LANTERN",
+          "en": "LANTERN",
+          "zh": "提灯"
+        }
+      ]
+    },
+    "item-spawn-large-egg-pickup": {
+      "name": "好大蛋生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_BIG EGG",
+          "en": "BIG EGG",
+          "zh": "好大蛋"
+        }
+      ]
+    },
+    "item-spawn-magic-bean": {
+      "name": "魔豆生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_MAGIC BEAN",
+          "en": "MAGIC BEAN",
+          "zh": "魔豆"
+        }
+      ]
+    },
+    "item-spawn-mandrake": {
+      "name": "曼德拉草生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_MANDRAKE",
+          "en": "MANDRAKE",
+          "zh": "曼德拉草"
+        }
+      ]
+    },
+    "item-spawn-medicinal-root": {
+      "name": "药用根茎生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_MEDICINAL ROOT",
+          "en": "MEDICINAL ROOT",
+          "zh": "药用根茎"
+        }
+      ]
+    },
+    "item-spawn-mushroom": {
+      "name": "馒头菇生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_BUTTON SHROOM",
+          "en": "BUTTON SHROOM",
+          "zh": "馒头菇"
+        }
+      ]
+    },
+    "item-spawn-portable-stove": {
+      "name": "便携火炉生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_PORTABLE STOVE",
+          "en": "PORTABLE STOVE",
+          "zh": "便携火炉"
+        }
+      ]
+    },
+    "item-spawn-rope-shooter": {
+      "name": "绳索炮生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_ROPE CANNON",
+          "en": "ROPE CANNON",
+          "zh": "绳索炮"
+        }
+      ]
+    },
+    "item-spawn-rope-spool": {
+      "name": "绳索生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_ROPE SPOOL",
+          "en": "ROPE SPOOL",
+          "zh": "绳索"
+        }
+      ]
+    },
+    "item-spawn-scorpion": {
+      "name": "蝎子生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_SCORPION",
+          "en": "SCORPION",
+          "zh": "蝎子"
+        }
+      ]
+    },
+    "item-spawn-shelf-shroom-pickup": {
+      "name": "踏板菇生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_SHELF FUNGUS",
+          "en": "SHELF FUNGUS",
+          "zh": "踏板菇"
+        }
+      ]
+    },
+    "item-spawn-shell": {
+      "name": "海螺生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_CONCH",
+          "en": "CONCH",
+          "zh": "海螺"
+        }
+      ]
+    },
+    "item-spawn-stone": {
+      "name": "石头生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_STONE",
+          "en": "STONE",
+          "zh": "石头"
+        }
+      ]
+    },
+    "item-spawn-torch": {
+      "name": "火炬生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_TORCH",
+          "en": "TORCH",
+          "zh": "火炬"
+        }
+      ]
+    },
+    "item-spawn-turkey-egg": {
+      "name": "“鸟”生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_BIRD",
+          "en": "BIRD",
+          "zh": "“鸟”"
+        }
+      ]
+    },
+    "item-spawn-warp-fungus": {
+      "name": "曲迁菇生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_WARP FUNGUS",
+          "en": "WARP FUNGUS",
+          "zh": "曲迁菇"
+        }
+      ]
+    },
+    "item-spawn-winterberry-yellow": {
+      "name": "黄雪莓生成点",
+      "kind": "official-name-with-description",
+      "terms": [
+        {
+          "key": "NAME_YELLOW WINTERBERRY",
+          "en": "YELLOW WINTERBERRY",
+          "zh": "黄雪莓"
+        }
+      ]
+    },
+    "item-vine-fruit-growth": {
+      "name": "莓蕉／菇莓生长点",
+      "kind": "resource-group",
+      "terms": [
+        {
+          "key": "NAME_BLUE BERRYNANA",
+          "en": "BLUE BERRYNANA",
+          "zh": "蓝莓蕉"
+        },
+        {
+          "key": "NAME_BROWN BERRYNANA",
+          "en": "BROWN BERRYNANA",
+          "zh": "棕莓蕉"
+        },
+        {
+          "key": "NAME_PINK BERRYNANA",
+          "en": "PINK BERRYNANA",
+          "zh": "粉莓蕉"
+        },
+        {
+          "key": "NAME_YELLOW BERRYNANA",
+          "en": "YELLOW BERRYNANA",
+          "zh": "黄莓蕉"
+        },
+        {
+          "key": "NAME_RED SHROOMBERRY",
+          "en": "RED SHROOMBERRY",
+          "zh": "红菇莓"
+        },
+        {
+          "key": "NAME_YELLOW SHROOMBERRY",
+          "en": "YELLOW SHROOMBERRY",
+          "zh": "黄菇莓"
+        },
+        {
+          "key": "NAME_GREEN SHROOMBERRY",
+          "en": "GREEN SHROOMBERRY",
+          "zh": "绿菇莓"
+        },
+        {
+          "key": "NAME_BLUE SHROOMBERRY",
+          "en": "BLUE SHROOMBERRY",
+          "zh": "蓝菇莓"
+        },
+        {
+          "key": "NAME_PURPLE SHROOMBERRY",
+          "en": "PURPLE SHROOMBERRY",
+          "zh": "紫菇莓"
+        }
+      ],
+      "description": "BerryVine uses its actual scene SpawnList rather than the inherited pool ID."
+    },
+    "item-willow-fruit-growth": {
+      "name": "荔莓生长点",
+      "kind": "resource-group",
+      "terms": [
+        {
+          "key": "NAME_GREEN KINGBERRY",
+          "en": "GREEN KINGBERRY",
+          "zh": "青荔莓"
+        },
+        {
+          "key": "NAME_PURPLE KINGBERRY",
+          "en": "PURPLE KINGBERRY",
+          "zh": "紫荔莓"
+        },
+        {
+          "key": "NAME_YELLOW KINGBERRY",
+          "en": "YELLOW KINGBERRY",
+          "zh": "黄荔莓"
+        }
+      ]
+    },
+    "item-winterberry-growth": {
+      "name": "雪莓生长点",
+      "kind": "resource-group",
+      "terms": [
+        {
+          "key": "NAME_ORANGE WINTERBERRY",
+          "en": "ORANGE WINTERBERRY",
+          "zh": "橙雪莓"
+        },
+        {
+          "key": "NAME_YELLOW WINTERBERRY",
+          "en": "YELLOW WINTERBERRY",
+          "zh": "黄雪莓"
+        }
+      ]
+    }
+  }
+}

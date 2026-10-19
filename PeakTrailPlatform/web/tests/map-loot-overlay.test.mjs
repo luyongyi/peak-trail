@@ -120,8 +120,8 @@ test("large marker collections use six draws, shared geometry and restrained dep
 
 test("capybara markers retain their animal category, warm finite beacons and a distinct paw badge", () => {
   const overlay = new MapLootOverlay();
-  const animal = marker({ id: "capybara-1", type: "animal-capybara", category: undefined, name: "豚豚崽", pos: [103, 204, 305] });
-  overlay.setData({ types: [{ id: "animal-capybara", category: "animal", name: "豚豚崽" }], markers: [
+  const animal = marker({ id: "capybara-1", type: "animal-capybara", category: undefined, name: "水豚", pos: [103, 204, 305] });
+  overlay.setData({ types: [{ id: "animal-capybara", category: "animal", name: "水豚" }], markers: [
     marker(), animal, marker({ id: "plant", type: "item-napberry", category: "item" }),
   ] });
   assert.equal(overlay.visibleMarkers[1].category, "animal");

@@ -6,7 +6,8 @@ from types import SimpleNamespace
 import numpy as np
 
 from export_loot_from_scene import (describe_spawner, selected_membership, export_map,
-                                    spawn_list_kind, vine_spawn_transforms, merge_coincident_markers)
+                                    spawn_list_kind, vine_spawn_transforms, merge_coincident_markers,
+                                    prefab_type)
 
 
 def plant(**changes):
@@ -20,6 +21,19 @@ def plant(**changes):
 
 
 class SpawnSemanticsTests(unittest.TestCase):
+    def test_native_chinese_names_and_distinct_egg_items_reject_unverified_aliases(self):
+        for prefab, native_name in (('HealingPuffShroom', '灵药菇'), ('ShelfShroom', '踏板菇'),
+                ('WarpFungus', '曲迁菇'), ('EarlyWorm', '早起虫儿'),
+                ('AncientIdol', '古老玩偶'), ('Flare', '照明棒')):
+            self.assertIn(native_name, prefab_type(prefab)['name'])
+        self.assertEqual(prefab_type('Egg')['id'], 'item-spawn-egg-pickup')
+        self.assertIn('煎蛋', prefab_type('Egg')['name'])
+        self.assertEqual(prefab_type('NestEgg')['id'], 'item-spawn-large-egg-pickup')
+        self.assertIn('好大蛋', prefab_type('NestEgg')['name'])
+        for alias in ('AntiRopeSpool', 'Coconut', 'HealingRoot', 'PoisonDart', 'GuidebookPage_Unreviewed'):
+            with self.assertRaisesRegex(ValueError, 'Unreviewed item prefab'):
+                prefab_type(alias)
+
     def test_deterministic_single_item_is_a_fixed_spawn_transform(self):
         kind, placement, conditions = describe_spawner('SingleItemSpawner', {}, 'Backpack')
         self.assertEqual(kind['id'], 'item-spawn-backpack')

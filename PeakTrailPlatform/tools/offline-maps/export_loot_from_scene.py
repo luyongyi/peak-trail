@@ -8,55 +8,25 @@ import argparse
 import gc
 import hashlib
 import json
+from functools import lru_cache
 from pathlib import Path
 
 from build_maps import Scene, game_data, pid
 
 
-PREFAB_LABELS = {
-    'AloeVera': ('aloe', '芦荟'), 'AncientIdol': ('ancient-idol', '古代雕像'),
-    'Backpack': ('backpack', '背包'), 'Beehive': ('beehive', '蜂巢'),
-    'BingBong': ('bing-bong', '宾邦'), 'Binoculars': ('binoculars', '望远镜'),
-    'Bugle': ('bugle', '号角'), 'Compass': ('compass', '指南针'),
-    'Dynamite': ('dynamite', '炸药'), 'Flare': ('flare', '信号棒'),
-    'Frisbee': ('frisbee', '飞盘'), 'Guidebook': ('guidebook', '指南'),
-    'GuidebookPageScroll Variant': ('guidebook-scroll', '指南卷轴'),
-    'HealingPuffShroom': ('healing-puff', '治疗泡芙菇'), 'Lantern': ('lantern', '提灯'),
-    'MagicBean': ('magic-bean', '魔豆'), 'Mushroom Normie': ('mushroom', '蘑菇'),
-    'Scorpion': ('scorpion', '蝎子'), 'ShelfShroom': ('shelf-shroom-pickup', '菌台道具'),
-    'Shell Big': ('shell', '大贝壳'), 'Torch': ('torch', '火把'),
-    'WarpFungus': ('warp-fungus', '传送蘑菇'),
-    'Winterberry Yellow': ('winterberry-yellow', '黄色冬莓'),
-    'RopeShooter': ('rope-shooter', '绳索枪'), 'RopeSpool': ('rope-spool', '绳索'),
-    'AntiRopeSpool': ('anti-rope-spool', '反重力绳索'),
-    'ClimbingSpike': ('climbing-spike-pickup', '攀爬钉道具'),
-    'Coconut': ('coconut-pickup', '椰子'), 'CactusBall': ('cactus-pickup', '仙人掌果'),
-    'Egg': ('egg-pickup', '鸟蛋'), 'NestEgg': ('egg-pickup', '鸟蛋'),
-    'HealingRoot': ('healing-root', '治疗根'), 'MedicinalRoot': ('medicinal-root', '药根'),
-    'PortableStovetopItem': ('portable-stove', '便携炉'),
-    'Frog': ('frog', '青蛙'), 'Mandrake': ('mandrake', '曼德拉草'),
-    'EarlyWorm': ('early-worm', '早起虫'), 'CloudFungus': ('cloud-fungus', '云朵菇'),
-    'Item_Honeycomb': ('honeycomb', '蜂窝蜜'),
-    'Glizzy_CattailVariant': ('cattail-food', '香蒲食物'),
-    'BounceShroom': ('bounce-shroom', '弹跳菇'), 'Cure-All': ('cure-all', '万能药'),
-    'Antidote': ('antidote', '解毒剂'), 'FirstAidKit': ('first-aid', '急救包'),
-    'Bandages': ('bandages', '绷带'), 'FireWood': ('firewood', '柴火'),
-    'Stone': ('stone', '石头'), 'EggTurkey': ('turkey-egg', '火鸡蛋'),
-    'PoisonDart': ('poison-dart', '毒镖'), 'HealingDart Variant': ('healing-dart', '治疗镖'),
-    'ChainShooter': ('chain-shooter', '锁链枪'), 'RopeShooterAnti': ('anti-rope-shooter', '反重力绳索枪'),
-}
-POOL_LABELS = {
-    4: ('ground-forage', '地面采集生成点'),
-    8: ('shore-berry-growth', '海岸浆果生长点'),
-    16: ('jungle-berry-growth', '丛林浆果生长点'),
-    32: ('clusterberry-growth', '簇生浆果生长点'),
-    64: ('coconut-growth', '椰树生长点'),
-    128: ('willow-fruit-growth', '柳树果实生长点'),
-    256: ('vine-fruit-growth', '藤蔓果实生长点'),
-    512: ('winterberry-growth', '冬莓生长点'),
-    4194304: ('cactus-growth', '仙人掌果生长点'),
-    8388608: ('redwood-growth', '红杉生长点'),
-    33554432: ('campfire-food', '营地食物生成点'),
+LABELS_PATH = Path(__file__).resolve().parents[2] / 'data/maps/loot-labels.zh-CN.json'
+POOL_TYPES = {
+    4: 'item-ground-forage',
+    8: 'item-shore-berry-growth',
+    16: 'item-jungle-berry-growth',
+    32: 'item-clusterberry-growth',
+    64: 'item-coconut-growth',
+    128: 'item-willow-fruit-growth',
+    256: 'item-vine-fruit-growth',
+    512: 'item-winterberry-growth',
+    4194304: 'item-cactus-growth',
+    8388608: 'item-redwood-growth',
+    33554432: 'item-campfire-food',
 }
 RUNTIME_ACTIVATORS = frozenset(('EnabledRandom', 'DisableBasedOnRunSettings',
                                'VariantObject', 'VariationSwapper', 'SpecialDayZone'))
@@ -72,15 +42,28 @@ ITEM_COVERAGE = ('Authenticated pickup-spawner, plant, vine, ground-forage and c
                  'references rather than live item state.')
 
 
+@lru_cache(maxsize=1)
+def loot_labels():
+    catalog = json.loads(LABELS_PATH.read_text(encoding='utf-8'))
+    if (catalog.get('schemaVersion') != 1 or catalog.get('locale') != 'zh-CN'
+            or not isinstance(catalog.get('prefabTypes'), dict)
+            or not isinstance(catalog.get('labels'), dict)):
+        raise ValueError('Invalid authenticated Chinese loot-label catalog')
+    return catalog
+
+
+def item_type(type_id, color='#b9d998'):
+    definition = loot_labels()['labels'].get(type_id)
+    if not isinstance(definition, dict) or not isinstance(definition.get('name'), str) or not definition['name'].strip():
+        raise ValueError(f'Unreviewed item type label: {type_id}')
+    return {'id': type_id, 'category': 'item', 'name': definition['name'], 'color': color}
+
+
 def prefab_type(name):
-    if name in PREFAB_LABELS:
-        slug, label = PREFAB_LABELS[name]
-    elif name.startswith('GuidebookPage'):
-        slug, label = 'guidebook-page', '指南页'
-    else:
+    type_id = loot_labels()['prefabTypes'].get(name)
+    if not isinstance(type_id, str):
         raise ValueError(f'Unreviewed item prefab: {name}')
-    return {'id': f'item-spawn-{slug}', 'category': 'item',
-            'name': f'{label}生成点', 'color': '#b9d998'}
+    return item_type(type_id)
 
 
 def spawn_list_kind(component, prefab_names):
@@ -104,8 +87,7 @@ def describe_spawner(component, data, prefab_name, runtime_activation=False):
             raise ValueError('Unreviewed ScoutStatue reward prefabs')
         conditions.update(initialGem=prefab_name, conditionalReward='ScoutsHonor',
                           requiresAllAmulets=True, requiredAmuletCount=4)
-        return {'id': 'item-scout-statue-reward', 'category': 'item',
-                'name': '终局雕像奖励点', 'color': '#b9d998'}, 'randomized-candidate', conditions
+        return item_type('item-scout-statue-reward'), 'randomized-candidate', conditions
     if component in ('SingleItemSpawner', 'EndgameFlareSpawner'):
         if not prefab_name:
             return None
@@ -151,8 +133,7 @@ def describe_spawner(component, data, prefab_name, runtime_activation=False):
         expected_kind = 'ground-forage' if component == 'GroundPlaceSpawner' else 'vine-fruit-growth'
         if content_kind != expected_kind:
             return None
-        label = '地面采集生成点' if component == 'GroundPlaceSpawner' else '藤蔓果实生长点'
-        kind = {'id': f'item-{content_kind}', 'category': 'item', 'name': label, 'color': '#98ce91'}
+        kind = item_type(f'item-{content_kind}', '#98ce91')
         conditions['spawnListContentKind'] = content_kind
     elif data.get('spawnMode') == 0:
         # Egg nests already have one authenticated static geometry marker.
@@ -164,10 +145,9 @@ def describe_spawner(component, data, prefab_name, runtime_activation=False):
         kind = prefab_type(prefab_name)
     else:
         pool = data.get('spawnPool', 0)
-        if pool not in POOL_LABELS:
+        if pool not in POOL_TYPES:
             raise ValueError(f'Unreviewed item spawn pool: {pool}')
-        slug, label = POOL_LABELS[pool]
-        kind = {'id': f'item-{slug}', 'category': 'item', 'name': label, 'color': '#98ce91'}
+        kind = item_type(POOL_TYPES[pool], '#98ce91')
     return kind, 'randomized-candidate', conditions
 
 

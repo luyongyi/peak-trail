@@ -88,7 +88,7 @@ test('capybara body requires its exact material and ignores mirages and unrelate
   assert.equal(markers.length, 1);
   assert.equal(markers[0].type, 'animal-capybara');
   assert.equal(markers[0].category, 'animal');
-  assert.equal(markers[0].name, '豚豚崽');
+  assert.equal(markers[0].name, '水豚');
   assert.equal(markers[0].placement, 'fixed');
   assert.equal(markers[0].source.materialName, 'M_Capybara');
   assert.deepEqual(markers[0].pos, [11, 21, 31]);
