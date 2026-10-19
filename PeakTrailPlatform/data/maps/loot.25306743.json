@@ -15,91 +15,106 @@
       "id": "chest-small",
       "category": "chest",
       "color": "#65d9ed",
-      "name": "行李箱"
+      "name": "行李箱",
+      "nameEn": "LUGGAGE"
     },
     {
       "id": "chest-large",
       "category": "chest",
       "color": "#f2c777",
-      "name": "大号行李箱"
+      "name": "大号行李箱",
+      "nameEn": "BIG LUGGAGE"
     },
     {
       "id": "chest-epic",
       "category": "chest",
       "color": "#c69cff",
-      "name": "探险家行李箱"
+      "name": "探险家行李箱",
+      "nameEn": "EXPLORER'S LUGGAGE"
     },
     {
       "id": "chest-ancient",
       "category": "chest",
       "color": "#f09a72",
-      "name": "古老行李箱"
+      "name": "古老行李箱",
+      "nameEn": "ANCIENT LUGGAGE"
     },
     {
       "id": "chest-trick",
       "category": "chest",
       "color": "#f08dbc",
-      "name": "行李箱（诱饵外观）"
+      "name": "行李箱（诱饵外观）",
+      "nameEn": "LUGGAGE (decoy appearance)"
     },
     {
       "id": "item-bird-nest",
       "category": "item",
       "color": "#9ee3a7",
-      "name": "蛋巢（好大蛋／小小蛋）"
+      "name": "蛋巢（好大蛋／小小蛋）",
+      "nameEn": "Egg nests (BIG EGG / SMALL EGG)"
     },
     {
       "id": "item-shelf-shroom",
       "category": "item",
       "color": "#75d8bb",
-      "name": "踏板菇（固定）"
+      "name": "踏板菇（固定）",
+      "nameEn": "SHELF FUNGUS (fixed)"
     },
     {
       "id": "item-piton",
       "category": "item",
       "color": "#9cb9dc",
-      "name": "鹤嘴锄（固定）"
+      "name": "鹤嘴锄（固定）",
+      "nameEn": "PICKAXE (fixed)"
     },
     {
       "id": "item-napberry",
       "category": "item",
       "color": "#b7b7f6",
-      "name": "晚安莓点"
+      "name": "晚安莓点",
+      "nameEn": "NAPBERRY spawn site"
     },
     {
       "id": "item-climbing-spike",
       "category": "item",
       "color": "#c2dceb",
-      "name": "岩钉（固定）"
+      "name": "岩钉（固定）",
+      "nameEn": "PITON (fixed)"
     },
     {
       "id": "item-amulet-bird",
       "category": "item",
       "color": "#d7d4a1",
-      "name": "童军的进取点"
+      "name": "童军的进取点",
+      "nameEn": "SCOUT'S INITIATIVE spawn site"
     },
     {
       "id": "item-amulet-goat",
       "category": "item",
       "color": "#b6c9e0",
-      "name": "童军的野心点"
+      "name": "童军的野心点",
+      "nameEn": "SCOUT'S AMBITION spawn site"
     },
     {
       "id": "item-amulet-turtle",
       "category": "item",
       "color": "#a7d1af",
-      "name": "童军的毅力点"
+      "name": "童军的毅力点",
+      "nameEn": "SCOUT’S TENACITY spawn site"
     },
     {
       "id": "item-amulet-bingbong",
       "category": "item",
       "color": "#cfabe0",
-      "name": "童军的盛情点"
+      "name": "童军的盛情点",
+      "nameEn": "SCOUT'S GENEROSITY spawn site"
     },
     {
       "id": "animal-capybara",
       "category": "animal",
       "color": "#e6ac69",
-      "name": "水豚"
+      "name": "水豚",
+      "nameEn": "Capybara"
     }
   ],
   "maps": [

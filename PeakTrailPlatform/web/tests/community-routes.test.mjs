@@ -1,9 +1,39 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { communityGroupLabel, communityMapIdentity, communityPlayers, mapRouteStages, matchesCommunityGroup, normalizeCommunityStage, normalizeCommunityTeams, normalizeCommunityTeamStage } from "../src/community-route-model.js";
+import { communityGroupLabel, communityMapIdentity, communityPlayers, communityTeamLabel, mapRouteStages, matchesCommunityGroup, normalizeCommunityStage, normalizeCommunityTeams, normalizeCommunityTeamStage } from "../src/community-route-model.js";
 import { createCommunityRoutes } from "../src/community-routes.js";
+import { setLocale } from "../src/i18n.js";
 
 const hash = character => character.repeat(64);
+
+test("English team labels use structured difficulty and preserve real member names", () => {
+  const value = { startedUtc: "2026-10-08T13:00:00Z", map: { scene: "Level_8" },
+    difficulty: { key: "a3-c1-m1", label: "服务端中文", ascent: 3, custom: true, mini: true },
+    summitCompleted: true, members: [{ playerKey: hash("1"), name: "登山者" }, { playerKey: hash("2"), name: "", nameMissing: true }] };
+  try {
+    setLocale("en");
+    const label = communityTeamLabel(value);
+    assert.match(label, /ASCENT 3.*CUSTOM RUN.*Mini.*Team reached the summit/);
+    assert.ok(label.endsWith("登山者, Climber"));
+    assert.ok(!label.includes("服务端中文"));
+    assert.match(communityTeamLabel({ ...value, difficulty: { label: "无法验证的中文" } }), /Unknown difficulty/);
+  } finally { setLocale("zh-CN"); }
+});
+
+test("cached controller errors translate without refreshing or changing its map", async () => {
+  let requests = 0;
+  const controller = createCommunityRoutes({ fetchImpl: async () => { requests++; return new Response("offline", { status: 503 }); } });
+  try {
+    setLocale("zh-CN");
+    await controller.enterMap(map(), { stageIndex: 0 });
+    assert.match(controller.getSnapshot().message, /大家的路线暂不可用/);
+    const id = controller.getSnapshot().mapPackId;
+    setLocale("en");
+    assert.match(controller.getSnapshot().message, /Community routes unavailable \(HTTP 503\)/);
+    assert.equal(controller.getSnapshot().mapPackId, id);
+    assert.equal(requests, 1);
+  } finally { controller.dispose(); setLocale("zh-CN"); }
+});
 const alignment = () => ({ status: "verified", id: hash("9"), method: "identity", landmarkCount: 3, maxErrorCm: 0 });
 function map(overrides = {}) {
   return { mapPackId: `sha256-${hash("a")}`, gameBuildId: "25306743", sceneName: "Level_8", route: {

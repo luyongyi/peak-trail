@@ -30,7 +30,11 @@ import { bindCameraTouchControls } from "./camera-touch.js";
 import { FEATURES, shouldPollLive } from "./features.js";
 import { createCommunityMapPanel } from "./community-map-panel.js";
 import { createMapLootPanel } from "./map-loot-panel.js";
-import { historicalRouteUrl, loadHistoricalRouteLink, parseHistoricalRouteLink } from "./historical-route-link.js";
+import { historicalRouteTitle, historicalRouteUrl, loadHistoricalRouteLink, parseHistoricalRouteLink } from "./historical-route-link.js";
+import { getLocale, tr, onLocaleChange, biomeName, gameItemName, formatNumber } from "./i18n.js";
+import { initLanguageControls } from "./i18n-dom.js";
+
+initLanguageControls();
 
 const $ = (id) => document.getElementById(id);
 const elements = {
@@ -151,6 +155,7 @@ const state = {
   lastEventTime: -1,
   toastTimer: null,
   errorTimer: null,
+  errorPresentation: null,
   daily: null,
   dailyRequestInFlight: null,
   dailyMapStatus: null,
@@ -284,23 +289,25 @@ function segmentChineseBase(option) {
     return ["25306743", "25739797"].includes(String(routeBuild)) && option?.segment === 4
       && ["volcano-kiln", "swamp-temple"].includes(route?.branch)
       && classifyRouteSegment(route.segments.find((entry) => entry.index === 4)).kind === "chapter"
-      ? `${routed} · 含顶峰` : routed;
+      ? `${biomeName(option?.segment === 4 ? (route.branch === "swamp-temple" ? "citadel" : "kiln") : option?.biome, routed)} · ${tr("含顶峰", "includes PEAK")}`
+      : routed;
   }
   const special = classifyRouteSegment(option);
-  if (special.name) return special.name;
-  if ([3, 4].includes(option?.segment)) return option.segment === 3 ? "第四关（分支未确认）" : "第五关（分支未确认）";
+  if (special.name) return biomeName(special.kind === "nadir" ? "nadir" : special.kind === "summit" ? "peak" : option?.biome, special.name);
+  if ([3, 4].includes(option?.segment)) return option.segment === 3 ? tr("第四关（分支未确认）", "Stage 4 (route unconfirmed)") : tr("第五关（分支未确认）", "Stage 5 (route unconfirmed)");
   const source = String(option?.biome || option?.name || "").trim();
-  return SEGMENT_NAMES_ZH.get(source.toLowerCase()) || option?.name || `分区 ${option?.segment ?? "?"}`;
+  if (["void", "nadir", "peak"].includes(source.toLowerCase())) return option?.name || tr(`分区 ${option?.segment ?? "?"}`, `Area ${option?.segment ?? "?"}`);
+  return biomeName(source, SEGMENT_NAMES_ZH.get(source.toLowerCase()) || option?.name || tr(`分区 ${option?.segment ?? "?"}`, `Area ${option?.segment ?? "?"}`));
 }
 
 function segmentDisplayName(option) {
-  if (!option) return "等待关卡";
+  if (!option) return tr("等待关卡", "Waiting for a stage");
   const base = segmentChineseBase(option);
   const matches = state.segmentOptions.filter((candidate) => segmentChineseBase(candidate) === base);
   if (matches.length < 2) return base;
   const index = matches.findIndex((candidate) => candidate.segment === option.segment);
-  if (matches.length === 2) return `${base}（${index === 0 ? "下段" : "上段"}）`;
-  return `${base}（第 ${index + 1} 段）`;
+  if (matches.length === 2) return tr(`${base}（${index === 0 ? "下段" : "上段"}）`, `${base} (${index === 0 ? "lower section" : "upper section"})`);
+  return tr(`${base}（第 ${index + 1} 段）`, `${base} (section ${formatNumber(index + 1)})`);
 }
 
 function collectSegmentOptions() {
@@ -392,38 +399,38 @@ function setSegmentLoadStatus(status, segment, message = "") {
 function markSegmentTransition(segment) {
   if (!state.usingCompatibleMap) return;
   if (state.mapPack?.identityVersion === 3) {
-    setSegmentLoadStatus("loading", segment, "正在加载 PEAK 真实关卡网格");
+    setSegmentLoadStatus("loading", segment, tr("正在加载 PEAK 真实关卡网格", "Loading PEAK map geometry"));
   } else {
-    setSegmentLoadStatus("ready", segment, "兼容高度场底图已就绪");
+    setSegmentLoadStatus("ready", segment, tr("兼容高度场底图已就绪", "Compatible height map ready"));
   }
 }
 
 function selectedSegmentStatus() {
   if (state.selectedSegment !== null && state.routeView?.hiddenSegments.has(state.selectedSegment)) {
-    return { status: "muted", text: "本关底图与实际分支不符 · 仅显示足迹", message: state.routeView.message };
+    return { status: "muted", text: tr("本关底图与实际分支不符 · 仅显示足迹", "Map route differs from this run · trails only"), message: state.routeView.message };
   }
   if (!state.usingCompatibleMap) {
     return state.mapPack
-      ? { status: "muted", text: "底图版本不匹配 · 仅回放足迹", message: "" }
-      : { status: "muted", text: "无同版本底图 · 仅回放足迹", message: "" };
+      ? { status: "muted", text: tr("底图版本不匹配 · 仅回放足迹", "Map build differs · trails only"), message: "" }
+      : { status: "muted", text: tr("无同版本底图 · 仅回放足迹", "No map for this build · trails only"), message: "" };
   }
 
   if (state.selectedSegment !== null) {
     const value = state.segmentMapStatuses.get(segmentStatusKey(state.selectedSegment));
-    if (value?.status === "loading") return { status: "loading", text: "正在加载本关底图…", message: value.message };
-    if (value?.status === "ready") return { status: "ready", text: "本关底图已就绪", message: value.message };
-    if (value?.status === "error") return { status: "error", text: "本关底图失败 · 足迹仍可回放", message: value.message };
-    return { status: "muted", text: "底图按关加载", message: "" };
+    if (value?.status === "loading") return { status: "loading", text: tr("正在加载本关底图…", "Loading this stage…"), message: value.message };
+    if (value?.status === "ready") return { status: "ready", text: tr("本关底图已就绪", "Stage map ready"), message: value.message };
+    if (value?.status === "error") return { status: "error", text: tr("本关底图失败 · 足迹仍可回放", "Stage map unavailable · trails remain available"), message: value.message };
+    return { status: "muted", text: tr("底图按关加载", "Maps load by stage"), message: "" };
   }
 
   const statuses = overviewSegmentOptions().map((option) => state.segmentMapStatuses.get(segmentStatusKey(option.segment)));
   const failed = statuses.filter((value) => value?.status === "error").length;
   const loading = statuses.filter((value) => value?.status === "loading").length;
   const ready = statuses.filter((value) => value?.status === "ready").length;
-  if (failed) return { status: "error", text: `${failed} 关底图失败 · 足迹仍可回放`, message: "" };
-  if (loading) return { status: "loading", text: `正在加载 ${loading} 关底图…`, message: "" };
-  if (ready === statuses.length && statuses.length) return { status: "ready", text: "所有关底图已就绪", message: "" };
-  return { status: "muted", text: "概览会按需加载所有关", message: "" };
+  if (failed) return { status: "error", text: tr(`${failed} 关底图失败 · 足迹仍可回放`, `${formatNumber(failed)} stage maps unavailable · trails remain available`), message: "" };
+  if (loading) return { status: "loading", text: tr(`正在加载 ${loading} 关底图…`, `Loading ${formatNumber(loading)} stage maps…`), message: "" };
+  if (ready === statuses.length && statuses.length) return { status: "ready", text: tr("所有关底图已就绪", "All stage maps ready"), message: "" };
+  return { status: "muted", text: tr("概览会按需加载所有关", "Overview loads stages as needed"), message: "" };
 }
 
 let segmentNavLastName = null;
@@ -437,17 +444,17 @@ function renderSegmentNavigation() {
   const activeIndex = chapters.findIndex((option) => option.segment === state.selectedSegment);
   const active = options.find((option) => option.segment === state.selectedSegment);
   const isOverview = state.selectedSegment === null;
-  elements.routeSummary.textContent = [state.historicalRoute?.title, state.routeView?.message || "关卡分支未确认"].filter(Boolean).join(" · ");
+  elements.routeSummary.textContent = [state.historicalRoute?.title, state.routeView?.message || tr("关卡分支未确认", "Route unconfirmed")].filter(Boolean).join(" · ");
   elements.segmentOrdinal.textContent = isOverview
-    ? `共 ${chapters.length} 关`
-    : active?.isVoid ? "额外区域 · 天底" : `第 ${activeIndex + 1} / ${chapters.length} 关`;
-  elements.segmentName.textContent = isOverview ? "所有关概览" : segmentDisplayName(active);
+    ? tr(`共 ${chapters.length} 关`, `${formatNumber(chapters.length)} stages`)
+    : active?.isVoid ? tr("额外区域 · 天底", "Extra area · NADIR") : tr(`第 ${activeIndex + 1} / ${chapters.length} 关`, `Stage ${formatNumber(activeIndex + 1)} / ${formatNumber(chapters.length)}`);
+  elements.segmentName.textContent = isOverview ? tr("所有关概览", "Mountain overview") : segmentDisplayName(active);
   elements.segmentOriginalName.textContent = isOverview
-    ? "仅在手动选择时加载"
-    : `${active?.name || "未知"} · Segment ${active?.segment ?? "?"}`;
+    ? tr("仅在手动选择时加载", "Loads when selected")
+    : `${active?.name || tr("未知", "Unknown")} · Segment ${active?.segment ?? "?"}`;
 
   // 收起状态下换关：短暂展开提示 2.6s 再收起（用户手动展开过则保持）。
-  const navName = `${elements.segmentOrdinal.textContent}|${elements.segmentName.textContent}`;
+  const navName = JSON.stringify([state.mapPack?.mapPackId ?? null, state.selectedSegment ?? "overview"]);
   if (segmentNavLastName !== null && segmentNavLastName !== navName
     && elements.segmentNavigator.classList.contains("is-collapsed")
     ) {
@@ -463,9 +470,9 @@ function renderSegmentNavigation() {
   const next = adjacentSegment(options, state.selectedSegment, 1);
   elements.previousSegmentButton.disabled = !previous;
   elements.nextSegmentButton.disabled = !next;
-  elements.previousSegmentButton.title = previous ? `浏览上一区域：${segmentDisplayName(previous)}` : "已到第一个区域";
-  elements.nextSegmentButton.title = next?.isVoid ? "浏览额外区域：天底（并非固定下一关）"
-    : next ? `浏览下一区域：${segmentDisplayName(next)}` : "已到最后一个区域";
+  elements.previousSegmentButton.title = previous ? tr(`浏览上一区域：${segmentDisplayName(previous)}`, `Previous area: ${segmentDisplayName(previous)}`) : tr("已到第一个区域", "First area reached");
+  elements.nextSegmentButton.title = next?.isVoid ? tr("浏览额外区域：天底（并非固定下一关）", "Explore extra area: NADIR")
+    : next ? tr(`浏览下一区域：${segmentDisplayName(next)}`, `Next area: ${segmentDisplayName(next)}`) : tr("已到最后一个区域", "Last area reached");
   elements.previousSegmentButton.setAttribute("aria-label", elements.previousSegmentButton.title);
   elements.nextSegmentButton.setAttribute("aria-label", elements.nextSegmentButton.title);
   elements.followSegmentButton.classList.toggle("is-active", state.segmentSelectionMode === "auto");
@@ -476,10 +483,11 @@ function renderSegmentNavigation() {
   const status = selectedSegmentStatus();
   elements.segmentLoadStatus.className = `segment-load-status is-${status.status}`;
   elements.segmentLoadStatus.textContent = status.text;
-  elements.segmentLoadStatus.title = status.message || status.text;
+  elements.segmentLoadStatus.title = getLocale() === "en" && /\p{Script=Han}/u.test(status.message || "")
+    ? status.text : status.message || status.text;
   if (state.workspaceMode === "explore") {
-    elements.compatibilityText.textContent = status.status === "loading" ? "地图加载中…"
-      : status.status === "error" ? "地图加载失败" : "地图浏览";
+    elements.compatibilityText.textContent = status.status === "loading" ? tr("地图加载中…", "Loading map…")
+      : status.status === "error" ? tr("地图加载失败", "Map unavailable") : tr("地图浏览", "Map explorer");
   }
 
   const desiredSelectValue = isOverview ? "all" : String(state.selectedSegment);
@@ -504,13 +512,14 @@ function populateSegmentControls() {
   elements.layerSelect.replaceChildren();
   const allOption = document.createElement("option");
   allOption.value = "all";
-  allOption.textContent = "所有关概览（手动）";
+  allOption.textContent = tr("所有关概览（手动）", "Mountain overview (manual)");
   elements.layerSelect.append(allOption);
   let chapterOrdinal = 0;
   state.segmentOptions.forEach((option) => {
     const selectOption = document.createElement("option");
     selectOption.value = String(option.segment);
-    selectOption.textContent = `${option.isVoid ? "额外区域" : `第 ${++chapterOrdinal} 关`} · ${segmentDisplayName(option)} / ${option.name}`;
+    const ordinal = option.isVoid ? null : ++chapterOrdinal;
+    selectOption.textContent = `${option.isVoid ? tr("额外区域", "Extra area") : tr(`第 ${ordinal} 关`, `Stage ${formatNumber(ordinal)}`)} · ${segmentDisplayName(option)} / ${option.name}`;
     elements.layerSelect.append(selectOption);
   });
   elements.layerSelect.disabled = state.segmentOptions.length === 0;
@@ -612,25 +621,38 @@ async function initializeViewer() {
     window.__ptState = state; // debug/QA hook: playback/live diagnostics
     await renderData();
   } catch (error) {
-    showError("地图视图未能启动", `请检查网络与浏览器的 WebGL 支持后刷新。${error.message}`, 0);
+    showError(tr("地图视图未能启动", "Map view could not start"), tr(`请检查网络与浏览器的 WebGL 支持后刷新。${error.message}`, `Check your connection and WebGL support, then refresh. ${error.message}`), 0);
   }
 }
 
 function describeError(error) {
   if (error instanceof ProtocolError) {
-    return { title: error.message, message: error.detail || "请检查所选文件。" };
+    return { title: errorUiText(error.message, "Unable to read this map or recording"),
+      message: errorUiText(error.detail || tr("请检查所选文件。", "Check the selected files.")) };
   }
-  return { title: "无法读取文件", message: error?.message || String(error) };
+  return { title: tr("无法读取文件", "Unable to read files"), message: errorUiText(error?.message || String(error)) };
+}
+
+function errorUiText(value, fallback = "Unable to read this map or recording. Check that the files are complete and compatible.") {
+  const text = String(value || "");
+  return getLocale() === "en" && /\p{Script=Han}/u.test(text) ? fallback : text;
 }
 
 function showError(title, message, timeout = 9000) {
   clearTimeout(state.errorTimer);
-  elements.errorTitle.textContent = title;
-  elements.errorMessage.textContent = message;
+  state.errorPresentation = { title, message };
+  renderErrorUi();
   elements.errorBanner.classList.add("is-visible");
   if (timeout) {
     state.errorTimer = setTimeout(() => elements.errorBanner.classList.remove("is-visible"), timeout);
   }
+}
+
+function renderErrorUi() {
+  if (!state.errorPresentation) return;
+  const { title, message } = state.errorPresentation;
+  elements.errorTitle.textContent = errorUiText(title, "Unable to complete this action");
+  elements.errorMessage.textContent = errorUiText(message);
 }
 
 function hideError() {
@@ -648,10 +670,10 @@ function setSourceLoading(kind, loading) {
   const stateLabel = kind === "map" ? elements.mapSourceState : elements.traceSourceState;
   button.disabled = isLoading;
   stateLabel.textContent = isLoading
-    ? "读取中"
+    ? tr("读取中", "Loading")
     : button.classList.contains("is-loaded")
-      ? kind === "map" && ["daily", "archive"].includes(state.mapSourceKind) ? "内嵌" : "已载入"
-      : "选择";
+      ? kind === "map" && ["daily", "archive"].includes(state.mapSourceKind) ? tr("内嵌", "Built in") : tr("已载入", "Loaded")
+      : tr("选择", "Choose");
 }
 
 async function importMap(files) {
@@ -687,7 +709,7 @@ async function importMap(files) {
 async function importTrace(files) {
   if (!FEATURES.legacyReplayVisible) return;
   if (!files || (files instanceof FileBundle ? !files.files.length : !files.length)) {
-    showError("所选目录没有可读取的文件", "请选择 PeakTrailRecordings 总目录，或直接导入其中的 PeakTrailHistory.ndjson。");
+    showError(tr("所选目录没有可读取的文件", "No readable files in this folder"), tr("请选择 PeakTrailRecordings 总目录，或直接导入其中的 PeakTrailHistory.ndjson。", "Choose the PeakTrailRecordings folder or its PeakTrailHistory.ndjson file."));
     return;
   }
   setSourceLoading("trace", true);
@@ -704,7 +726,7 @@ async function importTrace(files) {
     await selectTraceSession(firstSession?.manifest.sessionId, false);
     dismissGate();
     if (collection.warnings.length) {
-      showError("足迹已载入，请注意数据说明", collection.warnings.join("；"), 9000);
+      showError(tr("足迹已载入，请注意数据说明", "Trails loaded · review the data notes"), collection.warnings.join(tr("；", "; ")), 9000);
     }
   } catch (error) {
     const detail = describeError(error);
@@ -733,7 +755,7 @@ function setSourceMode(mode) {
   elements.modeLive?.setAttribute("aria-selected", String(live));
   elements.replaySource.hidden = live || !FEATURES.legacyReplayVisible;
   elements.liveSource.hidden = !live;
-  elements.modeChip.textContent = live ? "直播" : FEATURES.legacyReplayVisible ? "回放" : "地图";
+  elements.modeChip.textContent = live ? tr("直播", "Live") : FEATURES.legacyReplayVisible ? tr("回放", "Replay") : tr("地图", "Map");
   if (live) {
     if (!elements.liveUrl.value) elements.liveUrl.value = defaultRelayUrl();
     void refreshLiveRuns();
@@ -788,19 +810,19 @@ function buildGateDiagPanel() {
   const box = document.createElement("div");
   box.className = "gate-diag";
   const url = document.createElement("p");
-  url.textContent = `中继地址：${diag.base || "(未设置)"}`;
+  url.textContent = tr(`中继地址：${diag.base || "(未设置)"}`, `Relay: ${diag.base || "(not set)"}`);
   const status = document.createElement("p");
   status.className = diag.ok === false ? "is-error" : "is-ok";
   status.textContent = diag.ok === false
-    ? `连接失败：${diag.error || "未知错误"}`
-    : `连接正常${diag.at ? ` · ${new Date(diag.at).toLocaleTimeString()} 检测` : ""}`;
+    ? tr(`连接失败：${diag.error || "未知错误"}`, `Connection failed: ${diag.error || "Unknown error"}`)
+    : tr(`连接正常${diag.at ? ` · ${new Date(diag.at).toLocaleTimeString()} 检测` : ""}`, `Connected${diag.at ? ` · checked ${new Date(diag.at).toLocaleTimeString(getLocale())}` : ""}`);
   const tip = document.createElement("p");
   tip.className = "gate-diag-tip";
-  tip.textContent = "列表为空 = 当前没有对局在推流。进游戏并保持 PEAK Trail 的 Live 开启，约 1 秒内直播卡会自动点亮。";
+  tip.textContent = tr("列表为空 = 当前没有对局在推流。进游戏并保持 PEAK Trail 的 Live 开启，约 1 秒内直播卡会自动点亮。", "No runs are streaming. Enable Live in PEAK Trail while playing; a live card should appear within a second.");
   const retry = document.createElement("button");
   retry.type = "button";
   retry.className = "gate-live-row";
-  retry.textContent = "重新检测";
+  retry.textContent = tr("重新检测", "Check again");
   retry.addEventListener("click", (event) => {
     event.stopPropagation();
     void refreshGateRuns();
@@ -814,21 +836,21 @@ function renderGateRuns() {
   const card = elements.gateLive;
   card.classList.toggle("has-runs", gateRuns.length > 0);
   card.classList.toggle("is-empty", gateRuns.length === 0);
-  $("homeLiveCount").textContent = gateRuns.length ? `${gateRuns.length} 场` : "";
+  $("homeLiveCount").textContent = gateRuns.length ? tr(`${gateRuns.length} 场`, `${formatNumber(gateRuns.length)} runs`) : "";
   if (live.code) {
     const connected = gateRuns.find((run) => run.code === live.code);
-    elements.gateLiveHint.textContent = `正在观看 ${live.code}${connected?.sceneName ? " · " + connected.sceneName : ""} — 点击返回`;
+    elements.gateLiveHint.textContent = tr(`正在观看 ${live.code}${connected?.sceneName ? " · " + connected.sceneName : ""} — 点击返回`, `Watching ${live.code}${connected?.sceneName ? " · " + connected.sceneName : ""} — return`);
   } else if (!gateRuns.length) {
     // 压暗 ≠ 黑箱：一行摘要 + 点击卡片展开诊断（中继可达性/错误/最后检测时间）。
     const diag = state.gateDiag;
     const ago = diag?.at ? Math.max(0, Math.round((Date.now() - diag.at) / 1000)) : null;
     elements.gateLiveHint.textContent = diag?.ok === false
-      ? "中继不可达 · 点击查看详情"
-      : `暂无直播中的对局${ago !== null ? ` · 中继已连接（${ago}s 前检测）` : ""}`;
+      ? tr("中继不可达 · 点击查看详情", "Relay unavailable · view details")
+      : tr(`暂无直播中的对局${ago !== null ? ` · 中继已连接（${ago}s 前检测）` : ""}`, `No live runs${ago !== null ? ` · relay connected (checked ${formatNumber(ago)}s ago)` : ""}`);
   } else if (gateRuns.length === 1) {
-    elements.gateLiveHint.textContent = `${gateRuns[0].code} · ${gateRuns[0].sceneName ?? "未知场景"} · 点击进入`;
+    elements.gateLiveHint.textContent = tr(`${gateRuns[0].code} · ${gateRuns[0].sceneName ?? "未知场景"} · 点击进入`, `${gateRuns[0].code} · ${gateRuns[0].sceneName ?? "Unknown scene"} · join`);
   } else {
-    elements.gateLiveHint.textContent = `${gateRuns.length} 场对局直播中 · 点击选择`;
+    elements.gateLiveHint.textContent = tr(`${gateRuns.length} 场对局直播中 · 点击选择`, `${formatNumber(gateRuns.length)} live runs · choose a run`);
   }
   const showDiag = gateRuns.length === 0 && card.classList.contains("gate-diag-open");
   const showList = gateRuns.length > 1 || Boolean(live.code);
@@ -850,8 +872,8 @@ function renderGateRuns() {
     name.textContent = `${run.code} · ${run.sceneName ?? "?"}`;
     const meta = document.createElement("small");
     meta.textContent = [
-      run.participants ? `${run.participants} 人` : null,
-      run.code === live.code ? "观看中" : "直播中",
+      run.participants ? tr(`${run.participants} 人`, `${formatNumber(run.participants)} players`) : null,
+      run.code === live.code ? tr("观看中", "Watching") : tr("直播中", "Live"),
     ].filter(Boolean).join(" · ");
     row.append(name, meta);
     row.addEventListener("click", (event) => {
@@ -877,12 +899,12 @@ function syncWakeLockChip() {
   if (!chip) return;
   const liveActive = Boolean(state.live?.es || state.live?.demoTimer);
   if (wakeLock.held) {
-    chip.textContent = "常亮";
+    chip.textContent = tr("常亮", "Keep awake");
     chip.hidden = false;
     chip.classList.remove("is-unavailable");
   } else if (liveActive && !wakeLock.supported()) {
     // 局域网 HTTP 或老浏览器拿不到 Wake Lock API：明说，而不是默默失效。
-    chip.textContent = window.isSecureContext ? "当前浏览器不支持防熄屏" : "需 HTTPS 才能防熄屏";
+    chip.textContent = window.isSecureContext ? tr("当前浏览器不支持防熄屏", "Keep-awake is unavailable in this browser") : tr("需 HTTPS 才能防熄屏", "HTTPS is required to keep the screen awake");
     chip.hidden = false;
     chip.classList.add("is-unavailable");
   } else {
@@ -1002,7 +1024,7 @@ async function openHomeChapter(map, segment, presentedView, intent = null) {
 // Historical shares resolve independently of today's card availability. Every
 // map and overlay request is pinned to this group's verified original layout.
 async function openHistoricalRoute(destination, revision) {
-  const { group, mapPack: map, stageIndex, title, inspectionId, teamId } = destination;
+  const { group, mapPack: map, stageIndex, title, baseTitle, inspectionId, teamId } = destination;
   if (revision !== state.mapRequestRevision) { if (!destination.reusedMapPack && map !== state.mapPack) map.disposeAssets?.(); return; }
   const previous = state.mapPack;
   const preserveView = previous === map && state.workspaceMode === "explore" && !state.trace && state.selectedSegment === stageIndex;
@@ -1020,7 +1042,7 @@ async function openHistoricalRoute(destination, revision) {
   state.lastEventTime = -1;
   state.mapPack = map;
   state.mapSourceKind = "historical-route";
-  state.historicalRoute = { group, title, inspectionId, teamId: teamId || null };
+  state.historicalRoute = { group, title, baseTitle, inspectionId, teamId: teamId || null };
   updateDailyCountdown();
   state.dailyMapStatus = null;
   if (!preserveView) resetSegmentNavigation(null);
@@ -1164,12 +1186,12 @@ function startDemoLive() {
   state.live.lastRefreshSamples = -1;
   state.traceCollection = {
     sessions: [trace],
-    days: [{ date: "直播", sessions: [trace] }],
+    days: [{ date: tr("直播", "Live"), sessions: [trace] }],
     warnings: trace.warnings,
   };
   // 预铺 40 秒历史：一进门就有轨迹可看，不用干等。
   for (let t = 0; t <= 40_000; t += 200) demoEmit(trace, t);
-  setLiveStatus("调试模式 · 演示数据（未连接中继）");
+  setLiveStatus(tr("调试模式 · 演示数据（未连接中继）", "Debug mode · demo data (no relay connection)"));
   elements.liveStateRow.hidden = false;
   void refreshLiveRuns();
   void attachLiveTrace(trace);
@@ -1199,7 +1221,7 @@ async function refreshLiveRuns() {
       elements.liveRunList.replaceChildren();
       const empty = document.createElement("p");
       empty.className = "live-run-empty";
-      empty.textContent = `中继不可达（${String(error?.message || error)}）`;
+      empty.textContent = tr(`中继不可达（${String(error?.message || error)}）`, `Relay unavailable (${String(error?.message || error)})`);
       elements.liveRunList.append(empty);
     }
   }
@@ -1210,7 +1232,7 @@ function renderLiveRuns(base, runs) {
   if (!runs.length) {
     const empty = document.createElement("p");
     empty.className = "live-run-empty";
-    empty.textContent = "暂无活跃对局 · 游戏内开启 Live 后自动出现";
+    empty.textContent = tr("暂无活跃对局 · 游戏内开启 Live 后自动出现", "No active runs · enable Live in game to appear here");
     elements.liveRunList.append(empty);
     return;
   }
@@ -1220,12 +1242,12 @@ function renderLiveRuns(base, runs) {
     card.type = "button";
     card.className = `live-run-card${connected ? " is-connected" : ""}`;
     const title = document.createElement("strong");
-    title.textContent = `${run.code} · ${run.sceneName ?? "未知场景"}`;
+    title.textContent = `${run.code} · ${run.sceneName ?? tr("未知场景", "Unknown scene")}`;
     const meta = document.createElement("small");
     meta.textContent = [
-      `${run.producers} 源 · ${run.records} 条`,
-      run.participants ? `${run.participants} 人` : null,
-      connected ? "正在观看" : run.alive === false ? "宽限中" : "直播中",
+      tr(`${run.producers} 源 · ${run.records} 条`, `${formatNumber(run.producers)} sources · ${formatNumber(run.records)} records`),
+      run.participants ? tr(`${run.participants} 人`, `${formatNumber(run.participants)} players`) : null,
+      connected ? tr("正在观看", "Watching") : run.alive === false ? tr("宽限中", "Grace period") : tr("直播中", "Live"),
     ].filter(Boolean).join(" · ");
     card.append(title, meta);
     card.addEventListener("click", () => {
@@ -1242,7 +1264,7 @@ async function connectLiveRun(base, code) {
   state.live.code = code;
   state.live.trace = null;
   state.live.lastParticipants = 0;
-  setLiveStatus(`连接 run ${code}…`);
+  setLiveStatus(tr(`连接 run ${code}…`, `Connecting to run ${code}…`));
   elements.liveStateRow.hidden = false;
   state.live.lastSeq = 0;
   state.live.lastRefreshSamples = -1;
@@ -1264,7 +1286,7 @@ function openLiveStream(base, code) {
   es.onopen = () => {
     if (state.live.es !== es) return;
     state.live.lastSseAt = Date.now();
-    if (state.live.trace) setLiveStatus(`直播中 · ${code}（已续传）`);
+    if (state.live.trace) setLiveStatus(tr(`直播中 · ${code}（已续传）`, `Live · ${code} (resumed)`));
   };
   es.addEventListener("ping", () => {
     if (state.live.es !== es) return;
@@ -1277,7 +1299,7 @@ function openLiveStream(base, code) {
     // A hello on an established trace means the relay lost its buffer (restart):
     // our sequence is ahead of its, so rebuild from the fresh snapshot.
     if (state.live.trace && hello.lastSeq >= state.live.lastSeq) {
-      setLiveStatus(`直播中 · ${code}（已续传）`);
+      setLiveStatus(tr(`直播中 · ${code}（已续传）`, `Live · ${code} (resumed)`));
       return;
     }
     const trace = createLiveTrace(hello.manifest, { code, runId: hello.runId });
@@ -1285,10 +1307,10 @@ function openLiveStream(base, code) {
     state.live.lastSeq = 0;
     state.traceCollection = {
       sessions: [trace],
-      days: [{ date: "直播", sessions: [trace] }],
+      days: [{ date: tr("直播", "Live"), sessions: [trace] }],
       warnings: trace.warnings,
     };
-    setLiveStatus(`直播中 · ${code}`);
+    setLiveStatus(tr(`直播中 · ${code}`, `Live · ${code}`));
     void refreshLiveRuns();
     void attachLiveTrace(trace);
   });
@@ -1311,17 +1333,17 @@ function openLiveStream(base, code) {
       // Fatal (relay unreachable or run gone): the browser will not retry.
       state.live.reconnectAttempts += 1;
       if (state.live.reconnectAttempts > 3) {
-        setLiveStatus("直播已结束或中继不可达");
+        setLiveStatus(tr("直播已结束或中继不可达", "Run ended or relay unavailable"));
         disconnectLive(false);
         return;
       }
-      setLiveStatus(`连接中断，重连中…（${state.live.reconnectAttempts}）`);
+      setLiveStatus(tr(`连接中断，重连中…（${state.live.reconnectAttempts}）`, `Disconnected · reconnecting… (${formatNumber(state.live.reconnectAttempts)})`));
       const live = state.live;
       setTimeout(() => {
         if (state.live.es === es && live.code) openLiveStream(live.baseUrl, live.code);
       }, 2000);
     } else {
-      setLiveStatus("连接中断，自动重连…");
+      setLiveStatus(tr("连接中断，自动重连…", "Disconnected · reconnecting…"));
     }
   };
   if (!state.live.timer) state.live.timer = setInterval(() => { liveWatchdog(); liveFlush(); }, 1000);
@@ -1342,11 +1364,11 @@ function liveWatchdog() {
   if (live.es.readyState === EventSource.CLOSED) return; // fatal path handled by onerror
   live.reconnectAttempts += 1;
   if (live.reconnectAttempts > 3) {
-    setLiveStatus("直播已结束或中继不可达");
+    setLiveStatus(tr("直播已结束或中继不可达", "Run ended or relay unavailable"));
     disconnectLive(false);
     return;
   }
-  setLiveStatus(`连接中断，重连中…（${live.reconnectAttempts}）`);
+  setLiveStatus(tr(`连接中断，重连中…（${live.reconnectAttempts}）`, `Disconnected · reconnecting… (${formatNumber(live.reconnectAttempts)})`));
   live.es.close();
   openLiveStream(live.baseUrl, live.code);
 }
@@ -1389,7 +1411,7 @@ function liveFlush() {
   if (state.trace !== trace) return;
   elements.timeline.max = String(trace.duration);
   elements.totalTime.textContent = formatTime(trace.duration);
-  elements.sampleCount.textContent = trace.sampleCount.toLocaleString("zh-CN");
+  elements.sampleCount.textContent = trace.sampleCount.toLocaleString(getLocale());
   elements.eventCount.textContent = String(trace.events.length);
   // Trail geometry only changes when samples arrive; status/state records must
   // not trigger a full rebuild every second as the session grows.
@@ -1430,7 +1452,7 @@ function disconnectLive(silent = false) {
   syncWakeLock();
   if (!silent) {
     elements.liveStateRow.hidden = true;
-    setLiveStatus("已断开");
+    setLiveStatus(tr("已断开", "Disconnected"));
     void refreshLiveRuns();
   }
 }
@@ -1438,22 +1460,22 @@ function disconnectLive(silent = false) {
 function formatSessionLabel(trace) {
   const started = new Date(trace.manifest.startedAtUtc);
   const time = Number.isFinite(started.getTime())
-    ? started.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-    : "时间未知";
+    ? started.toLocaleTimeString(getLocale(), { hour: "2-digit", minute: "2-digit" })
+    : tr("时间未知", "Unknown time");
   const players = trace.participants.filter((participant) => trace.tracks.has(participant.id)).length;
   const isPartial = trace.manifest.status === "recording"
     || String(trace.manifestFileName || "").toLowerCase().includes("partial");
   const lifecycle = isPartial
-    ? "未完整结束"
+    ? tr("未完整结束", "Incomplete session")
     : trace.manifest.endReason
-      ? `结束 ${trace.manifest.endReason}`
+      ? tr(`结束 ${trace.manifest.endReason}`, `Ended: ${trace.manifest.endReason}`)
       : trace.manifest.status && trace.manifest.status !== "complete"
         ? trace.manifest.status
         : null;
   return [
     time,
     trace.manifest.sceneName,
-    `${players} 人`,
+    tr(`${players} 人`, `${formatNumber(players)} players`),
     formatTime(trace.duration),
     lifecycle,
   ].filter(Boolean).join(" · ");
@@ -1466,7 +1488,7 @@ function populateTraceArchive(preferredDate = null) {
   for (const day of collection?.days || []) {
     const option = document.createElement("option");
     option.value = day.date;
-    option.textContent = `${day.date} · ${day.sessions.length} 局`;
+    option.textContent = tr(`${day.date} · ${day.sessions.length} 局`, `${day.date} · ${formatNumber(day.sessions.length)} runs`);
     elements.dateSelect.append(option);
   }
   elements.dateSelect.disabled = !collection?.days.length;
@@ -1476,8 +1498,8 @@ function populateTraceArchive(preferredDate = null) {
   const sessionCount = collection?.sessions.length || 0;
   const dayCount = collection?.days.length || 0;
   elements.archiveSummary.textContent = sessionCount
-    ? `${dayCount} 天 · ${sessionCount} 局 · 本地解析`
-    : "等待导入足迹目录";
+    ? tr(`${dayCount} 天 · ${sessionCount} 局 · 本地解析`, `${formatNumber(dayCount)} days · ${formatNumber(sessionCount)} runs · parsed locally`)
+    : tr("等待导入足迹目录", "Choose a recordings folder");
 }
 
 function populateSessionSelect(preferredSessionId = null) {
@@ -1520,10 +1542,10 @@ async function selectTraceSession(sessionId, showMismatch = true) {
     await clearAutomaticMap();
     const detail = describeError(error);
     state.dailyMapStatus = {
-      title: `${trace.manifest.sceneName} 内嵌地图未载入`,
+      title: tr(`${trace.manifest.sceneName} 内嵌地图未载入`, `${trace.manifest.sceneName} published map was not loaded`),
       detail: detail.message,
     };
-    showError(detail.title, `${detail.message}。该局仍可在无底图模式回放。`, 9000);
+    showError(detail.title, tr(`${detail.message}。该局仍可在无底图模式回放。`, `${detail.message}. This run can still replay without a map.`), 9000);
   }
   if (selectionRevision !== state.traceSelectionRevision || state.trace !== trace) return;
   state.compatibility = assessCompatibility(trace.manifest, state.mapPack);
@@ -1569,7 +1591,7 @@ async function importMixed(files) {
     }
   }
   if (!tasks.length) {
-    showError("未识别这些文件", "请选择地图包，或 manifest.json 与 stream.ndjson。", 7000);
+    showError(tr("未识别这些文件", "Files not recognized"), tr("请选择地图包，或 manifest.json 与 stream.ndjson。", "Choose a map pack, or manifest.json with stream.ndjson."), 7000);
     return;
   }
   await Promise.allSettled(tasks);
@@ -1637,7 +1659,9 @@ function syncWorkspaceState() {
   shell.dataset.workspaceMode = state.workspaceMode;
   shell.dataset.replayState = replayEmpty ? "empty" : state.trace ? "ready" : "explore";
   if (state.workspaceMode === "explore") elements.modeChip.textContent = state.historicalRoute
-    ? state.historicalRoute.inspectionId ? "验收预览" : state.historicalRoute.teamId ? "团队路线" : "历史路线" : "地图";
+    ? state.historicalRoute.inspectionId ? tr("验收预览", "Review preview") : state.historicalRoute.teamId ? tr("团队路线", "Team route") : tr("历史路线", "Historical route") : tr("地图", "Map");
+  else elements.modeChip.textContent = state.workspaceMode === "live" ? tr("直播", "Live")
+    : FEATURES.legacyReplayVisible ? tr("回放", "Replay") : tr("地图", "Map");
   syncCommunityContext();
 }
 
@@ -1647,24 +1671,29 @@ function updateMapUI() {
   elements.mapSourceButton.classList.toggle("is-loaded", Boolean(pack));
   elements.mapSourceName.textContent = pack
     ? pack.sceneName
-    : state.dailyMapStatus?.title || "尚未导入地图";
+    : errorUiText(state.dailyMapStatus?.title, "Map temporarily unavailable") || tr("尚未导入地图", "No map loaded");
   elements.mapSourceMeta.textContent = pack
-    ? `${automatic ? "Pages 内嵌 · " : "开发导入 · "}${pack.mapPackId} · ${pack.layers.length} 层 · build ${pack.gameBuildId || "未知"}`
-    : state.dailyMapStatus?.detail || "按所选局次从 Pages catalog 自动匹配";
-  elements.mapSourceState.textContent = pack ? (automatic ? "内嵌" : "开发") : "自动";
+    ? tr(`${automatic ? "Pages 内嵌 · " : "开发导入 · "}${pack.mapPackId} · ${pack.layers.length} 层 · build ${pack.gameBuildId || "未知"}`, `${automatic ? "Published · " : "Development import · "}${pack.mapPackId} · ${formatNumber(pack.layers.length)} layers · build ${pack.gameBuildId || "Unknown"}`)
+    : errorUiText(state.dailyMapStatus?.detail, "Checking the published map catalog. Your current map remains available.") || tr("按所选局次从 Pages catalog 自动匹配", "Matches this run against the published map catalog");
+  elements.mapSourceState.textContent = pack ? (automatic ? tr("内嵌", "Built in") : tr("开发", "Development")) : tr("自动", "Automatic");
   updateSceneMeta();
 }
 
-function updateTraceUI() {
+function updateTraceSourceLabels() {
   const trace = state.trace;
   const sessionCount = state.traceCollection?.sessions.length || (trace ? 1 : 0);
   const dayCount = state.traceCollection?.days.length || (trace ? 1 : 0);
   elements.traceSourceButton.classList.toggle("is-loaded", Boolean(trace));
-  elements.traceSourceName.textContent = trace ? `${dayCount} 天 · ${sessionCount} 局足迹` : "尚未导入足迹";
+  elements.traceSourceName.textContent = trace ? tr(`${dayCount} 天 · ${sessionCount} 局足迹`, `${formatNumber(dayCount)} days · ${formatNumber(sessionCount)} recordings`) : tr("尚未导入足迹", "No trails loaded");
   elements.traceSourceMeta.textContent = trace
-    ? `当前 ${trace.manifest.sceneName} · ${trace.sampleCount.toLocaleString("zh-CN")} 个采样`
-    : "选择足迹总目录（可含多天、多局）";
-  elements.traceSourceState.textContent = trace ? "已载入" : "选择";
+    ? tr(`当前 ${trace.manifest.sceneName} · ${trace.sampleCount.toLocaleString(getLocale())} 个采样`, `${trace.manifest.sceneName} · ${formatNumber(trace.sampleCount)} samples`)
+    : tr("选择足迹总目录（可含多天、多局）", "Choose a recordings folder with one or more days and runs");
+  elements.traceSourceState.textContent = trace ? tr("已载入", "Loaded") : tr("选择", "Choose");
+}
+
+function updateTraceUI() {
+  const trace = state.trace;
+  updateTraceSourceLabels();
   elements.playButton.disabled = !trace;
   elements.timeline.disabled = !trace;
   elements.speedSelect.disabled = !trace;
@@ -1682,16 +1711,16 @@ function updateCompatibilityUI(showMismatchDetail = false) {
   elements.compatibilityPill.classList.remove("is-neutral", "is-good", "is-error");
   elements.compatibilityPill.classList.add(`is-${result.status}`);
   elements.compatibilityText.textContent = state.workspaceMode === "explore" && state.mapPack
-    ? "地图浏览" : result.message;
+    ? tr("地图浏览", "Map explorer") : errorUiText(result.message, result.compatible ? "Map and recording match" : state.trace ? "Trails available without a matching map" : "Choose a recording");
   if (showMismatchDetail && result.status === "error" && result.reasons.length) {
-    showError("地图与足迹不匹配", `${result.reasons.join("；")}。轨迹仍可在无底图模式回放。`, 12000);
+    showError(tr("地图与足迹不匹配", "Map and recording differ"), tr(`${result.reasons.join("；")}。轨迹仍可在无底图模式回放。`, `${result.reasons.join("; ")}. Trails remain available without a map.`), 12000);
   }
 }
 
 function updateSceneMeta() {
   const scene = state.trace?.manifest.sceneName || state.mapPack?.sceneName || "—";
   elements.sceneName.textContent = scene;
-  elements.sampleCount.textContent = state.trace ? state.trace.sampleCount.toLocaleString("zh-CN") : "0";
+  elements.sampleCount.textContent = state.trace ? state.trace.sampleCount.toLocaleString(getLocale()) : "0";
 
   const useMapBounds = state.mapPack && (!state.trace || state.compatibility?.compatible);
   const layers = useMapBounds ? (state.routeView?.layers || state.mapPack.layers).filter((layer) => state.selectedSegment === null
@@ -1706,19 +1735,36 @@ function updateSceneMeta() {
 }
 
 function participantName(playerId) {
-  if (!playerId) return "全局事件";
+  if (!playerId) return tr("全局事件", "Global event");
   return state.trace?.participants.find((participant) => participant.id === playerId)?.nickname || playerId;
 }
 
 function eventSegmentLabel(event) {
-  if (event.segment !== null) return `所属分层 ${event.segment}`;
-  if (event.activeSegment !== null) return `全局活动分区 ${event.activeSegment}`;
+  if (event.segment !== null) return tr(`所属分层 ${event.segment}`, `Recorded stage ${event.segment}`);
+  if (event.activeSegment !== null) return tr(`全局活动分区 ${event.activeSegment}`, `Active world area ${event.activeSegment}`);
   return null;
 }
 
 function eventItemLabel(event) {
   if (!event.item) return null;
-  return `物品 ${event.item.name || event.item.id}`;
+  const name = gameItemName(event.item.name || event.item.id);
+  return tr(`物品 ${name}`, `Item ${name}`);
+}
+
+function eventTitle(event) {
+  const chinese = event.label || eventPresentation(event.type).label;
+  const english = {
+    mine_explosion: "Mine explosion", mine_exploded: "Mine explosion", zombie_activated: "Zombie activated", zombie_woke: "Zombie woke",
+    world_spawn: "World object appeared", world_despawn: "World object disappeared", fog_activated: "Drowsy fog activated",
+    fog_enabled: "Drowsy fog appeared", fog_disabled: "Drowsy fog cleared", zombie_state: "Zombie state changed",
+    join: "Joined the climb", leave: "Left the climb", passed_out: "Passed out", recovered: "Regained consciousness",
+    death: "Death", revive: "Revived", warp: "Warped", segment_change: "Entered a new area", run_end: "Climb ended",
+    item_pickup: "Picked up item", item_drop: "Dropped item", item_use: "Used item", item_acquired: "Acquired item",
+    item_lost: "Lost item", item_moved: "Moved item", item_state_changed: "Item state changed", item_consumed: "Consumed item",
+    item_thrown: "Threw item", item_equipped: "Equipped item", item_unequipped: "Stowed item", equip: "Equipped item",
+    unequip: "Stowed item", stamina_empty: "Out of stamina", event: "Event",
+  }[event.type] || String(event.type || "Event").replaceAll("_", " ");
+  return tr(chinese, english);
 }
 
 function eventMovementLabel(event) {
@@ -1735,7 +1781,7 @@ function updatePlayers() {
   if (!participants.length) {
     const empty = document.createElement("p");
     empty.className = "inline-empty";
-    empty.textContent = "导入足迹后，可单独显示或隐藏玩家。";
+    empty.textContent = tr("导入足迹后，可单独显示或隐藏玩家。", "Import a recording to show or hide individual players.");
     elements.playerList.append(empty);
     return;
   }
@@ -1772,25 +1818,25 @@ function updatePlayerTelemetry() {
 }
 
 function updateWorldTelemetry() {
-  elements.worldTelemetryNote.textContent = state.trace ? worldTelemetryNote(state.trace.worldTimeline, state.currentTime) : "等待导入世界记录";
+  elements.worldTelemetryNote.textContent = state.trace ? worldTelemetryNote(state.trace.worldTimeline, state.currentTime) : tr("等待导入世界记录", "Waiting for world telemetry");
   const world = viewer?.worldRenderer;
   const fog = world?.fogState;
   const showFogNote = Boolean(fog?.count && fog.mode !== "map-baseline");
   elements.mapFogNote.hidden = !showFogNote;
-  elements.mapFogNote.textContent = showFogNote ? "本局实录雾 · 随时间线回放" : "";
+  elements.mapFogNote.textContent = showFogNote ? tr("本局实录雾 · 随时间线回放", "Recorded fog · follows the replay timeline") : "";
   elements.mapFogNote.title = showFogNote ? fog.note || "" : "";
   const objects = world?.objects || [];
-  elements.worldSummary.textContent = [state.trace?.worldTimeline?.captured ? `此刻记录 ${objects.length} 个世界对象 · 采样状态，不预测中间运动` : "", showFogNote ? fog.note : ""].filter(Boolean).join("\n");
+  elements.worldSummary.textContent = [state.trace?.worldTimeline?.captured ? tr(`此刻记录 ${objects.length} 个世界对象 · 采样状态，不预测中间运动`, `${formatNumber(objects.length)} recorded world objects · sampled state`) : "", showFogNote ? fog.note : ""].filter(Boolean).join("\n");
   const alerts = (world?.alerts || []).sort((a, b) => a.distance - b.distance).slice(0, 8);
-  const key = JSON.stringify(alerts.map((alert) => [alert.object.objectId, Math.round(alert.distance), alert.active]));
+  const key = JSON.stringify([getLocale(), alerts.map((alert) => [alert.object.objectId, Math.round(alert.distance), alert.active])]);
   if (elements.worldAlerts.dataset.key === key) return;
   elements.worldAlerts.dataset.key = key;
   elements.worldAlerts.replaceChildren();
   for (const alert of alerts) {
     const row = document.createElement("p");
     row.className = alert.active ? "world-alert is-danger" : "world-alert";
-    row.textContent = `${alert.object.kind.includes("zombie") ? "蘑菇僵尸" : "危险物"} · ${Math.round(alert.distance)}m · ${alert.active ? "已激活" : "接近预警"}`;
-    row.title = `记录状态：${alert.object.activity}；提示距离 ${alert.range}m（游戏激活还可能依赖朝向、视线等条件）`;
+    row.textContent = tr(`${alert.object.kind.includes("zombie") ? "蘑菇僵尸" : "危险物"} · ${Math.round(alert.distance)}m · ${alert.active ? "已激活" : "接近预警"}`, `${alert.object.kind.includes("zombie") ? "Mushroom zombie" : "Hazard"} · ${formatNumber(Math.round(alert.distance))}m · ${alert.active ? "Active" : "Proximity alert"}`);
+    row.title = tr(`记录状态：${alert.object.activity}；提示距离 ${alert.range}m（游戏激活还可能依赖朝向、视线等条件）`, `Recorded state: ${alert.object.activity}; alert range ${formatNumber(alert.range)}m (activation may also depend on facing and visibility)`);
     elements.worldAlerts.append(row);
   }
 }
@@ -1814,7 +1860,7 @@ function createEventButton(event) {
   symbol.textContent = presentation.symbol;
   const copy = document.createElement("span");
   const title = document.createElement("strong");
-  title.textContent = event.label || presentation.label;
+  title.textContent = eventTitle(event);
   const meta = document.createElement("small");
   meta.textContent = [
     participantName(event.playerId),
@@ -1871,11 +1917,11 @@ function updateEvents() {
   elements.timelineMarkers.replaceChildren();
   elements.eventList.scrollTop = 0;
   const events = state.trace?.events || [];
-  elements.eventCount.textContent = String(events.length);
+  elements.eventCount.textContent = formatNumber(events.length);
   if (!events.length) {
     const empty = document.createElement("p");
     empty.className = "inline-empty";
-    empty.textContent = "死亡、复活、传送和分区变化会显示在这里。";
+    empty.textContent = tr("死亡、复活、传送和分区变化会显示在这里。", "Deaths, revives, warps and stage changes appear here.");
     elements.eventList.append(empty);
     return;
   }
@@ -1916,7 +1962,7 @@ function showEventToast(event) {
   const presentation = eventPresentation(event.type);
   elements.eventToastIcon.textContent = presentation.symbol;
   elements.eventToastIcon.style.color = presentation.color;
-  elements.eventToastTitle.textContent = event.label || presentation.label;
+  elements.eventToastTitle.textContent = eventTitle(event);
   elements.eventToastMeta.textContent = [
     participantName(event.playerId),
     eventItemLabel(event),
@@ -1942,7 +1988,7 @@ function updatePlaybackTime(nextTime, detectEvents = true) {
   const eligibleMap = !state.trace || state.compatibility?.compatible ? state.mapPack : null;
   const nextRoute = resolveReplayRoute(eligibleMap, state.trace, state.currentTime);
   if (nextRoute.key !== state.routeView?.key) {
-    void renderData().catch((error) => showError("关卡分支更新失败", error.message));
+    void renderData().catch((error) => showError(tr("关卡分支更新失败", "Route update failed"), error.message));
   }
   elements.timeline.value = String(state.currentTime);
   // The live edge grows between flush ticks; a stale max makes the browser
@@ -1976,7 +2022,7 @@ function setPlaying(playing) {
   state.lastTelemetryAt = 0;
   if (!state.playing) updatePlayerTelemetry();
   elements.playButton.classList.toggle("is-playing", state.playing);
-  elements.playButton.setAttribute("aria-label", state.playing ? "暂停" : "播放");
+  elements.playButton.setAttribute("aria-label", state.playing ? tr("暂停", "Pause") : tr("播放", "Play"));
   syncWakeLock();
 }
 
@@ -2042,8 +2088,8 @@ async function applyDailyStatus() {
     const daily = await dailyReader.read();
     if (!daily) {
       if (!state.daily && !updateDailyCard()) {
-        elements.dailyScene.textContent = "本地模式";
-        elements.dailyCountdown.textContent = "未同步轮换";
+        elements.dailyScene.textContent = tr("本地模式", "Local mode");
+        elements.dailyCountdown.textContent = tr("未同步轮换", "Rotation not synchronized");
       }
       return;
     }
@@ -2058,7 +2104,7 @@ async function applyDailyStatus() {
     updateDailyCard();
     if (!isDailyMapFresh(daily)) {
       if (!state.historicalRoute) elements.dailyCountdown.textContent = Number.isFinite(Date.parse(daily.nextChangeAtUtc))
-        ? "轮换数据已过期" : "更新时间无效";
+        ? tr("轮换数据已过期", "Rotation data expired") : tr("更新时间无效", "Invalid update time");
       await expireDailyStatus(daily);
       return;
     }
@@ -2088,19 +2134,19 @@ async function applyDailyStatus() {
       if (state.trace) await clearAutomaticMap();
       else if (state.mapSourceKind === "daily") await clearDailyMap();
       state.dailyMapStatus = {
-        title: `${targetScene} 地图暂不可用`,
-        detail: error?.message || "无法读取地图目录",
+        title: tr(`${targetScene} 地图暂不可用`, `${targetScene} map is temporarily unavailable`),
+        detail: error?.message || tr("无法读取地图目录", "Unable to read the map catalog"),
       };
       updateMapUI();
       if (state.dailyMapErrorKey !== key) {
         state.dailyMapErrorKey = key;
-        showError("今日地图未载入", state.dailyMapStatus.detail, 7000);
+        showError(tr("今日地图未载入", "Current map was not loaded"), state.dailyMapStatus.detail, 7000);
       }
     }
   } catch {
     if (!state.daily && !updateDailyCard()) {
-      elements.dailyScene.textContent = "本地模式";
-      elements.dailyCountdown.textContent = "未同步轮换";
+      elements.dailyScene.textContent = tr("本地模式", "Local mode");
+      elements.dailyCountdown.textContent = tr("未同步轮换", "Rotation not synchronized");
     }
   } finally {
     state.dailyRequestInFlight = null;
@@ -2138,7 +2184,7 @@ async function ensureMapCatalog(force = false) {
     return { catalog: state.mapCatalog, baseUrl: state.mapCatalogBaseUrl };
   }
   const response = await fetch("./data/maps/catalog.json", { cache: "no-store" });
-  if (!response.ok) throw new ProtocolError("无法读取地图目录", `HTTP ${response.status}`);
+  if (!response.ok) throw new ProtocolError(tr("无法读取地图目录", "Unable to read the map catalog"), `HTTP ${response.status}`);
   const catalog = await response.json();
   // Selection performs the strict catalog shape check before any entry is used.
   state.mapCatalog = catalog;
@@ -2156,8 +2202,8 @@ async function syncMapForTrace(trace, refreshCatalog = false) {
     if (requestRevision !== state.mapRequestRevision || state.trace !== trace) return;
     await clearAutomaticMap();
     state.dailyMapStatus = {
-      title: `${trace.manifest.sceneName} 内嵌地图不可用`,
-      detail: error.message || "无法读取 Pages 地图目录",
+      title: tr(`${trace.manifest.sceneName} 内嵌地图不可用`, `${trace.manifest.sceneName} published map is unavailable`),
+      detail: error.message || tr("无法读取 Pages 地图目录", "Unable to read the published map catalog"),
     };
     return;
   }
@@ -2166,10 +2212,10 @@ async function syncMapForTrace(trace, refreshCatalog = false) {
   if (!entry) {
     await clearAutomaticMap();
     state.dailyMapStatus = {
-      title: `${trace.manifest.sceneName} 尚无匹配底图`,
+      title: tr(`${trace.manifest.sceneName} 尚无匹配底图`, `No matching map for ${trace.manifest.sceneName}`),
       detail: trace.manifest.mapPackId
-        ? `catalog 中没有 ${trace.manifest.mapPackId}`
-        : `需要同 build ${trace.manifest.gameBuildId || "未知"} 与投影版本的内嵌地图`,
+        ? tr(`catalog 中没有 ${trace.manifest.mapPackId}`, `Catalog has no map ${trace.manifest.mapPackId}`)
+        : tr(`需要同 build ${trace.manifest.gameBuildId || "未知"} 与投影版本的内嵌地图`, `A published map with the same build ${trace.manifest.gameBuildId || "Unknown"} and projection version is required`),
     };
     updateMapUI();
     return;
@@ -2189,7 +2235,7 @@ async function syncMapForTrace(trace, refreshCatalog = false) {
     const compatibility = assessCompatibility(trace.manifest, nextMap);
     if (!compatibility.compatible) {
       nextMap.disposeAssets?.();
-      throw new ProtocolError("内嵌地图与该局足迹不匹配", compatibility.reasons.join("；"));
+      throw new ProtocolError(tr("内嵌地图与该局足迹不匹配", "Published map does not match this run"), compatibility.reasons.join(tr("；", "; ")));
     }
     const previous = state.mapPack;
     state.mapPack = nextMap;
@@ -2218,10 +2264,10 @@ async function syncDailyMap(daily, refreshCatalog = false) {
 
   if (!entry) {
     await clearDailyMap();
-    const activeBuild = catalog.activeGameBuildId ? `build ${catalog.activeGameBuildId}` : "尚未指定当前构建";
+    const activeBuild = catalog.activeGameBuildId ? `build ${catalog.activeGameBuildId}` : tr("尚未指定当前构建", "Current build is not specified");
     state.dailyMapStatus = {
-      title: `${daily.sceneName} 地图包未发布`,
-      detail: `${activeBuild} · 可继续导入本地地图包`,
+      title: tr(`${daily.sceneName} 地图包未发布`, `${daily.sceneName} map pack is not published`),
+      detail: tr(`${activeBuild} · 可继续导入本地地图包`, `${activeBuild} · a local map pack can still be imported`),
     };
     updateMapUI();
     return;
@@ -2262,7 +2308,7 @@ async function syncDailyMap(daily, refreshCatalog = false) {
     if (String(nextMap.gameBuildId).trim() !== String(catalog.activeGameBuildId).trim()) conflicts.push("gameBuildId");
     if (conflicts.length) {
       nextMap.disposeAssets?.();
-      throw new ProtocolError("地图目录与地图包不一致", `冲突字段：${conflicts.join(", ")}`);
+      throw new ProtocolError(tr("地图目录与地图包不一致", "Map catalog and pack differ"), tr(`冲突字段：${conflicts.join(", ")}`, `Conflicting fields: ${conflicts.join(", ")}`));
     }
 
     const previous = state.mapPack;
@@ -2284,20 +2330,20 @@ async function syncDailyMap(daily, refreshCatalog = false) {
 function updateDailyCard() {
   const history = state.historicalRoute;
   if (history) {
-    const formatter = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" });
+    const formatter = new Intl.DateTimeFormat(getLocale(), { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" });
     const dates = [...new Set([history.group.firstStartedUtc, history.group.lastStartedUtc]
       .filter(value => typeof value === "string" && Number.isFinite(Date.parse(value)))
       .map(value => formatter.format(new Date(value))))];
-    const rotation = Number.isInteger(history.group.map.levelIndex) ? `轮换 ${history.group.map.levelIndex}` : "";
-    elements.dailyCard?.setAttribute("title", "历史录制地图");
-    elements.dailyScene.textContent = `历史 ${history.group.map.scene}`;
-    elements.dailyCountdown.textContent = [dates.join(" – "), rotation].filter(Boolean).join(" · ") || "历史录制地图";
+    const rotation = Number.isInteger(history.group.map.levelIndex) ? tr(`轮换 ${history.group.map.levelIndex}`, `Rotation ${formatNumber(history.group.map.levelIndex)}`) : "";
+    elements.dailyCard?.setAttribute("title", tr("历史录制地图", "Recorded map"));
+    elements.dailyScene.textContent = tr(`历史 ${history.group.map.scene}`, `Archive ${history.group.map.scene}`);
+    elements.dailyCountdown.textContent = [dates.join(" – "), rotation].filter(Boolean).join(" · ") || tr("历史录制地图", "Recorded map");
     return true;
   }
-  elements.dailyCard?.setAttribute("title", "今日轮换");
+  elements.dailyCard?.setAttribute("title", tr("今日轮换", "Current rotation"));
   elements.dailyScene.textContent = state.daily
-    ? state.daily.sceneName || `Level ${state.daily.mapSlot ?? state.daily.levelIndex ?? "?"}` : "正在获取…";
-  if (!state.daily?.nextChangeAtUtc) elements.dailyCountdown.textContent = "未同步轮换";
+    ? state.daily.sceneName || `Level ${state.daily.mapSlot ?? state.daily.levelIndex ?? "?"}` : tr("正在获取…", "Loading…");
+  if (!state.daily?.nextChangeAtUtc) elements.dailyCountdown.textContent = tr("未同步轮换", "Rotation not synchronized");
   return false;
 }
 
@@ -2306,12 +2352,12 @@ function updateDailyCountdown() {
   if (!state.daily?.nextChangeAtUtc) return;
   const remaining = new Date(state.daily.nextChangeAtUtc).getTime() - Date.now();
   if (!Number.isFinite(remaining)) {
-    elements.dailyCountdown.textContent = "更新时间无效";
+    elements.dailyCountdown.textContent = tr("更新时间无效", "Invalid update time");
     void expireDailyStatus(state.daily);
     return;
   }
   if (remaining <= 0) {
-    elements.dailyCountdown.textContent = "轮换数据已过期";
+    elements.dailyCountdown.textContent = tr("轮换数据已过期", "Rotation data expired");
     void expireDailyStatus(state.daily);
     return;
   }
@@ -2333,8 +2379,8 @@ async function expireDailyStatus(daily) {
   // It is labelled as an archive below and can no longer claim to be today's map.
   if (daily !== state.daily || isDailyMapFresh(daily) || state.trace) return;
   state.dailyMapStatus = {
-    title: `${daily?.sceneName || "今日"} 地图状态已过期`,
-    detail: "保留上次确认的地图，正在自动确认本轮地图；接口恢复后会自动更新",
+    title: tr(`${daily?.sceneName || "今日"} 地图状态已过期`, `${daily?.sceneName || "Current"} map status has expired`),
+    detail: tr("保留上次确认的地图，正在自动确认本轮地图；接口恢复后会自动更新", "Keeping the last verified map while checking this rotation. It will update when the service is available."),
   };
   updateMapUI();
 }
@@ -2402,7 +2448,7 @@ elements.playerList.addEventListener("click", (event) => {
   identityButton?.setAttribute("aria-expanded", String(expanded));
   identityButton?.setAttribute(
     "aria-label",
-    `${expanded ? "收起" : "展开"} ${row.dataset.playerName} 的生命、体力与手持信息`,
+    tr(`${expanded ? "收起" : "展开"} ${row.dataset.playerName} 的生命、体力与手持信息`, `${expanded ? "Collapse" : "Expand"} health, stamina and held item for ${row.dataset.playerName}`),
   );
 });
 
@@ -2413,7 +2459,8 @@ function syncFollowHud(detail) {
   if (active) {
     const auto = detail?.autoRotate ?? viewer?.followAutoRotate ?? false;
     const viewMode = detail?.viewMode ?? viewer?.followViewMode;
-    elements.followHudText.textContent = `${viewMode === "interior" ? "关内向外观测" : "外侧观测"} · ${detail?.name ?? viewer?.followTargetId ?? ""} · ${auto ? "自动轮换 60s" : "已锁定"}`;
+    const name = detail?.name ?? (viewer?.followTargetId != null ? participantName(viewer.followTargetId) : "");
+    elements.followHudText.textContent = tr(`${viewMode === "interior" ? "关内向外观测" : "外侧观测"} · ${name} · ${auto ? "自动轮换 60s" : "已锁定"}`, `${viewMode === "interior" ? "Interior observation" : "Exterior observation"} · ${name} · ${auto ? "Auto cycle · 60s" : "Locked"}`);
   }
   for (const row of elements.playerList.querySelectorAll(".player-row")) {
     row.querySelector(".player-follow-button")?.classList.toggle(
@@ -2490,8 +2537,8 @@ const replayInspector = document.querySelector(".inspector");
 const isAtPhoneInspector = () => replayInspector.getBoundingClientRect().top < window.innerHeight / 2;
 function updatePhonePanelButton() {
   const atInspector = isAtPhoneInspector();
-  elements.phonePanelButton.textContent = atInspector ? "地图 ↑" : "玩家 ↓";
-  elements.phonePanelButton.setAttribute("aria-label", atInspector ? "回到地图" : "跳到玩家状态与回放设置");
+  elements.phonePanelButton.textContent = atInspector ? tr("地图 ↑", "Map ↑") : tr("玩家 ↓", "Players ↓");
+  elements.phonePanelButton.setAttribute("aria-label", atInspector ? tr("回到地图", "Back to map") : tr("跳到玩家状态与回放设置", "Go to player status and replay settings"));
 }
 elements.phonePanelButton.addEventListener("click", () => {
   const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
@@ -2515,8 +2562,9 @@ elements.sceneCanvas.addEventListener("cameramodechange", (event) => {
   const free = event.detail.mode === "free";
   elements.freeCameraButton.setAttribute("aria-pressed", String(free));
   elements.cameraHelp.hidden = !free;
+  elements.cameraHelp.textContent = event.detail.help;
   elements.cameraTouchControls.hidden = !free;
-  elements.sceneCanvas.setAttribute("aria-label", free ? event.detail.help : "地图回放，可切换自由相机");
+  elements.sceneCanvas.setAttribute("aria-label", free ? event.detail.help : tr("地图回放，可切换自由相机", "Map replay · free camera available"));
 });
 elements.sceneCanvas.addEventListener("cameraplacement", (event) => { elements.cameraPlacement.textContent = event.detail.note; });
 elements.heightScale.addEventListener("input", () => {
@@ -2605,7 +2653,7 @@ window.addEventListener("drop", async (event) => {
   try {
     const files = await collectDroppedFiles(event.dataTransfer);
     if (!files.length) {
-      showError("拖入的目录没有可读取的文件", "请选择足迹总目录，或导入其中的 PeakTrailHistory.ndjson。");
+      showError(tr("拖入的目录没有可读取的文件", "No readable files in this dropped folder"), tr("请选择足迹总目录，或导入其中的 PeakTrailHistory.ndjson。", "Choose the recordings folder or its PeakTrailHistory.ndjson file."));
       return;
     }
     await importMixed(files);
@@ -2616,6 +2664,7 @@ window.addEventListener("drop", async (event) => {
 });
 
 window.addEventListener("beforeunload", () => {
+  disposeLocaleUi();
   window.removeEventListener("scroll", updatePhonePanelButton, true);
   disposeCameraTouch();
   communityMapPanel.dispose();
@@ -2680,16 +2729,16 @@ async function bootstrap() {
 async function bootstrapHistoricalRouteFromQuery() {
   let link;
   try { link = parseHistoricalRouteLink(window.location.search); }
-  catch (error) { showError("历史路线未打开", error.message, 0); return; }
+  catch (error) { showError(tr("历史路线未打开", "Unable to open historical route"), error.message, 0); return; }
   if (!link) return;
   await navigateHistoricalRoute(link);
 }
 
 async function readHistoricalJson(path, limit = 30_000_000) {
   const response = await fetch(path, { cache: "no-store", headers: { Accept: "application/json" }, signal: AbortSignal.timeout(20_000) });
-  if (!response.ok) throw new Error(`历史路线服务暂不可用（HTTP ${response.status}）。`);
-  if (!response.headers.get("content-type")?.includes("application/json")) throw new Error("历史路线服务返回格式无效。");
-  if (Number(response.headers.get("content-length")) > limit) throw new Error("历史路线数据过大。");
+  if (!response.ok) throw new Error(tr(`历史路线服务暂不可用（HTTP ${response.status}）。`, `Historical route service is unavailable (HTTP ${response.status}).`));
+  if (!response.headers.get("content-type")?.includes("application/json")) throw new Error(tr("历史路线服务返回格式无效。", "Historical route service returned an invalid format."));
+  if (Number(response.headers.get("content-length")) > limit) throw new Error(tr("历史路线数据过大。", "Historical route data is too large."));
   const reader = response.body?.getReader();
   let text;
   if (reader) {
@@ -2699,7 +2748,7 @@ async function readHistoricalJson(path, limit = 30_000_000) {
         const { done, value } = await reader.read();
         if (done) break;
         size += value.byteLength;
-        if (size > limit) { await reader.cancel(); throw new Error("历史路线数据过大。"); }
+        if (size > limit) { await reader.cancel(); throw new Error(tr("历史路线数据过大。", "Historical route data is too large.")); }
         chunks.push(value);
       }
     } finally { reader.releaseLock(); }
@@ -2708,7 +2757,7 @@ async function readHistoricalJson(path, limit = 30_000_000) {
     text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
   } else {
     text = await response.text();
-    if (new TextEncoder().encode(text).byteLength > limit) throw new Error("历史路线数据过大。");
+    if (new TextEncoder().encode(text).byteLength > limit) throw new Error(tr("历史路线数据过大。", "Historical route data is too large."));
   }
   return JSON.parse(text);
 }
@@ -2717,7 +2766,7 @@ async function openCommunityTeam(team) {
   if (!team) {
     if (!state.historicalRoute?.teamId) return;
     state.historicalRoute = { ...state.historicalRoute, teamId: null,
-      title: state.historicalRoute.title.replace(/ · 团队路线$/, "") };
+      title: state.historicalRoute.baseTitle || historicalRouteTitle(state.historicalRoute.group) };
     if (Number.isInteger(state.selectedSegment)) updateHistoricalRouteUrl(state.selectedSegment);
     else {
       const url = new URL(window.location.href); url.searchParams.delete("team");
@@ -2752,10 +2801,62 @@ async function navigateHistoricalRoute(link) {
       currentMapPack: state.mapPack,
     });
     await openHistoricalRoute(destination, revision);
-  } catch (error) { if (revision === state.mapRequestRevision) showError("历史路线未打开", error.message, 0); }
+  } catch (error) { if (revision === state.mapRequestRevision) showError(tr("历史路线未打开", "Unable to open historical route"), error.message, 0); }
   finally { state.manualMapLoads--; setSourceLoading("map", false); }
 }
 
+function refreshLocaleUi() {
+  // Language changes only repaint labels. They must not reset playback, choose a
+  // different chapter, refit the camera, or request the map's geometry again.
+  if (state.historicalRoute) {
+    const history = state.historicalRoute;
+    history.baseTitle = historicalRouteTitle(history.group);
+    history.title = history.baseTitle + (history.inspectionId ? tr(" · 验收预览", " · Review preview")
+      : history.teamId ? tr(" · 团队路线", " · Team routes") : "");
+  }
+  state.routeView = resolveReplayRoute(state.usingCompatibleMap ? state.mapPack : null, state.trace, state.currentTime);
+  let ordinal = 0;
+  for (const option of Array.from(elements.layerSelect.options || elements.layerSelect.children)) {
+    if (option.value === "all") { option.textContent = tr("所有关概览（手动）", "Mountain overview (manual)"); continue; }
+    const segment = state.segmentOptions.find(entry => String(entry.segment) === option.value);
+    if (!segment) continue;
+    const chapter = segment.isVoid ? null : ++ordinal;
+    option.textContent = `${segment.isVoid ? tr("额外区域", "Extra area") : tr(`第 ${chapter} 关`, `Stage ${formatNumber(chapter)}`)} · ${segmentDisplayName(segment)} / ${segment.name}`;
+  }
+  updateMapUI();
+  updateTraceSourceLabels();
+  updateCompatibilityUI();
+  renderSegmentNavigation();
+  const sessionId = elements.sessionSelect.value;
+  populateTraceArchive(elements.dateSelect.value);
+  populateSessionSelect(sessionId);
+  const scrollTop = elements.eventList.scrollTop;
+  updateEvents();
+  elements.eventList.scrollTop = scrollTop;
+  renderEventWindow();
+  updatePlayerTelemetry();
+  syncWorkspaceState();
+  syncFollowHud();
+  syncWakeLockChip();
+  updatePhonePanelButton();
+  updateDailyCard();
+  if (!state.historicalRoute && state.daily?.nextChangeAtUtc) {
+    const remaining = Date.parse(state.daily.nextChangeAtUtc) - Date.now();
+    if (!Number.isFinite(remaining)) elements.dailyCountdown.textContent = tr("更新时间无效", "Invalid update time");
+    else if (remaining <= 0) elements.dailyCountdown.textContent = tr("轮换数据已过期", "Rotation data expired");
+  }
+  renderGateRuns();
+  elements.playButton.setAttribute("aria-label", state.playing ? tr("暂停", "Pause") : tr("播放", "Play"));
+  for (const kind of ["map", "trace"]) {
+    if (state.sourceLoadingCounts[kind]) (kind === "map" ? elements.mapSourceState : elements.traceSourceState).textContent = tr("读取中", "Loading");
+  }
+  if (elements.errorBanner.classList.contains("is-visible")) {
+    renderErrorUi();
+  }
+  viewer?.refreshLocaleUi();
+}
+
+const disposeLocaleUi = onLocaleChange(refreshLocaleUi);
 window.dispatchEvent(new Event("peaktrail-ready"));
 void initializeViewer();
 void bootstrap();

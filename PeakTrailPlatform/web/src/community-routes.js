@@ -1,9 +1,11 @@
-import { communityMapIdentity, communityPlayers, matchingCommunityGroups, normalizeCommunityStage, normalizeCommunityTeams, normalizeCommunityTeamStage, pendingCommunityMessage } from "./community-route-model.js";
+import { getLocale, tr } from "./i18n.js";
+import { communityRouteError, communityMapIdentity, communityPlayers, matchingCommunityGroups, normalizeCommunityStage, normalizeCommunityTeams, normalizeCommunityTeamStage, pendingCommunityMessage } from "./community-route-model.js";
 import { historicalInspectionStatus, normalizeHistoricalInspection } from "./historical-route-link.js";
 import { heightBands } from "./route-collection-model.js";
 
 const MAX_RESPONSE_BYTES = 30_000_000;
-const displayError = error => error?.message || "大家的路线暂时无法读取，请稍后刷新。";
+const displayMessage = value => typeof value === "function" ? value() : value;
+const displayError = error => error?.localizedMessage?.() || (getLocale() === "en" && /[\u3400-\u9fff]/u.test(error?.message || "") ? "Routes are temporarily unavailable. Please refresh later." : error?.message) || tr("大家的路线暂时无法读取，请稍后刷新。", "Routes are temporarily unavailable. Please refresh later.");
 function waitForRetry(milliseconds, signal) {
   return new Promise((resolve, reject) => {
     const abort = () => { clearTimeout(timer); signal?.removeEventListener("abort", abort); reject(new DOMException("Aborted", "AbortError")); };
@@ -29,7 +31,8 @@ export function createCommunityRoutes({ fetchImpl = globalThis.fetch?.bind(globa
       countBy: "team", referencePlayerKey: null, summitCompleted: false, stageCompleted: false, finisherKeys: [],
       totalRouteCount: 0, truncated: false, unavailableCount: 0, message: "" };
   }
-  function getSnapshot() { return { ...state, mapPackId: mapPack?.mapPackId || null, players: communityPlayers(state.routes, hidden) }; }
+  function getSnapshot() { return { ...state, message: displayMessage(state.message), teamSearchMessage: displayMessage(state.teamSearchMessage), mapPackId: mapPack?.mapPackId || null, players: communityPlayers(state.routes, hidden) }; }
+  function appendMessage(value) { const previous = state.message; state.message = () => displayMessage(previous) + displayMessage(value); }
   function emit() { if (!disposed) onChange(getSnapshot()); }
   function invalidate() { request?.abort(); request = null; requestKind = null; revision++; }
   function begin(kind) { invalidate(); request = new AbortController(); requestKind = kind; return { revision, signal: request.signal }; }
@@ -38,7 +41,7 @@ export function createCommunityRoutes({ fetchImpl = globalThis.fetch?.bind(globa
   }
   function active(token) { return !disposed && token.revision === revision && mapPack !== null; }
   async function readApi(path, signal, { retryRate = false } = {}) {
-    if (typeof fetchImpl !== "function") throw new Error("浏览器无法读取大家的路线。");
+    if (typeof fetchImpl !== "function") throw communityRouteError("浏览器无法读取大家的路线。", "This browser cannot load community routes.");
     let response;
     for (let retries = 0; ; retries++) {
       response = await fetchImpl(path, { signal, headers: { Accept: "application/json" }, cache: "no-store" });
@@ -49,41 +52,41 @@ export function createCommunityRoutes({ fetchImpl = globalThis.fetch?.bind(globa
       const milliseconds = Math.ceil(Math.max(1, Math.min(300, Number.isFinite(seconds) ? seconds : 60)) * 1000);
       await response.body?.cancel();
       if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
-      state.message = `路线服务繁忙，${Math.ceil(milliseconds / 1000)} 秒后继续读取本队轨迹…`; emit();
+      state.message = () => tr(`路线服务繁忙，${Math.ceil(milliseconds / 1000)} 秒后继续读取本队轨迹…`, `Route service busy. Resuming team paths in ${Math.ceil(milliseconds / 1000)} seconds…`); emit();
       await retryDelay(milliseconds, signal);
       if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
     }
-    if (!response.ok) throw new Error(`大家的路线暂不可用（HTTP ${response.status}）`);
-    if (!response.headers.get("content-type")?.includes("application/json")) throw new Error("路线服务尚未启用，请稍后再试。");
-    if (Number(response.headers.get("content-length")) > MAX_RESPONSE_BYTES) throw new Error("路线响应过大，请选择更具体的难度。");
+    if (!response.ok) throw communityRouteError(`大家的路线暂不可用（HTTP ${response.status}）`, `Community routes unavailable (HTTP ${response.status})`);
+    if (!response.headers.get("content-type")?.includes("application/json")) throw communityRouteError("路线服务尚未启用，请稍后再试。", "The route service is not enabled yet. Please try again later.");
+    if (Number(response.headers.get("content-length")) > MAX_RESPONSE_BYTES) throw communityRouteError("路线响应过大，请选择更具体的难度。", "The route response is too large. Choose a specific difficulty.");
     const body = await response.text();
-    if (body.length > MAX_RESPONSE_BYTES) throw new Error("路线响应过大，请选择更具体的难度。");
+    if (body.length > MAX_RESPONSE_BYTES) throw communityRouteError("路线响应过大，请选择更具体的难度。", "The route response is too large. Choose a specific difficulty.");
     return JSON.parse(body);
   }
   function fail(error, token) {
     if (!active(token) || error?.name === "AbortError") return;
     invalidate();
-    clearData(); state.status = "error"; state.message = displayError(error); emit();
+    clearData(); state.status = "error"; state.message = () => displayError(error); emit();
   }
   function describeData() {
     state.status = state.totalRouteCount ? "ready" : "empty";
     if (state.inspectionId) {
-      state.message = state.totalRouteCount ? `验收预览 · ${state.routes.length} 条玩家轨迹 · ${historicalInspectionStatus(state.routes)} · 不计入公开路线或热力统计。`
-        : "验收预览 · 当前关卡没有录制轨迹；不计入公开路线或热力统计。";
+      state.message = () => state.totalRouteCount ? tr(`验收预览 · ${state.routes.length} 条玩家轨迹 · ${historicalInspectionStatus(state.routes)} · 不计入公开路线或热力统计。`, `Review preview · ${state.routes.length} player paths · ${historicalInspectionStatus(state.routes)} · Excluded from public routes and heatmaps.`)
+        : tr("验收预览 · 当前关卡没有录制轨迹；不计入公开路线或热力统计。", "Review preview · No paths recorded in this chapter. Excluded from public routes and heatmaps.");
       return;
     }
     if (state.teamId) {
       const members = communityPlayers(state.routes), recorded = members.filter(player => player.hasPoints);
       state.status = recorded.length ? "ready" : "empty";
-      state.message = recorded.length ? `本队 ${members.length} 位队员 · ${recorded.length} 位有本关轨迹 · ${historicalInspectionStatus(state.routes.filter(route => route.points.length))} · 不完整线路不计入热力。`
-        : `本队 ${members.length} 位队员 · 本关暂无录制轨迹。`;
-      if (state.summitCompleted) state.message += " 本队已登顶（任一队员完成即全队完成）。";
-      if (state.truncated) state.message += " 已达到显示上限，部分成员或轨迹尚未显示。";
+      state.message = () => recorded.length ? tr(`本队 ${members.length} 位队员 · ${recorded.length} 位有本关轨迹 · ${historicalInspectionStatus(state.routes.filter(route => route.points.length))} · 不完整线路不计入热力。`, `Team: ${members.length} members · ${recorded.length} with paths in this chapter · ${historicalInspectionStatus(state.routes.filter(route => route.points.length))} · Partial paths are excluded from heatmaps.`)
+        : tr(`本队 ${members.length} 位队员 · 本关暂无录制轨迹。`, `Team: ${members.length} members · No recorded paths in this chapter.`);
+      if (state.summitCompleted) appendMessage(() => tr(" 本队已登顶（任一队员完成即全队完成）。", " The team reached the summit (one finisher completes it for the team)."));
+      if (state.truncated) appendMessage(() => tr(" 已达到显示上限，部分成员或轨迹尚未显示。", " Display limit reached. Some members or paths are not shown."));
       return;
     }
-    state.message = state.totalRouteCount ? state.truncated
-      ? `本页展示 ${state.routes.length} / ${state.totalRouteCount} 条路线，热力统计全部有效路线。` : `${state.totalRouteCount} 条审核通过的完整关卡路线。`
-      : "当前关卡和难度还没有公开的完整路线。";
+    state.message = () => state.totalRouteCount ? state.truncated
+      ? tr(`本页展示 ${state.routes.length} / ${state.totalRouteCount} 条路线，热力统计全部有效路线。`, `Showing ${state.routes.length} / ${state.totalRouteCount} routes. Heatmaps count all valid routes.`) : tr(`${state.totalRouteCount} 条审核通过的完整关卡路线。`, `${state.totalRouteCount} approved complete chapter routes.`)
+      : tr("当前关卡和难度还没有公开的完整路线。", "There are no public complete routes for this chapter and difficulty yet.");
   }
   async function loadWholeTeamStage(group, stage, token) {
     const path = `${teamApiBase}/${state.teamId}/stages/${stage}/routes`;
@@ -97,19 +100,19 @@ export function createCommunityRoutes({ fetchImpl = globalThis.fetch?.bind(globa
       normalizeCommunityTeamStage(body, group, mapPack, stage, state.teamId);
       if (!first) first = body;
       else if (body.teamRevision !== first.teamRevision || body.totalRouteCount !== first.totalRouteCount || body.summitCompleted !== first.summitCompleted || body.stageCompleted !== first.stageCompleted
-        || JSON.stringify(body.finisherKeys || []) !== JSON.stringify(first.finisherKeys || [])) throw new Error("队伍记录已更新，请刷新后重新读取。");
+        || JSON.stringify(body.finisherKeys || []) !== JSON.stringify(first.finisherKeys || [])) throw communityRouteError("队伍记录已更新，请刷新后重新读取。", "Team records changed. Refresh to load them again.");
       for (const route of body.routes) {
-        if (ids.has(route.id)) throw new Error("队员路线分页重复，请刷新后重新读取。");
+        if (ids.has(route.id)) throw communityRouteError("队员路线分页重复，请刷新后重新读取。", "Duplicate team route pages. Please refresh.");
         ids.add(route.id); routes.push(route);
       }
-      if (routes.length > first.totalRouteCount) throw new Error("队伍记录已更新，请刷新后重新读取。");
+      if (routes.length > first.totalRouteCount) throw communityRouteError("队伍记录已更新，请刷新后重新读取。", "Team records changed. Refresh to load them again.");
       if (body.nextCursor === null || body.nextCursor === undefined) break;
       if (!/^[a-f0-9]{64}$/.test(body.nextCursor) || cursors.has(body.nextCursor)
-        || body.routes.at(-1)?.playerKey !== body.nextCursor) throw new Error("队员路线分页无效，请刷新后重新读取。");
+        || body.routes.at(-1)?.playerKey !== body.nextCursor) throw communityRouteError("队员路线分页无效，请刷新后重新读取。", "Invalid team route pagination. Please refresh.");
       cursor = body.nextCursor; cursors.add(cursor);
-      state.message = `正在读取本队全部轨迹…（${routes.length} / ${first.totalRouteCount} 位队员）`; emit();
+      state.message = () => tr(`正在读取本队全部轨迹…（${routes.length} / ${first.totalRouteCount} 位队员）`, `Loading all team paths… (${routes.length} / ${first.totalRouteCount} members)`); emit();
     }
-    if (!first.truncated && Number.isSafeInteger(first.totalRouteCount) && routes.length !== first.totalRouteCount) throw new Error("队员路线尚未完整返回，请刷新后重新读取。");
+    if (!first.truncated && Number.isSafeInteger(first.totalRouteCount) && routes.length !== first.totalRouteCount) throw communityRouteError("队员路线尚未完整返回，请刷新后重新读取。", "Some team routes are still missing. Please refresh.");
     return { ...first, routes, nextCursor: null };
   }
   async function loadStage() {
@@ -120,12 +123,12 @@ export function createCommunityRoutes({ fetchImpl = globalThis.fetch?.bind(globa
     const stage = state.stageIndex;
     if (!group) { emit(); return; }
     if (stage === null || !group.stageSummaries.some(value => value.index === stage)) {
-      state.status = "empty"; state.message = "选择一个关卡即可查看大家的路线。"; emit(); return;
+      state.status = "empty"; state.message = () => tr("选择一个关卡即可查看大家的路线。", "Choose a chapter to view community routes."); emit(); return;
     }
     if (state.mode === "off") {
-      state.status = "ready"; state.message = "选择大家的路线或热力图即可查看。"; emit(); return;
+      state.status = "ready"; state.message = () => tr("选择大家的路线或热力图即可查看。", "Choose community routes or a heatmap to view them."); emit(); return;
     }
-    state.status = "loading"; state.message = "正在读取当前关卡的路线…"; emit();
+    state.status = "loading"; state.message = () => tr("正在读取当前关卡的路线…", "Loading routes for this chapter…"); emit();
     const base = `${apiBase}/${encodeURIComponent(group.id)}/stages/${stage}`;
     const parameters = new URLSearchParams();
     if (state.difficulty) parameters.set("difficulty", state.difficulty);
@@ -165,7 +168,7 @@ export function createCommunityRoutes({ fetchImpl = globalThis.fetch?.bind(globa
     const previousId = state.group?.id, previousDifficulty = state.difficulty;
     const token = begin("groups");
     clearData(); state.groups = []; state.group = null; state.difficulties = [];
-    state.status = "loading"; state.message = "正在读取当前地图的公开路线…"; emit();
+    state.status = "loading"; state.message = () => tr("正在读取当前地图的公开路线…", "Loading public routes for this map…"); emit();
     try {
       const { matching, unavailableCount, pendingReasons } = matchingCommunityGroups(await readApi(apiBase, token.signal), mapPack);
       if (!active(token)) return;
@@ -178,8 +181,8 @@ export function createCommunityRoutes({ fetchImpl = globalThis.fetch?.bind(globa
       state.difficulty = state.difficulties.some(value => value.key === previousDifficulty) ? previousDifficulty : "";
       if (!state.group) {
         state.status = unavailableCount ? "mismatch" : "empty";
-        state.message = state.pinnedGroupId ? "这个历史路线组暂不可用，未切换到其他记录或今日路线。"
-          : unavailableCount ? pendingCommunityMessage(pendingReasons) : "当前地图还没有审核通过的完整关卡路线。";
+        state.message = () => state.pinnedGroupId ? tr("这个历史路线组暂不可用，未切换到其他记录或今日路线。", "This historical route group is unavailable. No other records or daily routes were substituted.")
+          : unavailableCount ? pendingCommunityMessage(pendingReasons) : tr("当前地图还没有审核通过的完整关卡路线。", "This map has no approved complete chapter routes yet.");
         emit(); return;
       }
       await loadStage();
@@ -187,13 +190,13 @@ export function createCommunityRoutes({ fetchImpl = globalThis.fetch?.bind(globa
   }
   async function enterMap(nextMapPack, { stageIndex = null, groupId = null, inspectionId = null, teamId = null, mode = null } = {}) {
     if (disposed) return;
-    if (groupId !== null && !/^[a-f0-9]{64}$/.test(groupId)) throw new Error("历史路线组无效。");
-    if (inspectionId !== null && (!groupId || !/^[a-f0-9]{64}$/.test(inspectionId))) throw new Error("历史验收投稿无效。");
-    if (teamId !== null && (!groupId || inspectionId || !/^[a-f0-9]{64}$/.test(teamId))) throw new Error("队伍链接无效。");
+    if (groupId !== null && !/^[a-f0-9]{64}$/.test(groupId)) throw communityRouteError("历史路线组无效。", "Invalid historical route group.");
+    if (inspectionId !== null && (!groupId || !/^[a-f0-9]{64}$/.test(inspectionId))) throw communityRouteError("历史验收投稿无效。", "Invalid review submission.");
+    if (teamId !== null && (!groupId || inspectionId || !/^[a-f0-9]{64}$/.test(teamId))) throw communityRouteError("队伍链接无效。", "Invalid team link.");
     const identity = communityMapIdentity(nextMapPack);
     if (!identity) {
       invalidate(); invalidateSearch(); mapPack = nextMapPack || null; state = freshState(); state.status = "mismatch";
-      state.message = "当前地图缺少可靠的版本或关卡分支信息，暂不叠加玩家路线。"; emit(); return;
+      state.message = () => tr("当前地图缺少可靠的版本或关卡分支信息，暂不叠加玩家路线。", "This map lacks reliable build or chapter branch information. Routes cannot be overlaid yet."); emit(); return;
     }
     if (identity === communityMapIdentity(mapPack) && groupId === state.pinnedGroupId && inspectionId === state.inspectionId && teamId === state.teamId) {
       mapPack = nextMapPack;
@@ -231,7 +234,7 @@ export function createCommunityRoutes({ fetchImpl = globalThis.fetch?.bind(globa
     const key = value === "" || state.difficulties.some(difficulty => difficulty.key === value) ? value : "";
     if (key === state.difficulty) return;
     state.difficulty = key;
-    invalidateSearch(); state.teams = []; state.teamSearchStatus = "idle"; state.teamSearchMessage = "难度已更新，可重新搜索队伍。";
+    invalidateSearch(); state.teams = []; state.teamSearchStatus = "idle"; state.teamSearchMessage = () => tr("难度已更新，可重新搜索队伍。", "Difficulty updated. Search for teams again.");
     await loadStage();
   }
   async function setMode(value) {
@@ -245,7 +248,7 @@ export function createCommunityRoutes({ fetchImpl = globalThis.fetch?.bind(globa
       if (wasLoading) clearData();
       if (state.group) {
         state.status = state.stageIndex === null ? "empty" : "ready";
-        state.message = state.stageIndex === null ? "选择一个关卡即可查看大家的路线。" : "选择大家的路线或热力图即可查看。";
+        state.message = () => state.stageIndex === null ? tr("选择一个关卡即可查看大家的路线。", "Choose a chapter to view community routes.") : tr("选择大家的路线或热力图即可查看。", "Choose community routes or a heatmap to view them.");
       }
       emit(); return;
     }
@@ -288,18 +291,18 @@ export function createCommunityRoutes({ fetchImpl = globalThis.fetch?.bind(globa
     const parameters = new URLSearchParams({ limit: "50" });
     if (state.searchMember) parameters.set("member", state.searchMember);
     if (!allMaps && state.group) parameters.set("group", state.group.id);
-    if (!allMaps && !state.group) { state.teams = []; state.teamSearchStatus = "empty"; state.teamSearchMessage = "当前地图还没有队伍记录，可切换全部地图搜索。"; emit(); return; }
+    if (!allMaps && !state.group) { state.teams = []; state.teamSearchStatus = "empty"; state.teamSearchMessage = () => tr("当前地图还没有队伍记录，可切换全部地图搜索。", "This map has no team records yet. Search all maps instead."); emit(); return; }
     if (state.difficulty) parameters.set("difficulty", state.difficulty);
-    state.teamSearchStatus = "loading"; state.teamSearchMessage = "正在查找队伍…"; emit();
+    state.teamSearchStatus = "loading"; state.teamSearchMessage = () => tr("正在查找队伍…", "Searching for teams…"); emit();
     try {
       const body = normalizeCommunityTeams(await readApi(`${teamApiBase}?${parameters}`, searchRequest.signal));
       if (disposed || current !== searchRevision || !mapPack) return;
       state.teams = body.teams; state.teamSearchStatus = body.teams.length ? "ready" : "empty";
-      state.teamSearchMessage = body.teams.length ? `${body.teams.length} 支队伍${body.truncated ? " · 结果较多，请缩小名字范围" : ""}` : "没有找到相关队伍。";
+      state.teamSearchMessage = () => body.teams.length ? tr(`${body.teams.length} 支队伍${body.truncated ? " · 结果较多，请缩小名字范围" : ""}`, `${body.teams.length} teams${body.truncated ? " · Many results. Refine the member name." : ""}`) : tr("没有找到相关队伍。", "No matching teams found.");
       emit();
     } catch (error) {
       if (disposed || current !== searchRevision || error?.name === "AbortError") return;
-      state.teams = []; state.teamSearchStatus = "error"; state.teamSearchMessage = displayError(error); emit();
+      state.teams = []; state.teamSearchStatus = "error"; state.teamSearchMessage = () => displayError(error); emit();
     }
   }
   async function selectTeam(id) {

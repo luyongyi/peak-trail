@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { lootGeometryTypes } from '../../tools/offline-maps/export-loot-from-geometry.mjs';
 
 const readJson = async path => JSON.parse(await readFile(new URL(path, import.meta.url), 'utf8'));
 const catalog = await readJson('../../data/maps/catalog.json');
@@ -55,6 +56,8 @@ test(`all ${build} markers retain authenticated geometry or component provenance
     assert.match(type.color, /^#[0-9a-f]{6}$/i);
     assert.ok(type.name.length > 0);
     assert.equal(type.name, localization.labels[type.id]?.name, `native Chinese label: ${type.id}`);
+    assert.equal(type.nameEn, localization.labels[type.id]?.nameEn, `native English label: ${type.id}`);
+    assert.ok(type.nameEn.length > 0 && type.nameEn.length <= 128);
   }
   for (const map of survey.maps) {
     assert.equal(map.layers.length, 6);
@@ -65,6 +68,7 @@ test(`all ${build} markers retain authenticated geometry or component provenance
       assert.ok(type && (layer || marker.scope === 'global'), `${map.sceneName}: ${marker.id}`);
       assert.equal(marker.category, type.category);
       assert.equal(marker.name, type.name);
+      assert.equal(Object.hasOwn(marker, 'nameEn'), false, 'English labels are stored once per type');
       assert.equal(marker.pos.length, 3);
       assert.ok(marker.pos.every(Number.isFinite));
       if (marker.scope === 'global') {
@@ -181,6 +185,23 @@ test('marker labels use the game Chinese names and keep descriptive site categor
   assert.equal(localization.labels['item-cactus-growth'].name, '刺莓生长点');
   assert.equal(localization.labels['item-ground-forage'].kind, 'map-description');
   assert.equal(localization.prefabTypes.AntiRopeSpool, undefined, 'unverified prefab aliases cannot get invented Chinese names');
+});
+
+test('English generator metadata matches the shared native terms and keeps map category descriptions explicit', () => {
+  for (const definition of lootGeometryTypes) {
+    assert.equal(definition.nameEn, localization.labels[definition.id].nameEn);
+    for (const { survey } of surveys) assert.equal(survey.types.find(type => type.id === definition.id).nameEn, definition.nameEn);
+  }
+  for (const label of Object.values(localization.labels)) {
+    assert.equal(typeof label.nameEn, 'string');
+    assert.ok(label.nameEn.trim() && label.nameEn.length <= 128);
+  }
+  assert.equal(localization.labels['item-spawn-healing-puff'].nameEn, 'REMEDY FUNGUS spawn site');
+  assert.equal(localization.labels['item-spawn-warp-fungus'].nameEn, 'WARP FUNGUS spawn site');
+  assert.equal(localization.labels['item-spawn-cattail-food'].nameEn, 'HOT DOG spawn site');
+  assert.match(localization.labels['item-cactus-growth'].nameEn, /Prickleberr/i);
+  assert.doesNotMatch(localization.labels['item-cactus-growth'].nameEn, /Cactus/i);
+  assert.doesNotMatch(localization.labels['chest-trick'].nameEn, /Clown/i);
 });
 
 test('current scene components restore the complete audited set of fixed spawn and growth reference sites', () => {

@@ -1,3 +1,4 @@
+import * as i18n from "../src/i18n.js";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
@@ -36,8 +37,8 @@ function model() {
 function fixture(selected = 0) {
   const requests = [];
   const load = (layer, signal, gameBuildId) => new Promise((resolve, reject) => requests.push({ layer: layer.id, signal, gameBuildId, resolve, reject }));
-  const TrailScene = new Function("THREE", "loadGameGeometry", "cancelAnimationFrame", "layoutPortraitLabels", "clusterPlayerEntries", "latestLifeEventBefore", "MARKER_LIFE_EVENT_TYPES", "isInteriorLayer", "chooseRecordedInteriorPose", "nadirCameraBounds", "nadirCameraParts", "collectCameraParts", "selectCameraSubjectParts", `${source}\nreturn TrailScene;`)(
-    THREE, load, () => {}, layoutPortraitLabels, clusterPlayerEntries, latestLifeEventBefore, MARKER_LIFE_EVENT_TYPES, isInteriorLayer, chooseRecordedInteriorPose, nadirCameraBounds, nadirCameraParts, collectCameraParts, selectCameraSubjectParts,
+  const TrailScene = new Function("THREE", "loadGameGeometry", "cancelAnimationFrame", "layoutPortraitLabels", "clusterPlayerEntries", "latestLifeEventBefore", "MARKER_LIFE_EVENT_TYPES", "isInteriorLayer", "chooseRecordedInteriorPose", "nadirCameraBounds", "nadirCameraParts", "collectCameraParts", "selectCameraSubjectParts", "tr", "formatNumber", `${source}\nreturn TrailScene;`)(
+    THREE, load, () => {}, layoutPortraitLabels, clusterPlayerEntries, latestLifeEventBefore, MARKER_LIFE_EVENT_TYPES, isInteriorLayer, chooseRecordedInteriorPose, nadirCameraBounds, nadirCameraParts, collectCameraParts, selectCameraSubjectParts, i18n.tr, i18n.formatNumber,
   );
   const layers = [
     { id: "A", segment: 0, biome: "shore" },

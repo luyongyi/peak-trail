@@ -1,3 +1,4 @@
+import * as i18n from "../src/i18n.js";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
@@ -22,7 +23,7 @@ const sceneSource = (await readFile(new URL("../src/scene.js", import.meta.url),
   .replace(/^import .*;\r?\n/gm, "").replace("export class TrailScene", "class TrailScene");
 
 function fixture({ samples = defaultSamples(), events = [], activeSegment = null, spatial = {} } = {}) {
-  const ports = { THREE, LineSegmentsGeometry, LineMaterial, LineSegments2, pointInBounds, clipTrailSegment, updateRecordedMineVisibility() {}, updateMapFogSurfaceVisibility() {}, latestLifeEventBefore, MARKER_LIFE_EVENT_TYPES, ...spatial };
+  const ports = { ...i18n, THREE, LineSegmentsGeometry, LineMaterial, LineSegments2, pointInBounds, clipTrailSegment, updateRecordedMineVisibility() {}, updateMapFogSurfaceVisibility() {}, latestLifeEventBefore, MARKER_LIFE_EVENT_TYPES, ...spatial };
   const TrailScene = new Function(...Object.keys(ports), `${sceneSource}\nreturn TrailScene;`)(...Object.values(ports));
   const scene = Object.create(TrailScene.prototype);
   Object.assign(scene, {

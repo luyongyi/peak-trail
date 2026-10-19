@@ -12,6 +12,11 @@ function nativeMarkerName(id) {
   if (typeof name !== 'string' || !name.trim()) throw new Error(`Missing native Chinese marker label: ${id}`);
   return name;
 }
+function englishMarkerName(id) {
+  const name = localizedLabels.labels[id]?.nameEn;
+  if (typeof name !== 'string' || !name.trim() || name.length > 128) throw new Error(`Missing English marker label: ${id}`);
+  return name;
+}
 
 // Exact body meshes, never lids, handles, clasps, decorative mushrooms, or
 // inferred nearby pickups. Identity proof is recorded in the survey notes.
@@ -35,7 +40,7 @@ export const lootGeometryTypes = [
   // The original body has the generic mesh name Cube. Require its exact
   // authenticated material; M_Capybara Mirage is a different mesa prop.
   { id: 'animal-capybara', category: 'animal', color: '#e6ac69', meshName: 'Cube', materialName: 'M_Capybara' },
-].map(type => ({ ...type, name: nativeMarkerName(type.id) }));
+].map(type => ({ ...type, name: nativeMarkerName(type.id), nameEn: englishMarkerName(type.id) }));
 
 const identity = () => [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -216,10 +221,14 @@ export function mergeSceneLoot(geometry, sceneLoot) {
   for (const type of sceneLoot.types) {
     if (!/^[a-z][a-z0-9_-]{0,79}$/.test(type?.id || '') || sceneTypes.has(type.id) || type.category !== 'item'
         || typeof type.name !== 'string' || !type.name.trim() || type.name.length > 100
+        || (type.nameEn !== undefined && (typeof type.nameEn !== 'string' || !type.nameEn.trim() || type.nameEn.length > 128))
         || !/^#[a-f0-9]{6}$/i.test(type.color || '')) fail('type definition');
     const existing = types.get(type.id);
     if (existing && (existing.name !== type.name || existing.category !== type.category || existing.color !== type.color)) fail(`type ${type.id}`);
-    sceneTypes.add(type.id); types.set(type.id, { id: type.id, category: type.category, name: type.name, color: type.color });
+    if (existing?.nameEn !== undefined && type.nameEn !== undefined && existing.nameEn !== type.nameEn) fail(`type ${type.id} English label`);
+    const nameEn = type.nameEn ?? existing?.nameEn;
+    sceneTypes.add(type.id); types.set(type.id, { id: type.id, category: type.category, name: type.name,
+      ...(nameEn === undefined ? {} : { nameEn }), color: type.color });
   }
   const removeTypes = sceneLoot.removeTypes || [];
   if (!Array.isArray(removeTypes) || new Set(removeTypes).size !== removeTypes.length

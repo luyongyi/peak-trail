@@ -1,3 +1,4 @@
+import * as i18n from "../src/i18n.js";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
@@ -85,6 +86,7 @@ function fixture({ liveVisible = true, legacyReplayVisible = true } = {}) {
   }
   let api;
   const ports = {
+    ...i18n,
     FEATURES: { liveVisible, legacyReplayVisible },
     viewer: { resize: () => calls.camera.push("resize"), fitView: () => calls.camera.push("fit") },
     state, elements, $: (id) => elements[id], document: { createElement: node }, URL, EventSource: FakeEventSource,

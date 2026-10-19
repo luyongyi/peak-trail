@@ -1,5 +1,6 @@
 import { buildHomeDailyView } from "./home-daily.js";
 import { HOME_ART, HOME_ENDINGS } from "./home-art.js";
+import { getLocale, onLocaleChange, tr } from "./i18n.js";
 
 const COPY = {
   shore: "SHORE",
@@ -50,6 +51,7 @@ export class HomePage {
     };
     document.addEventListener('visibilitychange', this.onVisibility);
     this.clock = setInterval(() => { if (this.visible && !document.hidden) this.tick(); }, 1000);
+    this.stopLocaleListener = onLocaleChange(() => { if (!this.disposed) this.tick(); });
     this.tick();
   }
 
@@ -76,13 +78,13 @@ export class HomePage {
         const map = await this.loadMapPack(new URL(entry.path, baseUrl).href);
         if (revision !== this.revision) { map.disposeAssets?.(); return; }
         const checked = buildHomeDailyView({ daily: this.daily, catalog, mapPack: map });
-        if (checked.mapStatus === 'identity-mismatch') throw new Error('轮换与模型身份不一致');
+        if (checked.mapStatus === 'identity-mismatch') throw new Error(tr('轮换与模型身份不一致', 'The daily rotation and map identities do not match'));
         this.mapPack = map;
       }
       this.tick();
     } catch (error) {
       if (revision !== this.revision) return;
-      this.error = error?.message || '地图暂不可用';
+      this.error = error?.message || tr('地图暂不可用', 'Map temporarily unavailable');
       this.tick();
     }
   }
@@ -90,28 +92,28 @@ export class HomePage {
   tick() {
     const view = this.view();
     const now = new Date();
-    this.$('homeDate').textContent = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit' })
-      .format(now).split('/').slice(0, 2).reverse().join('.');
+    const dateParts = new Intl.DateTimeFormat(getLocale(), { timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit' }).formatToParts(now);
+    this.$('homeDate').textContent = ['month', 'day'].map(type => dateParts.find(part => part.type === type).value).join('.');
     this.$('homeDate').dateTime = now.toISOString();
-    this.$('homeDateMeta').textContent = `${new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', year: 'numeric', weekday: 'long' }).format(now)} · 北京时间`;
+    this.$('homeDateMeta').textContent = `${new Intl.DateTimeFormat(getLocale(), { timeZone: 'Asia/Shanghai', year: 'numeric', weekday: 'long' }).format(now)}${tr(' · 北京时间', ' · Beijing time (UTC+8)')}`;
     this.$('homeStatus').textContent = view.statusLabel;
-    this.$('homeRouteLabel').textContent = view.sceneName ? `${view.isCurrent ? '本轮路线' : '上次确认'} / ${view.sceneName} · ${String(this.daily.levelIndex).padStart(3, '0')}` : '等待确认本轮路线';
-    this.$('homeCountdown').textContent = view.isCurrent ? `${view.countdownLabel} 后轮换` : view.countdownLabel;
-    this.$('homeCountdown').title = view.rotationLabel ? `接口报告的轮换时间：${view.rotationLabel}（北京时间）` : '';
+    this.$('homeRouteLabel').textContent = view.sceneName ? `${view.isCurrent ? tr('本轮路线', 'Current rotation') : tr('上次确认', 'Last confirmed')} / ${view.sceneName} · ${String(this.daily.levelIndex).padStart(3, '0')}` : tr('等待确认本轮路线', 'Waiting for the current rotation');
+    this.$('homeCountdown').textContent = view.isCurrent ? tr(`${view.countdownLabel} 后轮换`, `Next rotation in ${view.countdownLabel}`) : view.countdownLabel;
+    this.$('homeCountdown').title = view.rotationLabel ? tr(`接口报告的轮换时间：${view.rotationLabel}（北京时间）`, `Reported rotation time: ${view.rotationLabel} (Beijing time, UTC+8)`) : '';
     this.root.dataset.freshness = view.freshness;
     for (const card of view.cards) {
       const cell = this.cells[card.segment], button = this.buttons[card.segment];
       cell.dataset.theme = card.theme;
       button.disabled = !card.available;
-      button.setAttribute('aria-label', `${view.isCurrent ? '查看本轮' : '查看上次确认的'}第${card.segment + 1}关：${card.title}`);
+      button.setAttribute('aria-label', tr(`${view.isCurrent ? '查看本轮' : '查看上次确认的'}第${card.segment + 1}关：${card.title}`, `View ${view.isCurrent ? 'current' : 'last confirmed'} chapter ${card.segment + 1}: ${card.title}`));
       cell.querySelector('.home-biome-title').textContent = card.title;
       cell.querySelector('.home-biome-en').textContent = COPY[card.biome] || `CHAPTER ${card.ordinal}`;
       const img = cell.querySelector('img');
       const url = card.available ? HOME_ART[card.biome] : null;
       if (url && img.getAttribute('src') !== url) img.src = url;
       img.hidden = !url;
-      img.alt = url ? `${card.title}区域插画` : '';
-      cell.querySelector('.home-model-status').textContent = card.available ? '' : '等待确认';
+      img.alt = url ? tr(`${card.title}区域插画`, `${card.title} area illustration`) : '';
+      cell.querySelector('.home-model-status').textContent = card.available ? '' : tr('等待确认', 'Awaiting confirmation');
     }
     const ending = view.cards[3]?.ending;
     const finale = HOME_ENDINGS[ending?.branch];
@@ -121,25 +123,25 @@ export class HomePage {
     finaleElement.hidden = !finale;
     const finaleButton = this.$('homeEndingExplore');
     finaleButton.disabled = !finale;
-    finaleButton.setAttribute('aria-label', finale && ending ? `${view.isCurrent ? '查看本轮' : '查看上次确认的'}第5关：${ending.title}` : '终段等待路线确认');
-    this.$('homeEnding').textContent = ending?.title || '终段待确认';
+    finaleButton.setAttribute('aria-label', finale && ending ? tr(`${view.isCurrent ? '查看本轮' : '查看上次确认的'}第5关：${ending.title}`, `View ${view.isCurrent ? 'current' : 'last confirmed'} chapter 5: ${ending.title}`) : tr('终段等待路线确认', 'Final chapter awaiting route confirmation'));
+    this.$('homeEnding').textContent = ending?.title || tr('终段待确认', 'Final chapter unconfirmed');
     this.$('homeEndingEnglish').textContent = finale?.english || 'FINAL ASCENT';
-    this.$('homeEndingStatus').textContent = finale ? '' : '等待路线确认';
+    this.$('homeEndingStatus').textContent = finale ? '' : tr('等待路线确认', 'Awaiting route confirmation');
     const finaleArt = this.$('homeEndingArt');
     if (finale && finaleArt.getAttribute('src') !== finale.art) finaleArt.src = finale.art;
     finaleArt.hidden = !finale;
-    finaleArt.alt = ending ? `${ending.title}内部区域插画` : '';
+    finaleArt.alt = ending ? tr(`${ending.title}内部区域插画`, `${ending.title} interior illustration`) : '';
     for (const destination of view.destinations) {
       const art = this.$(`home-${destination.id}-art`);
       // These are alternative ending illustrations, not evidence that this
       // daily map or a recording has visited/selected either ending.
       const url = HOME_ART[destination.id];
       if (art.getAttribute('src') !== url) art.src = url;
-      art.alt = `${destination.title}结局区域插画`;
+      art.alt = tr(`${destination.title}结局区域插画`, `${destination.title} ending illustration`);
       const button = this.$(`home-${destination.id}-explore`);
       button.disabled = !destination.available;
       button.textContent = destination.actionLabel;
-      button.setAttribute('aria-label', `${view.isCurrent ? '本轮' : '上次确认的地图'}：${destination.actionLabel}`);
+      button.setAttribute('aria-label', tr(`${view.isCurrent ? '本轮' : '上次确认的地图'}：${destination.actionLabel}`, `${view.isCurrent ? 'Current rotation' : 'Last confirmed map'}: ${destination.actionLabel}`));
     }
   }
 
@@ -152,6 +154,7 @@ export class HomePage {
     this.disposed = true;
     this.revision++;
     clearInterval(this.clock);
+    this.stopLocaleListener?.();
     document.removeEventListener('visibilitychange', this.onVisibility);
     this.mapPack?.disposeAssets?.();
   }

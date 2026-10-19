@@ -1,9 +1,25 @@
+import { getLocale, setLocale, tr, formatNumber } from "../src/i18n.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
 import { historicalRouteTitle, historicalRouteUrl, loadHistoricalRouteLink, normalizeHistoricalInspection, parseHistoricalRouteLink } from "../src/historical-route-link.js";
 
 const hash = character => character.repeat(64);
+
+test("English history titles and links retain exact public identities and exclude private query fields", async () => {
+  try {
+    setLocale("en");
+    assert.match(historicalRouteTitle(group()), /^Historical routes.*Rotation 481/);
+    const url = new URL(historicalRouteUrl("https://peak.mylus.cn/?adminToken=private&uploadToken=secret&lang=zh-CN#local", hash("b"), 3, null, hash("d")));
+    assert.equal(url.searchParams.get("lang"), "en");
+    assert.deepEqual([...url.searchParams.keys()], ["routeGroup", "stage", "team", "lang"]);
+    assert.equal(url.hash, "");
+    assert.deepEqual(parseHistoricalRouteLink(url.search), { groupId: hash("b"), stageIndex: 3, teamId: hash("d") });
+    const f = fixture(), result = await loadHistoricalRouteLink({ groupId: hash("b"), teamId: hash("d"), stageIndex: 3 }, f.ports);
+    assert.equal(result.baseTitle, historicalRouteTitle(group()));
+    assert.match(result.title, /Team routes$/);
+  } finally { setLocale("zh-CN"); }
+});
 const packId = `sha256-${hash("a")}`;
 const route = ["Shore", "Roots", "Alpine", "Volcano", "Kiln"];
 function group(overrides = {}) {
@@ -233,7 +249,7 @@ async function historicalDailyFixture() {
   let incoming = today;
   const calls = { homeUpdates: [], schedules: [], home: 0, urlClears: 0 };
   class FixedDate extends Date { static now() { return Date.parse("2026-10-09T10:00:00Z"); } }
-  const ports = { state, elements, Date: FixedDate, Intl,
+  const ports = { state, elements, Date: FixedDate, Intl, getLocale, tr, formatNumber,
     dailyReader: { async read() { if (incoming instanceof Error) throw incoming; return incoming; }, retryAt: null },
     dailyClock: { schedule(...args) { calls.schedules.push(args); } },
     homePage: { update(value) { calls.homeUpdates.push(value); } },
@@ -251,12 +267,12 @@ test("historical daily card stays on the recorded scene and date while today's s
   f.api.updateDailyCountdown();
   assert.equal(f.elements.dailyCard.attributes.title, "历史录制地图");
   assert.equal(f.elements.dailyScene.textContent, "历史 Level_18");
-  assert.equal(f.elements.dailyCountdown.textContent, "2026-10-08 · 轮换 480");
+  assert.equal(f.elements.dailyCountdown.textContent, `${new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date("2026-10-08T14:00:00Z"))} · 轮换 480`);
   await f.api.applyDailyStatus();
   assert.equal(f.state.daily, f.today); assert.deepEqual(f.calls.homeUpdates, [f.today]);
   assert.equal(f.state.historicalRoute, f.history); assert.equal(f.state.mapPack, f.original);
-  assert.equal(f.elements.dailyScene.textContent, "历史 Level_18"); assert.equal(f.elements.dailyCountdown.textContent, "2026-10-08 · 轮换 480");
-  f.api.updateDailyCountdown(); assert.equal(f.elements.dailyCountdown.textContent, "2026-10-08 · 轮换 480");
+  assert.equal(f.elements.dailyScene.textContent, "历史 Level_18"); assert.equal(f.elements.dailyCountdown.textContent, `${new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date("2026-10-08T14:00:00Z"))} · 轮换 480`);
+  f.api.updateDailyCountdown(); assert.equal(f.elements.dailyCountdown.textContent, `${new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date("2026-10-08T14:00:00Z"))} · 轮换 480`);
 });
 
 test("returning home clears history and restores today's current card without modifying today's rotation", async () => {
@@ -274,7 +290,7 @@ test("missing, failed or stale daily observations cannot turn the historical car
     const f = await historicalDailyFixture(); f.incoming = incoming;
     f.api.updateDailyCountdown(); await f.api.applyDailyStatus();
     assert.equal(f.elements.dailyCard.attributes.title, "历史录制地图");
-    assert.equal(f.elements.dailyScene.textContent, "历史 Level_18"); assert.equal(f.elements.dailyCountdown.textContent, "2026-10-08 · 轮换 480");
+    assert.equal(f.elements.dailyScene.textContent, "历史 Level_18"); assert.equal(f.elements.dailyCountdown.textContent, `${new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date("2026-10-08T14:00:00Z"))} · 轮换 480`);
     assert.equal(f.state.mapPack, f.original);
   }
 });
@@ -346,13 +362,13 @@ test("historical service JSON reads have a timeout and stop oversized chunked re
   let canceled = 0, options;
   const body = new ReadableStream({ start(controller) { controller.enqueue(new Uint8Array(33)); }, cancel() { canceled++; } });
   const oversized = new Response(body, { headers: { "content-type": "application/json" } });
-  const bounded = new Function("fetch", `${implementation}; return readHistoricalJson;`)(async (_, settings) => {
+  const bounded = new Function("fetch", "tr", `${implementation}; return readHistoricalJson;`)(async (_, settings) => {
     options = settings; return oversized;
-  });
+  }, tr);
   await assert.rejects(bounded("/api/route-teams/public", 32), /数据过大/);
   assert.equal(canceled, 1); assert.equal(options.cache, "no-store"); assert.ok(options.signal instanceof AbortSignal);
-  const good = new Function("fetch", `${implementation}; return readHistoricalJson;`)(async () => new Response('{"team":null}',
-    { headers: { "content-type": "application/json" } }));
+  const good = new Function("fetch", "tr", `${implementation}; return readHistoricalJson;`)(async () => new Response('{"team":null}',
+    { headers: { "content-type": "application/json" } }), tr);
   assert.deepEqual(await good("/api/route-teams/public", 32), { team: null });
 });
 
@@ -360,12 +376,12 @@ test("clearing a team preserves its current map and removes the team from subseq
   const state = { selectedSegment: 3, historicalRoute: { group: group(), title: "历史路线 · 团队路线", teamId: hash("d") } };
   let url = `https://peak.mylus.cn/?routeGroup=${hash("b")}&stage=3&team=${hash("d")}`, opened = 0;
   const ports = { state, window: { location: { get href() { return url; } }, history: { replaceState(_, __, next) { url = next; } } },
-    historicalRouteUrl, renderSegmentNavigation: () => {}, syncWorkspaceState: () => {},
+    historicalRouteUrl, historicalRouteTitle, renderSegmentNavigation: () => {}, syncWorkspaceState: () => {},
     communityMapPanel: { openHistorical: async () => { opened++; } } };
   const source = `${await appFunction("updateHistoricalRouteUrl")}\n${await appFunction("openCommunityTeam")}`;
   const clear = new Function(...Object.keys(ports), `${source}; return openCommunityTeam;`)(...Object.values(ports));
   await clear(null);
-  assert.equal(state.historicalRoute.teamId, null); assert.equal(state.historicalRoute.title, "历史路线");
+  assert.equal(state.historicalRoute.teamId, null); assert.equal(state.historicalRoute.title, historicalRouteTitle(group()));
   assert.equal(new URL(url).searchParams.has("team"), false); assert.equal(opened, 1);
   state.historicalRoute.teamId = hash("d"); state.selectedSegment = null;
   url += `&team=${hash("d")}`;

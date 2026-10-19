@@ -1,3 +1,5 @@
+import { getLocale, tr } from './i18n.js';
+
 const idPattern = /^[a-z][a-z0-9_-]{0,79}$/;
 const hashPattern = /^[a-f0-9]{64}$/;
 const packPattern = /^sha256-[a-f0-9]{64}$/;
@@ -17,8 +19,10 @@ export function normalizeMapLoot(raw, mapPack) {
   const types = [], definitions = new Map();
   for (const type of raw.types) {
     if (!idPattern.test(type?.id || "") || definitions.has(type.id) || !categories.has(type.category)
-        || typeof type.name !== "string" || !type.name.trim() || type.name.length > 100) return null;
+        || typeof type.name !== "string" || !type.name.trim() || type.name.length > 100
+        || type.nameEn !== undefined && (typeof type.nameEn !== "string" || !type.nameEn.trim() || type.nameEn.length > 128)) return null;
     const normalized = { id: type.id, category: type.category, name: type.name,
+      ...(type.nameEn !== undefined ? { nameEn: type.nameEn } : {}),
       ...(typeof type.color === "string" && /^#[a-f0-9]{6}$/i.test(type.color) ? { color: type.color } : {}) };
     types.push(normalized); definitions.set(type.id, normalized);
   }
@@ -65,6 +69,10 @@ export function normalizeMapLoot(raw, mapPack) {
       : raw.source?.kind === "canonical-map-geometry-survey" ? "partial" : null };
 }
 
+export function lootTypeName(type, locale = getLocale()) {
+  return locale === 'en' && type?.nameEn ? type.nameEn : type?.name || '';
+}
+
 export function lootForLayers(markers, layers, segment = null) {
   const displayed = (layers || []).filter(layer => segment === null
     ? String(layer.biome).toLowerCase() !== "void" : layer.segment === segment);
@@ -86,9 +94,9 @@ export function createMapLootLoader({ fetchImpl = globalThis.fetch, baseUrl = ne
   async function readSurvey(path, signal) {
     const response = await fetchImpl(new URL(path, baseUrl), { signal, cache: "no-cache" });
     if (response.status === 404) return null;
-    if (!response.ok) throw new Error("物资点位暂时无法读取");
+    if (!response.ok) throw new Error(tr("物资点位暂时无法读取", "Map markers are temporarily unavailable."));
     const body = await response.text();
-    if (body.length > 24 * 1024 * 1024) throw new Error("物资点位数据超过上限");
+    if (body.length > 24 * 1024 * 1024) throw new Error(tr("物资点位数据超过上限", "Map marker data exceeds the size limit."));
     return signal?.aborted ? null : JSON.parse(body);
   }
   return async (mapPack, { signal } = {}) => {

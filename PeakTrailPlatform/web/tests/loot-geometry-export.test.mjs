@@ -304,6 +304,30 @@ test('component merges reject another build, scene, layer, provenance, type coll
   }
 });
 
+test('English type metadata survives component merges without copying it onto each marker', () => {
+  const { geometry, scene } = surveys();
+  scene.types[0].nameEn = 'ALOE VERA spawn site';
+  const result = mergeSceneLoot(geometry, scene);
+  assert.equal(result.types.find(type => type.id === scene.types[0].id).nameEn, 'ALOE VERA spawn site');
+  assert.deepEqual(result.maps, mergeSceneLoot(geometry, { ...scene, types: scene.types.map(({ nameEn, ...type }) => type) }).maps);
+  assert.ok(result.maps.flatMap(map => map.markers).every(marker => !Object.hasOwn(marker, 'nameEn')));
+});
+
+test('English type metadata is optional for older fixtures but rejects invalid labels and conflicts', () => {
+  const legacy = surveys();
+  assert.equal(Object.hasOwn(mergeSceneLoot(legacy.geometry, legacy.scene).types.at(-1), 'nameEn'), false);
+  for (const nameEn of [null, 42, '', '   ', 'x'.repeat(129)]) {
+    const { geometry, scene } = surveys(); scene.types[0].nameEn = nameEn;
+    assert.throws(() => mergeSceneLoot(geometry, scene), /type definition/);
+  }
+  const { geometry, scene } = surveys();
+  geometry.types[0].nameEn = 'Existing native English label';
+  scene.types.push({ ...geometry.types[0], nameEn: 'Conflicting English label' });
+  assert.throws(() => mergeSceneLoot(geometry, scene), /English label/);
+  delete scene.types[1].nameEn;
+  assert.equal(mergeSceneLoot(geometry, scene).types.find(type => type.id === geometry.types[0].id).nameEn, 'Existing native English label');
+});
+
 test('explicit component replacement requires the same type definition and complete map coverage', () => {
   const { geometry, scene } = surveys();
   scene.types.push(geometry.types[0]); scene.removeTypes = ['item-bird-nest'];

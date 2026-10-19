@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { HOME_ART, HOME_ART_FILES, HOME_ENDINGS } from "../src/home-art.js";
 import { buildHomeDailyView } from "../src/home-daily.js";
+import { getLocale, onLocaleChange, setLocale, tr } from "../src/i18n.js";
 
 test("home illustration registry permits exactly eleven named assets, including distinct special areas", () => {
   const expected = ["shore", "roots", "tropics", "alpine", "mesa", "volcano", "swamp", "kiln", "temple", "peak", "nadir"];
@@ -112,20 +113,50 @@ function fixture() {
   const root = { dataset: {}, querySelector: (selector) => nodes[selector.slice(1)], querySelectorAll: () => cells };
   const ports = {
     HOME_ART, HOME_ENDINGS,
+    getLocale, onLocaleChange, tr,
     buildHomeDailyView: (input) => buildHomeDailyView({ ...input, now }),
     document: { hidden: false, addEventListener() {}, removeEventListener() {} },
     setInterval: () => 1, clearInterval() {},
   };
   const HomePage = new Function(...Object.keys(ports), `${source}\nreturn HomePage;`)(...Object.values(ports));
   const explored = [];
-  const page = new HomePage({ root, loadCatalog: async () => ({ catalog }), loadMapPack: async () => mapPack(),
+  const requests = { catalog: 0, map: 0 };
+  const page = new HomePage({ root, loadCatalog: async () => { requests.catalog++; return { catalog }; }, loadMapPack: async () => { requests.map++; return mapPack(); },
     onExplore: (map, segment, view, intent) => explored.push({ map, segment, view, intent }), onRefresh: async () => {} });
   function show(branch = "swamp-temple") {
     Object.assign(page, { daily, catalog, mapPack: mapPack(branch) });
     page.tick();
   }
-  return { page, nodes, cells, show, explored };
+  return { page, nodes, cells, show, explored, requests };
 }
+
+test("locale changes rerender native chapters and accessible actions without loading another map", () => {
+  const { page, nodes, cells, show, requests } = fixture();
+  show();
+  const originalMap = page.mapPack;
+  const artWrites = nodes.homeEndingArt.srcWrites;
+  try {
+    setLocale("en");
+    assert.equal(cells[1].querySelector(".home-biome-title").textContent, "ROOTS");
+    assert.equal(cells[1].querySelector("button").getAttribute("aria-label"), "View current chapter 2: ROOTS");
+    assert.equal(cells[1].querySelector("img").alt, "ROOTS area illustration");
+    assert.equal(nodes.homeEnding.textContent, "THE CITADEL");
+    assert.equal(nodes["home-peak-explore"].textContent, "View the PEAK map");
+    assert.match(nodes.homeDateMeta.textContent, /Beijing time/);
+    assert.equal(page.mapPack, originalMap);
+    assert.equal(nodes.homeEndingArt.srcWrites, artWrites);
+    assert.deepEqual(requests, { catalog: 0, map: 0 });
+    setLocale("zh-CN");
+    assert.equal(nodes.homeEnding.textContent, "城塞");
+    assert.equal(cells[1].querySelector("img").alt, "森蕈区域插画");
+    page.dispose();
+    setLocale("en");
+    assert.equal(nodes.homeEnding.textContent, "城塞", "disposed pages must unsubscribe from locale changes");
+  } finally {
+    setLocale("zh-CN");
+    page.dispose();
+  }
+});
 
 test("an unconfirmed home initially hides the finale and cannot expose a guessed ending", () => {
   const { nodes, cells } = fixture();

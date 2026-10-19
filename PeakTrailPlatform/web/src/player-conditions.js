@@ -1,34 +1,35 @@
+import { tr } from "./i18n.js";
 const number = (value) => typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
 const text = (value) => typeof value === "string" ? value : null;
 
 // UI legend colors, not extracted game textures. Values and identities always
 // come from the snapshot; a name in an inventory is never a status observation.
 const CONDITIONS = {
-  Injury: ["受伤", "#dd726a"], Hunger: ["饥饿", "#dfb477"], Cold: ["寒冷", "#83cbe5"],
-  Poison: ["中毒", "#9fc477"], Crab: ["螃蟹", "#e59c6f"], Curse: ["诅咒", "#b791dc"],
-  Drowsy: ["昏睡", "#a1a4e0"], Weight: ["负重", "#9aada9"], Hot: ["炎热", "#e78358"],
-  Thorns: ["荆棘", "#95aa6e"], Spores: ["孢子", "#cfbc73"], Web: ["蛛网", "#d4d8cd"],
-  Arrow: ["箭伤", "#bb8475"], Petrify: ["石化", "#929aaa"], FlyTrap: ["捕蝇草", "#97b88a"],
+  Injury: ["受伤", "#dd726a", "Injury"], Hunger: ["饥饿", "#dfb477", "Hunger"], Cold: ["寒冷", "#83cbe5", "Cold"],
+  Poison: ["中毒", "#9fc477", "Poison"], Crab: ["螃蟹", "#e59c6f", "Crab"], Curse: ["诅咒", "#b791dc", "Curse"],
+  Drowsy: ["昏睡", "#a1a4e0", "Drowsiness"], Weight: ["负重", "#9aada9", "Weight"], Hot: ["炎热", "#e78358", "Heat"],
+  Thorns: ["荆棘", "#95aa6e", "Thorns"], Spores: ["孢子", "#cfbc73", "Spores"], Web: ["蛛网", "#d4d8cd", "Web"],
+  Arrow: ["箭伤", "#bb8475", "Arrow wound"], Petrify: ["石化", "#929aaa", "Petrification"], FlyTrap: ["捕蝇草", "#97b88a", "Flytrap"],
 };
 
 // Descriptive UI labels; retain raw enum names in tooltips for verification.
 const EFFECTS = {
-  PoisonOverTime: "持续中毒", InfiniteStamina: "无限体力", FasterBoi: "加速", Exhausted: "精疲力竭",
-  Glowing: "发光", ColdOverTime: "持续寒冷", Chaos: "混沌", AdjustStatus: "状态调整",
-  ClearAllStatus: "清除状态", PreventPoisonHealing: "阻止中毒恢复", AddBonusStamina: "补充额外体力",
-  DrowsyOverTime: "持续昏睡", AdjustStatusOverTime: "持续状态调整", Sunscreen: "防晒",
-  BingBongShield: "Bing Bong 护盾", ZombieBite: "僵尸咬伤", Invincibility: "无敌", LowGravity: "低重力",
-  Blind: "失明", Numb: "麻木", ClimbingChalk: "攀爬镁粉", NoHunger: "免饥饿", HealAll: "全体治疗",
-  DoubleJumpAmulet: "二段跳护符", RadiateInfiniteStam: "无限体力光环", MassSuperJump: "群体超级跳跃",
+  PoisonOverTime: ["持续中毒", "Poison over time"], InfiniteStamina: ["无限体力", "Infinite stamina"], FasterBoi: ["加速", "Speed boost"], Exhausted: ["精疲力竭", "Exhausted"],
+  Glowing: ["发光", "Glowing"], ColdOverTime: ["持续寒冷", "Cold over time"], Chaos: ["混沌", "Chaos"], AdjustStatus: ["状态调整", "Status adjustment"],
+  ClearAllStatus: ["清除状态", "Clear conditions"], PreventPoisonHealing: ["阻止中毒恢复", "Poison healing blocked"], AddBonusStamina: ["补充额外体力", "Bonus stamina"],
+  DrowsyOverTime: ["持续昏睡", "Drowsiness over time"], AdjustStatusOverTime: ["持续状态调整", "Status adjustment over time"], Sunscreen: ["防晒", "Sunscreen"],
+  BingBongShield: ["Bing Bong 护盾", "Bing Bong shield"], ZombieBite: ["僵尸咬伤", "Zombie bite"], Invincibility: ["无敌", "Invincibility"], LowGravity: ["低重力", "Low gravity"],
+  Blind: ["失明", "Blindness"], Numb: ["麻木", "Numbness"], ClimbingChalk: ["攀爬镁粉", "Climbing chalk"], NoHunger: ["免饥饿", "No hunger"], HealAll: ["全体治疗", "Heal everyone"],
+  DoubleJumpAmulet: ["二段跳护符", "Double jump amulet"], RadiateInfiniteStam: ["无限体力光环", "Infinite stamina aura"], MassSuperJump: ["群体超级跳跃", "Group super jump"],
 };
 
 export function effectPresentation(type) {
-  return EFFECTS[type] || String(type || "未知效果");
+  return EFFECTS[type] ? tr(...EFFECTS[type]) : String(type || tr("未知效果", "Unknown effect"));
 }
 
 export function conditionPresentation(type) {
-  const [label, color] = CONDITIONS[type] || [String(type || "未知状态"), "#a7b4b6"];
-  return { label, color };
+  const [zh, color, en] = CONDITIONS[type] || [String(type || tr("未知状态", "Unknown condition")), "#a7b4b6", String(type || tr("未知状态", "Unknown condition"))];
+  return { label: tr(zh, en), color };
 }
 
 export function normalizePlayerStatus(record) {
@@ -99,20 +100,20 @@ export function staminaLayout(telemetry, status, extra = false) {
     }
   }
   return { value, cap, base, ratio, capacity, blocked: capacity !== null ? 1 - capacity : null, blocks,
-    output: telemetry?.ready === false ? "同步中" : ratio === null ? "未记录" : `${Math.round(ratio * 100)}%`,
-    capText: capacity === null ? "上限未知" : `上限 ${Math.round(capacity * 100)}%` };
+    output: telemetry?.ready === false ? tr("同步中", "Syncing") : ratio === null ? tr("未记录", "Not recorded") : `${Math.round(ratio * 100)}%`,
+    capText: capacity === null ? tr("上限未知", "Cap unknown") : tr(`上限 ${Math.round(capacity * 100)}%`, `Cap ${Math.round(capacity * 100)}%`) };
 }
 
 export function conditionSummary(status) {
-  if (!status?.captured) return "此日志未记录状态种类，不能从体力下降推测寒冷或诅咒。";
-  if (status.ready !== true) return "状态同步未就绪，不把未收到的数据当作健康。";
+  if (!status?.captured) return tr("此日志未记录状态种类，不能从体力下降推测寒冷或诅咒。", "Conditions were not recorded. A stamina decrease cannot identify cold or curses.");
+  if (status.ready !== true) return tr("状态同步未就绪，不把未收到的数据当作健康。", "Conditions have not synced. Missing data does not mean healthy.");
   const active = (status.values || []).filter((entry) => entry.amount > 0 || entry.staminaBlock > 0 || entry.extraStaminaBlock > 0);
-  if (active.length) return `${active.length} 项状态 · 按记录显示占用，不把受损上限当成满体力`;
-  return status.complete ? "已记录：当前无状态占用" : "已记录部分无占用 · 状态快照不完整";
+  if (active.length) return tr(`${active.length} 项状态 · 按记录显示占用，不把受损上限当成满体力`, `${active.length} conditions · Recorded blocks are shown relative to full stamina capacity`);
+  return status.complete ? tr("已记录：当前无状态占用", "Recorded: no active capacity blocks") : tr("已记录部分无占用 · 状态快照不完整", "No blocks in the recorded part \u00b7 Condition snapshot incomplete");
 }
 
 export function appearanceFormPresentation(appearance) {
-  if (appearance?.formReady !== true || appearance.form === "unknown") return { known: false, transformed: false, label: "形态未记录" };
-  const names = { normal: "普通形态", skeleton: "骷髅形态", mushroom: "蘑菇形态", chicken: "鸡形态" };
-  return { known: Boolean(names[appearance.form]), transformed: appearance.form !== "normal", label: names[appearance.form] || "未知变形" };
+  if (appearance?.formReady !== true || appearance.form === "unknown") return { known: false, transformed: false, label: tr("形态未记录", "Form not recorded") };
+  const names = { normal: tr("普通形态", "Normal form"), skeleton: tr("骷髅形态", "Skeleton form"), mushroom: tr("蘑菇形态", "Mushroom form"), chicken: tr("鸡形态", "Chicken form") };
+  return { known: Boolean(names[appearance.form]), transformed: appearance.form !== "normal", label: names[appearance.form] || tr("未知变形", "Unknown transformation") };
 }

@@ -1,3 +1,4 @@
+import * as i18n from "../src/i18n.js";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
@@ -16,7 +17,7 @@ const orbitSource = (await readFile(new URL("../../vendor/three/0.180.0/examples
 const OrbitControls = new Function(...Object.keys(THREE), `${orbitSource}\nreturn OrbitControls;`)(...Object.values(THREE));
 const source = (await readFile(new URL("../src/scene.js", import.meta.url), "utf8"))
   .replace(/^import .*;\r?\n/gm, "").replace("export class TrailScene", "class TrailScene");
-const ports = { THREE, fitPerspectivePoints, collectCameraParts, selectCameraSubjectParts, isInteriorLayer, nadirCameraBounds, nadirCameraParts };
+const ports = { ...i18n, THREE, fitPerspectivePoints, collectCameraParts, selectCameraSubjectParts, isInteriorLayer, nadirCameraBounds, nadirCameraParts };
 const TrailScene = new Function(...Object.keys(ports), `${source}\nreturn TrailScene;`)(...Object.values(ports));
 
 class Surface extends EventTarget {

@@ -1,3 +1,4 @@
+import * as i18n from "../src/i18n.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
@@ -22,7 +23,7 @@ const ports = { THREE, LineSegmentsGeometry, LineMaterial, LineSegments2, normal
 const CommunityRouteOverlay = new Function(...Object.keys(ports), `${source}\nreturn CommunityRouteOverlay;`)(...Object.values(ports));
 const sceneSource = (await readFile(new URL("../src/scene.js", import.meta.url), "utf8"))
   .replace(/^import .*;\r?\n/gm, "").replace("export class TrailScene", "class TrailScene");
-const TrailScene = new Function("THREE", "CommunityRouteOverlay", `${sceneSource}\nreturn TrailScene;`)(THREE, CommunityRouteOverlay);
+const TrailScene = new Function("THREE", "CommunityRouteOverlay", "tr", "formatNumber", `${sceneSource}\nreturn TrailScene;`)(THREE, CommunityRouteOverlay, i18n.tr, i18n.formatNumber);
 const mapPackId = `sha256-${"a".repeat(64)}`;
 const routes = () => [{ id: "route-a", playerKey: "player-a", name: "Mylu", points: [
   [0, 10100, 20200, 30300], [100, 10200, 20300, 30400], [200, 10300, 20400, 30500],

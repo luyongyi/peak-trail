@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createMapLootLoader, lootForLayers, normalizeMapLoot } from "../src/map-loot.js";
 import { createMapLootPanel } from "../src/map-loot-panel.js";
+import { getLocale, setLocale } from '../src/i18n.js';
 
 const pack = (character = "a") => ({ mapPackId: `sha256-${character.repeat(64)}`, mapSlot: 0, sceneName: "Level_0",
   gameBuildId: "25306743", source: { sceneSha256: "f".repeat(64) }, layers: [
@@ -130,6 +131,18 @@ test("loader caches completed build surveys, verifies each selected map, and nev
   await cancelled(pack()); assert.equal(calls, 3);
 });
 
+test('localized names stay optional for legacy surveys and reject malformed English metadata', () => {
+  const raw = catalog();
+  raw.types[0].nameEn = 'LUGGAGE';
+  assert.equal(normalizeMapLoot(raw, pack()).types[0].nameEn, 'LUGGAGE');
+  for (const invalid of ['', ' ', 5, 'x'.repeat(129)]) {
+    const changed = structuredClone(raw); changed.types[0].nameEn = invalid;
+    assert.equal(normalizeMapLoot(changed, pack()), null);
+  }
+  delete raw.types[0].nameEn;
+  assert.ok(normalizeMapLoot(raw, pack()));
+});
+
 function indexedCatalog(maps = [pack(), pack("b")]) {
   return { schemaVersion: 1, kind: "map-loot-index", gameBuildId: maps[0].gameBuildId,
     maps: maps.map(map => ({ mapPackId: map.mapPackId, sceneName: map.sceneName, mapSlot: map.mapSlot,
@@ -199,6 +212,36 @@ function fixture(load) {
   return { elements, overlays, panel, get context() { return context; }, set context(value) { context = value; } };
 }
 const settle = () => new Promise(resolve => setImmediate(resolve));
+
+test('switching marker language preserves filters and positions without fetching the map again', async () => {
+  const previous = getLocale(); setLocale('zh-CN', { persist: false });
+  let requests = 0;
+  const raw = catalog();
+  raw.types[0].nameEn = 'LUGGAGE'; raw.types[2].nameEn = 'Crispberry growth site';
+  const f = fixture(async () => { requests++; return normalizeMapLoot(raw, pack()); });
+  try {
+    f.panel.sync(); await settle();
+    f.elements.mapLootItems.checked = true; f.elements.mapLootItems.dispatch('change');
+    const chest = f.elements.mapLootTypes.children[0].children[0];
+    chest.checked = false; f.elements.mapLootTypes.dispatch('change', chest);
+    const before = f.overlays.at(-1);
+    setLocale('en', { persist: false });
+    assert.equal(f.elements.mapLootTypes.children[0].children[2].textContent, 'LUGGAGE');
+    assert.equal(f.elements.mapLootItemTypes.children[0].children[2].textContent, 'Crispberry growth site');
+    assert.match(f.elements.mapLootStatus.textContent, /Current chapter/);
+    assert.equal(requests, 1);
+    assert.deepEqual(f.overlays.at(-1).types, before.types);
+    assert.deepEqual(f.overlays.at(-1).markers.map(marker => [marker.id, marker.pos]), before.markers.map(marker => [marker.id, marker.pos]));
+    assert.equal(f.overlays.at(-1).markers.find(marker => marker.type === 'small').name, 'LUGGAGE');
+    assert.equal(f.elements.mapLootTypes.children[0].children[0].checked, false);
+    setLocale('zh-CN', { persist: false });
+    assert.equal(f.elements.mapLootTypes.children[0].children[2].textContent, '小行李箱');
+    f.panel.dispose();
+    const count = f.overlays.length;
+    setLocale('en', { persist: false });
+    assert.equal(f.overlays.length, count, 'disposed panels unsubscribe from locale changes');
+  } finally { f.panel.dispose(); setLocale(previous, { persist: false }); }
+});
 
 test("panel defaults to all chest types, preserves focused rows and selection across chapters, and toggles fixed items", async () => {
   const f = fixture(); f.panel.sync(); await settle();

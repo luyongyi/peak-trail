@@ -66,6 +66,7 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
     copyFile(resolve(platformSource, "web", "src", "map-peak.js"), resolve(platform, "web", "src", "map-peak.js")),
     copyFile(resolve(platformSource, "web", "src", "map-loot.js"), resolve(platform, "web", "src", "map-loot.js")),
     copyFile(resolve(platformSource, "web", "src", "home-art.js"), resolve(platform, "web", "src", "home-art.js")),
+    ...["i18n.js", "game-text.js", "i18n-dom.js", "ui-text.js"].map(name => copyFile(resolve(platformSource, "web", "src", name), resolve(platform, "web", "src", name))),
     writeFile(resolve(platform, "web", "index.html"), '<!doctype html><a href="./downloads/recorder/0.7.1/PeakTrailRecorder.dll" download>Download</a>'),
     writeFile(resolve(platform, "web", "guide.html"), '<!doctype html><title>Legacy install guide</title><a href="downloads/recorder/old/PeakTrailRecorder.dll">Old recorder</a>'),
     writeFile(resolve(platform, "web", "routes.html"), '<!doctype html><title>Legacy routes</title><script>oldCollector()</script>'),
@@ -275,7 +276,10 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
     assert.match(page, /旧足迹入口暂时下线/);
     assert.match(page, /<a href="\.\/">返回首页<\/a>/);
     assert.match(page, /回忆录 Mod/);
-    assert.doesNotMatch(page, /<script|<form|PeakTrailRecorder|oldCollector|Legacy install guide|Legacy routes/);
+    assert.doesNotMatch(page, /<form|PeakTrailRecorder|oldCollector|Legacy install guide|Legacy routes/);
+    assert.equal((page.match(/<script/g) || []).length, 1);
+    assert.match(page, /import \{ initLanguageControls \} from '\.\/src\/i18n-dom\.js'/);
+    assert.match(page, /data-language-toggle/);
   }
   assert.deepEqual(await readFile(resolve(staged, recorderRelease.downloadPath)), recorderBytes);
   assert.deepEqual(JSON.parse(await readFile(resolve(staged, "data", "recorder", "release.json"), "utf8")), recorderRelease);

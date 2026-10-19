@@ -56,7 +56,10 @@ def item_type(type_id, color='#b9d998'):
     definition = loot_labels()['labels'].get(type_id)
     if not isinstance(definition, dict) or not isinstance(definition.get('name'), str) or not definition['name'].strip():
         raise ValueError(f'Unreviewed item type label: {type_id}')
-    return {'id': type_id, 'category': 'item', 'name': definition['name'], 'color': color}
+    name_en = definition.get('nameEn')
+    if not isinstance(name_en, str) or not name_en.strip() or len(name_en) > 128:
+        raise ValueError(f'Unreviewed English item type label: {type_id}')
+    return {'id': type_id, 'category': 'item', 'name': definition['name'], 'nameEn': name_en, 'color': color}
 
 
 def prefab_type(name):

@@ -23,6 +23,26 @@
   font-synthesis: none;
 }
 
+.language-toggle {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 7px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  background: rgba(147, 163, 159, .05);
+  color: var(--muted-strong);
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.language-toggle:hover { color: var(--accent-strong); border-color: rgba(239, 183, 78, .45); }
+.language-toggle svg { width: 14px; height: 14px; flex: 0 0 14px; }
+
 * {
   box-sizing: border-box;
 }
@@ -3246,4 +3266,14 @@ body.gate-open .app-shell { visibility: hidden; }
   .view-menu .camera-actions { min-width: 0; flex-direction: column; align-items: stretch; }
   .view-menu .camera-actions button { width: 100%; min-height: 38px; justify-content: flex-start; }
   .record-selectors { grid-template-columns: 1fr; }
+  .topbar .brand { min-width: 0; }
+  .top-actions .language-toggle { min-height: 44px; padding: 0 8px; font-size: 10px; }
+  .top-actions .language-toggle svg { display: none; }
+  html:lang(en) .top-actions .button { padding: 0 7px; font-size: .68rem; white-space: nowrap; }
+  html:lang(en) .topbar .brand strong { font-size: .72rem; }
+}
+
+@media (max-width: 359px) {
+  .topbar .top-actions { grid-column: 1 / -1; grid-row: 2; justify-self: stretch; justify-content: flex-end; }
+  .topbar .daily-card { grid-row: 3; }
 }

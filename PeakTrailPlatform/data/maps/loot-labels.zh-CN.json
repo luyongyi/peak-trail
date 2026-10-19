@@ -64,6 +64,7 @@
   "labels": {
     "animal-capybara": {
       "name": "水豚",
+      "nameEn": "Capybara",
       "kind": "official-description-term",
       "terms": [
         {
@@ -76,6 +77,7 @@
     },
     "chest-ancient": {
       "name": "古老行李箱",
+      "nameEn": "ANCIENT LUGGAGE",
       "kind": "official-name",
       "terms": [
         {
@@ -87,6 +89,7 @@
     },
     "chest-epic": {
       "name": "探险家行李箱",
+      "nameEn": "EXPLORER'S LUGGAGE",
       "kind": "official-name",
       "terms": [
         {
@@ -98,6 +101,7 @@
     },
     "chest-large": {
       "name": "大号行李箱",
+      "nameEn": "BIG LUGGAGE",
       "kind": "official-name",
       "terms": [
         {
@@ -109,6 +113,7 @@
     },
     "chest-small": {
       "name": "行李箱",
+      "nameEn": "LUGGAGE",
       "kind": "official-name",
       "terms": [
         {
@@ -120,6 +125,7 @@
     },
     "chest-trick": {
       "name": "行李箱（诱饵外观）",
+      "nameEn": "LUGGAGE (decoy appearance)",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -132,6 +138,7 @@
     },
     "item-amulet-bingbong": {
       "name": "童军的盛情点",
+      "nameEn": "SCOUT'S GENEROSITY spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -143,6 +150,7 @@
     },
     "item-amulet-bird": {
       "name": "童军的进取点",
+      "nameEn": "SCOUT'S INITIATIVE spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -154,6 +162,7 @@
     },
     "item-amulet-goat": {
       "name": "童军的野心点",
+      "nameEn": "SCOUT'S AMBITION spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -165,6 +174,7 @@
     },
     "item-amulet-turtle": {
       "name": "童军的毅力点",
+      "nameEn": "SCOUT’S TENACITY spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -176,6 +186,7 @@
     },
     "item-bird-nest": {
       "name": "蛋巢（好大蛋／小小蛋）",
+      "nameEn": "Egg nests (BIG EGG / SMALL EGG)",
       "kind": "resource-group",
       "terms": [
         {
@@ -193,6 +204,7 @@
     },
     "item-cactus-growth": {
       "name": "刺莓生长点",
+      "nameEn": "Prickleberry growth site",
       "kind": "resource-group",
       "terms": [
         {
@@ -210,6 +222,7 @@
     },
     "item-campfire-food": {
       "name": "棉花糖／热狗肠生成点",
+      "nameEn": "MARSHMALLOW / HOT DOG spawn site",
       "kind": "resource-group",
       "terms": [
         {
@@ -226,6 +239,7 @@
     },
     "item-climbing-spike": {
       "name": "岩钉（固定）",
+      "nameEn": "PITON (fixed)",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -237,6 +251,7 @@
     },
     "item-clusterberry-growth": {
       "name": "葚莓生长点",
+      "nameEn": "Clusterberry growth site",
       "kind": "resource-group",
       "terms": [
         {
@@ -258,6 +273,7 @@
     },
     "item-coconut-growth": {
       "name": "椰子生长点",
+      "nameEn": "COCONUT growth site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -269,6 +285,7 @@
     },
     "item-ground-forage": {
       "name": "地面采集生成点",
+      "nameEn": "Ground forage spawn site",
       "kind": "map-description",
       "terms": [
         {
@@ -336,6 +353,7 @@
     },
     "item-jungle-berry-growth": {
       "name": "脆莓／火烧莓生长点",
+      "nameEn": "Crispberry / Scorchberry growth site",
       "kind": "resource-group",
       "terms": [
         {
@@ -362,6 +380,7 @@
     },
     "item-napberry": {
       "name": "晚安莓点",
+      "nameEn": "NAPBERRY spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -373,6 +392,7 @@
     },
     "item-piton": {
       "name": "鹤嘴锄（固定）",
+      "nameEn": "PICKAXE (fixed)",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -384,6 +404,7 @@
     },
     "item-redwood-growth": {
       "name": "踏板菇／弹力菇／云雾菇生成点",
+      "nameEn": "SHELF FUNGUS / BOUNCE FUNGUS / CLOUD FUNGUS spawn site",
       "kind": "resource-group",
       "terms": [
         {
@@ -406,6 +427,7 @@
     },
     "item-scout-statue-reward": {
       "name": "终局雕像奖励点",
+      "nameEn": "Final statue reward site",
       "kind": "map-description",
       "terms": [
         {
@@ -423,6 +445,7 @@
     },
     "item-shelf-shroom": {
       "name": "踏板菇（固定）",
+      "nameEn": "SHELF FUNGUS (fixed)",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -434,6 +457,7 @@
     },
     "item-shore-berry-growth": {
       "name": "脆莓生长点",
+      "nameEn": "Crispberry growth site",
       "kind": "resource-group",
       "terms": [
         {
@@ -455,6 +479,7 @@
     },
     "item-spawn-aloe": {
       "name": "芦荟生成点",
+      "nameEn": "ALOE VERA spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -466,6 +491,7 @@
     },
     "item-spawn-ancient-idol": {
       "name": "古老玩偶生成点",
+      "nameEn": "ANCIENT IDOL spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -477,6 +503,7 @@
     },
     "item-spawn-anti-rope-shooter": {
       "name": "反重绳索炮生成点",
+      "nameEn": "ANTI-ROPE CANNON spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -488,6 +515,7 @@
     },
     "item-spawn-antidote": {
       "name": "解毒剂生成点",
+      "nameEn": "ANTIDOTE spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -499,6 +527,7 @@
     },
     "item-spawn-backpack": {
       "name": "背包生成点",
+      "nameEn": "BACKPACK spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -510,6 +539,7 @@
     },
     "item-spawn-bandages": {
       "name": "绷带生成点",
+      "nameEn": "BANDAGES spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -521,6 +551,7 @@
     },
     "item-spawn-beehive": {
       "name": "蜂巢生成点",
+      "nameEn": "BEEHIVE spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -532,6 +563,7 @@
     },
     "item-spawn-bing-bong": {
       "name": "宾邦生成点",
+      "nameEn": "BING BONG spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -543,6 +575,7 @@
     },
     "item-spawn-binoculars": {
       "name": "望远镜生成点",
+      "nameEn": "BINOCULARS spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -554,6 +587,7 @@
     },
     "item-spawn-bounce-shroom": {
       "name": "弹力菇生成点",
+      "nameEn": "BOUNCE FUNGUS spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -565,6 +599,7 @@
     },
     "item-spawn-bugle": {
       "name": "喇叭生成点",
+      "nameEn": "BUGLE spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -576,6 +611,7 @@
     },
     "item-spawn-cactus-pickup": {
       "name": "仙人球生成点",
+      "nameEn": "CACTUS spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -587,6 +623,7 @@
     },
     "item-spawn-cattail-food": {
       "name": "热狗肠生成点",
+      "nameEn": "HOT DOG spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -598,6 +635,7 @@
     },
     "item-spawn-chain-shooter": {
       "name": "锁链发射器生成点",
+      "nameEn": "CHAIN LAUNCHER spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -609,6 +647,7 @@
     },
     "item-spawn-climbing-spike-pickup": {
       "name": "岩钉生成点",
+      "nameEn": "PITON spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -620,6 +659,7 @@
     },
     "item-spawn-cloud-fungus": {
       "name": "云雾菇生成点",
+      "nameEn": "CLOUD FUNGUS spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -631,6 +671,7 @@
     },
     "item-spawn-compass": {
       "name": "罗盘生成点",
+      "nameEn": "COMPASS spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -642,6 +683,7 @@
     },
     "item-spawn-cure-all": {
       "name": "万灵药生成点",
+      "nameEn": "CURE-ALL spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -653,6 +695,7 @@
     },
     "item-spawn-dynamite": {
       "name": "炸药生成点",
+      "nameEn": "DYNAMITE spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -664,6 +707,7 @@
     },
     "item-spawn-early-worm": {
       "name": "早起虫儿生成点",
+      "nameEn": "THE EARLY WORM spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -675,6 +719,7 @@
     },
     "item-spawn-egg-pickup": {
       "name": "煎蛋生成点",
+      "nameEn": "EGG spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -686,6 +731,7 @@
     },
     "item-spawn-firewood": {
       "name": "棍子生成点",
+      "nameEn": "STICK spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -697,6 +743,7 @@
     },
     "item-spawn-first-aid": {
       "name": "急救箱生成点",
+      "nameEn": "FIRST AID KIT spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -708,6 +755,7 @@
     },
     "item-spawn-flare": {
       "name": "照明棒生成点",
+      "nameEn": "FLARE spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -719,6 +767,7 @@
     },
     "item-spawn-frisbee": {
       "name": "飞盘生成点",
+      "nameEn": "FLYING DISC spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -730,6 +779,7 @@
     },
     "item-spawn-frog": {
       "name": "青蛙生成点",
+      "nameEn": "FROG spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -741,6 +791,7 @@
     },
     "item-spawn-guidebook": {
       "name": "旅行指南生成点",
+      "nameEn": "GUIDEBOOK spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -752,6 +803,7 @@
     },
     "item-spawn-guidebook-scroll": {
       "name": "卷轴生成点",
+      "nameEn": "SCROLL spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -763,6 +815,7 @@
     },
     "item-spawn-healing-dart": {
       "name": "吹箭筒生成点",
+      "nameEn": "BLOWGUN spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -774,6 +827,7 @@
     },
     "item-spawn-healing-puff": {
       "name": "灵药菇生成点",
+      "nameEn": "REMEDY FUNGUS spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -785,6 +839,7 @@
     },
     "item-spawn-honeycomb": {
       "name": "蜂巢蜜生成点",
+      "nameEn": "HONEYCOMB spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -796,6 +851,7 @@
     },
     "item-spawn-lantern": {
       "name": "提灯生成点",
+      "nameEn": "LANTERN spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -807,6 +863,7 @@
     },
     "item-spawn-large-egg-pickup": {
       "name": "好大蛋生成点",
+      "nameEn": "BIG EGG spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -818,6 +875,7 @@
     },
     "item-spawn-magic-bean": {
       "name": "魔豆生成点",
+      "nameEn": "MAGIC BEAN spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -829,6 +887,7 @@
     },
     "item-spawn-mandrake": {
       "name": "曼德拉草生成点",
+      "nameEn": "MANDRAKE spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -840,6 +899,7 @@
     },
     "item-spawn-medicinal-root": {
       "name": "药用根茎生成点",
+      "nameEn": "MEDICINAL ROOT spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -851,6 +911,7 @@
     },
     "item-spawn-mushroom": {
       "name": "馒头菇生成点",
+      "nameEn": "BUTTON SHROOM spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -862,6 +923,7 @@
     },
     "item-spawn-portable-stove": {
       "name": "便携火炉生成点",
+      "nameEn": "PORTABLE STOVE spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -873,6 +935,7 @@
     },
     "item-spawn-rope-shooter": {
       "name": "绳索炮生成点",
+      "nameEn": "ROPE CANNON spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -884,6 +947,7 @@
     },
     "item-spawn-rope-spool": {
       "name": "绳索生成点",
+      "nameEn": "ROPE SPOOL spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -895,6 +959,7 @@
     },
     "item-spawn-scorpion": {
       "name": "蝎子生成点",
+      "nameEn": "SCORPION spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -906,6 +971,7 @@
     },
     "item-spawn-shelf-shroom-pickup": {
       "name": "踏板菇生成点",
+      "nameEn": "SHELF FUNGUS spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -917,6 +983,7 @@
     },
     "item-spawn-shell": {
       "name": "海螺生成点",
+      "nameEn": "CONCH spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -928,6 +995,7 @@
     },
     "item-spawn-stone": {
       "name": "石头生成点",
+      "nameEn": "STONE spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -939,6 +1007,7 @@
     },
     "item-spawn-torch": {
       "name": "火炬生成点",
+      "nameEn": "TORCH spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -950,6 +1019,7 @@
     },
     "item-spawn-turkey-egg": {
       "name": "“鸟”生成点",
+      "nameEn": "BIRD spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -961,6 +1031,7 @@
     },
     "item-spawn-warp-fungus": {
       "name": "曲迁菇生成点",
+      "nameEn": "WARP FUNGUS spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -972,6 +1043,7 @@
     },
     "item-spawn-winterberry-yellow": {
       "name": "黄雪莓生成点",
+      "nameEn": "YELLOW WINTERBERRY spawn site",
       "kind": "official-name-with-description",
       "terms": [
         {
@@ -983,6 +1055,7 @@
     },
     "item-vine-fruit-growth": {
       "name": "莓蕉／菇莓生长点",
+      "nameEn": "Berrynana / Shroomberry growth site",
       "kind": "resource-group",
       "terms": [
         {
@@ -1035,6 +1108,7 @@
     },
     "item-willow-fruit-growth": {
       "name": "荔莓生长点",
+      "nameEn": "Kingberry growth site",
       "kind": "resource-group",
       "terms": [
         {
@@ -1056,6 +1130,7 @@
     },
     "item-winterberry-growth": {
       "name": "雪莓生长点",
+      "nameEn": "Winterberry growth site",
       "kind": "resource-group",
       "terms": [
         {

@@ -1,3 +1,4 @@
+import * as i18n from "../src/i18n.js";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -263,9 +264,9 @@ function applicationExpiry(state, clearDailyMap, updateMapUI = () => {}) {
   const source = readFileSync(new URL("../src/app.js", import.meta.url), "utf8");
   const start = source.indexOf("async function expireDailyStatus");
   const end = source.indexOf('document.addEventListener("visibilitychange"', start);
-  return new Function("state", "isDailyMapFresh", "clearDailyMap", "updateMapUI",
+  return new Function("state", "isDailyMapFresh", "clearDailyMap", "updateMapUI", "tr",
     `${source.slice(start, end)}; return expireDailyStatus;`)(state,
-      value => freshness(value, START + 20_000) === "current", clearDailyMap, updateMapUI);
+      value => freshness(value, START + 20_000) === "current", clearDailyMap, updateMapUI, i18n.tr);
 }
 
 test("an old expiry callback cannot clear a newly refreshed daily map", async () => {

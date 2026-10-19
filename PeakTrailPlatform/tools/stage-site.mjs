@@ -25,13 +25,13 @@ const outputDirectory = resolve(platformDirectory, "site-dist");
 const { gameAssetsDirectory, mapPacksDirectory, mapEnclosuresDirectory, homeArtDirectory } = localAssetPaths;
 
 // Keep bookmarked URLs recoverable without publishing the retired recorder
-// tutorial or standalone collector. Neither page loads old scripts or uploads.
+// tutorial or standalone collector. Only shared language controls are loaded.
 const retiredEntryPage = `<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>旧足迹入口暂时下线 · PEAK 回忆录</title>
-<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0d1917;color:#edf5ee;font:16px/1.8 system-ui}main{max-width:32rem;padding:2rem}h1{font-size:1.5rem}a{color:#9cdbc1}</style></head>
-<body><main><h1>旧足迹入口暂时下线</h1><p>现在使用回忆录 Mod 录制与回放。在首页进入地图后，可查看回忆录上传的路线与热力图。</p>
-<a href="./">返回首页</a></main></body></html>\n`;
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0d1917;color:#edf5ee;font:16px/1.8 system-ui}main{max-width:32rem;padding:2rem}h1{font-size:1.5rem}a{color:#9cdbc1}button{display:block;margin-left:auto;border:1px solid #9cdbc155;border-radius:8px;padding:9px 12px;background:#152422;color:#edf5ee;cursor:pointer}</style></head>
+<body><main><button data-language-toggle type="button" aria-label="切换为英语" title="切换为英语" lang="en"><span data-language-label>English</span></button><h1>旧足迹入口暂时下线</h1><p>现在使用回忆录 Mod 录制与回放。在首页进入地图后，可查看回忆录上传的路线与热力图。</p>
+<a href="./">返回首页</a></main><script type="module">import { initLanguageControls } from './src/i18n-dom.js'; initLanguageControls();</script></body></html>\n`;
 
 export async function stageSite({ preview = false, argv = process.argv.slice(2), env = process.env } = {}) {
 const profile = await readSiteStagingProfile(resolve(toolDirectory, "site-build-profile.json"), argv, { preview });

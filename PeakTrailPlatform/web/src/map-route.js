@@ -1,10 +1,12 @@
+import { biomeName, tr } from "./i18n.js";
+
 // BiomeType is reused for the last two chapters. A branch is evidence from a
 // resolved MapHandler, never a choice computed from the date or level parity.
 const BRANCHES = new Set(["volcano-kiln", "swamp-temple"]);
-const NAMES = { "volcano-kiln": ["火山", "熔炉"], "swamp-temple": ["雾沼", "城塞"] };
+const NAMES = { "volcano-kiln": ["volcano", "kiln"], "swamp-temple": ["swamp", "temple"] };
 const SPECIAL_STAGES = [
-  { biome: "peak", biomeId: 5, stageId: "peak", name: "顶峰", kind: "summit" },
-  { biome: "void", biomeId: 17, stageId: "nadir", name: "天底", kind: "nadir" },
+  { biome: "peak", biomeId: 5, stageId: "peak", kind: "summit" },
+  { biome: "void", biomeId: 17, stageId: "nadir", kind: "nadir" },
 ];
 
 /**
@@ -21,7 +23,7 @@ export function classifyRouteSegment(entry) {
     && (!biome || biome === candidate.biome)
     && (biomeId === null || biomeId === candidate.biomeId));
   return stage
-    ? { stageId: stage.stageId, name: stage.name, kind: stage.kind }
+    ? { stageId: stage.stageId, name: biomeName(stage.biome), kind: stage.kind }
     : { stageId: null, name: null, kind: "chapter" };
 }
 
@@ -75,7 +77,8 @@ export function routeAtTime(trace, seconds) {
 export function routeSegmentName(route, index) {
   const special = classifyRouteSegment(route?.segments?.find((entry) => entry.index === index));
   if (special.name) return special.name;
-  return index === 3 || index === 4 ? NAMES[route?.branch]?.[index - 3] || null : null;
+  const biome = index === 3 || index === 4 ? NAMES[route?.branch]?.[index - 3] : null;
+  return biome ? biomeName(biome) : null;
 }
 
 export function resolveReplayRoute(mapPack, trace, seconds = 0) {
@@ -93,14 +96,14 @@ export function resolveReplayRoute(mapPack, trace, seconds = 0) {
     }
   }
   const pair = NAMES[route?.branch];
-  const label = pair ? pair.join(" → ") : "关卡分支未确认";
-  const provenance = source === "recorded" ? "DLL 本局记录"
-    : source === "map" ? trace ? "旧日志未记录分支 · 同版本地图配置" : "同版本地图配置"
-      : "没有可靠分支记录";
+  const label = pair ? pair.map(biome => biomeName(biome)).join(" → ") : tr("关卡分支未确认", "Chapter branch unconfirmed");
+  const provenance = source === "recorded" ? tr("DLL 本局记录", "Recorded by the Mod for this run")
+    : source === "map" ? trace ? tr("旧日志未记录分支 · 同版本地图配置", "Branch absent from legacy log · matching map configuration") : tr("同版本地图配置", "Matching map configuration")
+      : tr("没有可靠分支记录", "No verified branch record");
   const key = JSON.stringify([route, [...hiddenSegments]]);
   return {
     route, source, hiddenSegments, key, label,
-    message: `${label} · ${provenance}${hiddenSegments.size ? " · 分支不匹配的底图已隐藏，保留足迹" : ""}`,
+    message: `${label} · ${provenance}${hiddenSegments.size ? tr(" · 分支不匹配的底图已隐藏，保留足迹", " · Mismatched chapter models hidden; recorded paths retained") : ""}`,
     layers: (mapPack?.layers || []).filter((layer) => !hiddenSegments.has(layer.segment)),
   };
 }

@@ -21,6 +21,7 @@ import { MapLootOverlay } from "./map-loot-overlay.js";
 import { EnclosureContextRenderer } from "./enclosure-context-renderer.js";
 import { fitPerspectivePoints } from "./camera-framing.js";
 import { collectCameraParts, selectCameraSubjectParts } from "./camera-subject.js";
+import { tr, formatNumber } from "./i18n.js";
 
 function collectWaterDepthEntries(root, heightScale) {
   const entries = [];
@@ -545,7 +546,28 @@ export class TrailScene {
   }
 
   emitMapStatus(status, message, segment = this.activeSegment) {
-    this.canvas.dispatchEvent(new CustomEvent("peaktrail-map-status", { detail: { status, message, segment } }));
+    this.lastMapStatus = { status, message, segment };
+    this.canvas.dispatchEvent(new CustomEvent("peaktrail-map-status", { detail: {
+      status, message: Array.isArray(message) ? tr(...message) : message, segment,
+    } }));
+  }
+
+  setCameraPlacementNote(chinese, english) {
+    this.cameraPlacementLabels = [chinese, english];
+    this.cameraPlacementNote = tr(chinese, english);
+    this.canvas.dispatchEvent(new CustomEvent("cameraplacement", { detail: { note: this.cameraPlacementNote } }));
+  }
+
+  refreshLocaleUi() {
+    if (this.lastMapStatus) {
+      const { status, message, segment } = this.lastMapStatus;
+      this.emitMapStatus(status, message, segment);
+    }
+    if (this.cameraPlacementLabels) this.setCameraPlacementNote(...this.cameraPlacementLabels);
+    this.canvas.dispatchEvent(new CustomEvent("cameramodechange", { detail: { mode: this.freeCamera.mode, help: REPLAY_CAMERA_HELP } }));
+    for (const group of this.playerGroups.values()) {
+      group.names.textContent = `${tr(`${group.members.size} 人`, `${formatNumber(group.members.size)} players`)} · ${group.nicknames.join(" · ")}`;
+    }
   }
 
   isGeometryLayerRequested(layer) {
@@ -575,7 +597,7 @@ export class TrailScene {
     const selected = this.activeSegment;
     const isCurrent = () => token === this.buildToken && selectionToken === this.geometrySelectionToken;
     const groups = this.terrainRoot.children.filter((group) => this.isGeometryLayerRequested(group.userData.mapLayer));
-    this.emitMapStatus("loading", "正在加载本关真实网格…", selected);
+    this.emitMapStatus("loading", ["正在加载本关真实网格…", "Loading this stage's geometry…"], selected);
     try {
       // Sequential parsing limits memory spikes in the explicitly requested overview.
       for (const group of groups) {
@@ -611,7 +633,7 @@ export class TrailScene {
           await this.geometryLoads.get(layer.id);
           if (!isCurrent()) return;
         }
-        if (!group.userData.loaded) throw new Error(`第 ${layer.segment} 关真实网格未能就绪`);
+        if (!group.userData.loaded) throw new Error(tr(`第 ${layer.segment} 关真实网格未能就绪`, `Geometry for stage ${formatNumber(layer.segment)} did not load`));
       }
       if (!isCurrent()) return;
       await this.enclosureContext?.setSelection(this.mapPack, this.selectedLayer(), {
@@ -633,7 +655,7 @@ export class TrailScene {
       }
       this.applyLayerVisibility();
       this.setTime(this.currentTime);
-      this.emitMapStatus("ready", selected === null ? "真实网格概览" : "本关真实网格已就绪", selected);
+      this.emitMapStatus("ready", selected === null ? ["真实网格概览", "Map geometry overview"] : ["本关真实网格已就绪", "Stage geometry ready"], selected);
     } catch (error) {
       if (!isCurrent() || error.name === "AbortError") return;
       this.emitMapStatus("error", error.message, selected);
@@ -944,9 +966,9 @@ export class TrailScene {
       // the width from the column count.
       const columns = Math.min(3, cluster.length);
       ring.style.setProperty("--group-columns", String(columns));
-      names.textContent = `${cluster.length} 人 · ${nicknames.join(" · ")}`;
+      names.textContent = `${tr(`${cluster.length} 人`, `${formatNumber(cluster.length)} players`)} · ${nicknames.join(" · ")}`;
       element.title = nicknames.join(" · ");
-      group = { key, element, ring, names, leader, members, columns };
+      group = { key, element, ring, names, leader, members, columns, nicknames };
       this.playerGroups.set(key, group);
     }
     for (const [id, member] of group.members) {
@@ -1541,7 +1563,7 @@ export class TrailScene {
       // The camera lives OUTSIDE the Z-mirrored world root, so every coordinate
       // and direction handed to it must be in rendered space (Z negated).
       this.freeCamera.enterAt([pose.pos[0] - this.origin.x, (pose.pos[1] - this.origin.y) * this.heightScale, -(pose.pos[2] - this.origin.z)], [Math.sin(yaw), 0, -Math.cos(yaw)], { focus });
-      this.cameraPlacementNote = "已记录的玩家中心 · 关内参考视点，非眼位";
+      this.cameraPlacementLabels = ["已记录的玩家中心 · 关内参考视点，非眼位", "Recorded player center · interior reference view, not eye position"];
     } else {
       // A bounding box centre can be air or solid rock. Require a floor AND a
       // ceiling from real loaded geometry, not a fabricated 'interior' point.
@@ -1566,10 +1588,10 @@ export class TrailScene {
         }
         if (point) break;
       }
-      if (point) { this.freeCamera.enterAt(point, [0, 0, 1], { focus }); this.cameraPlacementNote = "内部几何参考点（非玩家位置）"; }
-      else { this.freeCamera.setMode("free", { focus }); this.cameraPlacementNote = "未找到可靠内部落点，可用 WASD 自行移入"; }
+      if (point) { this.freeCamera.enterAt(point, [0, 0, 1], { focus }); this.cameraPlacementLabels = ["内部几何参考点（非玩家位置）", "Interior geometry reference point (not a player position)"]; }
+      else { this.freeCamera.setMode("free", { focus }); this.cameraPlacementLabels = ["未找到可靠内部落点，可用 WASD 自行移入", "No reliable interior landing point found. Use WASD to move inside."]; }
     }
-    this.canvas.dispatchEvent(new CustomEvent("cameraplacement", { detail: { note: this.cameraPlacementNote } }));
+    this.setCameraPlacementNote(...this.cameraPlacementLabels);
     if (focus) this.freeCamera.focus();
   }
 
@@ -1584,7 +1606,7 @@ export class TrailScene {
     const target = new THREE.Vector3(event.pos[0] - this.origin.x, (event.pos[1] - this.origin.y) * this.heightScale, -(event.pos[2] - this.origin.z));
     const position = target.clone().add(new THREE.Vector3(9, 10, -12));
     this.freeCamera.enterAt(position, target.clone().sub(position), { focus: false });
-    this.canvas.dispatchEvent(new CustomEvent("cameraplacement", { detail: { note: "事件近景 · 特效为回放示意" } }));
+    this.setCameraPlacementNote("事件近景 · 特效为回放示意", "Event close-up · effects illustrate the replay");
   }
 
   fitView() {

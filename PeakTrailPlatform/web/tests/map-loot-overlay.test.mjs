@@ -1,3 +1,4 @@
+import * as i18n from "../src/i18n.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
@@ -11,7 +12,7 @@ const source = (await readFile(new URL("../src/map-loot-overlay.js", import.meta
 const MapLootOverlay = new Function("THREE", "lootTypeStyle", "MAP_LOOT_MAX_BEAM_HEIGHT", `${source}\nreturn MapLootOverlay;`)(THREE, lootTypeStyle, MAP_LOOT_MAX_BEAM_HEIGHT);
 const sceneSource = (await readFile(new URL("../src/scene.js", import.meta.url), "utf8"))
   .replace(/^import .*;\r?\n/gm, "").replace("export class TrailScene", "class TrailScene");
-const TrailScene = new Function("THREE", `${sceneSource}\nreturn TrailScene;`)(THREE);
+const TrailScene = new Function("THREE", "tr", "formatNumber", `${sceneSource}\nreturn TrailScene;`)(THREE, i18n.tr, i18n.formatNumber);
 
 const marker = (overrides = {}) => ({ id: "crate-1", type: "luggage", category: "chest", pos: [101, 202, 303], segment: 1, layerId: "shore", ...overrides });
 const matrixAt = (mesh, index = 0) => { const matrix = new THREE.Matrix4(); mesh.getMatrixAt(index, matrix); return matrix; };

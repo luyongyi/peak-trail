@@ -8,7 +8,7 @@
 .home-header .gate-brand .brand-mark svg { width: 25px; height: 25px; }
 .home-header .gate-brand strong { font-size: 15px; letter-spacing: .18em; }
 .home-header .gate-brand small { display: block; font-size: 10px; font-weight: 400; letter-spacing: .15em; margin-top: 5px; color: #84988c; }
-.home-actions { display: flex; align-items: center; gap: 24px; }
+.home-actions { display: flex; align-items: center; gap: 16px; }
 .home-actions button { font: inherit; font-size: 12px; cursor: pointer; }
 .home-nav-link { display: inline-flex; align-items: center; gap: 8px; padding: 10px 0; font-size: 12px; color: #b3c0b7; text-decoration: none; white-space: nowrap; }
 .home-nav-link:hover { color: #f0e2b3; }
@@ -207,6 +207,8 @@
   .home-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 12px; }
   .home-actions button, .home-actions a, .home-countdown button, .home-release-link, .home-footer summary { min-height: 44px; }
   .home-actions > a, .home-actions > button { justify-content: center; }
+  .home-actions .language-toggle { justify-self: start; padding: 0 12px; min-width: 80px; }
+  html:lang(en) .home-nav-link { font-size: 11px; letter-spacing: 0; }
   .home-nav-link { padding: 10px 8px; border-bottom: 1px solid #a7b89c16; }
   .home-live { padding: 10px 8px; }
   .home-replay { padding: 10px 12px; gap: 16px; }

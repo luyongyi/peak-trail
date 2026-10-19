@@ -1,3 +1,4 @@
+import * as i18n from "../src/i18n.js";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
@@ -41,6 +42,7 @@ function fixture(branch = "swamp-temple") {
     "segmentLoadStatus", "layerSelect"].map((key) => [key, node()]));
   const selected = [];
   const ports = {
+    ...i18n,
     state, elements, classifyRouteSegment, routeSegmentName, document: { createElement: node },
     viewer: { setActiveSegment: (segment) => selected.push(segment), setViewIntent() {} },
     segmentAtTime: () => state.segmentTimeline[0]?.segment ?? null,
@@ -147,4 +149,19 @@ test("overview previous/next return to mountain endpoints and empty navigation s
   assert.equal(f.api.adjacentSegment(f.state.segmentOptions, null, 1).segment, 0);
   assert.equal(f.api.adjacentSegment(f.state.segmentOptions, 0, -1), undefined);
   assert.equal(f.api.adjacentSegment([], null, 1), undefined);
+});
+
+test("English navigation retains game area names and counts each chapter exactly once", () => {
+  i18n.setLocale("en", { persist: false });
+  try {
+    const f = fixture();
+    assert.equal(f.elements.segmentName.textContent, "THE CITADEL · includes PEAK");
+    assert.equal(f.elements.segmentOrdinal.textContent, "Stage 5 / 5");
+    const options = f.elements.layerSelect.children;
+    assert.match(options[1].textContent, /^Stage 1 · SHORE/);
+    assert.match(options[5].textContent, /^Stage 5 · THE CITADEL/);
+    assert.match(options[6].textContent, /^Extra area · NADIR/);
+    assert.equal(f.state.selectedSegment, 4);
+    assert.deepEqual(f.selected, []);
+  } finally { i18n.setLocale("zh-CN", { persist: false }); }
 });

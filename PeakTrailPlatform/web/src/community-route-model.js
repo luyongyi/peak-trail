@@ -1,6 +1,13 @@
+import { getLocale, tr } from "./i18n.js";
 import { normalizeRoute } from "./map-route.js";
-import { heightBands, normalizeHeatmap, normalizeRouteGroups, normalizeRoutes } from "./route-collection-model.js";
+import { difficultyLabel, heightBands, normalizeHeatmap, normalizeRouteGroups, normalizeRoutes } from "./route-collection-model.js";
 import { teamMemberColor } from "./team-route-model.js";
+
+export function communityRouteError(zh, en) {
+  const error = new Error(tr(zh, en));
+  error.localizedMessage = () => tr(zh, en);
+  return error;
+}
 
 const HASH = /^[a-f0-9]{64}$/;
 const PACK_ID = /^sha256-[a-f0-9]{64}$/;
@@ -61,20 +68,20 @@ export function matchingCommunityGroups(value, mapPack) {
 }
 
 export function pendingCommunityMessage(reasons = []) {
-  if (reasons.includes("map-build-unavailable")) return "已有路线与当前底图的游戏版本不同，暂时不能显示在这张地图上。";
-  if (reasons.includes("recording-landmarks-missing")) return "旧录像未记录地图地标，路线已保留；需要验证原地图布局后才能显示。";
-  if (reasons.includes("source-landmarks-missing")) return "路线已保留，正在等待当前地图模型的地标数据，验证对齐后才能显示。";
-  return "已有路线的布局、地标或关卡分支尚未通过对齐验证，暂不叠加到地图。";
+  if (reasons.includes("map-build-unavailable")) return tr("已有路线与当前底图的游戏版本不同，暂时不能显示在这张地图上。", "These routes use a different game build and cannot be shown on this map yet.");
+  if (reasons.includes("recording-landmarks-missing")) return tr("旧录像未记录地图地标，路线已保留；需要验证原地图布局后才能显示。", "These older recordings have no map landmarks. Routes are saved and await verification of the original layout.");
+  if (reasons.includes("source-landmarks-missing")) return tr("路线已保留，正在等待当前地图模型的地标数据，验证对齐后才能显示。", "Routes are saved and await map landmarks to verify their alignment.");
+  return tr("已有路线的布局、地标或关卡分支尚未通过对齐验证，暂不叠加到地图。", "Route layout, landmarks or chapter branch have not passed alignment checks yet.");
 }
 
 export function normalizeCommunityStage(rawRoutes, rawHeatmap, group, mapPack, stageIndex) {
   for (const value of [rawRoutes, rawHeatmap]) {
     if (value?.groupId !== group.id || value.stageIndex !== stageIndex || value.mapCompatibility !== "matched"
       || value.mapPackId !== mapPack.mapPackId || !verifiedAlignment(value.mapAlignment)
-      || value.mapAlignment.id !== group.mapAlignment?.id || value.coordinateSpace !== "canonical-map-world-cm") throw new Error("返回的路线与当前地图或关卡不一致，请刷新。");
+      || value.mapAlignment.id !== group.mapAlignment?.id || value.coordinateSpace !== "canonical-map-world-cm") throw communityRouteError("返回的路线与当前地图或关卡不一致，请刷新。", "Returned routes do not match this map or chapter. Please refresh.");
   }
   if (!matchesCommunityGroup(group, mapPack) || !group.stageSummaries.some(stage => stage.index === stageIndex)) {
-    throw new Error("当前地图没有这个关卡的已核验路线。");
+    throw communityRouteError("当前地图没有这个关卡的已核验路线。", "This map has no verified routes for this chapter.");
   }
   const response = normalizeRoutes(rawRoutes);
   const heatmap = normalizeHeatmap(rawHeatmap);
@@ -86,7 +93,7 @@ export function communityPlayers(routes, hidden = new Set()) {
   const players = new Map();
   for (const route of routes) {
     const key = route.playerKey || route.id;
-    if (!players.has(key)) players.set(key, { id: key, playerKey: key, name: route.name,
+    if (!players.has(key)) players.set(key, { id: key, playerKey: key, name: route.nameMissing ? tr("登山者", "Climber") : route.name, nameMissing: Boolean(route.nameMissing),
       color: teamMemberColor(key), visible: !hidden.has(key), difficulty: route.difficulty || null, pointCount: 0, hasPoints: false });
     const player = players.get(key);
     player.pointCount += route.points?.length || 0;
@@ -96,22 +103,22 @@ export function communityPlayers(routes, hidden = new Set()) {
 }
 
 export function normalizeCommunityTeams(value) {
-  if (!Array.isArray(value?.teams)) throw new Error("队伍列表格式无效。");
+  if (!Array.isArray(value?.teams)) throw communityRouteError("队伍列表格式无效。", "Invalid team list.");
   const ids = new Set();
   return { teams: value.teams.map(team => {
     if (!HASH.test(team?.id || "") || ids.has(team.id) || !HASH.test(team.groupId || "")
       || !Number.isFinite(Date.parse(team.startedUtc)) || !team.map || typeof team.map.scene !== "string"
       || !Array.isArray(team.members) || !Array.isArray(team.stageSummaries) || team.stageSummaries.length > 64
       || team.stageSummaries.some(stage => !Number.isInteger(stage?.index) || stage.index < 0 || typeof stage.name !== "string"
-        || !Number.isSafeInteger(stage.memberCount) || stage.memberCount < 0 || !Number.isSafeInteger(stage.completedCount) || stage.completedCount < 0)) throw new Error("队伍身份无效。");
+        || !Number.isSafeInteger(stage.memberCount) || stage.memberCount < 0 || !Number.isSafeInteger(stage.completedCount) || stage.completedCount < 0)) throw communityRouteError("队伍身份无效。", "Invalid team identity.");
     ids.add(team.id);
     const members = new Map();
     for (const member of team.members) {
-      if (!HASH.test(member?.playerKey || "") || typeof member.name !== "string") throw new Error("队员身份无效。");
-      members.set(member.playerKey, { playerKey: member.playerKey, name: member.name || "登山者" });
+      if (!HASH.test(member?.playerKey || "") || typeof member.name !== "string") throw communityRouteError("队员身份无效。", "Invalid member identity.");
+      members.set(member.playerKey, { playerKey: member.playerKey, name: member.name || tr("登山者", "Climber"), ...(!member.name ? { nameMissing: true } : {}) });
     }
     if (team.summitCompleted !== undefined && typeof team.summitCompleted !== "boolean"
-      || team.finisherKeys !== undefined && (!Array.isArray(team.finisherKeys) || team.finisherKeys.some(key => !HASH.test(key) || !members.has(key)))) throw new Error("队伍登顶状态无效。");
+      || team.finisherKeys !== undefined && (!Array.isArray(team.finisherKeys) || team.finisherKeys.some(key => !HASH.test(key) || !members.has(key)))) throw communityRouteError("队伍登顶状态无效。", "Invalid team summit status.");
     return { ...team, members: [...members.values()] };
   }), truncated: Boolean(value.truncated) };
 }
@@ -121,30 +128,30 @@ export function normalizeCommunityTeamStage(value, group, mapPack, stageIndex, t
     || value.mapCompatibility !== "matched" || value.mapPackId !== mapPack.mapPackId
     || !verifiedAlignment(value.mapAlignment) || value.mapAlignment.id !== group.mapAlignment?.id
     || value.coordinateSpace !== "canonical-map-world-cm" || !matchesCommunityGroup(group, mapPack)) {
-    throw new Error("这支队伍的路线与当前地图不一致，请打开对应地图。");
+    throw communityRouteError("这支队伍的路线与当前地图不一致，请打开对应地图。", "This team uses a different map. Open its original map.");
   }
   const response = normalizeRoutes(value, { maximumPoints });
   if (response.routes.some(route => !HASH.test(route.playerKey || "") || typeof route.completed !== "boolean"
     || ![true, false, null, undefined].includes(route.gameCompleted)
-    || route.summitCompleted !== undefined && typeof route.summitCompleted !== "boolean")) throw new Error("队员路线格式无效。");
+    || route.summitCompleted !== undefined && typeof route.summitCompleted !== "boolean")) throw communityRouteError("队员路线格式无效。", "Invalid member route.");
   if (value.summitCompleted !== undefined && typeof value.summitCompleted !== "boolean"
     || value.stageCompleted !== undefined && typeof value.stageCompleted !== "boolean"
     || value.teamRevision !== undefined && !HASH.test(value.teamRevision)
     || !Number.isSafeInteger(value.totalRouteCount) || value.totalRouteCount < 0
-    || value.finisherKeys !== undefined && (!Array.isArray(value.finisherKeys) || value.finisherKeys.some(key => !HASH.test(key)))) throw new Error("队伍登顶状态无效。");
+    || value.finisherKeys !== undefined && (!Array.isArray(value.finisherKeys) || value.finisherKeys.some(key => !HASH.test(key)))) throw communityRouteError("队伍登顶状态无效。", "Invalid team summit status.");
   return { routes: response.routes, heatmap: null, totalRouteCount: response.totalRouteCount, truncated: Boolean(response.truncated),
     summitCompleted: value.summitCompleted === true, stageCompleted: value.stageCompleted === true || response.routes.some(route => route.gameCompleted === true), finisherKeys: value.finisherKeys || [],
     teamLoaded: true, heightBands: heightBands(response.routes, null) };
 }
 
 export function communityTeamLabel(team) {
-  const date = new Date(team.startedUtc).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
-  const difficulty = typeof team.difficulty === "string" ? team.difficulty : team.difficulty?.label || team.difficulty?.key || "难度未知";
-  return `${date} · ${team.map.scene} · ${difficulty}${team.summitCompleted ? " · 本队已登顶" : ""} · ${team.members.map(member => member.name).join("、")}`;
+  const date = new Date(team.startedUtc).toLocaleString(getLocale(), { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
+  const difficulty = getLocale() === "zh-CN" && (typeof team.difficulty === "string" ? team.difficulty : team.difficulty?.label) || difficultyLabel(team.difficulty);
+  return `${date} · ${team.map.scene} · ${difficulty}${team.summitCompleted ? tr(" · 本队已登顶", " · Team reached the summit") : ""} · ${team.members.map(member => member.nameMissing ? tr("登山者", "Climber") : member.name).join(tr("、", ", "))}`;
 }
 
 export function communityGroupLabel(group, index = 0) {
-  const number = Number.isInteger(group.map?.levelIndex) ? `轮换 ${group.map.levelIndex} · ` : "";
+  const number = Number.isInteger(group.map?.levelIndex) ? tr(`轮换 ${group.map.levelIndex} · `, `Rotation ${group.map.levelIndex} · `) : "";
   const count = (group.stageSummaries || []).reduce((total, stage) => total + (stage.routeCount || 0), 0);
-  return `${number}记录组 ${index + 1} · ${count} 条完整关卡路线`;
+  return tr(`${number}记录组 ${index + 1} · ${count} 条完整关卡路线`, `${number}Group ${index + 1} · ${count} complete chapter routes`);
 }

@@ -1,5 +1,6 @@
-import { createMapLootLoader, lootForLayers } from "./map-loot.js";
+import { createMapLootLoader, lootForLayers, lootTypeName } from "./map-loot.js";
 import { lootTypeStyle } from "./map-loot-style.js";
+import { getLocale, tr, onLocaleChange, formatNumber } from './i18n.js';
 
 export function createMapLootPanel({ getContext, getScene, root = document, load = createMapLootLoader() } = {}) {
   const $ = id => root.getElementById(id);
@@ -21,11 +22,12 @@ export function createMapLootPanel({ getContext, getScene, root = document, load
   function apply() {
     const context = getContext();
     const valid = context.enabled && source && context.mapPack?.mapPackId === source.mapPackId;
-    const key = `${context.stageIndex ?? "all"}|${(context.layers || context.mapPack?.layers || []).map(layer => layer.id).join(",")}`;
+    const key = `${getLocale()}|${context.stageIndex ?? "all"}|${(context.layers || context.mapPack?.layers || []).map(layer => layer.id).join(",")}`;
     if (source !== appliedSource || key !== appliedKey) {
       const colors = new Map((source?.types || []).map(type => [type.id, type.color]));
+      const names = new Map((source?.types || []).map(type => [type.id, lootTypeName(type)]));
       appliedMarkers = valid ? lootForLayers(source.markers, context.layers || context.mapPack.layers, context.stageIndex ?? null)
-        .map(marker => ({ ...marker, color: colors.get(marker.type) })) : [];
+        .map(marker => ({ ...marker, name: names.get(marker.type) || marker.name, color: colors.get(marker.type) })) : [];
       appliedSource = source; appliedKey = key;
     }
     getScene()?.setMapLoot({ mapPackId: valid ? source.mapPackId : null, enabled: Boolean(valid && enabled),
@@ -44,14 +46,16 @@ export function createMapLootPanel({ getContext, getScene, root = document, load
     elements.mapLootCount.textContent = String(visible);
     elements.mapLootCount.hidden = !source;
     elements.mapLootStatus.dataset.state = error ? "error" : pending ? "loading" : source ? "ready" : "missing";
-    elements.mapLootStatus.textContent = error || (pending ? "正在读取本图标记…" : !source ? "此地图版本尚无标记数据。"
-      : markers.length ? `${context.stageIndex == null ? "整张地图" : "当前分区"} · 已显示 ${visible} / ${markers.length} 处`
-        : "当前分区没有已确认的地图标记")
-      + (!error && !pending && source?.itemCoverage === "partial" ? "\n此版本仍有部分物品点待整理" : "");
+    elements.mapLootStatus.textContent = error ? tr("地图标记加载失败，可重试。", "Unable to load map markers. Please retry.")
+      : (pending ? tr("正在读取本图标记…", "Loading this map's markers…") : !source ? tr("此地图版本尚无标记数据。", "No markers are available for this map version yet.")
+        : markers.length ? tr(`${context.stageIndex == null ? "整张地图" : "当前分区"} · 已显示 ${visible} / ${markers.length} 处`,
+          `${context.stageIndex == null ? 'Whole map' : 'Current chapter'} · ${formatNumber(visible)} / ${formatNumber(markers.length)} shown`)
+          : tr("当前分区没有已确认的地图标记", "No verified markers in this chapter."))
+      + (!error && !pending && source?.itemCoverage === "partial" ? tr("\n此版本仍有部分物品点待整理", "\nSome item sites for this version are still being documented.") : "");
     elements.mapLootRetry.hidden = !error;
     elements.mapLootEnabled.disabled = !source;
     elements.mapLootAll.disabled = elements.mapLootNone.disabled = !source;
-    const nextRowKey = `${context.stageIndex ?? "all"}|${(context.layers || context.mapPack?.layers || []).map(layer => layer.id).join(",")}`;
+    const nextRowKey = `${getLocale()}|${context.stageIndex ?? "all"}|${(context.layers || context.mapPack?.layers || []).map(layer => layer.id).join(",")}`;
     if (rowSource !== source || rowKey !== nextRowKey) {
       rowSource = source; rowKey = nextRowKey; typeInputs.clear();
       const chestRows = [], itemRows = [], animalRows = [];
@@ -59,12 +63,14 @@ export function createMapLootPanel({ getContext, getScene, root = document, load
         const count = counts.get(type.id) || 0;
         if (!count) continue;
         const label = make("label", "map-loot-type");
+        const displayName = lootTypeName(type);
+        label.title = displayName;
         label.style.setProperty("--loot-color", type.color || lootTypeStyle(type.id, type.category).color);
         const input = make("input"); input.type = "checkbox"; input.checked = selected.has(type.id); input.value = type.id;
-        input.setAttribute("aria-label", type.name);
+        input.setAttribute("aria-label", displayName);
         typeInputs.set(type.id, input);
         const swatch = make("i", `map-loot-swatch is-${type.category}`); swatch.setAttribute("aria-hidden", "true");
-        const name = make("span", "map-loot-type-name", type.name), number = make("span", "map-loot-type-count", String(count));
+        const name = make("span", "map-loot-type-name", displayName), number = make("span", "map-loot-type-count", String(count));
         label.append(input, swatch, name, number);
         (type.category === "chest" ? chestRows : type.category === "animal" ? animalRows : itemRows).push(label);
       }
@@ -97,7 +103,7 @@ export function createMapLootPanel({ getContext, getScene, root = document, load
       }
     } catch (exception) {
       if (disposed || abort.signal.aborted || controller !== abort) return;
-      error = "地图标记加载失败，可重试。";
+      error = true;
     } finally {
       if (!disposed && controller === abort) { pending = null; render(); }
     }
@@ -137,5 +143,6 @@ export function createMapLootPanel({ getContext, getScene, root = document, load
   listen(elements.mapLootMenu, "keydown", event => {
     if (event.key === "Escape") { elements.mapLootMenu.open = false; elements.mapLootMenu.querySelector("summary")?.focus(); }
   });
-  return { sync, dispose() { disposed = true; controller?.abort(); for (const remove of listeners) remove(); getScene()?.setMapLoot({ enabled: false }); } };
+  const unsubscribeLocale = onLocaleChange(render);
+  return { sync, dispose() { disposed = true; unsubscribeLocale(); controller?.abort(); for (const remove of listeners) remove(); getScene()?.setMapLoot({ enabled: false }); } };
 }

@@ -1,20 +1,22 @@
+import { biomeName, gameText, tr } from "./i18n.js";
+
 const MAX_POINTS = 200_000;
 const MAX_CELLS = 200_000;
 const COLORS = ["#edc977", "#88cabb", "#d994b0", "#a8baf0", "#b7cf8e", "#e7a581", "#c8a9db", "#8dbdd8"];
 const finiteInteger = value => Number.isSafeInteger(value);
 
 function checkArray(value, limit, label) {
-  if (!Array.isArray(value) || value.length > limit) throw new Error(`${label}格式无效或数据过大`);
+  if (!Array.isArray(value) || value.length > limit) throw new Error(tr(`${label}格式无效或数据过大`, `${label}: invalid format or too much data`));
   return value;
 }
 
 export function normalizeRouteGroups(value) {
-  return checkArray(value?.groups, 2000, "地图组").map(group => {
-    if (typeof group?.id !== "string" || !group.id || !group.map || typeof group.map.scene !== "string") throw new Error("地图组身份无效");
+  return checkArray(value?.groups, 2000, tr("地图组", "Map groups")).map(group => {
+    if (typeof group?.id !== "string" || !group.id || !group.map || typeof group.map.scene !== "string") throw new Error(tr("地图组身份无效", "Invalid map group identity"));
     return {
       ...group,
-      difficulties: checkArray(group.difficulties || [], 100, "难度"),
-      stageSummaries: checkArray(group.stageSummaries || [], 64, "关卡").filter(stage => finiteInteger(stage?.index) && stage.index >= 0),
+      difficulties: checkArray(group.difficulties || [], 100, tr("难度", "Difficulties")),
+      stageSummaries: checkArray(group.stageSummaries || [], 64, tr("关卡", "Chapters")).filter(stage => finiteInteger(stage?.index) && stage.index >= 0),
     };
   });
 }
@@ -25,21 +27,22 @@ export function normalizeRoutes(value, { maximumPoints = MAX_POINTS } = {}) {
   // Counts are not a proxy for data size: a large lobby may have hundreds of
   // short or empty member paths. Network pages retain a point budget, while a
   // verified collection assembled from those pages may exceed one page.
-  const routes = checkArray(value?.routes, Infinity, "路线").map(route => {
-    if (typeof route?.id !== "string" || !route.id || ids.has(route.id)) throw new Error("路线身份无效");
+  const routes = checkArray(value?.routes, Infinity, tr("路线", "Routes")).map(route => {
+    if (typeof route?.id !== "string" || !route.id || ids.has(route.id)) throw new Error(tr("路线身份无效", "Invalid route identity"));
     ids.add(route.id);
-    const points = checkArray(route.points, maximumPoints, "轨迹坐标");
+    const points = checkArray(route.points, maximumPoints, tr("轨迹坐标", "Path coordinates"));
     pointCount += points.length;
-    if (pointCount > maximumPoints) throw new Error("轨迹坐标超过单页上限");
+    if (pointCount > maximumPoints) throw new Error(tr("轨迹坐标超过单页上限", "Path coordinates exceed the page limit"));
     let previous = -1;
     for (const point of points) {
       if (!Array.isArray(point) || point.length !== 4 || !point.every(finiteInteger)
-        || point[0] < 0 || point[0] <= previous || point.slice(1).some(v => Math.abs(v) > 2_147_483_647)) throw new Error("轨迹时间或坐标无效");
+        || point[0] < 0 || point[0] <= previous || point.slice(1).some(v => Math.abs(v) > 2_147_483_647)) throw new Error(tr("轨迹时间或坐标无效", "Invalid path time or coordinates"));
       previous = point[0];
     }
-    const breaks = checkArray(route.breaks || [], maximumPoints, "轨迹断点");
-    if (breaks.some(t => !finiteInteger(t) || t < 0)) throw new Error("轨迹断点无效");
-    return { ...route, name: typeof route.name === "string" && route.name.trim() ? route.name : "登山者", points,
+    const breaks = checkArray(route.breaks || [], maximumPoints, tr("轨迹断点", "Path breaks"));
+    if (breaks.some(t => !finiteInteger(t) || t < 0)) throw new Error(tr("轨迹断点无效", "Invalid path breaks"));
+    const nameMissing = typeof route.name !== "string" || !route.name.trim();
+    return { ...route, name: nameMissing ? tr("登山者", "Climber") : route.name, nameMissing, points,
       breaks: [...breaks].sort((a, b) => a - b) };
   });
   return { ...value, routes, totalRouteCount: finiteInteger(value.totalRouteCount) ? value.totalRouteCount : routes.length };
@@ -48,18 +51,35 @@ export function normalizeRoutes(value, { maximumPoints = MAX_POINTS } = {}) {
 export function normalizeHeatmap(value) {
   if (!finiteInteger(value?.cellSizeCm) || value.cellSizeCm <= 0
     || !finiteInteger(value.heightBandCm) || value.heightBandCm <= 0
-    || !finiteInteger(value.routeCount) || value.routeCount < 0) throw new Error("热力图精度无效");
-  const cells = checkArray(value.cells, MAX_CELLS, "热力网格");
+    || !finiteInteger(value.routeCount) || value.routeCount < 0) throw new Error(tr("热力图精度无效", "Invalid heatmap resolution"));
+  const cells = checkArray(value.cells, MAX_CELLS, tr("热力网格", "Heatmap cells"));
   if (cells.some(cell => !Array.isArray(cell) || cell.length !== 4 || !cell.every(finiteInteger)
-    || cell[3] <= 0 || cell[3] > value.routeCount)) throw new Error("热力网格计数无效");
+    || cell[3] <= 0 || cell[3] > value.routeCount)) throw new Error(tr("热力网格计数无效", "Invalid heatmap cell counts"));
   return { ...value, cells };
 }
 
 export function mapGroupLabel(group) {
   const map = group.map;
-  const suffix = map.route?.branch === "volcano-kiln" ? "火山 / 熔炉"
-    : map.route?.branch === "swamp-temple" ? "雾沼 / 城塞" : "";
-  return `${map.scene}${Number.isInteger(map.levelIndex) ? ` · 轮换 ${map.levelIndex}` : ""}${suffix ? ` · ${suffix}` : ""} · 构建 ${map.buildId}`;
+  const pair = map.route?.branch === "volcano-kiln" ? ["volcano", "kiln"]
+    : map.route?.branch === "swamp-temple" ? ["swamp", "temple"] : null;
+  const suffix = pair?.map(biome => biomeName(biome)).join(" / ") || "";
+  return `${map.scene}${Number.isInteger(map.levelIndex) ? tr(` · 轮换 ${map.levelIndex}`, ` · Rotation ${map.levelIndex}`) : ""}${suffix ? ` · ${suffix}` : ""}${tr(` · 构建 ${map.buildId}`, ` · Build ${map.buildId}`)}`;
+}
+
+// The service's display label may use another locale. Its structured fields
+// and stable key carry the difficulty identity; never infer modes from a name.
+export function difficultyLabel(value) {
+  const key = typeof value === "string" ? value : value?.key;
+  const match = /^a(-?\d+|unknown)-c(0|1|unknown)-m(0|1|unknown)$/.exec(key || "");
+  const raw = value && typeof value === "object" ? value : {};
+  const ascent = Number.isInteger(raw.ascent) ? raw.ascent
+    : match && match[1] !== "unknown" ? Number(match[1]) : null;
+  const custom = typeof raw.custom === "boolean" ? raw.custom : match?.[2] === "1";
+  const mini = typeof raw.mini === "boolean" ? raw.mini : match?.[3] === "1";
+  const base = ascent === null ? tr("难度未知", "Unknown difficulty")
+    : ascent >= 1 && ascent <= 8 ? gameText(`ASCENT ${ascent}`, `天阶 ${ascent}`, `ASCENT ${ascent}`)
+      : `Ascent ${ascent}`;
+  return [base, custom ? gameText("CUSTOM", "自定义冒险", "CUSTOM RUN") : "", mini ? "Mini" : ""].filter(Boolean).join(" · ");
 }
 
 export function routeColor(index) { return COLORS[index % COLORS.length]; }
@@ -125,6 +145,6 @@ export function viewBounds(points) {
 
 export function mapCompatibilityNote(group) {
   return group?.mapCompatibility === "matched"
-    ? "地图身份已核验 · 当前为无底图坐标视图，保留真实 XYZ。"
-    : "等待对应构建的地图 · 先展示真实 XYZ 路线与热力，未叠加其他版本的底图。";
+    ? tr("地图身份已核验 · 当前为无底图坐标视图，保留真实 XYZ。", "Map identity verified · This coordinate view preserves recorded XYZ without a base map.")
+    : tr("等待对应构建的地图 · 先展示真实 XYZ 路线与热力，未叠加其他版本的底图。", "Waiting for the matching game build's map · Recorded XYZ routes and heat remain visible without a base map.");
 }

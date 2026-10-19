@@ -1,3 +1,5 @@
+import { tr, onLocaleChange } from "./i18n.js";
+import { difficultyLabel } from "./route-collection-model.js";
 import { createCommunityRoutes } from "./community-routes.js";
 import { communityGroupLabel, communityTeamLabel } from "./community-route-model.js";
 import { historicalInspectionRouteStatus } from "./historical-route-link.js";
@@ -53,35 +55,35 @@ export function createCommunityMapPanel({ getContext, getScene, root = document,
     const teamOption = elements.communityMode.querySelector?.('option[value="team"]');
     if (teamOption) { teamOption.disabled = !snapshot.teamId || Boolean(snapshot.inspectionId); teamOption.hidden = Boolean(snapshot.inspectionId); }
     const routesOption = elements.communityMode.querySelector?.('option[value="routes"]');
-    if (routesOption) routesOption.textContent = snapshot.teamId ? "成员路线" : "大家的路线";
+    if (routesOption) routesOption.textContent = snapshot.teamId ? tr("成员路线", "Member routes") : tr("大家的路线", "Community routes");
     const active = opened && snapshot.mode !== "off";
     elements.communityStatus.dataset.state = snapshot.status;
-    elements.communityStatus.textContent = active ? snapshot.message || "选择一个关卡查看大家的路线。"
-      : "切换线路图层，查看大家完成本关的路线与热力。";
+    elements.communityStatus.textContent = active ? snapshot.message || tr("选择一个关卡查看大家的路线。", "Choose a chapter to view community routes.")
+      : tr("切换线路图层，查看大家完成本关的路线与热力。", "Choose a route layer to view completed paths and heatmaps.");
     elements.communityRefresh.disabled = snapshot.status === "loading";
     elements.communityFilters.hidden = !active || !snapshot.group;
     elements.communityGroupField.hidden = snapshot.groups.length < 2;
     elements.communityGroup.disabled = Boolean(snapshot.pinnedGroupId);
     elements.communityGroup.replaceChildren(...snapshot.groups.map((group, index) => option(group.id, communityGroupLabel(group, index))));
     elements.communityGroup.value = snapshot.group?.id || "";
-    elements.communityDifficulty.replaceChildren(option("", "全部难度"), ...snapshot.difficulties.map(value => option(value.key, value.label || "难度未知")));
+    elements.communityDifficulty.replaceChildren(option("", tr("全部难度", "All difficulties")), ...snapshot.difficulties.map(value => option(value.key, difficultyLabel(value))));
     elements.communityDifficulty.value = snapshot.difficulty;
     elements.communityDifficulty.disabled = Boolean(snapshot.inspectionId || snapshot.teamId);
     const difficultyField = elements.communityDifficulty.closest?.("label");
     if (difficultyField) difficultyField.hidden = Boolean(snapshot.inspectionId);
-    elements.communityHeight.replaceChildren(option("", "全部高度"), ...snapshot.heightBands.map(band => {
+    elements.communityHeight.replaceChildren(option("", tr("全部高度", "All heights")), ...snapshot.heightBands.map(band => {
       const step = (snapshot.heatmap?.heightBandCm || 200) / 100;
-      return option(band, `${band * step}–${(band + 1) * step} 米`);
+      return option(band, tr(`${band * step}–${(band + 1) * step} 米`, `${band * step}–${(band + 1) * step} m`));
     }));
     elements.communityHeight.value = snapshot.heightBand === null ? "" : String(snapshot.heightBand);
     elements.communityLegend.hidden = !active || !snapshot.totalRouteCount;
     const visible = snapshot.players.filter(player => player.visible).length;
     elements.communityLegend.textContent = snapshot.mode === "heatmap"
-      ? `按${snapshot.countBy === "team" ? "队伍" : "成员"}统计 · 同一${snapshot.countBy === "team" ? "队伍" : "成员"}在同一空间格只计一次\n浅黄 → 深红：经过${snapshot.countBy === "team" ? "队伍" : "人数"}逐渐增多\n仅完整线路 · 可按高度层筛选`
-      : `${snapshot.inspectionId ? "验收预览 · " : snapshot.teamId ? "本队 · " : ""}${visible} / ${snapshot.players.length} 位可见成员 · ${snapshot.mode === "team" ? "共享路段合并，独走段保留 · " : ""}断点不连接${snapshot.inspectionId ? " · 不参与公开路线与热力统计" : ""}`;
+      ? tr(`按${snapshot.countBy === "team" ? "队伍" : "成员"}统计 · 同一${snapshot.countBy === "team" ? "队伍" : "成员"}在同一空间格只计一次\n浅黄 → 深红：经过${snapshot.countBy === "team" ? "队伍" : "人数"}逐渐增多\n仅完整线路 · 可按高度层筛选`, `Counted by ${snapshot.countBy === "team" ? "team" : "member"} · Each ${snapshot.countBy === "team" ? "team" : "member"} counts once per spatial cell\nPale yellow → dark red: more ${snapshot.countBy === "team" ? "teams" : "members"} passed through\nComplete paths only · Filter by height band`)
+      : tr(`${snapshot.inspectionId ? "验收预览 · " : snapshot.teamId ? "本队 · " : ""}${visible} / ${snapshot.players.length} 位可见成员 · ${snapshot.mode === "team" ? "共享路段合并，独走段保留 · " : ""}断点不连接${snapshot.inspectionId ? " · 不参与公开路线与热力统计" : ""}`, `${snapshot.inspectionId ? "Review preview · " : snapshot.teamId ? "This team · " : ""}${visible} / ${snapshot.players.length} members visible · ${snapshot.mode === "team" ? "Shared sections merged, solo sections retained · " : ""}Gaps remain separate${snapshot.inspectionId ? " · Excluded from public routes and heatmaps" : ""}`);
     if (elements.communitySearchForm) elements.communitySearchForm.hidden = Boolean(snapshot.inspectionId);
     if (elements.communitySearchButton) elements.communitySearchButton.disabled = snapshot.teamSearchStatus === "loading";
-    if (elements.communityTeamSearchStatus) { elements.communityTeamSearchStatus.hidden = Boolean(snapshot.inspectionId); elements.communityTeamSearchStatus.textContent = snapshot.teamSearchMessage || "输入成员名字，查找他参与的队伍。"; }
+    if (elements.communityTeamSearchStatus) { elements.communityTeamSearchStatus.hidden = Boolean(snapshot.inspectionId); elements.communityTeamSearchStatus.textContent = snapshot.teamSearchMessage || tr("输入成员名字，查找他参与的队伍。", "Enter a member name to find their teams."); }
     if (elements.communityTeamResults) {
       elements.communityTeamResults.replaceChildren();
       if (!snapshot.inspectionId) for (const team of snapshot.teams) {
@@ -101,7 +103,7 @@ export function createCommunityMapPanel({ getContext, getScene, root = document,
     if (elements.communityMembersControls) elements.communityMembersControls.hidden = !active || !["routes", "team"].includes(snapshot.mode) || !snapshot.players.length;
     if (elements.communityAllPlayers) { elements.communityAllPlayers.checked = Boolean(snapshot.players.length) && visible === snapshot.players.length; elements.communityAllPlayers.indeterminate = visible > 0 && visible < snapshot.players.length; }
     if (elements.communityReference) {
-      elements.communityReference.replaceChildren(option("", "不指定参考队长"), ...snapshot.players.map(player => option(player.playerKey, player.name)));
+      elements.communityReference.replaceChildren(option("", tr("不指定参考队长", "No reference leader")), ...snapshot.players.map(player => option(player.playerKey, player.name)));
       elements.communityReference.value = snapshot.referencePlayerKey || "";
       elements.communityReference.closest?.("label")?.toggleAttribute?.("hidden", snapshot.mode !== "team");
     }
@@ -109,12 +111,12 @@ export function createCommunityMapPanel({ getContext, getScene, root = document,
     if (active && ["routes", "team"].includes(snapshot.mode)) for (const player of snapshot.players) {
       const label = root.createElement("label"); label.className = "community-player";
       const check = root.createElement("input"); check.type = "checkbox"; check.checked = player.visible;
-      check.setAttribute("aria-label", `显示 ${player.name} 的路线`);
+      check.setAttribute("aria-label", tr(`显示 ${player.name} 的路线`, `Show ${player.name}’s route`));
       check.addEventListener("change", () => { if (interactive()) controller.setPlayerVisible(player.id, check.checked); });
       const dot = root.createElement("i"); dot.style.backgroundColor = player.color; dot.setAttribute("aria-hidden", "true");
       const name = root.createElement("span");
       const recordedRoute = snapshot.inspectionId || snapshot.teamId ? snapshot.routes.find(route => (route.playerKey || route.id) === player.id) : null;
-      name.textContent = `${player.name}${!player.hasPoints ? "（本关无记录）" : recordedRoute ? `（${historicalInspectionRouteStatus(recordedRoute)}）` : ""}`;
+      name.textContent = `${player.name}${!player.hasPoints ? tr("（本关无记录）", " (no chapter record)") : recordedRoute ? tr(`（${historicalInspectionRouteStatus(recordedRoute)}）`, ` (${historicalInspectionRouteStatus(recordedRoute)})`) : ""}`;
       label.append(check, dot, name); elements.communityPlayers.append(label);
     }
     applyOverlay(snapshot);
@@ -185,7 +187,8 @@ export function createCommunityMapPanel({ getContext, getScene, root = document,
     if (disposed) return;
     close({ clear: true });
     elements.communityToggle.hidden = true;
-    disposed = true; listeners.forEach(remove => remove()); controller.dispose();
+    disposed = true; unsubscribeLocale(); listeners.forEach(remove => remove()); controller.dispose();
   }
+  const unsubscribeLocale = onLocaleChange(() => render(controller.getSnapshot()));
   return { sync, openHistorical, dispose };
 }

@@ -1,3 +1,5 @@
+import { tr } from './i18n.js';
+
 // World state is observation data, never inferred from player inventory events.
 const KINDS = new Set(['item', 'placed_object', 'mine', 'zombie', 'zombie_spawn', 'sleep_fog', 'spore_cloud', 'fog_safe_zone']);
 const vector = (value, n) => Array.isArray(value) && value.length === n && value.every(Number.isFinite) ? [...value] : null;
@@ -94,7 +96,7 @@ export function worldEffectsAtTime(events, time) {
 }
 
 export function worldTelemetryNote(timeline, time) {
-  if (!timeline?.captured) return '此日志未采集世界动态（需 0.6+）：放置物、僵尸、爆炸与雾区状态未知。';
-  if (time < timeline.firstTime) return '此时尚无世界采样；不提前展示后续物体。';
-  return '世界状态按记录采样回放；预警圈为辅助提示，爆炸与雾体为示意效果。';
+  if (!timeline?.captured) return tr('此日志未采集世界动态（需 0.6+）：放置物、僵尸、爆炸与雾区状态未知。', 'This recording has no world snapshots (requires 0.6+). Placed objects, zombies, explosions and fog state are unknown.');
+  if (time < timeline.firstTime) return tr('此时尚无世界采样；不提前展示后续物体。', 'No world snapshot is available at this time. Later objects are not shown early.');
+  return tr('世界状态按记录采样回放；预警圈为辅助提示，爆炸与雾体为示意效果。', 'World state follows recorded snapshots. Warning ranges, explosions and fog effects are visual guides.');
 }

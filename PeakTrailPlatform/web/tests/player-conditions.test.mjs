@@ -1,9 +1,26 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizePlayerStatus, staminaLayout, conditionSummary, appearanceFormPresentation } from "../src/player-conditions.js";
+import { normalizePlayerStatus, staminaLayout, conditionSummary, appearanceFormPresentation, conditionPresentation, effectPresentation } from "../src/player-conditions.js";
+import { setLocale } from "../src/i18n.js";
 import { loadTraceBundle, tracePlayerStateAtTime } from "../src/protocol.js";
 
 const value = (type, id, amount, extra = 0) => ({ type, id, amount, staminaBlock: extra ? 0 : amount, extraStaminaBlock: extra });
+
+test("condition and form labels switch language without changing recorded values", () => {
+  const record = normalized(), before = structuredClone(record);
+  try {
+    setLocale("en");
+    assert.equal(conditionPresentation("Cold").label, "Cold");
+    assert.equal(effectPresentation("InfiniteStamina"), "Infinite stamina");
+    assert.equal(appearanceFormPresentation({ formReady: true, form: "skeleton" }).label, "Skeleton form");
+    assert.equal(staminaLayout({ stamina: .35, maxStamina: .7 }, record).capText, "Cap 70%");
+    assert.match(conditionSummary(record), /3 conditions/);
+    assert.deepEqual(record, before);
+    setLocale("zh-CN");
+    assert.equal(conditionPresentation("Cold").label, "寒冷");
+    assert.equal(staminaLayout({ stamina: .35, maxStamina: .7 }, record).capText, "上限 70%");
+  } finally { setLocale("zh-CN"); }
+});
 function status(overrides = {}) {
   return { ready: true, complete: true, authority: "synthetic", source: "recorded", dead: false,
     values: [value("Cold", 2, .2), value("Curse", 5, .1), value("Petrify", 13, .4, .4)],

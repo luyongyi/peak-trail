@@ -1,16 +1,9 @@
 import { selectDailyMapPack } from "./protocol.js";
 import { classifyRouteSegment, normalizeRoute, routeSegmentName } from "./map-route.js";
 import { latestDailyBoundary } from "./daily-refresh.js";
+import { biomeName, getLocale, tr } from "./i18n.js";
 
-const BIOMES = {
-  shore: { title: "海岸", theme: "shore" },
-  roots: { title: "森蕈", theme: "roots" },
-  tropics: { title: "雨林", theme: "tropics" },
-  alpine: { title: "雪山", theme: "alpine" },
-  mesa: { title: "方山", theme: "mesa" },
-  volcano: { title: "火山", theme: "volcano" },
-  swamp: { title: "雾沼", theme: "swamp" },
-};
+const BIOME_THEMES = new Set(["shore", "roots", "tropics", "alpine", "mesa", "volcano", "swamp"]);
 
 function timestamp(value) {
   return typeof value === "string" && value.trim() ? Date.parse(value) : NaN;
@@ -28,7 +21,7 @@ function localTimestamp(value, timeZone) {
   if (!Number.isFinite(value)) return null;
   // This is the observation's local date, not a guessed date-to-map rotation.
   try {
-    return new Intl.DateTimeFormat("zh-CN", {
+    return new Intl.DateTimeFormat(getLocale(), {
       timeZone, year: "numeric", month: "2-digit", day: "2-digit",
       hour: "2-digit", minute: "2-digit", hourCycle: "h23",
     }).format(value);
@@ -49,7 +42,7 @@ function sameIdentity(mapPack, entry, daily) {
 function pendingCard(segment) {
   return {
     segment, ordinal: String(segment + 1).padStart(2, "0"),
-    title: `第${["一", "二", "三", "四"][segment]}关`, theme: "unknown",
+    title: tr(`第${["一", "二", "三", "四"][segment]}关`, `Chapter ${segment + 1}`), theme: "unknown",
     biome: null, sourceName: null, layerId: null, layer: null,
     available: false, ending: null,
   };
@@ -77,15 +70,14 @@ function chapterCards(mapPack) {
     const card = pendingCard(segment);
     const layer = layerForSegment(mapPack, segment);
     if (!layer || (segment === 3 && !branchMatches)) {
-      if (segment === 3) card.title = "第四关 · 分支待确认";
+      if (segment === 3) card.title = tr("第四关 · 分支待确认", "Chapter 4 · Branch unconfirmed");
       return card;
     }
     const biome = String(layer.biome || "").toLowerCase();
-    const known = BIOMES[biome];
     return {
       ...card,
-      title: segment === 3 ? routeSegmentName(route, 3) : known?.title || layer.name || card.title,
-      theme: known?.theme || "unknown", biome,
+      title: segment === 3 ? routeSegmentName(route, 3) : biomeName(biome, layer.name || card.title),
+      theme: BIOME_THEMES.has(biome) ? biome : "unknown", biome,
       sourceName: String(layer.name || layer.biome || ""), layerId: layer.id || null, layer,
       available: true,
       ending: segment === 3 ? {
@@ -98,18 +90,18 @@ function chapterCards(mapPack) {
 
 function specialDestinations(mapPack, cards) {
   const summit = {
-    id: "peak", title: "顶峰", english: "PEAK", kind: "summit",
-    exclusiveGroup: "run-ending", alternativeId: "nadir", outcomeLabel: "从顶峰撤离",
+    id: "peak", title: biomeName("peak"), english: "PEAK", kind: "summit",
+    exclusiveGroup: "run-ending", alternativeId: "nadir", outcomeLabel: tr("从顶峰撤离", "Escape from the PEAK"),
     segment: null, layerId: null, available: false, sharedLayer: false,
-    description: "顶峰结局，与天底互斥。",
-    actionLabel: "等待顶峰所在分区确认",
+    description: tr("顶峰结局，与天底互斥。", "The PEAK ending is an alternative to NADIR."),
+    actionLabel: tr("等待顶峰所在分区确认", "Waiting for the PEAK chapter to be confirmed"),
   };
   const nadir = {
-    id: "nadir", title: "天底", english: "NADIR", kind: "nadir",
-    exclusiveGroup: "run-ending", alternativeId: "peak", outcomeLabel: "前往天底之门",
+    id: "nadir", title: biomeName("void"), english: "NADIR", kind: "nadir",
+    exclusiveGroup: "run-ending", alternativeId: "peak", outcomeLabel: tr("前往天底之门", "Reach the gate to NADIR"),
     segment: null, layerId: null, available: false, sharedLayer: false,
-    description: "天底是额外区域，与顶峰结局互斥。",
-    actionLabel: "等待天底地图资源",
+    description: tr("天底是额外区域，与顶峰结局互斥。", "NADIR is an additional area and an alternative to the PEAK ending."),
+    actionLabel: tr("等待天底地图资源", "Waiting for the NADIR map"),
   };
   if (!mapPack) return [summit, nadir];
 
@@ -129,12 +121,12 @@ function specialDestinations(mapPack, cards) {
   const finale = cards[3]?.ending;
   if (peakLayer) {
     Object.assign(summit, { segment: peakLayer.segment, layerId: peakLayer.id || null,
-      available: true, actionLabel: "查看顶峰地图" });
+      available: true, actionLabel: tr("查看顶峰地图", "View the PEAK map") });
   } else if (["25306743", "25739797"].includes(String(mapPack.gameBuildId)) && finale && mapPack.mapPeak?.segment === finale.segment) {
     Object.assign(summit, { segment: finale.segment, layerId: finale.layerId,
       available: true, sharedLayer: true, viewIntent: "summit",
-      description: `${finale.title}上方的顶峰区域；地图视图依据 PeakHandler 碰撞边界定位。`,
-      actionLabel: "查看顶峰地图" });
+      description: tr(`${finale.title}上方的顶峰区域；地图视图依据 PeakHandler 碰撞边界定位。`, `The PEAK above ${finale.title}; the view uses the game's PeakHandler collision bounds.`),
+      actionLabel: tr("查看顶峰地图", "View the PEAK map") });
   } else if (["25306743", "25739797"].includes(String(mapPack.gameBuildId)) && finale) {
     // Verified MapHandler.JumpToSegmentLogic in this build maps enum Peak=5 to
     // array index 4 (the Kiln/Citadel), but the exported GLB does not retain a
@@ -142,12 +134,12 @@ function specialDestinations(mapPack, cards) {
     // finale's interior camera and present it as a verified Peak map.
     Object.assign(summit, { segment: finale.segment, layerId: finale.layerId,
       available: false, sharedLayer: true,
-      description: `顶峰与${finale.title}共用游戏分区，但当前导出无法从混合模型中可靠拆出顶峰；暂不把${finale.title}室内或离群岩块冒充顶峰地图。`,
-      actionLabel: "等待顶峰模型精确导出" });
+      description: tr(`顶峰与${finale.title}共用游戏分区，但当前导出无法从混合模型中可靠拆出顶峰；暂不把${finale.title}室内或离群岩块冒充顶峰地图。`, `The PEAK shares a game chapter with ${finale.title}. A separate, verified summit model is not yet available.`),
+      actionLabel: tr("等待顶峰模型精确导出", "Waiting for a verified PEAK model") });
   }
   const voidLayer = confirmedLayer("nadir");
   if (voidLayer) Object.assign(nadir, { segment: voidLayer.segment, layerId: voidLayer.id || null,
-    available: true, actionLabel: "查看天底地图" });
+    available: true, actionLabel: tr("查看天底地图", "View the NADIR map") });
   return [summit, nadir];
 }
 
@@ -181,11 +173,11 @@ export function buildHomeDailyView({ daily = null, catalog = null, mapPack = nul
     : !mapPack ? "waiting-pack" : !identityMatched ? "identity-mismatch"
       : cards.every((card) => card.available) ? "ready" : "route-unconfirmed";
   const countdownLabel = remainingSeconds === null
-    ? freshness === "stale" ? "等待新一轮确认" : "尚未同步轮换"
+    ? freshness === "stale" ? tr("等待新一轮确认", "Waiting for the next rotation") : tr("尚未同步轮换", "Rotation not synced")
     : `${String(Math.floor(remainingSeconds / 3600)).padStart(2, "0")}:${String(Math.floor(remainingSeconds % 3600 / 60)).padStart(2, "0")}:${String(remainingSeconds % 60).padStart(2, "0")}`;
   return {
     freshness, isCurrent: freshness === "current",
-    statusLabel: freshness === "current" ? "今日五段路线" : freshness === "stale" ? "上次确认的五段路线" : "等待轮换确认",
+    statusLabel: freshness === "current" ? tr("今日五段路线", "Today's five chapters") : freshness === "stale" ? tr("上次确认的五段路线", "Last confirmed five chapters") : tr("等待轮换确认", "Waiting for rotation confirmation"),
     sceneName: valid ? daily.sceneName : null, mapSlot: valid ? daily.mapSlot : null,
     observedLabel, rotationLabel, remainingSeconds, countdownLabel,
     fetchedAtUtc: valid ? daily.fetchedAtUtc : null,

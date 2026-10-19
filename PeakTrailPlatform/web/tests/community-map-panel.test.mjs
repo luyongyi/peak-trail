@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
 import { createCommunityMapPanel } from "../src/community-map-panel.js";
+import { setLocale } from "../src/i18n.js";
 
 const ids = ["appShell", "communityToggle", "communityLayerControl", "communityMode", "communityPanel", "communityRefresh", "communityStatus", "communityFilters",
   "communityGroupField", "communityGroup", "communityDifficulty", "communityHeight", "communityLegend", "communityPlayers", "communityCollapse", "communitySearchForm", "communityMemberSearch", "communitySearchScope",
@@ -32,6 +33,38 @@ function node(tagName = "div") {
     replaceChildren(...children) { this.children = [...children]; }, append(...children) { this.children.push(...children); } };
 }
 const settle = () => new Promise(resolve => setImmediate(resolve));
+
+test("language switching rerenders cached routes and filters without requests or selection changes", async () => {
+  setLocale("zh-CN");
+  const chosen = group();
+  chosen.difficulties = [{ key: "a3-c1-m0", ascent: 3, custom: true, mini: false, label: "服务器中文难度" }];
+  const f = fixture({ groups: [chosen] });
+  try {
+    await f.open(); await f.change("communityMode", "routes");
+    await f.change("communityDifficulty", chosen.difficulties[0].key);
+    await f.change("communityHeight", "0");
+    const member = f.elements.communityPlayers.children[0].children[0];
+    member.checked = false; member.dispatch("change");
+    const requests = f.calls.length, before = f.scene.overlays.at(-1);
+    setLocale("en");
+    assert.equal(f.calls.length, requests);
+    assert.match(f.elements.communityStatus.textContent, /complete chapter routes/);
+    assert.match(f.elements.communityDifficulty.children[1].textContent, /ASCENT 3.*CUSTOM RUN/);
+    assert.equal(f.elements.communityDifficulty.value, chosen.difficulties[0].key);
+    assert.equal(f.elements.communityHeight.value, "0");
+    assert.equal(f.elements.communityMode.value, "routes");
+    assert.equal(f.elements.communityPlayers.children[0].children[0].checked, false);
+    assert.equal(f.elements.communityPlayers.children[1].children[2].textContent, "登山者", "real nicknames remain unchanged");
+    assert.deepEqual(f.scene.overlays.at(-1).visiblePlayers, before.visiblePlayers);
+    setLocale("zh-CN");
+    assert.equal(f.calls.length, requests);
+    assert.match(f.elements.communityStatus.textContent, /完整关卡路线/);
+    f.panel.dispose();
+    const text = f.elements.communityStatus.textContent;
+    setLocale("en");
+    assert.equal(f.elements.communityStatus.textContent, text, "disposed panels unsubscribe from language events");
+  } finally { f.panel.dispose(); setLocale("zh-CN"); }
+});
 function response(value) { return new Response(JSON.stringify(value), { headers: { "Content-Type": "application/json" } }); }
 function stageResponse(id, stageIndex, heat = false) {
   const common = { groupId: id, stageIndex, mapCompatibility: "matched", mapPackId: map().mapPackId,

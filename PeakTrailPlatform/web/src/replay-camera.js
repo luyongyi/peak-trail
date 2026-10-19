@@ -1,9 +1,14 @@
+import { tr, onLocaleChange } from './i18n.js';
+
 const MOVEMENT_KEYS = new Set(["KeyW", "KeyA", "KeyS", "KeyD", "KeyQ", "KeyE", "ShiftLeft", "ShiftRight"]);
 const TOUCH_DIRECTIONS = new Set(["forward", "back", "left", "right", "up", "down"]);
 const MAX_FRAME_SECONDS = 0.05;
 const MAX_PITCH = Math.PI * 0.495;
 
-export const REPLAY_CAMERA_HELP = "点击地图后：WASD 前后左右，Q / E 下降 / 上升，Shift 加速，按住鼠标拖动转向，Esc 返回环绕视角。触屏可按住方向按钮移动，拖动地图转向。自由相机可穿过墙体，不模拟玩家碰撞。";
+const cameraHelp = () => tr("点击地图后：WASD 前后左右，Q / E 下降 / 上升，Shift 加速，按住鼠标拖动转向，Esc 返回环绕视角。触屏可按住方向按钮移动，拖动地图转向。自由相机可穿过墙体，不模拟玩家碰撞。",
+  "Click the map: WASD to move, Q / E to descend / ascend, Shift to move faster, drag to look, and Esc to return to orbit view. On touchscreens, hold the direction buttons to move and drag the map to look. The free camera can pass through walls; player collisions are not simulated.");
+export let REPLAY_CAMERA_HELP = cameraHelp();
+onLocaleChange(() => { REPLAY_CAMERA_HELP = cameraHelp(); });
 
 function typingTarget(target) {
   return Boolean(target && (target.isContentEditable
