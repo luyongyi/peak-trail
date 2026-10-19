@@ -17,6 +17,9 @@ const expectedMeshes = new Map([
   ['chest-trick', 'Luggage_Trick'], ['item-bird-nest', 'BirdNest'],
   ['item-shelf-shroom', 'ShelfShroom'], ['item-piton', 'pickaxe'],
   ['item-napberry', 'Nap Berry'], ['animal-capybara', 'Cube'],
+  ['item-climbing-spike', 'Spike'], ['item-amulet-bird', 'Medallion_Bird'],
+  ['item-amulet-goat', 'Medallion_Goat'], ['item-amulet-turtle', 'Medallion_Turtle'],
+  ['item-amulet-bingbong', 'Medallion_BingBong'],
 ]);
 
 for (const { build, survey, routes } of surveys) {
@@ -41,10 +44,11 @@ test(`loot survey ${build} covers all 21 enabled canonical maps with exact scene
   }
 });
 
-test(`all ${build} markers retain complete geometry provenance, layer ownership and finite Unity coordinates`, () => {
+test(`all ${build} markers retain authenticated geometry or component provenance and finite Unity coordinates`, () => {
   const types = new Map(survey.types.map(type => [type.id, type]));
-  assert.equal(types.size, expectedMeshes.size);
-  assert.deepEqual([...types.keys()].sort(), [...expectedMeshes.keys()].sort());
+  assert.equal(types.size, survey.types.length);
+  for (const id of expectedMeshes.keys()) assert.ok(types.has(id), id);
+  if (build === '25306743') assert.equal(types.size, expectedMeshes.size);
   for (const type of types.values()) {
     assert.ok(['chest', 'item', 'animal'].includes(type.category));
     assert.match(type.color, /^#[0-9a-f]{6}$/i);
@@ -56,26 +60,53 @@ test(`all ${build} markers retain complete geometry provenance, layer ownership 
     const ids = new Set(), locations = new Set();
     for (const marker of map.markers) {
       const type = types.get(marker.type), layer = layers.get(marker.layerId);
-      assert.ok(type && layer, `${map.sceneName}: ${marker.id}`);
+      assert.ok(type && (layer || marker.scope === 'global'), `${map.sceneName}: ${marker.id}`);
       assert.equal(marker.category, type.category);
       assert.equal(marker.name, type.name);
-      assert.equal(marker.segment, layer.segment);
       assert.equal(marker.pos.length, 3);
       assert.ok(marker.pos.every(Number.isFinite));
-      assert.equal(marker.source.modelOrigin.length, 3);
-      assert.ok(marker.source.modelOrigin.every(Number.isFinite));
-      assert.match(marker.source.geometrySha256, hash);
-      assert.equal(marker.source.geometrySha256, layer.geometrySha256);
-      assert.equal(marker.source.meshName, expectedMeshes.get(marker.type));
+      if (marker.scope === 'global') {
+        assert.equal(marker.layerId, 'global');
+        assert.equal(marker.segment, -1);
+        assert.equal(marker.source.scopeRoot, 'MapHandler.globalParent');
+        assert.equal(marker.source.geometrySha256, undefined);
+        assert.equal(marker.source.sourceKind, 'serialized-scene-component');
+      } else {
+        assert.equal(marker.segment, layer.segment);
+        assert.match(marker.source.geometrySha256, hash);
+        assert.equal(marker.source.geometrySha256, layer.geometrySha256);
+      }
+      if (marker.source.sourceKind === 'serialized-scene-component') {
+        assert.equal(build, '25739797', 'new components cannot be reused for an unauthenticated old scene');
+        assert.equal(marker.category, 'item');
+        assert.equal(marker.source.sceneSha256, map.sourceSceneSha256);
+        assert.match(marker.source.componentPathId, /^-?[1-9]\d{0,19}$/);
+        assert.ok(['SingleItemSpawner', 'EndgameFlareSpawner', 'BerryBush', 'BerryVine',
+          'GroundPlaceSpawner', 'Spawner', 'ScoutStatue'].includes(marker.source.component));
+        if (marker.type === 'item-scout-statue-reward') {
+          assert.equal(marker.source.component, 'ScoutStatue');
+          assert.equal(marker.source.anchor, 'referenced-transform-world-position');
+          assert.equal(marker.source.transformField, 'gemSpot');
+          assert.match(marker.source.transformPathId, /^-?[1-9]\d{0,19}$/);
+          assert.equal(marker.placement, 'randomized-candidate');
+        } else assert.equal(marker.source.anchor, 'component-world-position');
+        assert.equal(marker.source.modelOrigin, undefined);
+      } else {
+        assert.equal(marker.source.modelOrigin.length, 3);
+        assert.ok(marker.source.modelOrigin.every(Number.isFinite));
+        assert.equal(marker.source.meshName, expectedMeshes.get(marker.type));
+        assert.equal(marker.source.anchor, 'geometry-bounds-center');
+        assert.ok(Number.isInteger(marker.source.meshIndex) && marker.source.meshIndex >= 0);
+        assert.ok(Number.isInteger(marker.source.nodeIndex) && marker.source.nodeIndex >= 0);
+        assert.ok(marker.source.instanceIndex === null || Number.isInteger(marker.source.instanceIndex) && marker.source.instanceIndex >= 0);
+        if (marker.type === 'item-climbing-spike') assert.equal(marker.source.materialName, 'M_ClimbingSpike');
+        if (marker.type.startsWith('item-amulet-')) assert.equal(marker.source.materialName, 'Tarnished Gold Medallion');
+      }
       if (marker.category === 'animal') {
         assert.equal(marker.type, 'animal-capybara');
         assert.equal(marker.source.materialName, 'M_Capybara');
         assert.equal(marker.segment, 2);
       }
-      assert.equal(marker.source.anchor, 'geometry-bounds-center');
-      assert.ok(Number.isInteger(marker.source.meshIndex) && marker.source.meshIndex >= 0);
-      assert.ok(Number.isInteger(marker.source.nodeIndex) && marker.source.nodeIndex >= 0);
-      assert.ok(marker.source.instanceIndex === null || Number.isInteger(marker.source.instanceIndex) && marker.source.instanceIndex >= 0);
       assert.equal(ids.has(marker.id), false, `duplicate ID: ${map.sceneName}/${marker.id}`);
       ids.add(marker.id);
       const location = `${marker.type}:${marker.pos.map(value => Math.round(value * 10000)).join(',')}`;
@@ -85,16 +116,24 @@ test(`all ${build} markers retain complete geometry provenance, layer ownership 
   }
 });
 
-test(`survey ${build} distinguishes candidate chests, fixed resource sites and absent spawned loose items`, () => {
+test(`survey ${build} distinguishes candidate sites and preserves audited geometry coverage`, () => {
   assert.equal(survey.source.kind, 'canonical-map-geometry-survey');
   assert.match(survey.source.chestCoverage, /candidate/i);
   assert.match(survey.source.itemCoverage, /loose|spawn/i);
   assert.match(survey.source.animalCoverage, /Mirage.*excluded/);
   const counts = new Map();
   for (const map of survey.maps) for (const marker of map.markers) {
-    assert.equal(marker.placement, marker.category === 'chest' ? 'randomized-candidate' : 'fixed');
     assert.equal(Object.hasOwn(marker, 'contents'), false);
     assert.equal(Object.hasOwn(marker, 'isOpen'), false);
+    if (marker.source.sourceKind === 'serialized-scene-component') {
+      const conditions = marker.source.conditions;
+      assert.equal(typeof conditions, 'object');
+      if (!['SingleItemSpawner'].includes(marker.source.component) || conditions.runtimeActivation
+          || conditions.playersInRoomRequirement > 0 || (conditions.belowAscentRequirement ?? -1) !== -1
+          || conditions.normalRunsOnly) assert.equal(marker.placement, 'randomized-candidate');
+      continue;
+    }
+    assert.equal(marker.placement, marker.category === 'chest' || marker.type.startsWith('item-amulet-') ? 'randomized-candidate' : 'fixed');
     counts.set(marker.type, (counts.get(marker.type) || 0) + 1);
   }
   // Audited body counts catch dropped GPU instances, accidentally selecting lids,
@@ -103,16 +142,41 @@ test(`survey ${build} distinguishes candidate chests, fixed resource sites and a
     'chest-small': 1890, 'chest-large': 805, 'chest-epic': 275,
     'chest-ancient': 104, 'item-bird-nest': 460, 'item-shelf-shroom': 3131,
     'item-piton': 254, 'item-napberry': 66, 'chest-trick': 9,
-    'animal-capybara': 53,
+    'animal-capybara': 53, 'item-climbing-spike': 1411,
+    'item-amulet-bird': 21, 'item-amulet-goat': 21, 'item-amulet-turtle': 21, 'item-amulet-bingbong': 21,
   } : {
     'chest-small': 1877, 'chest-large': 781, 'chest-epic': 290,
     'chest-ancient': 117, 'chest-trick': 11, 'item-bird-nest': 490,
     'item-shelf-shroom': 3310, 'item-piton': 247, 'item-napberry': 66,
-    'animal-capybara': 53,
+    'animal-capybara': 53, 'item-climbing-spike': 1319,
+    'item-amulet-bird': 21, 'item-amulet-goat': 21, 'item-amulet-turtle': 21, 'item-amulet-bingbong': 21,
   };
   assert.deepEqual(Object.fromEntries(counts), expectedCounts);
 });
 }
+
+test('current scene components restore the complete audited set of fixed spawn and growth reference sites', () => {
+  const { survey } = surveys.find(entry => entry.build === '25739797');
+  const sites = survey.maps.flatMap(map => map.markers.filter(marker => marker.source.sourceKind === 'serialized-scene-component'));
+  assert.equal(survey.types.length, 53);
+  assert.equal(sites.length, 42585);
+  assert.equal(survey.maps.flatMap(map => map.markers).filter(marker => marker.category === 'item').length, 48101);
+  assert.match(survey.source.componentCoverage, /reference points/);
+  const counts = new Map();
+  for (const marker of sites) counts.set(marker.source.component, (counts.get(marker.source.component) || 0) + 1);
+  assert.deepEqual(Object.fromEntries([...counts].sort()), {
+    BerryBush: 30292, BerryVine: 2417, EndgameFlareSpawner: 168,
+    GroundPlaceSpawner: 6146, ScoutStatue: 21, SingleItemSpawner: 3478, Spawner: 63,
+  });
+  assert.equal(sites.filter(marker => marker.placement === 'fixed').length, 2811);
+  for (const map of survey.maps) {
+    assert.equal(map.markers.filter(marker => marker.scope === 'global').length, 30, map.sceneName);
+    assert.equal(map.markers.filter(marker => marker.type === 'item-scout-statue-reward').length, 1, map.sceneName);
+    assert.ok(map.markers.some(marker => marker.segment === 0 && marker.type === 'item-shore-berry-growth'), map.sceneName);
+    assert.ok(map.markers.some(marker => marker.segment === 1 && marker.source.component === 'BerryVine'), map.sceneName);
+  }
+  assert.equal(surveys[0].survey.source.componentCoverage, undefined);
+});
 
 test('every catalog map has its own versioned survey without reusing another build identity', () => {
   const enabled = catalog.mapPacks.filter(entry => entry.enabled !== false);

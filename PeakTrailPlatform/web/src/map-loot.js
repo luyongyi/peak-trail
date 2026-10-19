@@ -31,42 +31,91 @@ export function normalizeMapLoot(raw, mapPack) {
   for (const marker of entry.markers) {
     const type = definitions.get(marker?.type);
     const layer = layers.get(marker?.layerId);
+    const global = marker?.scope === "global";
     if (!type || marker.category !== type.category || typeof marker.id !== "string" || !marker.id || marker.id.length > 180
         || ids.has(marker.id) || !Array.isArray(marker.pos) || marker.pos.length !== 3
         || !marker.pos.every(value => Number.isFinite(value) && Math.abs(value) <= 100000)
-        || !Number.isInteger(marker.segment) || marker.segment < 0 || marker.segment > 63
         || !["fixed", "randomized-candidate"].includes(marker.placement)
-        || !layer || layer.segment !== marker.segment
-        || marker.source?.geometrySha256 && marker.source.geometrySha256 !== layer.geometrySha256) return null;
+        || marker.type === "item-scout-statue-reward" && marker.source?.sourceKind !== "serialized-scene-component"
+        || marker.scope !== undefined && !["layer", "global"].includes(marker.scope)
+        || (global ? marker.category !== "item" || marker.segment !== -1 || marker.layerId !== "global"
+          || marker.source?.sourceKind !== "serialized-scene-component" || marker.source.scopeRoot !== "MapHandler.globalParent"
+          || marker.source.geometrySha256 !== undefined
+          : !Number.isInteger(marker.segment) || marker.segment < 0 || marker.segment > 63
+            || !layer || layer.segment !== marker.segment
+            || marker.source?.geometrySha256 && marker.source.geometrySha256 !== layer.geometrySha256)
+        || marker.source?.sceneSha256 && marker.source.sceneSha256 !== entry.sourceSceneSha256) return null;
+    if (marker.source?.sourceKind === "serialized-scene-component") {
+      const source = marker.source;
+      const reward = marker.type === "item-scout-statue-reward";
+      if (!hashPattern.test(source.sceneSha256 || "")
+          || typeof source.component !== "string" || !/^[A-Za-z_][A-Za-z0-9_]{0,99}$/.test(source.component)
+          || typeof source.componentPathId !== "string" || !/^-?[1-9]\d{0,19}$/.test(source.componentPathId)
+          || (reward ? global || source.component !== "ScoutStatue" || source.anchor !== "referenced-transform-world-position"
+            || source.transformField !== "gemSpot" || typeof source.transformPathId !== "string"
+            || !/^-?[1-9]\d{0,19}$/.test(source.transformPathId) || marker.placement !== "randomized-candidate"
+            : source.component === "ScoutStatue" || source.anchor !== "component-world-position")) return null;
+    }
     ids.add(marker.id);
     markers.push({ ...marker, name: typeof marker.name === "string" ? marker.name.slice(0, 100) : type.name, pos: [...marker.pos] });
   }
   return { mapPackId: entry.mapPackId, sceneName: entry.sceneName, sourceSceneSha256: entry.sourceSceneSha256,
-    gameBuildId: String(raw.gameBuildId), types, markers };
+    gameBuildId: String(raw.gameBuildId), types, markers,
+    itemCoverage: raw.source?.componentCoverage ? "expanded"
+      : raw.source?.kind === "canonical-map-geometry-survey" ? "partial" : null };
 }
 
 export function lootForLayers(markers, layers, segment = null) {
-  const allowed = new Set((layers || []).filter(layer => segment !== null || String(layer.biome).toLowerCase() !== "void")
-    .map(layer => layer.id));
-  return markers.filter(marker => allowed.has(marker.layerId) && (segment === null || marker.segment === segment));
+  const displayed = (layers || []).filter(layer => segment === null
+    ? String(layer.biome).toLowerCase() !== "void" : layer.segment === segment);
+  const allowed = new Set(displayed.map(layer => layer.id));
+  return markers.filter(marker => {
+    if (marker.scope !== "global") return allowed.has(marker.layerId) && (segment === null || marker.segment === segment);
+    // Global spawners retain their native scope. A chapter only displays the
+    // global points inside its original XYZ bounds; this does not assign them
+    // a fabricated chapter. The mountain overview includes all global sites.
+    const mountain = displayed.filter(layer => String(layer.biome).toLowerCase() !== "void");
+    return segment === null ? mountain.length > 0 : mountain.some(layer => ["X", "Y", "Z"].every((axis, index) =>
+      Number.isFinite(layer[`min${axis}`]) && Number.isFinite(layer[`max${axis}`])
+        && marker.pos[index] >= layer[`min${axis}`] && marker.pos[index] <= layer[`max${axis}`]));
+  });
 }
 
 export function createMapLootLoader({ fetchImpl = globalThis.fetch, baseUrl = new URL("../../data/maps/", import.meta.url) } = {}) {
-  const cache = new Map();
+  const cache = new Map(), mapCache = new Map();
+  async function readSurvey(path, signal) {
+    const response = await fetchImpl(new URL(path, baseUrl), { signal, cache: "no-cache" });
+    if (response.status === 404) return null;
+    if (!response.ok) throw new Error("物资点位暂时无法读取");
+    const body = await response.text();
+    if (body.length > 24 * 1024 * 1024) throw new Error("物资点位数据超过上限");
+    return signal?.aborted ? null : JSON.parse(body);
+  }
   return async (mapPack, { signal } = {}) => {
     const build = String(mapPack?.gameBuildId || "");
     if (!/^\d{1,20}$/.test(build)) return null;
     // Share only completed responses. A cancelled request must never poison a later map selection.
     let raw = cache.get(build);
     if (!raw) {
-      const response = await fetchImpl(new URL(`loot.${build}.json`, baseUrl), { signal, cache: "no-cache" });
-      if (response.status === 404) return null;
-      if (!response.ok) throw new Error("物资点位暂时无法读取");
-      const body = await response.text();
-      if (body.length > 24 * 1024 * 1024) throw new Error("物资点位数据超过上限");
-      raw = JSON.parse(body);
-      if (signal?.aborted) return null;
+      raw = await readSurvey(`loot.${build}.json`, signal);
+      if (!raw || signal?.aborted) return null;
       cache.set(build, raw);
+    }
+    if (raw.kind === "map-loot-index") {
+      if (raw.schemaVersion !== 1 || String(raw.gameBuildId) !== build
+          || !Array.isArray(raw.maps) || raw.maps.length > 128 || !packPattern.test(mapPack.mapPackId || "")) return null;
+      const entries = raw.maps.filter(entry => entry?.mapPackId === mapPack.mapPackId);
+      const entry = entries[0], path = `loot/${build}/${mapPack.mapPackId}.json`;
+      if (entries.length !== 1 || entry.path !== path || entry.sceneName !== mapPack.sceneName
+          || entry.mapSlot !== mapPack.mapSlot || entry.sourceSceneSha256 !== mapPack.source?.sceneSha256) return null;
+      if (signal?.aborted) return null;
+      let mapRaw = mapCache.get(path);
+      if (!mapRaw) {
+        mapRaw = await readSurvey(path, signal);
+        if (!mapRaw || signal?.aborted) return null;
+        mapCache.set(path, mapRaw);
+      }
+      raw = mapRaw;
     }
     return normalizeMapLoot(raw, mapPack);
   };

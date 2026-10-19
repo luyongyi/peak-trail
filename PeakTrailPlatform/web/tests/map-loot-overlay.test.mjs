@@ -86,6 +86,16 @@ test("malformed coordinates never enter GPU buffers and supplied type colors mat
   overlay.dispose();
 });
 
+test("global resource points already selected by the panel survive chapter rendering filters", () => {
+  const overlay = new MapLootOverlay();
+  const input = marker({ id: "global", category: "item", type: "item-spawn-magic-bean",
+    scope: "global", segment: -1, layerId: "global" });
+  overlay.setData([input]).setContext({ activeSegment: 2, selectedLayerId: "alpine" });
+  assert.deepEqual(overlay.visibleMarkers.map(marker => marker.id), ["global"]);
+  assert.equal(overlay.resources.beam.count, 1);
+  overlay.dispose();
+});
+
 test("large marker collections use six draws, shared geometry and restrained depth-aware xray", () => {
   const overlay = new MapLootOverlay();
   overlay.setData(Array.from({ length: 1000 }, (_, index) => marker({ id: `${index}`, pos: [index, 2, 3] })));

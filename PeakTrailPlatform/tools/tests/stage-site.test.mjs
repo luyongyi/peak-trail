@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { access, copyFile, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { access, copyFile, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, truncate, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -109,15 +109,19 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
     })),
   };
   const manifestBytes = JSON.stringify(manifest);
-  const lootEvidence = { schemaVersion: 1, gameBuildId: "123", types: [{ id: "chest-small", category: "chest", name: "小型行李箱" }],
+  const lootEvidence = { schemaVersion: 1, gameBuildId: "123", source: { kind: "canonical-map-geometry-survey", itemCoverage: "Audited reference points", privatePath: "must not publish" },
+    types: [{ id: "chest-small", category: "chest", name: "小型行李箱" }],
     maps: [{ mapPackId: packId, sceneName: manifest.sceneName, mapSlot: manifest.mapSlot, sourceSceneSha256: manifest.source.sceneSha256,
       markers: [{ id: "crate-1", type: "chest-small", category: "chest", name: "小型行李箱", pos: [1, 2, 3], segment: 0,
         layerId: "layer-0", placement: "randomized-candidate" }] }] };
   const lootPath = resolve(platform, "data", "maps", "loot.123.json");
-  await writeFile(lootPath, JSON.stringify(lootEvidence));
   const secondManifest = { ...manifest, mapPackId: secondPackId, sceneName: 'Level_1', mapSlot: 1,
     source: { sceneSha256: 'c'.repeat(64) } };
   const secondManifestBytes = JSON.stringify(secondManifest);
+  lootEvidence.maps.push({ ...lootEvidence.maps[0], mapPackId: secondPackId, sceneName: secondManifest.sceneName,
+    mapSlot: secondManifest.mapSlot, sourceSceneSha256: secondManifest.source.sceneSha256,
+    markers: [{ ...lootEvidence.maps[0].markers[0], id: "crate-2", pos: [4, 5, 6] }] });
+  await writeFile(lootPath, JSON.stringify(lootEvidence));
   const route = {
     authority: "serialized-map-handler",
     branch: "volcano-kiln",
@@ -233,11 +237,37 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
   const options = { env: { ...process.env, PEAK_TRAIL_ASSET_ROOT: assets, PEAK_TRAIL_DOWNLOAD_PRODUCT: "recorder", PEAK_TRAIL_RECORDER_DLL: recorderPath } };
   await execFileAsync(process.execPath, [resolve(tools, "stage-site.mjs")], options);
   const staged = resolve(platform, "site-dist");
-  assert.deepEqual(JSON.parse(await readFile(resolve(staged, "data", "maps", "loot.123.json"), "utf8")), lootEvidence);
+  const publicLootSource = { kind: "canonical-map-geometry-survey", itemCoverage: "Audited reference points" };
+  const stagedLootIndex = JSON.parse(await readFile(resolve(staged, "data", "maps", "loot.123.json"), "utf8"));
+  assert.deepEqual(stagedLootIndex, { schemaVersion: 1, kind: "map-loot-index", gameBuildId: "123", source: publicLootSource,
+    maps: lootEvidence.maps.map(({ mapPackId, sceneName, mapSlot, sourceSceneSha256 }) => ({ mapPackId, sceneName, mapSlot, sourceSceneSha256,
+      path: `loot/123/${mapPackId}.json` })) });
+  assert.ok(Buffer.byteLength(JSON.stringify(stagedLootIndex)) < 4096, "the build index never contains all map markers");
+  assert.deepEqual((await readdir(resolve(staged, "data", "maps", "loot", "123"))).sort(), [packId, secondPackId].map(id => `${id}.json`).sort());
+  for (const entry of lootEvidence.maps) {
+    const survey = JSON.parse(await readFile(resolve(staged, "data", "maps", "loot", "123", `${entry.mapPackId}.json`), "utf8"));
+    assert.deepEqual(survey, { schemaVersion: 1, gameBuildId: "123", types: lootEvidence.types, source: publicLootSource, maps: [entry] });
+  }
   await writeFile(resolve(staged, "preflight-marker.txt"), "keep on failure");
   const invalidLoot = structuredClone(lootEvidence); invalidLoot.maps[0].sourceSceneSha256 = "0".repeat(64);
   await writeFile(lootPath, JSON.stringify(invalidLoot));
   await assert.rejects(execFileAsync(process.execPath, [resolve(tools, "stage-site.mjs")], options), /Map supply survey does not match/);
+  assert.equal(await readFile(resolve(staged, "preflight-marker.txt"), "utf8"), "keep on failure");
+  await writeFile(lootPath, JSON.stringify(lootEvidence));
+  // The canonical build file can exceed the browser's per-response budget.
+  // Unknown top-level evidence is omitted from both the tiny index and chunks.
+  await writeFile(lootPath, JSON.stringify({ ...lootEvidence, privatePadding: "x".repeat(24 * 1024 * 1024) }));
+  await execFileAsync(process.execPath, [resolve(tools, "stage-site.mjs")], options);
+  assert.deepEqual(JSON.parse(await readFile(resolve(staged, "data", "maps", "loot.123.json"), "utf8")), stagedLootIndex);
+  assert.ok((await stat(resolve(staged, "data", "maps", "loot", "123", `${packId}.json`))).size < 4096);
+  await writeFile(resolve(staged, "preflight-marker.txt"), "keep on failure");
+  const oversizedMap = structuredClone(lootEvidence);
+  oversizedMap.maps[0].markers[0].source = { evidence: "x".repeat(24 * 1024 * 1024) };
+  await writeFile(lootPath, JSON.stringify(oversizedMap));
+  await assert.rejects(execFileAsync(process.execPath, [resolve(tools, "stage-site.mjs")], options), /Map supply map payload exceeds size limit/);
+  assert.equal(await readFile(resolve(staged, "preflight-marker.txt"), "utf8"), "keep on failure");
+  await truncate(lootPath, 96 * 1024 * 1024 + 1);
+  await assert.rejects(execFileAsync(process.execPath, [resolve(tools, "stage-site.mjs")], options), /Map supply survey exceeds size limit/);
   assert.equal(await readFile(resolve(staged, "preflight-marker.txt"), "utf8"), "keep on failure");
   await writeFile(lootPath, JSON.stringify(lootEvidence));
   for (const name of ["guide.html", "routes.html"]) {

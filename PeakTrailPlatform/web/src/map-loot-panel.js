@@ -9,6 +9,7 @@ export function createMapLootPanel({ getContext, getScene, root = document, load
   const listeners = [];
   let source = null, mapKey = null, controller = null, pending = null, error = "", disposed = false;
   let enabled = true;
+  let allItems = false;
   const selected = new Set(), known = new Set();
   const typeInputs = new Map();
   let rowSource = null, rowKey = null, appliedSource = null, appliedKey = null, appliedMarkers = [];
@@ -45,7 +46,8 @@ export function createMapLootPanel({ getContext, getScene, root = document, load
     elements.mapLootStatus.dataset.state = error ? "error" : pending ? "loading" : source ? "ready" : "missing";
     elements.mapLootStatus.textContent = error || (pending ? "正在读取本图标记…" : !source ? "此地图版本尚无标记数据。"
       : markers.length ? `${context.stageIndex == null ? "整张地图" : "当前分区"} · 已显示 ${visible} / ${markers.length} 处`
-        : "当前分区没有已确认的地图标记");
+        : "当前分区没有已确认的地图标记")
+      + (!error && !pending && source?.itemCoverage === "partial" ? "\n此版本仍有部分物品点待整理" : "");
     elements.mapLootRetry.hidden = !error;
     elements.mapLootEnabled.disabled = !source;
     elements.mapLootAll.disabled = elements.mapLootNone.disabled = !source;
@@ -91,7 +93,7 @@ export function createMapLootPanel({ getContext, getScene, root = document, load
       if (disposed || abort.signal.aborted || controller !== abort) return;
       source = data;
       for (const type of source?.types || []) if (!known.has(type.id)) {
-        known.add(type.id); if (["chest", "animal"].includes(type.category)) selected.add(type.id);
+        known.add(type.id); if (["chest", "animal"].includes(type.category) || type.category === "item" && allItems) selected.add(type.id);
       }
     } catch (exception) {
       if (disposed || abort.signal.aborted || controller !== abort) return;
@@ -120,13 +122,14 @@ export function createMapLootPanel({ getContext, getScene, root = document, load
   listen(elements.mapLootItemTypes, "change", changeType);
   listen(elements.mapLootAnimalTypes, "change", changeType);
   listen(elements.mapLootItems, "change", () => {
-    const context = getContext(), markers = lootForLayers(source?.markers || [], context.layers || context.mapPack?.layers, context.stageIndex ?? null);
-    for (const marker of markers) if (marker.category === "item") {
-      if (elements.mapLootItems.checked) selected.add(marker.type); else selected.delete(marker.type);
+    allItems = elements.mapLootItems.checked;
+    for (const type of source?.types || []) if (type.category === "item") {
+      if (allItems) selected.add(type.id); else selected.delete(type.id);
     }
     render();
   });
   for (const [key, checked] of [["mapLootAll", true], ["mapLootNone", false]]) listen(elements[key], "click", () => {
+    allItems = checked;
     for (const type of source?.types || []) { if (checked) selected.add(type.id); else selected.delete(type.id); }
     enabled = true; render();
   });

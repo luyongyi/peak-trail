@@ -131,25 +131,51 @@ for (const build of new Set(mapPacks.map(pack => String(pack.manifest.gameBuildI
   if (!/^\d{1,20}$/.test(build)) continue;
   let raw;
   try {
-    const body = await readFile(resolve(mapsDirectory, `loot.${build}.json`), "utf8");
-    if (body.length > 24 * 1024 * 1024) throw new Error("Map supply survey exceeds size limit");
-    raw = JSON.parse(body);
+    const path = resolve(mapsDirectory, `loot.${build}.json`), file = await lstat(path);
+    if (!file.isFile() || file.isSymbolicLink()) throw new Error("Map supply survey must be a regular file");
+    if (file.size > 96 * 1024 * 1024) throw new Error("Map supply survey exceeds size limit");
+    const body = await readFile(path);
+    if (body.length > 96 * 1024 * 1024) throw new Error("Map supply survey exceeds size limit");
+    raw = JSON.parse(body.toString("utf8"));
   } catch (error) { if (error.code === "ENOENT") continue; throw error; }
-  const entries = [];
+  const entries = [], chunks = [];
+  const source = {};
+  for (const key of ["kind", "anchor", "positions", "chestCoverage", "itemCoverage", "animalCoverage", "componentCoverage", "excluded"]) {
+    const value = raw.source?.[key];
+    if (typeof value === "string" && value.length <= 4096) source[key] = value;
+  }
   for (const pack of mapPacks.filter(pack => String(pack.manifest.gameBuildId) === build)) {
     if (!raw.maps?.some(entry => entry.mapPackId === pack.mapPackId)) continue;
-    if (!normalizeMapLoot(raw, pack.manifest)) throw new Error(`Map supply survey does not match ${pack.mapPackId}`);
-    entries.push(raw.maps.find(entry => entry.mapPackId === pack.mapPackId));
+    const normalized = normalizeMapLoot(raw, pack.manifest);
+    if (!normalized) throw new Error(`Map supply survey does not match ${pack.mapPackId}`);
+    const original = raw.maps.find(entry => entry.mapPackId === pack.mapPackId);
+    const entry = { mapPackId: normalized.mapPackId, sceneName: normalized.sceneName, mapSlot: pack.manifest.mapSlot,
+      sourceSceneSha256: normalized.sourceSceneSha256,
+      ...(original.layers ? { layers: original.layers.map(layer => ({ id: layer.id, segment: layer.segment, geometrySha256: layer.geometrySha256 })) } : {}),
+      markers: normalized.markers };
+    const path = `loot/${build}/${pack.mapPackId}.json`;
+    const survey = { schemaVersion: 1, gameBuildId: build, types: normalized.types,
+      ...(Object.keys(source).length ? { source } : {}), maps: [entry] };
+    const body = JSON.stringify(survey) + "\n";
+    if (Buffer.byteLength(body, "utf8") > 24 * 1024 * 1024) throw new Error(`Map supply map payload exceeds size limit: ${pack.mapPackId}`);
+    chunks.push({ path, body });
+    entries.push({ mapPackId: entry.mapPackId, sceneName: entry.sceneName, mapSlot: entry.mapSlot,
+      sourceSceneSha256: entry.sourceSceneSha256, path });
   }
   if (!entries.length) throw new Error(`Map supply survey has no matching maps for build ${build}`);
-  lootCatalogs.set(build, { schemaVersion: 1, gameBuildId: build, types: raw.types, maps: entries });
+  lootCatalogs.set(build, { index: { schemaVersion: 1, kind: "map-loot-index", gameBuildId: build,
+    ...(Object.keys(source).length ? { source } : {}), maps: entries }, chunks });
 }
 
 // site-dist is generated exclusively by this script and is safe to recreate.
 await rm(outputDirectory, { recursive: true, force: true });
 await mkdir(outputDirectory, { recursive: true });
 await mkdir(resolve(outputDirectory, "data", "maps"), { recursive: true });
-for (const [build, survey] of lootCatalogs) await writeFile(resolve(outputDirectory, "data", "maps", `loot.${build}.json`), JSON.stringify(survey) + "\n");
+for (const [build, { index, chunks }] of lootCatalogs) {
+  await writeFile(resolve(outputDirectory, "data", "maps", `loot.${build}.json`), JSON.stringify(index) + "\n");
+  await mkdir(resolve(outputDirectory, "data", "maps", "loot", build), { recursive: true });
+  for (const { path, body } of chunks) await writeFile(resolve(outputDirectory, "data", "maps", path), body);
+}
 for (const [filename, evidence] of trajectorySidecars) await writeFile(resolve(outputDirectory, "data", "maps", filename), JSON.stringify(evidence, null, 2) + "\n");
 await mkdir(resolve(outputDirectory, "schema"), { recursive: true });
 await mkdir(dirname(resolve(outputDirectory, downloadRelease.downloadPath)), { recursive: true });

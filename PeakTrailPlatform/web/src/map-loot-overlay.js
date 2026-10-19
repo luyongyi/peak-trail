@@ -100,7 +100,7 @@ function normalizeMarker(marker, index, types) {
 
 function samePlacement(left, right) {
   return left.id === right.id && left.type === right.type && left.category === right.category && left.color === right.color
-    && left.segment === right.segment && left.layerId === right.layerId && left.pos.every((axis, index) => axis === right.pos[index]);
+    && left.segment === right.segment && left.layerId === right.layerId && left.scope === right.scope && left.pos.every((axis, index) => axis === right.pos[index]);
 }
 
 function sameTypes(left, right) {
@@ -183,8 +183,8 @@ export class MapLootOverlay {
     const { activeSegment, selectedLayerId, origin, heightScale } = this.context;
     const visible = this.enabled ? this.markers.filter(marker =>
       (this.types === null || this.types.has(marker.type))
-      && (activeSegment === null || marker.segment === activeSegment)
-      && (selectedLayerId === null || !marker.layerId || marker.layerId === selectedLayerId)) : [];
+      && (marker.scope === "global" || activeSegment === null || marker.segment === activeSegment)
+      && (marker.scope === "global" || selectedLayerId === null || !marker.layerId || marker.layerId === selectedLayerId)) : [];
     this.visibleMarkers = visible;
     this.root.visible = visible.length > 0;
     if (!visible.length) {
