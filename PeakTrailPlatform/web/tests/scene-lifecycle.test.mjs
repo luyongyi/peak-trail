@@ -5,7 +5,7 @@ import { layoutPortraitLabels, clusterPlayerEntries } from "../src/portrait-layo
 import { latestLifeEventBefore, MARKER_LIFE_EVENT_TYPES } from "../src/protocol.js";
 import { chooseRecordedInteriorPose, isInteriorLayer } from "../src/camera-placement.js";
 import { ReplayCamera } from "../src/replay-camera.js";
-import { nadirCameraBounds } from "../src/nadir-camera-bounds.js";
+import { nadirCameraBounds, nadirCameraParts } from "../src/nadir-camera-bounds.js";
 import { collectCameraParts, selectCameraSubjectParts } from "../src/camera-subject.js";
 import * as THREE from "../../vendor/three/0.180.0/build/three.module.js";
 
@@ -36,8 +36,8 @@ function model() {
 function fixture(selected = 0) {
   const requests = [];
   const load = (layer, signal, gameBuildId) => new Promise((resolve, reject) => requests.push({ layer: layer.id, signal, gameBuildId, resolve, reject }));
-  const TrailScene = new Function("THREE", "loadGameGeometry", "cancelAnimationFrame", "layoutPortraitLabels", "clusterPlayerEntries", "latestLifeEventBefore", "MARKER_LIFE_EVENT_TYPES", "isInteriorLayer", "chooseRecordedInteriorPose", "nadirCameraBounds", "collectCameraParts", "selectCameraSubjectParts", `${source}\nreturn TrailScene;`)(
-    THREE, load, () => {}, layoutPortraitLabels, clusterPlayerEntries, latestLifeEventBefore, MARKER_LIFE_EVENT_TYPES, isInteriorLayer, chooseRecordedInteriorPose, nadirCameraBounds, collectCameraParts, selectCameraSubjectParts,
+  const TrailScene = new Function("THREE", "loadGameGeometry", "cancelAnimationFrame", "layoutPortraitLabels", "clusterPlayerEntries", "latestLifeEventBefore", "MARKER_LIFE_EVENT_TYPES", "isInteriorLayer", "chooseRecordedInteriorPose", "nadirCameraBounds", "nadirCameraParts", "collectCameraParts", "selectCameraSubjectParts", `${source}\nreturn TrailScene;`)(
+    THREE, load, () => {}, layoutPortraitLabels, clusterPlayerEntries, latestLifeEventBefore, MARKER_LIFE_EVENT_TYPES, isInteriorLayer, chooseRecordedInteriorPose, nadirCameraBounds, nadirCameraParts, collectCameraParts, selectCameraSubjectParts,
   );
   const layers = [
     { id: "A", segment: 0, biome: "shore" },

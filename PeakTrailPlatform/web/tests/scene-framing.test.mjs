@@ -6,7 +6,7 @@ import { ReplayCamera } from "../src/replay-camera.js";
 import { fitPerspectivePoints } from "../src/camera-framing.js";
 import { collectCameraParts, selectCameraSubjectParts } from "../src/camera-subject.js";
 import { isInteriorLayer } from "../src/camera-placement.js";
-import { nadirCameraBounds } from "../src/nadir-camera-bounds.js";
+import { nadirCameraBounds, nadirCameraParts } from "../src/nadir-camera-bounds.js";
 
 // Use the bundled controller and production scene methods unchanged except for
 // import wiring. The DOM surface and renderer sizing are the only boundary ports.
@@ -16,7 +16,7 @@ const orbitSource = (await readFile(new URL("../../vendor/three/0.180.0/examples
 const OrbitControls = new Function(...Object.keys(THREE), `${orbitSource}\nreturn OrbitControls;`)(...Object.values(THREE));
 const source = (await readFile(new URL("../src/scene.js", import.meta.url), "utf8"))
   .replace(/^import .*;\r?\n/gm, "").replace("export class TrailScene", "class TrailScene");
-const ports = { THREE, fitPerspectivePoints, collectCameraParts, selectCameraSubjectParts, isInteriorLayer, nadirCameraBounds };
+const ports = { THREE, fitPerspectivePoints, collectCameraParts, selectCameraSubjectParts, isInteriorLayer, nadirCameraBounds, nadirCameraParts };
 const TrailScene = new Function(...Object.keys(ports), `${source}\nreturn TrailScene;`)(...Object.values(ports));
 
 class Surface extends EventTarget {
@@ -74,7 +74,7 @@ function fixture(t, { width = 1600, height = 900, heightScale = 2.5 } = {}) {
 function assertFramed(scene) {
   scene.camera.updateMatrixWorld(true);
   const projected = scene.cameraFitPoints().map((point) => new THREE.Vector3().fromArray(point).project(scene.camera));
-  const limit = 1 / 1.14;
+  const limit = 1 / 1.02;
   for (const axis of ["x", "y"]) {
     const min = Math.min(...projected.map((point) => point[axis]));
     const max = Math.max(...projected.map((point) => point[axis]));
@@ -235,5 +235,60 @@ test("a preset drains real OrbitControls drag damping before setting the new cam
     for (let frame = 0; frame < 10; frame += 1) controls.update();
     assertPoseClose(pose(scene), fitted);
     assertFramed(scene);
+  }
+});
+
+test("Void presets fit oriented terrain vertices while retaining the audited 5km water and source bounds", (t) => {
+  const { scene } = fixture(t, { width: 1800, height: 600 });
+  const layer = { segment: 5, biome: "Void", name: "Void_Segment",
+    minX: -2400, maxX: 2600, minY: 702.6, maxY: 1100, minZ: -2300, maxZ: 2700 };
+  scene.mapPack = { identityVersion: 3, gameBuildId: "25739797", layers: [layer] };
+  scene.activeSegment = 5;
+  const originalBounds = structuredClone(scene.viewBounds());
+  const world = new THREE.Group(); world.scale.z = -1; world.add(scene.terrainRoot);
+  scene.terrainRoot.scale.y = scene.heightScale;
+  const chapter = new THREE.Group(); chapter.userData = { loaded: true, mapLayer: layer };
+  scene.terrainRoot.add(chapter);
+  const model = new THREE.Group(); model.position.copy(scene.origin).negate(); chapter.add(model);
+  const terrainGeometry = new THREE.BoxGeometry(4, 4, 600), terrainMaterial = new THREE.MeshBasicMaterial({ name: "M_Petrified_Stone" });
+  const terrain = new THREE.Mesh(terrainGeometry, terrainMaterial);
+  terrain.position.set(100, 900, 350); terrain.rotation.set(0.14, Math.PI / 4, 0);
+  model.add(terrain);
+  const waterGeometry = new THREE.PlaneGeometry(5000, 5000), waterMaterial = new THREE.MeshBasicMaterial();
+  waterMaterial.userData.peakTerrain = { sourceMaterial: "M_Void Water", sourceColors: { shader: "GD/Water-GD" } };
+  const water = new THREE.Mesh(waterGeometry, waterMaterial);
+  water.rotation.x = -Math.PI / 2; water.position.set(100, 702.6, 200); model.add(water);
+  t.after(() => { terrainGeometry.dispose(); terrainMaterial.dispose(); waterGeometry.dispose(); waterMaterial.dispose(); });
+  const sourceTerrain = collectCameraParts(THREE, chapter, scene.origin).find((part) => part.materials[0].name === "M_Petrified_Stone");
+  const display = ([x, y, z]) => [x - scene.origin.x, (y - scene.origin.y) * scene.heightScale, -(z - scene.origin.z)];
+  const expected = sourceTerrain.points.map(display);
+  const globalBoxPoints = [];
+  for (const x of [sourceTerrain.bounds.min[0], sourceTerrain.bounds.max[0]]) for (const y of [sourceTerrain.bounds.min[1], sourceTerrain.bounds.max[1]]) for (const z of [sourceTerrain.bounds.min[2], sourceTerrain.bounds.max[2]]) {
+    globalBoxPoints.push(display([x, y, z]));
+  }
+  assert.notDeepEqual(expected, globalBoxPoints, "the rotated mesh has a tighter oriented box than its world-axis box");
+  scene.cameraSubjectParts = () => { throw new Error("verified Void framing must use its filtered oriented parts"); };
+  assert.deepEqual(scene.cameraFitPoints(), expected, "framing uses the retained terrain's original oriented points, without the water or a global box");
+  const retained = scene.nadirGeometryParts();
+  assert.equal(retained.length, 1);
+  assert.equal(scene.nadirGeometryParts()[0].points, retained[0].points, "cached source fit points retain their identity");
+  assert.deepEqual(scene.nadirGeometryBounds(), sourceTerrain.bounds, "legacy camera bounds retain their original meaning");
+  for (const preset of ["overview", "top"]) {
+    scene.applySurveyPreset(preset);
+    assertFramed(scene);
+    const position = terrainGeometry.getAttribute("position"), index = terrainGeometry.getIndex();
+    for (let offset = 0; offset < index.count; offset++) {
+      const projected = new THREE.Vector3().fromBufferAttribute(position, index.getX(offset)).applyMatrix4(terrain.matrixWorld).project(scene.camera);
+      assert.ok(Math.abs(projected.x) <= 1 / 1.02 + 1e-7, `${preset} contains actual rendered vertex X`);
+      assert.ok(Math.abs(projected.y) <= 1 / 1.02 + 1e-7, `${preset} contains actual rendered vertex Y`);
+      assert.ok(projected.z > -1 && projected.z < 1, `${preset} contains actual rendered vertex depth`);
+    }
+    if (preset === "overview") {
+      const globalFit = fitPerspectivePoints(globalBoxPoints, { aspect: scene.camera.aspect, fov: scene.camera.fov, padding: 1.02 });
+      assert.ok(scene.camera.position.distanceTo(scene.controls.target) < globalFit.distance * 0.99, "default Void framing moves closer than the global terrain AABB");
+    }
+    assert.equal(water.parent, model, "camera filtering keeps the authored water in the scene");
+    assert.equal(water.visible, true);
+    assert.deepEqual(scene.viewBounds(), originalBounds, "source bounds remain available for players and trail clipping");
   }
 });

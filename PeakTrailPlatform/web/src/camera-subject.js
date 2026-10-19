@@ -129,10 +129,12 @@ function localIndexedBounds(THREE, geometry) {
 }
 
 /**
- * Collect per-instance bounds in original Unity-world coordinates. The chapter
+ * Collect per-instance bounds and fit points in original Unity-world coordinates. The chapter
  * group sits above the model's -origin translation and below display scaling /
  * Z reflection. Removing group.matrixWorld and adding origin restores that
  * source coordinate space without changing any object or geometry bounds.
+ * The transformed local box corners retain its orientation for camera fitting;
+ * the enclosing world-axis bounds remain available for subject clustering.
  * Indexed draw ranges are essential: Unity static batches can share a position
  * buffer containing unrelated geometry far outside the primitive being drawn.
  */
@@ -143,6 +145,7 @@ export function collectCameraParts(THREE, group, origin) {
   const inverse = group.matrixWorld.clone().invert();
   const offset = new THREE.Vector3(origin?.x ?? origin?.[0] ?? 0, origin?.y ?? origin?.[1] ?? 0, origin?.z ?? origin?.[2] ?? 0);
   const local = new THREE.Matrix4(), instance = new THREE.Matrix4(), relative = new THREE.Matrix4();
+  const corner = new THREE.Vector3();
   const parts = [];
   group.traverseVisible((mesh) => {
     if (!mesh.isMesh) return;
@@ -161,7 +164,12 @@ export function collectCameraParts(THREE, group, origin) {
       const world = bounds.clone().applyMatrix4(relative);
       world.min.add(offset); world.max.add(offset);
       const result = { min: world.min.toArray(), max: world.max.toArray() };
-      if (validBounds(result) && diagonal(result) > 0) parts.push({ bounds: result, materials });
+      if (!validBounds(result) || diagonal(result) <= 0) continue;
+      const points = [];
+      for (const x of [bounds.min.x, bounds.max.x]) for (const y of [bounds.min.y, bounds.max.y]) for (const z of [bounds.min.z, bounds.max.z]) {
+        points.push(corner.set(x, y, z).applyMatrix4(relative).add(offset).toArray());
+      }
+      parts.push({ bounds: result, points, materials });
     }
   });
   return parts;

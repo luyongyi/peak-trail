@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import * as THREE from "../../vendor/three/0.180.0/build/three.module.js";
 import { collectCameraParts, selectCameraSubjectParts } from "../src/camera-subject.js";
+import { fitPerspectivePoints } from "../src/camera-framing.js";
 
 const part = (min, max, name = "part") => ({ name, bounds: { min, max } });
 const mountain = () => Array.from({ length: 20 }, (_, index) => {
@@ -99,8 +100,47 @@ test("collection removes display origin, height scale, and reflection but keeps 
     { min: [119, 808, 317], max: [121, 812, 323] },
   ]);
   assert.deepEqual(result[0].materials, [{ name: "rock", shader: "W/Peak_Rock" }]);
+  assert.equal(result[0].points.length, 8);
+  assert.deepEqual(result[0].points[0], [97, 794, 303]);
+  for (const part of result) {
+    assert.deepEqual(new THREE.Box3().setFromPoints(part.points.map((point) => new THREE.Vector3().fromArray(point))).min.toArray(), part.bounds.min);
+    assert.deepEqual(new THREE.Box3().setFromPoints(part.points.map((point) => new THREE.Vector3().fromArray(point))).max.toArray(), part.bounds.max);
+  }
   assert.deepEqual(Array.from(mesh.instanceMatrix.array), original);
   assert.equal(mesh.geometry.boundingBox, null);
+  geometry.dispose(); material.dispose();
+});
+
+test("oriented local corners frame a rotated slender mesh closer while containing its rendered indexed vertices", () => {
+  const { chapter, origin, model } = fixture();
+  const geometry = new THREE.BoxGeometry(4, 4, 600), material = new THREE.MeshBasicMaterial();
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.position.set(160, 100, 220); mesh.rotation.y = Math.PI / 4;
+  model.add(mesh);
+  const [part] = collectCameraParts(THREE, chapter, origin);
+  const display = ([x, y, z]) => [x - origin.x, (y - origin.y) * 3, -(z - origin.z)];
+  const oriented = part.points.map(display);
+  const axisAligned = [];
+  for (const x of [part.bounds.min[0], part.bounds.max[0]]) for (const y of [part.bounds.min[1], part.bounds.max[1]]) for (const z of [part.bounds.min[2], part.bounds.max[2]]) {
+    axisAligned.push(display([x, y, z]));
+  }
+  const options = { aspect: 3, padding: 1.04 };
+  const fit = fitPerspectivePoints(oriented, options), previous = fitPerspectivePoints(axisAligned, options);
+  assert.ok(fit.distance < previous.distance * 0.8, "removing rotated world-box inflation moves the camera at least 20% closer");
+  for (const aspect of [3, 16 / 9, 9 / 16]) {
+    const frame = fitPerspectivePoints(oriented, { ...options, aspect });
+    const camera = new THREE.PerspectiveCamera(38, aspect, frame.near, frame.far);
+    camera.position.fromArray(frame.position); camera.up.fromArray(frame.up);
+    camera.lookAt(new THREE.Vector3().fromArray(frame.target)); camera.updateMatrixWorld(true);
+    const position = geometry.getAttribute("position"), index = geometry.getIndex();
+    for (let offset = 0; offset < index.count; offset++) {
+      const projected = new THREE.Vector3().fromBufferAttribute(position, index.getX(offset)).applyMatrix4(mesh.matrixWorld).project(camera);
+      assert.ok(Math.abs(projected.x) <= 1 / options.padding + 1e-8, `rendered vertex X fits at aspect ${aspect}`);
+      assert.ok(Math.abs(projected.y) <= 1 / options.padding + 1e-8, `rendered vertex Y fits at aspect ${aspect}`);
+      assert.ok(projected.z > -1 && projected.z < 1, "actual geometry remains between the clipping planes");
+    }
+  }
+  assert.equal(geometry.boundingBox, null);
   geometry.dispose(); material.dispose();
 });
 
@@ -114,13 +154,21 @@ test("indexed draw ranges and material groups exclude unrelated shared-buffer po
   geometry.setIndex([0, 1, 2, 3, 4, 5]);
   geometry.setDrawRange(0, 3);
   const material = new THREE.MeshBasicMaterial(), mesh = new THREE.Mesh(geometry, material); model.add(mesh);
-  assert.deepEqual(collectCameraParts(THREE, chapter, origin)[0].bounds, { min: [0, 0, 0], max: [2, 3, 0] });
+  let collected = collectCameraParts(THREE, chapter, origin)[0];
+  assert.deepEqual(collected.bounds, { min: [0, 0, 0], max: [2, 3, 0] });
+  assert.ok(collected.points.every(([x, y, z]) => x >= 0 && x <= 2 && y >= 0 && y <= 3 && z === 0));
   geometry.setDrawRange(3, 3);
-  assert.deepEqual(collectCameraParts(THREE, chapter, origin)[0].bounds, { min: [5000, 6000, 7000], max: [5001, 6001, 7000] });
+  collected = collectCameraParts(THREE, chapter, origin)[0];
+  assert.deepEqual(collected.bounds, { min: [5000, 6000, 7000], max: [5001, 6001, 7000] });
+  assert.ok(collected.points.every(([x, y, z]) => x >= 5000 && x <= 5001 && y >= 6000 && y <= 6001 && z === 7000));
   geometry.setDrawRange(0, Infinity); geometry.addGroup(0, 3, 0);
-  assert.deepEqual(collectCameraParts(THREE, chapter, origin)[0].bounds, { min: [0, 0, 0], max: [2, 3, 0] });
+  collected = collectCameraParts(THREE, chapter, origin)[0];
+  assert.deepEqual(collected.bounds, { min: [0, 0, 0], max: [2, 3, 0] });
+  assert.ok(collected.points.every(([x, y, z]) => x >= 0 && x <= 2 && y >= 0 && y <= 3 && z === 0));
   geometry.getAttribute("position").setX(1, 4); geometry.getAttribute("position").needsUpdate = true;
-  assert.equal(collectCameraParts(THREE, chapter, origin)[0].bounds.max[0], 4);
+  collected = collectCameraParts(THREE, chapter, origin)[0];
+  assert.equal(collected.bounds.max[0], 4);
+  assert.equal(Math.max(...collected.points.map(([x]) => x)), 4);
   geometry.dispose(); material.dispose();
 });
 

@@ -37,8 +37,8 @@ function assertInFrame(scene, layer) {
   scene.camera.updateMatrixWorld(true);
   for (const x of [layer.minX, layer.maxX]) for (const y of [layer.minY, layer.maxY]) for (const z of [layer.minZ, layer.maxZ]) {
     const ndc = new THREE.Vector3(x - scene.origin.x, (y - scene.origin.y) * scene.heightScale, -(z - scene.origin.z)).project(scene.camera);
-    assert.ok(Math.abs(ndc.x) <= 1 / 1.14 + 1e-9, `X ${ndc.x}`);
-    assert.ok(Math.abs(ndc.y) <= 1 / 1.14 + 1e-9, `Y ${ndc.y}`);
+    assert.ok(Math.abs(ndc.x) <= 1 / 1.02 + 1e-9, `X ${ndc.x}`);
+    assert.ok(Math.abs(ndc.y) <= 1 / 1.02 + 1e-9, `Y ${ndc.y}`);
     assert.ok(ndc.z >= -1 && ndc.z <= 1, `Z ${ndc.z}`);
   }
 }
@@ -109,6 +109,54 @@ test("height exaggeration and top preset frame every corner", async () => {
   finish(); await loading;
   scene.setHeightScale(3); assertInFrame(scene, layers[0]);
   scene.topView(); assert.equal(scene.surveyPreset, "top"); assertInFrame(scene, layers[0]);
+});
+
+test("survey presets keep the complete subject below persistent viewport controls", async () => {
+  const { scene, finish } = fixture();
+  scene.canvas.getBoundingClientRect = () => ({ left: 0, right: 1280, top: 56, bottom: 720, width: 1280, height: 664 });
+  scene.canvas.parentElement.querySelectorAll = () => [
+    { getBoundingClientRect: () => ({ left: 16, right: 1264, top: 72, bottom: 107, width: 1248, height: 35 }) },
+    { getBoundingClientRect: () => ({ left: 450, right: 830, top: 75, bottom: 104, width: 380, height: 29 }) },
+    { getBoundingClientRect: () => ({ left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0 }) },
+  ];
+  const loading = scene.setData({ mapPack, trace: null, useMap: true, activeSegment: 0 });
+  finish(); await loading;
+  const frame = scene.surveyCameraFrame();
+  assert.equal(frame.top, 1 - 110 / 664);
+  for (const preset of ["overview", "top"]) {
+    scene.applySurveyPreset(preset);
+    scene.camera.updateMatrixWorld(true);
+    for (const point of scene.cameraFitPoints()) {
+      const ndc = new THREE.Vector3(...point).project(scene.camera);
+      const midpoint = (frame.top + frame.bottom) / 2;
+      assert.ok(Math.abs(ndc.x) <= 1 / 1.02 + 1e-9);
+      assert.ok(ndc.y <= midpoint + (frame.top - midpoint) / 1.02 + 1e-9);
+      assert.ok(ndc.y >= midpoint + (frame.bottom - midpoint) / 1.02 - 1e-9);
+    }
+  }
+});
+
+test("a temporary expanded navigator cannot enlarge the reserved camera area", () => {
+  const { scene } = fixture();
+  let width = 1024, top = 138, height = 240;
+  scene.canvas.getBoundingClientRect = () => ({ left: 0, right: width, top: 56, bottom: 816, width, height: 760 });
+  scene.canvas.parentElement.querySelectorAll = () => [{
+    matches: (selector) => selector === ".segment-navigator",
+    getBoundingClientRect: () => ({ left: 16, right: width - 16, top, bottom: top + height, width: width - 32, height }),
+  }];
+  const desktop = scene.surveyCameraFrame();
+  top = 72; height = 35;
+  assert.deepEqual(scene.surveyCameraFrame(), desktop, "tablet chapter flash uses its collapsed top-row footprint");
+  width = 375; top = 148; height = 240;
+  const phone = scene.surveyCameraFrame();
+  height = 55;
+  assert.deepEqual(scene.surveyCameraFrame(), phone, "phone chapter flash keeps the collapsed capsule height");
+  width = 844; top = 122; height = 240;
+  scene.canvas.ownerDocument = { defaultView: { matchMedia: () => ({ matches: true }) } };
+  const landscape = scene.surveyCameraFrame();
+  height = 46;
+  assert.deepEqual(scene.surveyCameraFrame(), landscape, "sideways phones use their collapsed toolbar row");
+  assert.equal(landscape.top, 1 - 2 * (6 + 46 + 4) / 760);
 });
 
 test("map-only citadel entry keeps the complete model in view", async () => {

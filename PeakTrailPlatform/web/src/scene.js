@@ -15,7 +15,7 @@ import { SpectatorCamera, FOLLOW_DISTANCE, FOLLOW_MIN_DISTANCE, FOLLOW_MAX_DISTA
 import { followLayerAtPosition } from "./map-enclosures.js";
 import { FollowTerrainQuery } from "./follow-terrain.js";
 import { SourceWaterRenderer } from "./source-water-renderer.js";
-import { nadirCameraBounds } from "./nadir-camera-bounds.js";
+import { nadirCameraBounds, nadirCameraParts } from "./nadir-camera-bounds.js";
 import { CommunityRouteOverlay } from "./community-route-overlay.js";
 import { MapLootOverlay } from "./map-loot-overlay.js";
 import { EnclosureContextRenderer } from "./enclosure-context-renderer.js";
@@ -627,6 +627,7 @@ export class TrailScene {
           group.userData.loaded = false;
           delete group.userData.cameraSubjectParts;
           delete group.userData.nadirCameraBounds;
+          delete group.userData.nadirCameraParts;
           this.geometryLoads.delete(group.userData.mapLayer.id);
         }
       }
@@ -1458,31 +1459,18 @@ export class TrailScene {
     const group = this.terrainRoot.children.find((entry) => entry.userData.mapLayer === layer && entry.userData.loaded);
     if (!group) return null;
     if (Object.hasOwn(group.userData, "nadirCameraBounds")) return group.userData.nadirCameraBounds;
-    group.updateWorldMatrix(true, true);
     // Undo display origin, height scaling and Z reflection before collecting
     // source-world extents. Camera fitting must not alter viewBounds, which
     // also governs player visibility and trail clipping.
-    const inverse = group.matrixWorld.clone().invert();
-    const instance = new THREE.Matrix4(), relative = new THREE.Matrix4();
-    const parts = [];
-    group.traverse((mesh) => {
-      if (!mesh.isMesh || !mesh.visible) return;
-      mesh.geometry.computeBoundingBox();
-      const materials = (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).map((material) => ({
-        name: material.userData?.peakTerrain?.sourceMaterial || material.name,
-        shader: material.userData?.peakTerrain?.sourceColors?.shader,
-      }));
-      const local = new THREE.Matrix4().multiplyMatrices(inverse, mesh.matrixWorld);
-      for (let i = 0; i < (mesh.isInstancedMesh ? mesh.count : 1); i++) {
-        if (mesh.isInstancedMesh) { mesh.getMatrixAt(i, instance); relative.multiplyMatrices(local, instance); }
-        else relative.copy(local);
-        const bounds = mesh.geometry.boundingBox.clone().applyMatrix4(relative);
-        bounds.min.add(this.origin); bounds.max.add(this.origin);
-        parts.push({ bounds: { min: bounds.min.toArray(), max: bounds.max.toArray() }, materials });
-      }
-    });
+    const parts = collectCameraParts(THREE, group, this.origin);
+    group.userData.nadirCameraParts = nadirCameraParts(layer, this.mapPack.gameBuildId, parts);
     group.userData.nadirCameraBounds = nadirCameraBounds(layer, this.mapPack.gameBuildId, parts);
     return group.userData.nadirCameraBounds;
+  }
+
+  nadirGeometryParts() {
+    if (!this.nadirGeometryBounds()) return null;
+    return this.terrainRoot.children.find((entry) => entry.userData.mapLayer === this.selectedLayer())?.userData.nadirCameraParts || null;
   }
 
   cameraFitBounds() {
@@ -1515,16 +1503,24 @@ export class TrailScene {
   }
 
   cameraFitPoints() {
-    const special = this.summitCameraBounds() || this.nadirGeometryBounds();
-    const parts = !special && this.cameraSubjectParts();
+    const summit = this.summitCameraBounds();
+    const special = summit || this.nadirGeometryBounds();
+    const parts = !summit && (special ? this.nadirGeometryParts() : this.cameraSubjectParts());
     const bounds = special || this.viewBounds();
-    const boxes = parts?.length ? parts.map((part) => part.bounds) : bounds ? [bounds] : [];
+    const boxes = parts?.length ? parts.slice() : bounds ? [{ bounds }] : [];
     // Adjacent exit landmarks are display context outside the chapter group.
     // Include them separately without restoring the outliers omitted above.
     const context = this.useMap && this.enclosureContext?.bounds;
-    if (context) boxes.push(context);
+    if (context) boxes.push({ bounds: context });
     const points = [];
-    for (const box of boxes) {
+    for (const part of boxes) {
+      if (part.points?.length) {
+        for (const point of part.points) points.push([
+          point[0] - this.origin.x, (point[1] - this.origin.y) * this.heightScale, -(point[2] - this.origin.z),
+        ]);
+        continue;
+      }
+      const box = part.bounds;
       for (const x of [box.min[0], box.max[0]]) for (const y of [box.min[1], box.max[1]]) for (const z of [box.min[2], box.max[2]]) {
         points.push([x - this.origin.x, (y - this.origin.y) * this.heightScale, -(z - this.origin.z)]);
       }
@@ -1606,6 +1602,33 @@ export class TrailScene {
     this.applySurveyPreset(this.surveyPreset);
   }
 
+  surveyCameraFrame() {
+    const viewport = this.canvas.getBoundingClientRect?.();
+    if (!(viewport?.height > 0)) return undefined;
+    // Reserve the persistent controls above the terrain. Popovers and expanded
+    // navigation are temporary overlays and must not push the map farther away.
+    const controls = this.canvas.parentElement?.querySelectorAll?.(".viewport-toolbar, .segment-navigator") || [];
+    const landscapePhone = this.canvas.ownerDocument?.defaultView?.matchMedia?.(
+      "(min-width: 480px) and (max-width: 950px) and (max-height: 500px) and (orientation: landscape)",
+    ).matches;
+    let topInset = 0;
+    for (const control of controls) {
+      const rect = control.getBoundingClientRect();
+      // Navigation briefly expands on chapter changes. Reserve only its
+      // collapsed capsule (35 px desktop / 55 px touch / 46 px sideways phone),
+      // not that flash. Sideways phones keep the capsule on their toolbar row.
+      const bottom = control.matches?.(".segment-navigator")
+        ? landscapePhone ? viewport.top + 6 + 46
+          : viewport.width >= 744 ? viewport.top + 16 + 35 : rect.top + Math.min(rect.height, 55)
+        : rect.bottom;
+      if (rect.width > 0 && rect.height > 0 && rect.right > viewport.left && rect.left < viewport.right
+          && bottom > viewport.top && rect.top < viewport.bottom) {
+        topInset = Math.max(topInset, bottom - viewport.top + 4);
+      }
+    }
+    return { left: -1, right: 1, bottom: -1, top: 1 - 2 * Math.min(topInset, viewport.height * 0.35) / viewport.height };
+  }
+
   applySurveyPreset(preset) {
     const top = preset === "top";
     // OrbitControls caches the Y-up orbit axis. A tiny Z offset gives the top
@@ -1615,7 +1638,7 @@ export class TrailScene {
     const points = this.cameraFitPoints();
     const fit = fitPerspectivePoints(points, {
       aspect: this.camera.aspect, fov: this.camera.fov,
-      direction: top ? [0, 1, 0.000001] : [0.52, 0.85, 0.62], up,
+      direction: top ? [0, 1, 0.000001] : [0.52, 0.85, 0.62], up, padding: 1.02, frame: this.surveyCameraFrame(),
     });
     if (!fit) return;
     // A preset must not inherit the last drag's residual rotation or pan.

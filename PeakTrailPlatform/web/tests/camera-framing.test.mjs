@@ -18,12 +18,17 @@ function verifyFrame(points, options = {}) {
   camera.lookAt(new Vector3().fromArray(frame.target));
   camera.updateMatrixWorld(true);
   const projected = points.map((point) => new Vector3().fromArray(point).project(camera));
-  const limit = 1 / (options.padding ?? 1.14);
-  for (const axis of ["x", "y"]) {
+  const padding = options.padding ?? 1.14;
+  const viewport = options.frame ?? { left: -1, right: 1, bottom: -1, top: 1 };
+  const axes = [["x", viewport.left, viewport.right], ["y", viewport.bottom, viewport.top]];
+  for (const [axis, lower, upper] of axes) {
+    const midpoint = (lower + upper) / 2;
+    const paddedLower = midpoint + (lower - midpoint) / padding;
+    const paddedUpper = midpoint + (upper - midpoint) / padding;
     const min = Math.min(...projected.map((point) => point[axis]));
     const max = Math.max(...projected.map((point) => point[axis]));
-    assert.ok(min >= -limit - 1e-8 && max <= limit + 1e-8, `${axis} fits the padded viewport: ${min}, ${max}`);
-    assert.ok(Math.abs(min + max) < 1e-8, `${axis} projected bounds are centered: ${min}, ${max}`);
+    assert.ok(min >= paddedLower - 1e-8 && max <= paddedUpper + 1e-8, `${axis} fits the padded viewport: ${min}, ${max}`);
+    assert.ok(Math.abs(min + max - 2 * midpoint) < 1e-8, `${axis} projected bounds are centered: ${min}, ${max}`);
   }
   for (const point of projected) assert.ok(point.z > -1 && point.z < 1, "near and far planes contain all geometry");
   return { frame, projected };
@@ -80,6 +85,37 @@ test("screen centering and distance are stable under world-space translation", (
   }
 });
 
+test("asymmetric frames keep all geometry below a toolbar and centered inside the padded safe area", () => {
+  const points = corners([-320, -40, -600], [440, 380, 400]);
+  points.push([200, 680, 100], [-430, 120, -200]);
+  const frame = { left: -0.94, right: 0.82, bottom: -0.92, top: 0.68 };
+  for (const aspect of [16 / 9, 9 / 16]) {
+    const { projected } = verifyFrame(points, { aspect, padding: 1.04, frame });
+    assert.ok(Math.max(...projected.map((point) => point.y)) < frame.top);
+  }
+});
+
+test("an off-center single-point frame can place the camera target beyond the point bounds", () => {
+  for (const frame of [
+    { left: -1, right: -0.2, bottom: -0.9, top: -0.1 },
+    { left: 0.2, right: 1, bottom: 0.1, top: 0.9 },
+  ]) {
+    const { frame: fit } = verifyFrame([[1200, -45, 930]], { frame, minDistance: 80 });
+    assert.notDeepEqual(fit.target, [1200, -45, 930]);
+  }
+});
+
+test("asymmetric framing is translation-stable and an explicit full frame preserves default behavior", () => {
+  const points = corners([-100, -20, -300], [200, 230, 150]);
+  const options = { aspect: 16 / 9, padding: 1.04, frame: { left: -0.8, right: 0.95, bottom: -0.9, top: 0.7 } };
+  const offset = [100000, -200000, 300000];
+  const original = verifyFrame(points, options).frame;
+  const translated = verifyFrame(points.map((point) => point.map((value, axis) => value + offset[axis])), options).frame;
+  assert.ok(Math.abs(original.distance - translated.distance) < 1e-8);
+  for (let axis = 0; axis < 3; axis++) assert.ok(Math.abs(translated.target[axis] - original.target[axis] - offset[axis]) < 1e-8);
+  assert.deepEqual(fitPerspectivePoints(points), fitPerspectivePoints(points, { frame: { left: -1, right: 1, bottom: -1, top: 1 } }));
+});
+
 test("invalid points and camera parameters fail without producing a broken pose", () => {
   for (const points of [null, [], [[1, 2]], [[1, NaN, 3]], [[Infinity, 0, 0]], [[1, 2, 3], null]]) {
     assert.equal(fitPerspectivePoints(points), null);
@@ -89,4 +125,16 @@ test("invalid points and camera parameters fail without producing a broken pose"
     { minDistance: NaN }, { minDistance: -1 }, { direction: [0, 0, 0] },
     { up: [0, 0, 0] }, { direction: [0, 1, 0], up: [0, 1, 0] },
   ]) assert.equal(fitPerspectivePoints([[0, 0, 0]], options), null);
+  for (const frame of [
+    null, [], {}, { left: -1, right: 1, bottom: -1 },
+    { left: -1.01, right: 1, bottom: -1, top: 1 },
+    { left: -1, right: 1.01, bottom: -1, top: 1 },
+    { left: 0.2, right: 0.2, bottom: -1, top: 1 },
+    { left: 1, right: -1, bottom: -1, top: 1 },
+    { left: -1, right: 1, bottom: -1.01, top: 1 },
+    { left: -1, right: 1, bottom: -1, top: 1.01 },
+    { left: -1, right: 1, bottom: 0, top: 0 },
+    { left: -1, right: 1, bottom: 1, top: -1 },
+    { left: -1, right: 1, bottom: -1, top: NaN },
+  ]) assert.equal(fitPerspectivePoints([[0, 0, 0]], { frame }), null);
 });
