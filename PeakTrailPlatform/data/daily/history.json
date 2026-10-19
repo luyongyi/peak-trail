@@ -140,6 +140,13 @@
       "mapSlot": 8,
       "sceneName": "Level_8",
       "nextChangeAtUtc": "2026-10-19T16:59:59.923Z"
+    },
+    {
+      "observedAtUtc": "2026-10-19T21:30:08.005Z",
+      "levelIndex": 492,
+      "mapSlot": 9,
+      "sceneName": "Level_9",
+      "nextChangeAtUtc": "2026-10-20T17:00:00.005Z"
     }
   ]
 }
