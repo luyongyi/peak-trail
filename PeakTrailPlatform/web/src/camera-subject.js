@@ -33,7 +33,7 @@ function separationSquared(a, b) {
  * stay in the framing. Ambiguous or malformed scenes retain every input part.
  * Returned entries are the original objects, in their original order.
  */
-export function selectCameraSubjectParts(parts) {
+export function selectCameraSubjectParts(parts, { interior = false } = {}) {
   if (!Array.isArray(parts)) return [];
   if (parts.length < 8 || parts.some((part) => !validBounds(part?.bounds))) return parts.slice();
   const metrics = parts.map((part) => {
@@ -79,8 +79,17 @@ export function selectCameraSubjectParts(parts) {
       || main.count < Math.max(8, parts.length * 0.75)) return parts.slice();
   const mainDiagonal = diagonal(main.bounds);
   if (!(mainDiagonal > 0)) return parts.slice();
-  const significant = ranked.filter((component) => component === main
-    || component.weight >= totalWeight * 0.005 || diagonal(component.bounds) >= mainDiagonal * 0.15);
+  const significant = ranked.filter((component) => {
+    if (component === main) return true;
+    const componentDiagonal = diagonal(component.bounds);
+    // Enclosed chapters can contain many copies of a small rock far from the
+    // building. Repetition gives that fragment surface weight without making
+    // it a second subject. Keep the same strict dominant-subject guards above,
+    // and still protect sizeable islands and components near the main shell.
+    if (interior && componentDiagonal < mainDiagonal * 0.15
+        && separationSquared(component.bounds, main.bounds) > mainDiagonal ** 2) return false;
+    return component.weight >= totalWeight * 0.005 || componentDiagonal >= mainDiagonal * 0.15;
+  });
   // A long, low chapter needs room for a detached exit along its length, but
   // that length must not also grant floating rocks hundreds of metres of
   // vertical tolerance. Use an ellipsoid following each subject's own axes.

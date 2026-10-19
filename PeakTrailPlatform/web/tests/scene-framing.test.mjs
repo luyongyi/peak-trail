@@ -115,10 +115,12 @@ test("default and top presets fit height-scaled, origin-relative, Z-reflected bo
   assertPoseClose(pose(scene), topPose);
 });
 
-test("loaded geometry fits its main subject while retaining distant objects and source bounds", (t) => {
+for (const name of ["Shore_Segment", "Temple_Segment", "Volcano_Segment"]) {
+test(`loaded ${name} fits its main subject while retaining distant objects and source bounds`, (t) => {
   const { scene } = fixture(t);
   scene.mapPack.identityVersion = 3;
   const layer = scene.mapPack.layers[0];
+  layer.name = name;
   const originalLayer = structuredClone(layer);
   const world = new THREE.Group();
   world.scale.z = -1;
@@ -157,6 +159,7 @@ test("loaded geometry fits its main subject while retaining distant objects and 
   scene.topView();
   assertFramed(scene);
 });
+}
 
 test("an adjacent enclosure landmark joins the selected subject without changing chapter bounds", (t) => {
   const { scene } = fixture(t);

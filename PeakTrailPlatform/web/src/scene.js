@@ -1493,10 +1493,11 @@ export class TrailScene {
       if (!group.userData.cameraSubjectParts) {
         const parts = collectCameraParts(THREE, group, this.origin);
         // Each chapter keeps its own subject, even in the mountain overview.
-        // Interior shells and the explicit Void view retain their full extents.
+        // Interior shells stay connected to their subject; only isolated tiny
+        // fragments far outside that subject may stop controlling the camera.
         const layer = group.userData.mapLayer;
-        group.userData.cameraSubjectParts = isInteriorLayer(layer, this.mapPack.route)
-          || String(layer.biome).toLowerCase() === "void" ? parts : selectCameraSubjectParts(parts);
+        group.userData.cameraSubjectParts = String(layer.biome).toLowerCase() === "void" ? parts
+          : selectCameraSubjectParts(parts, { interior: isInteriorLayer(layer, this.mapPack.route) });
       }
       return group.userData.cameraSubjectParts;
     });

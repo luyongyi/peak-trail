@@ -77,6 +77,45 @@ test("subject selection is independent of input order and coordinate scale", () 
   }
 });
 
+test("interior composition omits extremely distant repeated small rocks despite their combined surface weight", () => {
+  const main = [...mountain(), ...mountain().map((entry) => part(entry.bounds.min.map((value, axis) => value + (axis === 2 ? 80 : 0)),
+    entry.bounds.max.map((value, axis) => value + (axis === 2 ? 80 : 0)), `rear-${entry.name}`))];
+  const rocks = Array.from({ length: 9 }, (_, index) => part([1600, 10, 1600], [1608.8, 18.8, 1608.8], `repeated-rock-${index}`));
+  const input = [...main, ...rocks], before = structuredClone(input);
+  const area = (entry) => {
+    const [x, y, z] = entry.bounds.max.map((value, axis) => value - entry.bounds.min[axis]);
+    return x * y + y * z + z * x;
+  };
+  const fragmentWeight = rocks.reduce((sum, entry) => sum + area(entry), 0) / input.reduce((sum, entry) => sum + area(entry), 0);
+  assert.ok(fragmentWeight > 0.025 && fragmentWeight < 0.035, "nine copies contribute roughly 3% of the total surface weight");
+  assert.deepEqual(selectCameraSubjectParts(input), input, "ordinary outdoor composition still protects weighted detached components");
+  const selected = selectCameraSubjectParts(input, { interior: true });
+  assert.deepEqual(selected, main);
+  assert.equal(selected[0], input[0], "selected entries remain the original objects");
+  assert.deepEqual(input, before, "subject filtering never changes geometry bounds");
+});
+
+test("interior composition protects sizeable distant islands, near exits and nearby weighted fragments", () => {
+  const main = [...mountain(), ...mountain().map((entry) => part(entry.bounds.min.map((value, axis) => value + (axis === 2 ? 80 : 0)),
+    entry.bounds.max.map((value, axis) => value + (axis === 2 ? 80 : 0)), `rear-${entry.name}`))];
+  const rocks = Array.from({ length: 9 }, (_, index) => part([1600, 10, 1600], [1608.8, 18.8, 1608.8], `repeated-rock-${index}`));
+  const exit = part([113, 20, 70], [115, 22, 72], "exit");
+  const island = part([700, 0, 0], [740, 3, 30], "separate island");
+  assert.deepEqual(selectCameraSubjectParts([...main, ...rocks, exit, island], { interior: true }), [...main, exit, island]);
+  const nearbyRocks = rocks.map((entry) => part([220, 10, 100], [228.8, 18.8, 108.8], entry.name));
+  assert.deepEqual(selectCameraSubjectParts([...main, ...nearbyRocks], { interior: true }), [...main, ...nearbyRocks],
+    "a weighted small component within one main-subject diagonal is protected");
+});
+
+test("interior filtering keeps every part when multiple substantial subjects make the scene ambiguous", () => {
+  const main = mountain();
+  const other = mountain().map((entry) => part(entry.bounds.min.map((value, axis) => value + (axis === 0 ? 500 : 0)),
+    entry.bounds.max.map((value, axis) => value + (axis === 0 ? 500 : 0)), `other-${entry.name}`));
+  const rocks = Array.from({ length: 9 }, (_, index) => part([1600, 10, 1600], [1608.8, 18.8, 1608.8], `repeated-rock-${index}`));
+  const input = [...main, ...other, ...rocks];
+  assert.deepEqual(selectCameraSubjectParts(input, { interior: true }), input);
+});
+
 function fixture() {
   const root = new THREE.Group(); root.scale.set(1, 3, -1);
   const chapter = new THREE.Group(); root.add(chapter);
