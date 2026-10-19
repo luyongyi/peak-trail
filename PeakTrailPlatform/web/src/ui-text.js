@@ -1,6 +1,12 @@
 // Website UI copy. Game names (PEAK/NADIR) and BACK retain the exact runtime
 // terms from SerializedTermsData; map, sharing, and replay explanations are ours.
 export const UI_TEXT_PAIRS = Object.freeze([
+  ["点击地图标记，靠近查看；再次点击返回", "Click a map marker for a closer look; click it again to return."],
+  ["标记特写", "Marker close-up"],
+  ["已靠近此标记", "Viewing this marker up close"],
+  ["再点一次标记可返回", "Click the marker again to return"],
+  ["返回靠近前的视角", "Return to the view before this close-up"],
+  ["返回原视角", "Return to previous view"],
   ["PEAK Trail · 地图与回忆录", "PEAK Trail · Maps & Memories"],
   ["每日地图与玩家线路", "Daily maps & player routes"],
   ["下载回忆录 Mod", "Download Memories Mod"],

@@ -184,6 +184,139 @@ test("caps can identify a marker through the parent world reflection", () => {
   overlay.dispose();
 });
 
+const screenPoint = (overlay, point, camera, width = 800, height = 600) => {
+  overlay.root.updateWorldMatrix(true, false);
+  camera.updateWorldMatrix(true, false);
+  const projected = new THREE.Vector3(...point).applyMatrix4(overlay.root.matrixWorld).project(camera);
+  return { x: (projected.x + 1) * width / 2, y: (1 - projected.y) * height / 2, width, height, camera };
+};
+const frontCamera = () => {
+  const camera = new THREE.PerspectiveCamera(50, 800 / 600, 0.1, 200);
+  camera.position.set(0, 6, 60);
+  camera.lookAt(0, 6, 0);
+  return camera;
+};
+
+test("CSS-pixel picking reaches badges, finite beams and ground anchors through world transforms", () => {
+  const overlay = new MapLootOverlay(), world = new THREE.Group(), camera = frontCamera();
+  world.scale.z = -1; world.add(overlay.root);
+  overlay.setData([marker({ pos: [100, 202, 310] })])
+    .setContext({ origin: [100, 200, 300], heightScale: 2 }).setPixelRatio(3);
+  for (const local of [[0, 16.12, 10], [0, 10.12, 10], [0, 4.12, 10]]) {
+    const hit = screenPoint(overlay, local, camera);
+    assert.equal(overlay.pickScreen(hit)?.id, "crate-1");
+    assert.equal(overlay.pickScreen({ ...hit, x: hit.x + 40 }), null);
+  }
+  const orthographic = new THREE.OrthographicCamera(-20, 20, 30, -30, 0.1, 200);
+  orthographic.position.set(0, 6, 60); orthographic.lookAt(0, 6, 0);
+  const hit = screenPoint(overlay, [0, 16.12, 10], orthographic, 390, 844);
+  assert.equal(overlay.pickScreen({ ...hit, x: hit.x + 6 })?.id, "crate-1");
+  overlay.setFilters({ enabled: false });
+  assert.equal(overlay.pickScreen(hit), null);
+  overlay.dispose();
+});
+
+test("screen picking ranks exact badges before crossing beams, then pixel distance and depth", () => {
+  const overlay = new MapLootOverlay(), camera = frontCamera();
+  // The foreground beam crosses the more distant chest badge exactly.
+  overlay.setData([marker({ id: "foreground-beam", pos: [0, 6, 20] }), marker({ id: "badge", pos: [0, 0, 0] })]);
+  const badge = screenPoint(overlay, [0, 12.12, 0], camera);
+  assert.equal(overlay.pickScreen(badge)?.id, "badge");
+  overlay.setData([marker({ id: "right", pos: [1, 0, 0] }), marker({ id: "left", pos: [-1, 0, 0] })]);
+  assert.equal(overlay.pickScreen(screenPoint(overlay, [-0.8, 12.12, 0], camera))?.id, "left");
+  // Ground targets overlap in screen space; the nearer depth wins regardless of order.
+  overlay.setData([marker({ id: "far", pos: [0, 6 - 0.12, 0] }), marker({ id: "near", pos: [0, 6 - 0.12, 20] })]);
+  assert.equal(overlay.pickScreen({ x: 400, y: 300, width: 800, height: 600, camera })?.id, "near");
+  overlay.setData([marker({ id: "first", pos: [0, 0, 0] }), marker({ id: "selected", pos: [0, 0, 0] })]).setSelected("selected");
+  assert.equal(overlay.pickScreen(badge)?.id, "selected");
+  overlay.dispose();
+});
+
+test("selected halo edges return their marker while another exact badge retains priority", () => {
+  const overlay = new MapLootOverlay(), camera = frontCamera();
+  overlay.setData([marker({ pos: [0, 0, 0] })]);
+  const cap = screenPoint(overlay, [0, 12.12, 0], camera);
+  const anchor = screenPoint(overlay, [0, 0.12, 0], camera);
+  for (const point of [cap, anchor]) assert.equal(overlay.pickScreen({ ...point, x: point.x + 16 }), null);
+  overlay.setSelected("crate-1");
+  for (const point of [cap, anchor]) assert.equal(overlay.pickScreen({ ...point, x: point.x + 16 })?.id, "crate-1");
+  overlay.setData([marker({ pos: [0, 0, 0] }), marker({ id: "nearby", pos: [1.5, 0, 0], type: "campfire" })]);
+  assert.equal(overlay.pickScreen(screenPoint(overlay, [1.5, 12.12, 0], camera))?.id, "nearby");
+  overlay.setFilters({ types: [] });
+  assert.equal(overlay.selectedId, null);
+  for (const point of [cap, anchor]) assert.equal(overlay.pickScreen({ ...point, x: point.x + 16 }), null);
+  overlay.dispose();
+});
+
+test("screen picking excludes hidden filters, behind-camera and clipped depth markers", () => {
+  const overlay = new MapLootOverlay(), camera = frontCamera();
+  camera.far = 80; camera.updateProjectionMatrix();
+  overlay.setData([marker({ id: "behind", pos: [0, 0, 100] }), marker({ id: "past-far", pos: [0, 0, -100] })]);
+  assert.equal(overlay.pickScreen({ x: 400, y: 300, width: 800, height: 600, camera }), null);
+  overlay.setData([marker({ pos: [0, 0, 0] }), marker({ id: "filtered", type: "campfire", pos: [0, 0, 0] })])
+    .setFilters({ types: ["campfire"] });
+  const cap = screenPoint(overlay, [0, 12.12, 0], camera);
+  assert.equal(overlay.pickScreen(cap)?.id, "filtered");
+  for (const invalid of [{ ...cap, x: -1 }, { ...cap, y: 601 }, { ...cap, width: 0 }, { ...cap, x: NaN }, { ...cap, camera: {} }]) {
+    assert.equal(overlay.pickScreen(invalid), null);
+  }
+  overlay.setFilters({ types: [] });
+  assert.equal(overlay.pickScreen(cap), null);
+  overlay.dispose();
+  assert.equal(overlay.pickScreen(cap), null);
+});
+
+test("a beam crossing the near plane cannot create a target behind its visible anchor", () => {
+  const overlay = new MapLootOverlay(), camera = new THREE.PerspectiveCamera(50, 800 / 600, 1, 200);
+  camera.position.set(0, 5, 5); camera.lookAt(0, 0, 0);
+  overlay.setData([marker({ pos: [0, 0, 0] })]);
+  assert.equal(overlay.pickScreen(screenPoint(overlay, [0, 0.12, 0], camera))?.id, "crate-1");
+  // The top is behind the camera and projects below the viewport. Connecting
+  // its raw screen position to the anchor would incorrectly hit this point.
+  assert.equal(overlay.pickScreen({ x: 400, y: 400, width: 800, height: 600, camera }), null);
+  overlay.dispose();
+});
+
+test("selection adds an isolated halo, survives growth and clears when no longer visible", () => {
+  const overlay = new MapLootOverlay();
+  overlay.setData([marker({ pos: [0, 0, 0] })]);
+  const resources = overlay.resources;
+  const attributes = [resources.beam.instanceMatrix, resources.ring.instanceMatrix, resources.tint, resources.capPositions, resources.capColors, resources.capKinds];
+  const versions = attributes.map(attribute => attribute.version);
+  overlay.setSelected("crate-1");
+  assert.equal(overlay.selectedId, "crate-1");
+  assert.equal(overlay.root.children.length, 7);
+  close(positionAt(overlay.selectionResources.positions, 0), [0, 0.12, 0]);
+  close(positionAt(overlay.selectionResources.positions, 1), [0, 12.12, 0]);
+  assert.deepEqual(attributes.map(attribute => attribute.version), versions);
+  overlay.setPixelRatio(2);
+  assert.equal(overlay.selectionResources.points.material.uniforms.pixelRatio.value, 2);
+  const first = overlay.selectionResources;
+  let geometryReleased = 0, materialReleased = 0;
+  first.points.geometry.addEventListener("dispose", () => geometryReleased++);
+  first.points.material.addEventListener("dispose", () => materialReleased++);
+  overlay.setData([marker({ pos: [0, 0, 0] }), ...Array.from({ length: 16 }, (_, index) => marker({ id: `extra-${index}`, pos: [index, 0, 0] }))]);
+  assert.equal(geometryReleased, 1); assert.equal(materialReleased, 1);
+  assert.notEqual(overlay.selectionResources, first);
+  assert.equal(overlay.selectedId, "crate-1");
+  assert.equal(overlay.selectionResources.points.visible, true);
+  overlay.setFilters({ enabled: false });
+  assert.equal(overlay.selectedId, null);
+  assert.equal(overlay.selectionResources.points.visible, false);
+  overlay.setFilters({ enabled: true }).setSelected("crate-1").setContext({ activeSegment: 2 });
+  assert.equal(overlay.selectedId, null);
+  overlay.setContext({ activeSegment: 1 }).setSelected("missing");
+  assert.equal(overlay.selectedId, null);
+  overlay.setSelected("crate-1").clear();
+  assert.equal(overlay.selectedId, null);
+  const last = overlay.selectionResources;
+  let finalRelease = 0;
+  last.points.geometry.addEventListener("dispose", () => finalRelease++);
+  overlay.dispose(); overlay.dispose();
+  assert.equal(finalRelease, 1);
+  assert.equal(overlay.selectionResources, null);
+});
+
 test("growth and disposal release each shared GPU resource exactly once and detach the root", () => {
   const overlay = new MapLootOverlay(), world = new THREE.Group(); world.add(overlay.root);
   overlay.setData([marker()]);

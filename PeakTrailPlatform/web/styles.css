@@ -3090,6 +3090,7 @@ body.gate-open .app-shell { visibility: hidden; }
 .map-loot-master input:disabled { opacity: .35; }
 .map-loot-status { margin: 11px 0 15px; color: #a6b4ac; font-size: .66rem; line-height: 1.6; font-variant-numeric: tabular-nums; }
 .map-loot-status[data-state="error"] { color: #e9bb80; }
+.map-loot-interaction-hint { margin: -6px 0 16px; padding-left: 9px; border-left: 2px solid #c7a66a66; color: #c8b893; font-size: .62rem; line-height: 1.75; }
 .map-loot-section-heading { display: flex; justify-content: space-between; align-items: center; color: #c1cec5; font-size: .68rem; margin-bottom: 6px; }
 .map-loot-section-heading > span { letter-spacing: .06em; }
 .map-loot-section-heading > div { display: flex; gap: 9px; }
@@ -3112,6 +3113,37 @@ body.gate-open .app-shell { visibility: hidden; }
 .map-loot-item-types { margin-top: 4px; }
 .map-loot-footnote { margin: 15px 0 0; padding-top: 12px; border-top: 1px solid #d0dbc014; font-size: .59rem; color: #82968a; line-height: 1.9; }
 .map-loot-footnote i { display: inline-block; width: 5px; height: 5px; margin-right: 6px; border-radius: 50%; background: #8ca993; }
+.map-loot-focus {
+  position: absolute; bottom: 22px; left: 50%; z-index: 6; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 13px; width: max-content; max-width: calc(100% - 32px);
+  padding: 13px 14px; border: 1px solid #d1b47966; border-radius: 14px;
+  background: linear-gradient(120deg, #243329f5, #101b18f5); box-shadow: 0 10px 32px #0007, inset 0 1px #efe0b612;
+  backdrop-filter: blur(14px); color: #e7ede5;
+}
+.map-loot-focus[hidden] { display: none; }
+.map-loot-focus-glyph { display: grid; place-items: center; flex: 0 0 36px; height: 36px; border: 1px solid #c7a66a44; border-radius: 10px; background: #d2b46d0d; color: #ebc883; }
+.map-loot-focus svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.map-loot-focus-copy { display: grid; min-width: 0; gap: 4px; max-width: 300px; }
+.map-loot-focus-copy small { color: #d0b784; font-size: .59rem; letter-spacing: .035em; }
+.map-loot-focus-copy strong { display: -webkit-box; overflow: hidden; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; font-size: .82rem; font-weight: 650; line-height: 1.35; }
+.map-loot-focus-copy > span { color: #a7b6aa; font-size: .6rem; line-height: 1.45; }
+.map-loot-focus-return { display: flex; flex: 0 0 auto; align-items: center; justify-content: center; gap: 6px; min-height: 44px; max-width: 152px; padding: 8px 11px; border: 1px solid #c9ad7155; border-radius: 9px; background: #d9b97513; color: #ecd3a3; font-size: .68rem; line-height: 1.5; cursor: pointer; }
+.map-loot-focus-return svg { flex-shrink: 0; width: 16px; height: 16px; }
+.map-loot-focus-return:hover { background: #d9b97525; border-color: #d9b97599; }
+.map-loot-focus-return:focus-visible { outline: 2px solid #edcc8b; outline-offset: 3px; }
+@media (max-width: 1100px) { .map-loot-focus { bottom: 88px; } }
+@media (max-width: 743px) {
+  .map-loot-focus { gap: 9px; max-width: calc(100% - 20px); padding: 11px; }
+  .map-loot-focus-glyph { display: none; }
+  .map-loot-focus-copy { max-width: 210px; }
+  .map-loot-focus-copy strong { font-size: .78rem; }
+  .map-loot-focus-return { max-width: 136px; padding: 8px; font-size: .65rem; }
+}
+@media (max-width: 950px) and (max-height: 500px) and (orientation: landscape) {
+  .map-loot-focus { bottom: 56px; gap: 9px; padding: 8px 11px; }
+  .map-loot-focus-glyph { display: none; }
+  .map-loot-focus-copy { gap: 2px; max-width: 280px; }
+}
 @media (max-width: 743px) {
   .map-loot-menu > summary { gap: 5px; padding: 6px 9px; font-size: .69rem; }
   .map-loot-pop { left: 0; right: auto; max-height: calc(100dvh - 205px); }

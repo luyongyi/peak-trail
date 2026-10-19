@@ -76,6 +76,10 @@ const elements = {
   emptyState: $("emptyState"),
   dropOverlay: $("dropOverlay"),
   sceneCanvas: $("sceneCanvas"),
+  mapLootMenu: $("mapLootMenu"),
+  mapLootFocus: $("mapLootFocus"),
+  mapLootFocusName: $("mapLootFocusName"),
+  mapLootFocusReturn: $("mapLootFocusReturn"),
   sceneName: $("sceneName"),
   sampleCount: $("sampleCount"),
   altitudeRange: $("altitudeRange"),
@@ -2549,6 +2553,49 @@ window.addEventListener("scroll", updatePhonePanelButton, { passive: true, captu
 elements.topViewButton.addEventListener("click", () => viewer?.topView());
 elements.fitViewButton.addEventListener("click", () => viewer?.fitView());
 elements.freeCameraButton.addEventListener("click", () => viewer?.toggleFreeCamera());
+function bindMapLootFocusUi({ canvas, card, name, restoreButton, menu, getViewer }) {
+  if (!canvas || !card || !name || !restoreButton) return () => {};
+  let active = false;
+  const render = (event) => {
+    const detail = event.detail || {};
+    const changedMarker = !active || card.dataset.markerId !== String(detail.markerId || "");
+    active = detail.active === true;
+    if (active && changedMarker && menu) menu.open = false;
+    card.hidden = !active;
+    card.dataset.markerId = active ? String(detail.markerId || "") : "";
+    name.textContent = active ? String(detail.name || tr("地图标记", "Map marker")) : "";
+    name.title = name.textContent;
+  };
+  const restore = () => {
+    if (!active) return;
+    getViewer()?.restoreMapLootView();
+    canvas.focus({ preventScroll: true });
+  };
+  const escape = (event) => {
+    if (!active || event.key !== "Escape" || event.defaultPrevented) return;
+    if (event.target?.closest?.("input, select, textarea, [contenteditable='true']")) return;
+    event.preventDefault();
+    event.stopPropagation();
+    restore();
+  };
+  canvas.addEventListener("peaktrail-loot-focus", render);
+  canvas.addEventListener("keydown", escape);
+  card.addEventListener("keydown", escape);
+  restoreButton.addEventListener("click", restore);
+  return () => {
+    canvas.removeEventListener("peaktrail-loot-focus", render);
+    canvas.removeEventListener("keydown", escape);
+    card.removeEventListener("keydown", escape);
+    restoreButton.removeEventListener("click", restore);
+    card.hidden = true;
+  };
+}
+const disposeMapLootFocus = bindMapLootFocusUi({
+  canvas: elements.sceneCanvas, card: elements.mapLootFocus,
+  name: elements.mapLootFocusName, restoreButton: elements.mapLootFocusReturn,
+  menu: elements.mapLootMenu,
+  getViewer: () => viewer,
+});
 const disposeCameraTouch = bindCameraTouchControls({
   root: elements.cameraTouchControls, canvas: elements.sceneCanvas,
   getCamera: () => viewer?.freeCamera,
@@ -2667,6 +2714,7 @@ window.addEventListener("beforeunload", () => {
   disposeLocaleUi();
   window.removeEventListener("scroll", updatePhonePanelButton, true);
   disposeCameraTouch();
+  disposeMapLootFocus();
   communityMapPanel.dispose();
   mapLootPanel.dispose();
   homePage.dispose();

@@ -74,6 +74,36 @@ const CAP_FRAGMENT = `
     #include <colorspace_fragment>
   }
 `;
+const SELECTION_VERTEX = `
+  uniform float pixelRatio;
+  void main() {
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    gl_PointSize = 36.0 * pixelRatio;
+  }
+`;
+const SELECTION_FRAGMENT = `
+  void main() {
+    float radius = length(gl_PointCoord * 2.0 - 1.0);
+    float ring = smoothstep(0.72, 0.79, radius) * (1.0 - smoothstep(0.88, 0.97, radius));
+    if (ring < 0.005) discard;
+    gl_FragColor = vec4(1.0, 0.91, 0.64, ring * 0.96);
+    #include <colorspace_fragment>
+  }
+`;
+
+function clipBeam(base, cap, baseViewZ, capViewZ) {
+  let from = 0, to = 1;
+  // Clip the finite beam before dividing by W: near-plane crossings must not
+  // become screen-spanning targets, and points behind the camera never count.
+  for (const [a, b] of [[base.w - 1e-7, cap.w - 1e-7], [base.z + base.w, cap.z + cap.w],
+    [base.w - base.z, cap.w - cap.z], [-baseViewZ - 1e-7, -capViewZ - 1e-7]]) {
+    if (a < 0 && b < 0) return null;
+    if (a < 0) from = Math.max(from, -a / (b - a));
+    if (b < 0) to = Math.min(to, -a / (b - a));
+    if (from > to) return null;
+  }
+  return { from, to };
+}
 
 function coordinate(value) {
   if (Array.isArray(value)) return value.slice(0, 3);
@@ -126,6 +156,8 @@ export class MapLootOverlay {
     this.capacity = 0;
     this.pixelRatio = 1;
     this.resources = null;
+    this.selectedId = null;
+    this.selectionResources = null;
     this.disposed = false;
   }
 
@@ -175,6 +207,48 @@ export class MapLootOverlay {
   setPixelRatio(value) {
     this.pixelRatio = THREE.MathUtils.clamp(Number(value) || 1, 1, 3);
     if (this.resources) for (const material of this.resources.capMaterials) material.uniforms.pixelRatio.value = this.pixelRatio;
+    if (this.selectionResources) this.selectionResources.points.material.uniforms.pixelRatio.value = this.pixelRatio;
+    return this;
+  }
+
+  /** Highlight a visible marker without changing filters or instance buffers. */
+  setSelected(id) {
+    if (this.disposed) return this;
+    this.selectedId = id !== null && id !== undefined && this.visibleMarkers.some(marker => marker.id === id) ? id : null;
+    return this.refreshSelection();
+  }
+
+  refreshSelection() {
+    const index = this.visibleMarkers.findIndex(marker => marker.id === this.selectedId);
+    if (index < 0 || !this.resources) {
+      this.selectedId = null;
+      if (this.selectionResources) this.selectionResources.points.visible = false;
+      return this;
+    }
+    if (!this.selectionResources) {
+      const geometry = new THREE.BufferGeometry();
+      const positions = new THREE.Float32BufferAttribute(new Float32Array(6), 3);
+      positions.setUsage(THREE.DynamicDrawUsage);
+      geometry.setAttribute("position", positions);
+      const material = new THREE.ShaderMaterial({
+        vertexShader: SELECTION_VERTEX, fragmentShader: SELECTION_FRAGMENT,
+        uniforms: { pixelRatio: { value: this.pixelRatio } },
+        transparent: true, depthTest: false, depthWrite: false, toneMapped: false,
+      });
+      const points = new THREE.Points(geometry, material);
+      points.name = "loot-selected-halos";
+      points.renderOrder = 36;
+      points.frustumCulled = false;
+      this.root.add(points);
+      this.selectionResources = { points, positions };
+    }
+    const { positions, points } = this.selectionResources;
+    const cap = this.resources.capPositions, marker = this.visibleMarkers[index];
+    const height = Math.min(MAP_LOOT_MAX_BEAM_HEIGHT, lootTypeStyle(marker.type, marker.category, marker.color).beamHeight);
+    positions.setXYZ(0, cap.getX(index), cap.getY(index) - height, cap.getZ(index));
+    positions.setXYZ(1, cap.getX(index), cap.getY(index), cap.getZ(index));
+    positions.needsUpdate = true;
+    points.visible = true;
     return this;
   }
 
@@ -188,6 +262,7 @@ export class MapLootOverlay {
     this.visibleMarkers = visible;
     this.root.visible = visible.length > 0;
     if (!visible.length) {
+      this.refreshSelection();
       if (this.resources) {
         this.resources.beam.count = this.resources.beamXray.count = 0;
         this.resources.ring.count = this.resources.ringXray.count = 0;
@@ -222,7 +297,7 @@ export class MapLootOverlay {
     resources.tint.needsUpdate = resources.capPositions.needsUpdate = resources.capColors.needsUpdate = resources.capKinds.needsUpdate = true;
     resources.cap.geometry.setDrawRange(0, visible.length);
     resources.cap.geometry.computeBoundingSphere();
-    return this;
+    return this.refreshSelection();
   }
 
   ensureCapacity(count) {
@@ -287,6 +362,67 @@ export class MapLootOverlay {
     return hits.length ? this.visibleMarkers[hits[0].index] ?? null : null;
   }
 
+  /** CSS-pixel picking for badges, ground anchors and the finite beacon ribbon. */
+  pickScreen({ x, y, width, height, camera } = {}) {
+    if (this.disposed || !this.root.visible || !this.resources || !camera?.isCamera
+      || ![x, y, width, height].every(Number.isFinite) || width <= 0 || height <= 0
+      || x < 0 || y < 0 || x > width || y > height) return null;
+    this.root.updateWorldMatrix(true, true);
+    camera.updateWorldMatrix(true, false);
+    const viewMatrix = new THREE.Matrix4().multiplyMatrices(camera.matrixWorldInverse, this.root.matrixWorld);
+    const baseView = new THREE.Vector4(), capView = new THREE.Vector4();
+    const base = new THREE.Vector4(), cap = new THREE.Vector4();
+    const first = new THREE.Vector4(), last = new THREE.Vector4();
+    const positions = this.resources.capPositions;
+    let best = null;
+    const consider = (marker, distance, depth, priority = 1) => {
+      if (!best || priority < best.priority || (priority === best.priority && (distance < best.distance - 0.25
+        || (Math.abs(distance - best.distance) <= 0.25 && (depth < best.depth - 0.001
+          || (Math.abs(depth - best.depth) <= 0.001 && marker.id === this.selectedId)))))) best = { marker, distance, depth, priority };
+    };
+    this.visibleMarkers.forEach((marker, index) => {
+      const style = lootTypeStyle(marker.type, marker.category, marker.color);
+      const selected = marker.id === this.selectedId;
+      const beamHeight = Math.min(MAP_LOOT_MAX_BEAM_HEIGHT, style.beamHeight);
+      capView.set(positions.getX(index), positions.getY(index), positions.getZ(index), 1).applyMatrix4(viewMatrix);
+      baseView.copy(capView);
+      // Height is local to the overlay; a transformed parent can rotate or
+      // reflect it, so transform the real base rather than subtracting view Y.
+      baseView.set(positions.getX(index), positions.getY(index) - beamHeight, positions.getZ(index), 1).applyMatrix4(viewMatrix);
+      cap.copy(capView).applyMatrix4(camera.projectionMatrix);
+      base.copy(baseView).applyMatrix4(camera.projectionMatrix);
+      if (capView.z < 0 && cap.w > 0 && cap.z >= -cap.w && cap.z <= cap.w) {
+        const dx = x - (cap.x / cap.w + 1) * width / 2;
+        const dy = y - (1 - cap.y / cap.w) * height / 2;
+        const distance = Math.hypot(dx, dy), radius = style.kind === "animal" ? 13 : style.kind === "chest" ? 7.5 : 5.5;
+        if (distance <= (selected ? 18 : Math.max(9, radius + 3))) {
+          // An actual badge takes precedence over a different marker's beam
+          // passing underneath it; padded targets still rank by pixel distance.
+          const insideBadge = style.kind === "chest" ? Math.abs(dx) + Math.abs(dy) <= radius : distance <= radius;
+          consider(marker, distance, -capView.z, insideBadge ? 0 : selected ? 0.5 : 1);
+        }
+      }
+      const clipped = clipBeam(base, cap, baseView.z, capView.z);
+      if (!clipped) return;
+      first.copy(base).lerp(cap, clipped.from); last.copy(base).lerp(cap, clipped.to);
+      const bx = (first.x / first.w + 1) * width / 2, by = (1 - first.y / first.w) * height / 2;
+      const tx = (last.x / last.w + 1) * width / 2, ty = (1 - last.y / last.w) * height / 2;
+      const dx = tx - bx, dy = ty - by, length = dx * dx + dy * dy;
+      const along = length ? THREE.MathUtils.clamp(((x - bx) * dx + (y - by) * dy) / length, 0, 1) : 0;
+      const distance = Math.hypot(x - bx - along * dx, y - by - along * dy);
+      if (distance <= 5.5) {
+        const fraction = clipped.from + along * (clipped.to - clipped.from);
+        consider(marker, distance, -(baseView.z + fraction * (capView.z - baseView.z)));
+      }
+      // A slightly larger anchor target helps with nearly vertical top views.
+      if (clipped.from === 0) {
+        const distance = Math.hypot(x - bx, y - by);
+        if (distance <= (selected ? 18 : 8)) consider(marker, distance, -baseView.z, selected ? 0.5 : 1);
+      }
+    });
+    return best?.marker ?? null;
+  }
+
   clear() {
     this.markers = [];
     return this.refresh();
@@ -303,6 +439,7 @@ export class MapLootOverlay {
     for (const material of materials) material.dispose();
     this.root.clear();
     this.resources = null;
+    this.selectionResources = null;
     this.capacity = 0;
   }
 
@@ -310,6 +447,7 @@ export class MapLootOverlay {
     if (this.disposed) return;
     this.releaseResources();
     this.markers = this.visibleMarkers = [];
+    this.selectedId = null;
     this.root.visible = false;
     this.root.removeFromParent();
     this.disposed = true;

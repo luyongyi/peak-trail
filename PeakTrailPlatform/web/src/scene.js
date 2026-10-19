@@ -18,6 +18,7 @@ import { SourceWaterRenderer } from "./source-water-renderer.js";
 import { nadirCameraBounds, nadirCameraParts } from "./nadir-camera-bounds.js";
 import { CommunityRouteOverlay } from "./community-route-overlay.js";
 import { MapLootOverlay } from "./map-loot-overlay.js";
+import { MapLootFocus } from "./map-loot-focus.js";
 import { EnclosureContextRenderer } from "./enclosure-context-renderer.js";
 import { fitPerspectivePoints } from "./camera-framing.js";
 import { collectCameraParts, selectCameraSubjectParts } from "./camera-subject.js";
@@ -202,6 +203,7 @@ export class TrailScene {
       [canvas, "pointerdown", (event) => this.onFollowPointerDown(event)],
       [canvas, "pointermove", (event) => this.onFollowPointerMove(event)],
       [canvas.ownerDocument, "pointerup", (event) => this.onFollowPointerUp(event)],
+      [canvas.ownerDocument, "pointercancel", (event) => this.onFollowPointerCancel(event)],
       [canvas, "wheel", (event) => this.onFollowWheel(event)],
     ];
     for (const [target, name, handler] of this.followListeners) target.addEventListener(name, handler);
@@ -258,6 +260,7 @@ export class TrailScene {
     this.gridRoot = new THREE.Group();
     this.communityOverlay = new CommunityRouteOverlay();
     this.mapLootOverlay = new MapLootOverlay();
+    this.mapLootFocus = new MapLootFocus(this, THREE);
     this.worldRoot.add(this.gridRoot, this.sourceWater.root, this.terrainRoot, this.trailRoot, this.worldRenderer.root);
     this.worldRoot.add(this.communityOverlay.root);
     this.worldRoot.add(this.enclosureContext.root);
@@ -308,7 +311,8 @@ export class TrailScene {
   animate(timestamp) {
     const delta = this.lastFrameTime === null ? 0 : (timestamp - this.lastFrameTime) / 1000;
     this.lastFrameTime = timestamp;
-    if (this.freeCamera.mode === "free") this.freeCamera.update(delta);
+    if (this.mapLootFocus?.update(timestamp)) { /* The close-up flight owns the camera this frame. */ }
+    else if (this.freeCamera.mode === "free") this.freeCamera.update(delta);
     else if (this.followTargetId !== null) this.updateFollowCamera(delta);
     else this.controls.update();
     this.updateCameraMarkerVisibility();
@@ -322,6 +326,10 @@ export class TrailScene {
   }
 
   async setData({ mapPack, trace, useMap, activeSegment, viewIntent = null }) {
+    this.clearMapLootFocus();
+    this.lootFocusTerrain?.dispose();
+    this.lootFocusTerrain = null;
+    this.lootFocusTerrainKey = null;
     this.communityOverlay?.clear();
     this.mapLootOverlay?.clear();
     const retainReplayCamera = Boolean(trace && this.trace === trace);
@@ -1007,6 +1015,7 @@ export class TrailScene {
     // `== null` covers scenes whose constructor never ran (fixtures) where the
     // field is undefined rather than null: already-not-following is a no-op.
     if (next === null ? this.followTargetId == null : next === this.followTargetId) return;
+    this.clearMapLootFocus();
     this.followTargetId = next;
     this.surveyPreset = null;
     ++this.cameraSelectionRevision;
@@ -1170,8 +1179,15 @@ export class TrailScene {
   }
 
   onFollowPointerDown(event) {
-    if (event.isPrimary === false || event.button !== 0) return;
-    this.followDownAt = { x: event.clientX, y: event.clientY, time: performance.now() };
+    this.mapLootFocus?.interrupt();
+    this.lootPointerIds ||= new Set();
+    this.lootPointerIds.add(event.pointerId);
+    if (event.isPrimary === false || event.button !== 0 || this.lootPointerIds.size > 1) {
+      this.followDownAt = null;
+      return;
+    }
+    this.followDownAt = { id: event.pointerId, x: event.clientX, y: event.clientY, time: performance.now(), moved: false,
+      cameraSnapshot: this.mapLootFocus?.capture() };
     if (this.followTargetId === null || this.freeCamera.mode === "free") return;
     event.preventDefault();
     this.followPointer = { id: event.pointerId, x: event.clientX, y: event.clientY };
@@ -1179,6 +1195,8 @@ export class TrailScene {
   }
 
   onFollowPointerMove(event) {
+    if (this.followDownAt && (this.followDownAt.id === undefined || this.followDownAt.id === event.pointerId)
+        && Math.hypot(event.clientX - this.followDownAt.x, event.clientY - this.followDownAt.y) > 6) this.followDownAt.moved = true;
     if (this.followTargetId === null || this.freeCamera.mode === "free" || this.followPointer?.id !== event.pointerId) return;
     const dx = event.clientX - this.followPointer.x;
     const dy = event.clientY - this.followPointer.y;
@@ -1192,20 +1210,80 @@ export class TrailScene {
   }
 
   onFollowPointerUp(event) {
+    this.lootPointerIds?.delete(event.pointerId);
     if (this.followPointer?.id === event.pointerId) {
       this.followPointer = null;
       try { this.canvas.releasePointerCapture?.(event.pointerId); } catch { /* optional */ }
-      return;
     }
-    // 跟随未开启时，把对玩家标记的"点击"（非拖拽）作为跟随入口。
-    if (!this.followDownAt || event.button !== 0) return;
-    const moved = Math.hypot(event.clientX - this.followDownAt.x, event.clientY - this.followDownAt.y);
-    const elapsed = performance.now() - this.followDownAt.time;
+    // A real tap selects a player first, then a map item; drags never select.
+    if (!this.followDownAt || event.button !== 0 || this.followDownAt.id !== undefined && this.followDownAt.id !== event.pointerId) return;
+    const down = this.followDownAt;
+    const moved = Math.hypot(event.clientX - down.x, event.clientY - down.y);
+    const elapsed = performance.now() - down.time;
     this.followDownAt = null;
-    if (moved > 6 || elapsed > 500) return;
+    if (down.moved || moved > 6 || elapsed > 500 || this.lootPointerIds?.size) return;
     const hit = this.pickPlayerMarker(event);
-    if (hit) this.lockFollowTarget(hit);
+    if (hit) { this.lockFollowTarget(hit); return; }
+    const marker = this.pickMapLootMarker(event);
+    if (marker) this.mapLootFocus?.focus(marker, down.cameraSnapshot);
   }
+
+  onFollowPointerCancel(event) {
+    this.lootPointerIds?.delete(event.pointerId);
+    this.followDownAt = null;
+    if (this.followPointer?.id === event.pointerId) {
+      this.followPointer = null;
+      try { this.canvas.releasePointerCapture?.(event.pointerId); } catch { /* optional */ }
+    }
+  }
+
+  pickMapLootMarker(event) {
+    const rect = this.canvas.getBoundingClientRect?.();
+    if (!(rect?.width > 0 && rect.height > 0)) return null;
+    return this.mapLootOverlay?.pickScreen?.({ x: event.clientX - rect.left, y: event.clientY - rect.top,
+      width: rect.width, height: rect.height, camera: this.camera }) ?? null;
+  }
+
+  mapLootFocusTerrainQuery(marker) {
+    if (!this.terrainRoot?.children?.length) return null;
+    const segment = Number.isInteger(marker?.segment) && marker.segment >= 0 ? marker.segment : this.activeSegment;
+    const layerId = marker?.scope === "global" || marker?.layerId === "global" ? null : marker?.layerId;
+    const visible = this.terrainRoot.children.filter(group => group.visible !== false);
+    let roots = visible.filter(group => layerId ? group.userData.layerId === layerId
+      : segment != null && group.userData.segment === segment);
+    if (!roots.length && !layerId && segment == null && Array.isArray(marker?.pos)) {
+      // A global-parent prop has no chapter assignment. In overview, bound the
+      // query to its nearest already loaded source layer; these bounds select
+      // a query index only and never act as a camera collision surface.
+      const nearest = visible.map(group => {
+        const layer = group.userData.mapLayer;
+        const distance = layer ? Math.hypot(...["X", "Y", "Z"].map((axis, index) => Math.max(
+          layer[`min${axis}`] - marker.pos[index], 0, marker.pos[index] - layer[`max${axis}`]))) : Infinity;
+        return { group, distance };
+      }).sort((a, b) => a.distance - b.distance)[0];
+      if (Number.isFinite(nearest?.distance)) roots = [nearest.group];
+    }
+    if (this.enclosureContext?.root?.visible) roots.push(this.enclosureContext.root);
+    if (!roots.length) return null;
+    // Only this loaded chapter and its visible context are indexed. Geometry
+    // trees are shared with follow queries; no other map or hidden layer loads.
+    const key = JSON.stringify([this.buildToken, this.geometrySelectionToken, this.heightScale, this.origin.toArray(),
+      roots.map(root => [root.uuid, root.children.length, root.userData.loaded])]);
+    if (this.lootFocusTerrainKey !== key) {
+      this.lootFocusTerrain?.dispose();
+      this.lootFocusTerrain = new FollowTerrainQuery(THREE).setRoots(roots);
+      this.lootFocusTerrainKey = key;
+    }
+    const querySegment = roots[0]?.userData.segment ?? segment;
+    const enclosure = this.mapPack?.mapEnclosures?.enclosures?.find(entry => entry.segment === querySegment);
+    const center = enclosure?.interiorReference;
+    return { query: this.lootFocusTerrain, interiorReference: center ? new THREE.Vector3(center[0] - this.origin.x,
+      (center[1] - this.origin.y) * this.heightScale, -(center[2] - this.origin.z)) : null };
+  }
+
+  restoreMapLootView() { return this.mapLootFocus?.restore() ?? false; }
+
+  clearMapLootFocus(options) { return this.mapLootFocus?.clear(options) ?? false; }
 
   pickPlayerMarker(event) {
     const rect = this.canvas.getBoundingClientRect();
@@ -1228,6 +1306,7 @@ export class TrailScene {
   }
 
   onFollowWheel(event) {
+    this.mapLootFocus?.interrupt();
     if (this.followTargetId === null || this.freeCamera.mode === "free") return;
     event.preventDefault();
     const interior = this.followViewMode === "interior";
@@ -1353,11 +1432,13 @@ export class TrailScene {
     if (!this.mapLootOverlay) return false;
     if (!this.useMap || !enabled || mapPackId !== this.mapPack?.mapPackId) {
       this.mapLootOverlay.clear();
+      this.mapLootFocus?.reconcile([]);
       return false;
     }
     this.syncMapLootContext();
     this.mapLootOverlay.setData(markers);
     this.mapLootOverlay.setFilters({ enabled: true, types });
+    this.mapLootFocus?.reconcile(this.mapLootOverlay.visibleMarkers);
     return true;
   }
 
@@ -1369,6 +1450,7 @@ export class TrailScene {
   setHeightScale(value) {
     const next = THREE.MathUtils.clamp(Number(value) || 1, 0.2, 5);
     const changed = next !== this.heightScale;
+    if (changed) this.clearMapLootFocus();
     this.heightScale = next;
     this.applyHeightScale();
     if (changed && this.surveyPreset && this.freeCamera.mode === "orbit" && this.followTargetId == null) {
@@ -1410,6 +1492,10 @@ export class TrailScene {
   setActiveSegment(segment) {
     const next = segment === null || segment === "all" ? null : Number(segment);
     if (next === this.activeSegment) return;
+    this.clearMapLootFocus();
+    this.lootFocusTerrain?.dispose();
+    this.lootFocusTerrain = null;
+    this.lootFocusTerrainKey = null;
     this.communityOverlay?.clear();
     this.activeSegment = next;
     ++this.geometrySelectionToken;
@@ -1432,6 +1518,7 @@ export class TrailScene {
   }
 
   setViewIntent(intent) {
+    this.clearMapLootFocus();
     this.viewIntent = intent === "summit" ? "summit" : null;
     if (this.followTargetId == null) {
       this.fitView();
@@ -1552,6 +1639,7 @@ export class TrailScene {
   }
 
   enterInteriorView(focus = true) {
+    this.clearMapLootFocus();
     this.setFollowTarget(null);
     this.surveyPreset = null;
     ++this.cameraSelectionRevision;
@@ -1595,10 +1683,11 @@ export class TrailScene {
     if (focus) this.freeCamera.focus();
   }
 
-  toggleFreeCamera() { this.setFollowTarget(null); this.surveyPreset = null; ++this.cameraSelectionRevision; this.freeCamera.setMode(this.freeCamera.mode === "free" ? "orbit" : "free"); this.freeCamera.focus(); }
+  toggleFreeCamera() { this.clearMapLootFocus(); this.setFollowTarget(null); this.surveyPreset = null; ++this.cameraSelectionRevision; this.freeCamera.setMode(this.freeCamera.mode === "free" ? "orbit" : "free"); this.freeCamera.focus(); }
 
   focusWorldEvent(event) {
     if (!event.objectId || !event.pos) return;
+    this.clearMapLootFocus();
     this.setFollowTarget(null);
     this.surveyPreset = null;
     ++this.cameraSelectionRevision;
@@ -1610,6 +1699,7 @@ export class TrailScene {
   }
 
   fitView() {
+    this.clearMapLootFocus();
     this.setFollowTarget(null);
     ++this.cameraSelectionRevision;
     this.freeCamera.setMode("orbit");
@@ -1618,6 +1708,7 @@ export class TrailScene {
   }
 
   topView() {
+    this.clearMapLootFocus();
     this.setFollowTarget(null);
     ++this.cameraSelectionRevision;
     this.freeCamera.setMode("orbit");
@@ -1692,6 +1783,8 @@ export class TrailScene {
   }
 
   dispose() {
+    this.clearMapLootFocus();
+    this.lootFocusTerrain?.dispose();
     ++this.cameraSelectionRevision;
     ++this.buildToken;
     ++this.geometrySelectionToken;
