@@ -26,10 +26,11 @@ internal sealed class RecordingSession : IDisposable
     };
 
     private readonly ManualLogSource _log;
-    private readonly FileStream _stream;
+    private readonly Stream _stream;
+    private readonly bool _recordLocal;
     private readonly StreamWriter _writer;
     private readonly AppendOnlyHistoryLog? _history;
-    private readonly LivePublisher? _live;
+    private LivePublisher? _live;
     private readonly WorldTelemetryReader _world;
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private readonly Dictionary<int, TrackedPlayer> _tracked = new();
@@ -41,9 +42,10 @@ internal sealed class RecordingSession : IDisposable
     private string _lastRouteFingerprint = string.Empty;
     private bool _disposed;
 
-    public RecordingSession(string outputRoot, float sampleHz, ManualLogSource log, LivePublisher? live = null)
+    public RecordingSession(string outputRoot, float sampleHz, ManualLogSource log, LivePublisher? live = null, bool recordLocal = true)
     {
         _log = log;
+        _recordLocal = recordLocal;
         Scene scene = SceneManager.GetActiveScene();
         int levelIndex = GetLevelIndex();
         int mapSlot = ResolveMapSlot(scene.name, levelIndex);
@@ -55,7 +57,7 @@ internal sealed class RecordingSession : IDisposable
         string directoryName = SanitizeFileName(
             startedAt.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture)
             + "_" + scene.name + "_" + sessionId[..Math.Min(sessionId.Length, 12)]);
-        SessionDirectory = CreateUniqueDirectory(outputRoot, directoryName);
+        SessionDirectory = recordLocal ? CreateUniqueDirectory(outputRoot, directoryName) : string.Empty;
         _manifestPartialPath = Path.Combine(SessionDirectory, "manifest.partial.json");
         _streamPartialPath = Path.Combine(SessionDirectory, "stream.ndjson.partial");
 
@@ -78,30 +80,30 @@ internal sealed class RecordingSession : IDisposable
         RunManagerInstanceId = RunManager.Instance != null ? RunManager.Instance.GetInstanceID() : 0;
         _lastActiveSegment = GetActiveSegment();
 
-        Directory.CreateDirectory(SessionDirectory);
+        if (recordLocal) Directory.CreateDirectory(SessionDirectory);
         AtomicWriteManifest();
 
-        _stream = new FileStream(
+        _stream = recordLocal ? new FileStream(
             _streamPartialPath,
             FileMode.CreateNew,
             FileAccess.Write,
             FileShare.Read,
             16 * 1024,
-            FileOptions.SequentialScan);
+            FileOptions.SequentialScan) : Stream.Null;
         _writer = new StreamWriter(_stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), 16 * 1024)
         {
             AutoFlush = true,
         };
 
-        _history = AppendOnlyHistoryLog.TryOpen(outputRoot, _log);
+        _history = recordLocal ? AppendOnlyHistoryLog.TryOpen(outputRoot, _log) : null;
         _live = live;
         live?.Configure(Manifest, TryResolveLocalPlayerId());
         _world = new WorldTelemetryReader(WriteRecord, () => ElapsedMilliseconds, _log);
-        WorldTelemetryHooks.Active = _world;
+        if (recordLocal) WorldTelemetryHooks.Active = _world;
         _history?.WriteSessionStart(Manifest);
         WriteRouteIfChanged(Manifest.Route, 0);
         WriteEvent("segment_change", null, _lastActiveSegment, null, "session_start");
-        _log.LogInfo($"Recording PEAK trail to '{SessionDirectory}'.");
+        _log.LogInfo(recordLocal ? $"Recording PEAK trail to '{SessionDirectory}'." : "Live path session started; local recording is disabled.");
     }
 
     public string SessionDirectory { get; }
@@ -116,7 +118,7 @@ internal sealed class RecordingSession : IDisposable
 
     public void SampleWorld()
     {
-        if (!_disposed) _world.Sample();
+        if (!_disposed && _recordLocal) _world.Sample();
     }
 
     public void UpdateRunId()
@@ -133,6 +135,7 @@ internal sealed class RecordingSession : IDisposable
         }
 
         Manifest.RunId = current;
+        _live?.RefreshManifest();
         // A timestamp session ID remains valid when the host had not assigned RunId yet.
         AtomicWriteManifest();
     }
@@ -478,6 +481,77 @@ internal sealed class RecordingSession : IDisposable
     /// live sampling rate in the plugin ticker).</summary>
     public bool LiveEnabled => _live != null;
 
+    public bool RecordsLocally => _recordLocal;
+
+    public string? LiveWatchUrl => _live?.WatchUrl;
+
+    public string? LiveStatus => _live?.Status.ToString();
+
+    /// <summary>Changes live publishing without ending or restarting the local recording.</summary>
+    public void SetLivePublisher(LivePublisher? publisher)
+    {
+        if (_disposed || ReferenceEquals(publisher, _live)) return;
+        LivePublisher? previous = _live;
+        _live = null;
+        previous?.Dispose();
+        if (publisher == null) return;
+        try
+        {
+            publisher.Configure(Manifest, TryResolveLocalPlayerId());
+            _live = publisher;
+            PublishLiveSnapshot();
+        }
+        catch
+        {
+            _live = null;
+            publisher.Dispose();
+            throw;
+        }
+    }
+
+    private void PublishLiveSnapshot()
+    {
+        long nowMs = ElapsedMilliseconds;
+        if (Manifest.Route != null)
+        {
+            WriteLiveOnly(new Dictionary<string, object?>
+            {
+                ["type"] = "route", ["t"] = nowMs, ["route"] = Manifest.Route,
+            });
+        }
+        WriteLiveOnly(new Dictionary<string, object?>
+        {
+            ["type"] = "event", ["t"] = nowMs, ["event"] = "segment_change",
+            ["activeSegment"] = GetActiveSegment(),
+        });
+        foreach (TrackedPlayer player in _tracked.Values)
+        {
+            if (player.Character == null) continue;
+            string playerId = player.Identity.PlayerId;
+            WriteLiveOnly(new Dictionary<string, object?>
+            {
+                ["type"] = "participant", ["t"] = nowMs,
+                ["playerId"] = playerId, ["nickname"] = player.Identity.Nickname,
+            });
+            AppearanceTelemetry? appearance = PlayerAppearanceReader.Read(player.Character, nowMs - player.FirstObservedAtMs);
+            if (appearance != null)
+            {
+                WriteLiveOnly(new Dictionary<string, object?>
+                {
+                    ["type"] = "appearance", ["t"] = nowMs,
+                    ["playerId"] = playerId, ["appearance"] = appearance,
+                });
+            }
+            // A fresh publisher needs complete change-driven state even if nothing changed.
+            player.LastStatusFingerprint = string.Empty;
+            player.LastStateAtMs = -StateHeartbeatMilliseconds;
+            player.LastInventoryFingerprint = string.Empty;
+            player.HasLiveSample = false;
+        }
+        SamplePlayers(float.MaxValue, float.MaxValue, 1f);
+        SampleLivePositions(0.05f, 2f, 1f);
+    }
+
     public void Complete(string reason)
     {
         if (_disposed)
@@ -505,6 +579,7 @@ internal sealed class RecordingSession : IDisposable
         AtomicWriteManifest();
         _history?.WriteSessionEnd(Manifest, ElapsedMilliseconds);
         DisposeWriter();
+        if (!_recordLocal) return;
 
         string finalStream = Path.Combine(SessionDirectory, "stream.ndjson");
         string finalManifest = Path.Combine(SessionDirectory, "manifest.json");
@@ -846,17 +921,28 @@ internal sealed class RecordingSession : IDisposable
             return;
         }
 
+        if (_recordLocal)
+        {
+            try
+            {
+                _writer.WriteLine(JsonConvert.SerializeObject(record, Formatting.None, CompactJsonSettings));
+                _history?.WriteTraceRecord(Manifest.SessionId, record);
+            }
+            catch (Exception exception)
+            {
+                _log.LogError($"Failed to append trail record: {exception}");
+            }
+        }
         try
         {
-            _writer.WriteLine(JsonConvert.SerializeObject(record, Formatting.None, CompactJsonSettings));
-            _history?.WriteTraceRecord(Manifest.SessionId, record);
-            // Live publishing is additive: the offline files above stay the
-            // archival record and the relay path must never affect them.
-            if (record is Dictionary<string, object?> dictionary) _live?.Publish(dictionary, RoomTimestamp());
+            // Disk failures and a disabled local archive must not stop the live path.
+            if (record is Dictionary<string, object?> dictionary
+                && !string.Equals(dictionary.TryGetValue("type", out object? type) ? type as string : null, "sample", StringComparison.Ordinal))
+                _live?.Publish(dictionary, RoomTimestamp());
         }
         catch (Exception exception)
         {
-            _log.LogError($"Failed to append trail record: {exception}");
+            _log.LogWarning($"Failed to enqueue live record: {exception.GetType().Name}");
         }
     }
 
@@ -911,6 +997,7 @@ internal sealed class RecordingSession : IDisposable
 
     private void AtomicWriteManifest()
     {
+        if (!_recordLocal) return;
         try
         {
             AtomicWriteJson(_manifestPartialPath, Manifest);
@@ -961,7 +1048,8 @@ internal sealed class RecordingSession : IDisposable
         try
         {
             _writer.Flush();
-            _stream.Flush(flushToDisk: true);
+            if (_stream is FileStream fileStream) fileStream.Flush(flushToDisk: true);
+            else _stream.Flush();
             _live?.Dispose();
         }
         catch (Exception exception)

@@ -1,282 +1,358 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Threading;
 using BepInEx.Logging;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace PeakTrailRecorder;
 
+internal enum LivePublisherStatus { WaitingForRun, Connecting, Standby, Live, Reconnecting, Stopped }
+
 /// <summary>
-/// Publishes the session's records to the live relay while the game runs.
-/// Everything happens on one background thread over outbound HTTP only — the
-/// Unity main thread just enqueues already-materialized POCO dictionaries and
-/// never touches sockets. The 4-character run code identifies the run and is
-/// confirmed server-side by re-deriving it from the runId; no login is required.
+/// Account-free, leased v2 publishing. All game objects are projected on the caller
+/// thread; the worker handles only detached JSON and cancellable outbound HTTP.
 /// </summary>
 internal sealed class LivePublisher : IDisposable
 {
     private const int FlushIntervalMs = 100;
-    private const int BatchSizeLines = 40;
-    private const int MaxQueuedRecords = 4000;
-    private const int MaxPreRegistrationRecords = 2000;
-    private const int MaxRetriesPerBatch = 3;
-    private static readonly TimeSpan HttpClientTimeout = TimeSpan.FromSeconds(5);
-
+    private const int MaxBatchLines = 40;
+    private const int MaxBatchBytes = 128 * 1024;
     private readonly ManualLogSource _log;
     private readonly string _serverUrl;
-    private readonly ConcurrentQueue<Dictionary<string, object?>> _queue = new();
-    private readonly AutoResetEvent _signal = new(initialState: false);
+    private readonly string _clientId = Guid.NewGuid().ToString("N");
     private readonly CancellationTokenSource _cancellation = new();
-
     private readonly HttpClient _http;
     private readonly Thread _thread;
-    private readonly List<string> _backlog = new();       // serialized lines waiting for registration
-    private readonly List<string> _batch = new();
+    private readonly LivePayload _payload = new();
+    private readonly LiveRecordBuffer _records = new();
+    private readonly object _configurationLock = new();
+    private readonly Stopwatch _clock = Stopwatch.StartNew();
+    private TraceManifest? _sourceManifest; // only Configure/Publish on the game thread access this
+    private JObject? _manifest;
+    private string? _roomKey;
+    private string? _configuredRunId;
+    private string? _sessionId;
+    private string? _publishToken;
+    private string? _watchUrl;
+    private long _epoch = -1;
+    private long _sequence;
+    private long _epochOrigin;
+    private long _nextRegistrationAt;
+    private long _nextHeartbeatAt;
+    private long _nextUploadAt;
+    private int _heartbeatMs = 5000;
+    private int _retryMs = 500;
+    private string? _pendingBody;
+    private volatile LivePublisherStatus _status = LivePublisherStatus.WaitingForRun;
+    private int _disposed;
+    private long _lastWarningAt = -60_000;
 
-    private TraceManifest? _manifest;
-    private string? _producer;
-    private string? _code;
-    private bool _registered;
-    private int _lastWarningAtMs;
-    private bool _disposed;
+    public LivePublisher(string serverUrl, ManualLogSource log) : this(serverUrl, log, null) { }
 
-    public LivePublisher(string serverUrl, ManualLogSource log)
+    // The injectable transport keeps network/failure tests independent of Unity.
+    internal LivePublisher(string serverUrl, ManualLogSource log, HttpMessageHandler? handler)
     {
         var connection = new LiveRelayConnection(serverUrl);
         _serverUrl = connection.ServerUrl;
         _log = log;
-        _http = connection.CreateHttpClient(HttpClientTimeout);
-        _thread = new Thread(RunLoop)
-        {
-            IsBackground = true,
-            Name = "PeakTrailLivePublisher",
-        };
+        _http = handler == null
+            ? connection.CreateHttpClient(TimeSpan.FromSeconds(5))
+            : new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) };
+        _thread = new Thread(RunLoop) { IsBackground = true, Name = "PeakTrailLivePublisherV2" };
         _thread.Start();
     }
 
-    /// <summary>Called once by the recording session after its manifest exists.</summary>
+    public LivePublisherStatus Status => Volatile.Read(ref _disposed) != 0 ? LivePublisherStatus.Stopped : _status;
+    public string? WatchUrl => Volatile.Read(ref _watchUrl);
+
+    /// <summary>The legacy producer argument is intentionally never transmitted.</summary>
     public void Configure(TraceManifest manifest, string? producer)
     {
-        _manifest = manifest;
-        _producer = string.IsNullOrWhiteSpace(producer) ? null : producer;
+        _sourceManifest = manifest;
+        RefreshManifest();
     }
 
-    /// <summary>Enqueue one record on the Unity main thread. The room timestamp is
-    /// attached here so the relay can deduplicate the same game frame uploaded by
-    /// several teammates. Never throws; drops on overflow instead of blocking.</summary>
+    /// <summary>Call on the game thread when a previously missing RunId becomes available.</summary>
+    public void RefreshManifest()
+    {
+        if (Volatile.Read(ref _disposed) != 0 || _sourceManifest == null) return;
+        string runId = RunCode.Normalize(_sourceManifest.RunId);
+        if (runId.Length == 0 || string.Equals(runId, _configuredRunId, StringComparison.Ordinal)) return;
+        JObject safe = LivePayload.Manifest(_sourceManifest);
+        string key = LivePayload.RoomKey(runId, _sourceManifest.SceneName);
+        lock (_configurationLock)
+        {
+            _manifest = safe;
+            _roomKey = key;
+            _configuredRunId = runId;
+        }
+    }
+
+    /// <summary>No sockets, waits, or Unity access. Incoming POCOs are detached and anonymized.</summary>
     public void Publish(Dictionary<string, object?> record, int roomTimestamp)
     {
-        if (_disposed || record == null) return;
-        if (_queue.Count >= MaxQueuedRecords)
+        if (Volatile.Read(ref _disposed) != 0 || record == null) return;
+        try
         {
-            WarnThrottled("Live queue is full; dropping records faster than the relay accepts them.");
-            return;
+            RefreshManifest();
+            JObject? safe = _payload.Record(record);
+            if (safe != null) _records.Add(safe);
         }
-        var envelope = new Dictionary<string, object?>(record)
-        {
-            ["roomTs"] = roomTimestamp,
-        };
-        _queue.Enqueue(envelope);
-        _signal.Set();
+        catch (Exception exception) { WarnThrottled("Live record skipped: " + exception.GetType().Name); }
     }
 
     private void RunLoop()
     {
-        var pending = new Queue<Dictionary<string, object?>>();
-        var preRegistration = new List<string>();
-        var backoff = TimeSpan.FromMilliseconds(500);
-        while (!_cancellation.IsCancellationRequested)
+        long nextTick = FlushIntervalMs;
+        try
         {
-            try
+            while (!_cancellation.IsCancellationRequested)
             {
-                _signal.WaitOne(FlushIntervalMs);
-                DrainQueue(pending);
-                if (!_registered)
+                // Publish never wakes this clock: no tiny requests per individual sample.
+                int wait = (int)Math.Max(0, nextTick - _clock.ElapsedMilliseconds);
+                if (_cancellation.Token.WaitHandle.WaitOne(wait)) break;
+                nextTick = _clock.ElapsedMilliseconds + FlushIntervalMs;
+                try { Tick(); }
+                catch (OperationCanceledException) when (_cancellation.IsCancellationRequested) { break; }
+                catch (Exception exception)
                 {
-                    if (!TryRegister(preRegistration)) continue;
-                }
-                FlushBatches();
-                CapBatchBacklog();
-                backoff = TimeSpan.FromMilliseconds(500);
-            }
-            catch (Exception exception)
-            {
-                if (!_cancellation.IsCancellationRequested)
-                {
-                    WarnThrottled("Live publisher retrying after: " + exception.GetType().Name);
-                }
-                Thread.Sleep(backoff);
-                backoff = TimeSpan.FromMilliseconds(Math.Min(backoff.TotalMilliseconds * 2, 8000));
-            }
-        }
-        DrainQueue(pending);
-        if (_registered) FlushBatches();
-    }
-
-    /// <summary>A dead relay must never grow memory: once the backlog exceeds the
-    /// same bound as the main queue, the oldest lines are dropped for good.</summary>
-    private void CapBatchBacklog()
-    {
-        if (_batch.Count <= MaxQueuedRecords) return;
-        WarnThrottled("Live relay is unreachable; dropping the oldest queued records.");
-        _batch.RemoveRange(0, _batch.Count - MaxQueuedRecords);
-    }
-
-    private void DrainQueue(Queue<Dictionary<string, object?>> pending)
-    {
-        while (_queue.TryDequeue(out Dictionary<string, object?>? record))
-        {
-            pending.Enqueue(record);
-        }
-        while (pending.Count > 0)
-        {
-            Dictionary<string, object?> record = pending.Dequeue();
-            string line;
-            try
-            {
-                line = JsonConvert.SerializeObject(record, Formatting.None, RecordingSession.CompactJsonSettings);
-            }
-            catch
-            {
-                continue; // A record that cannot serialize is dropped, never fatal.
-            }
-            if (_registered) _batch.Add(line);
-            else
-            {
-                _backlog.Add(line);
-                if (_backlog.Count > MaxPreRegistrationRecords)
-                {
-                    _backlog.RemoveRange(0, _backlog.Count - MaxPreRegistrationRecords);
+                    if (_cancellation.IsCancellationRequested) break;
+                    _status = LivePublisherStatus.Reconnecting;
+                    WarnThrottled("Live relay unavailable: " + exception.GetType().Name);
+                    Backoff();
                 }
             }
         }
-    }
-
-    private bool TryRegister(List<string> preRegistration)
-    {
-        TraceManifest? manifest = _manifest;
-        if (manifest == null || string.IsNullOrEmpty(manifest.RunId)) return false;
-
-        for (int attempt = 0; attempt < RunCode.MaxDerivationAttempts; attempt++)
+        finally
         {
-            string code = RunCode.Derive(manifest.RunId, attempt);
-            var payload = new Dictionary<string, object?>
-            {
-                ["code"] = code,
-                ["runId"] = manifest.RunId,
-                ["manifest"] = manifest,
-            };
-            string body = JsonConvert.SerializeObject(payload, Formatting.None, RecordingSession.CompactJsonSettings);
-            using var content = new StringContent(body, Encoding.UTF8, "application/json");
-            using var response = _http.PostAsync($"{_serverUrl}/api/runs", content).GetAwaiter().GetResult();
-            if (response.IsSuccessStatusCode)
-            {
-                _code = code;
-                _registered = true;
-                _log.LogInfo($"Live publishing confirmed by relay: run code '{code}' (attempt {attempt}).");
-                if (preRegistration.Count > 0)
-                {
-                    _batch.AddRange(preRegistration);
-                    preRegistration.Clear();
-                }
-                return true;
-            }
-            bool collision = (int)response.StatusCode == 409;
-            if (!collision)
-            {
-                WarnThrottled($"Relay rejected run registration (HTTP {(int)response.StatusCode}). Check the relay service.");
-                return false;
-            }
-            // Another runId hashed to this code; the deterministic next attempt
-            // keeps every teammate on the same (new) code with no coordination.
+            TryEnd();
+            _http.Dispose();
+            _cancellation.Dispose();
         }
-        WarnThrottled("Every run-code attempt collided; live publishing stays idle this session.");
-        return false;
     }
 
-    private void FlushBatches()
+    private void Tick()
     {
-        while (_batch.Count > 0)
+        long now = _clock.ElapsedMilliseconds;
+        if (_publishToken == null)
         {
-            int size = Math.Min(BatchSizeLines, _batch.Count);
-            string body = string.Join("\n", _batch.GetRange(0, size)) + "\n";
-            _batch.RemoveRange(0, size);
-            if (!PostBatch(body))
+            if (now >= _nextRegistrationAt) TryRegister();
+            return;
+        }
+        if (now >= _nextHeartbeatAt)
+        {
+            using HttpResponseMessage heartbeat = Post("heartbeat", "{}", "application/json");
+            if (LeaseLost(heartbeat)) return;
+            if (!heartbeat.IsSuccessStatusCode)
             {
-                // Put the batch back at the front for the next cycle; CapBatchBacklog
-                // bounds total memory if the relay stays unreachable.
-                _batch.InsertRange(0, body.Split('\n', StringSplitOptions.RemoveEmptyEntries));
+                _nextHeartbeatAt = now + RetryDelay(heartbeat, 1000);
+                _status = LivePublisherStatus.Reconnecting;
                 return;
             }
+            _nextHeartbeatAt = _clock.ElapsedMilliseconds + _heartbeatMs;
+        }
+        if (_clock.ElapsedMilliseconds < _nextUploadAt) return;
+        if (_pendingBody == null) _pendingBody = BuildBatch();
+        if (_pendingBody == null) { _status = LivePublisherStatus.Live; return; }
+        using HttpResponseMessage response = Post("records", _pendingBody, "application/x-ndjson");
+        if (LeaseLost(response)) return;
+        if (response.IsSuccessStatusCode)
+        {
+            _pendingBody = null;
+            _retryMs = 500;
+            _status = LivePublisherStatus.Live;
+            _nextUploadAt = _clock.ElapsedMilliseconds + FlushIntervalMs;
+            return;
+        }
+        _status = LivePublisherStatus.Reconnecting;
+        if ((int)response.StatusCode == 429)
+        {
+            // Preserve exactly the same envelope and sequence numbers until acknowledged.
+            _nextUploadAt = _clock.ElapsedMilliseconds + RetryDelay(response, 1000);
+        }
+        else
+        {
+            WarnThrottled("Live relay rejected a batch (HTTP " + (int)response.StatusCode + ").");
+            Backoff();
         }
     }
 
-    private bool PostBatch(string body)
+    private void TryRegister()
     {
-        for (int attempt = 1; attempt <= MaxRetriesPerBatch; attempt++)
+        JObject? manifest;
+        string? roomKey;
+        lock (_configurationLock)
         {
-            try
-            {
-                using var content = new StringContent(body, Encoding.UTF8, "application/x-ndjson");
-                using var response = _http.PostAsync($"{_serverUrl}/api/runs/{_code}/records?producer={Uri.EscapeDataString(_producer ?? "")}", content).GetAwaiter().GetResult();
-                if (response.IsSuccessStatusCode) return true;
-                int status = (int)response.StatusCode;
-                if (status == 404)
-                {
-                    // Relay restarted or the run expired; re-register and replay.
-                    _registered = false;
-                    return false;
-                }
-                if (status == 429 || status == 413)
-                {
-                    WarnThrottled($"Relay throttled a live batch ({status}); dropping it to protect the game.");
-                    return true; // Treated as delivered: never block or grow unbounded.
-                }
-                WarnThrottled($"Relay rejected a live batch (HTTP {status}). Check the relay service.");
-            }
-            catch (Exception exception)
-            {
-                WarnThrottled($"Live batch attempt {attempt} failed: {exception.GetType().Name}");
-            }
-            Thread.Sleep(TimeSpan.FromMilliseconds(250 * attempt));
+            manifest = _manifest == null ? null : (JObject)_manifest.DeepClone();
+            roomKey = _roomKey;
         }
-        return false;
+        if (manifest == null || roomKey == null) { _status = LivePublisherStatus.WaitingForRun; return; }
+        _status = _epoch < 0 ? LivePublisherStatus.Connecting : LivePublisherStatus.Reconnecting;
+        var requestBody = new JObject { ["roomKey"] = roomKey, ["clientId"] = _clientId, ["manifest"] = manifest };
+        using var request = new HttpRequestMessage(HttpMethod.Post, _serverUrl + "/api/live/v2/sessions")
+        {
+            Content = new StringContent(requestBody.ToString(Formatting.None), Encoding.UTF8, "application/json"),
+        };
+        using HttpResponseMessage response = _http.SendAsync(request, _cancellation.Token).GetAwaiter().GetResult();
+        JObject body = ReadObject(response);
+        if ((int)response.StatusCode == 409 && (string?)body["error"] == "publisher-active")
+        {
+            SetWatchUrl((string?)body["watchId"]);
+            _status = LivePublisherStatus.Standby;
+            _nextRegistrationAt = _clock.ElapsedMilliseconds + Math.Clamp((int?)body["retryAfterMs"] ?? 5000, 1000, 30_000);
+            return;
+        }
+        if (!response.IsSuccessStatusCode)
+        {
+            _status = LivePublisherStatus.Reconnecting;
+            _nextRegistrationAt = _clock.ElapsedMilliseconds + RetryDelay(response, _retryMs);
+            _retryMs = Math.Min(_retryMs * 2, 8000);
+            WarnThrottled("Live registration rejected (HTTP " + (int)response.StatusCode + ").");
+            return;
+        }
+        string? sessionId = (string?)body["sessionId"];
+        string? token = (string?)body["publishToken"];
+        string? watchId = (string?)body["watchId"];
+        long epoch = (long?)body["epoch"] ?? -1;
+        if (string.IsNullOrEmpty(sessionId) || string.IsNullOrEmpty(token) || string.IsNullOrEmpty(watchId) || epoch < 0)
+            throw new InvalidOperationException("Incomplete live registration response.");
+        bool newEpoch = epoch != _epoch || !string.Equals(sessionId, _sessionId, StringComparison.Ordinal);
+        _sessionId = sessionId;
+        _publishToken = token;
+        _epoch = epoch;
+        SetWatchUrl(watchId);
+        _heartbeatMs = Math.Clamp((int?)body["heartbeatMs"] ?? 5000, 1000, 5000);
+        _nextHeartbeatAt = _clock.ElapsedMilliseconds + _heartbeatMs;
+        if (newEpoch)
+        {
+            _sequence = 0;
+            _epochOrigin = _records.LatestTime;
+            _pendingBody = null;
+            _records.ReplaySnapshot(includeRecentEvents: true);
+        }
+        else if (body["lastProducerSeq"] != null)
+        {
+            long acknowledged = (long)body["lastProducerSeq"]!;
+            RestoreUnacknowledgedEvents(acknowledged);
+            _sequence = acknowledged;
+            _pendingBody = null;
+            _records.ReplaySnapshot(includeRecentEvents: false);
+        }
+        _retryMs = 500;
+        _nextUploadAt = _clock.ElapsedMilliseconds + FlushIntervalMs;
+        _status = LivePublisherStatus.Live;
+    }
+
+    private string? BuildBatch()
+    {
+        List<JObject> records = _records.Take(MaxBatchLines, MaxBatchBytes - 4096);
+        if (records.Count == 0) return null;
+        var body = new StringBuilder();
+        foreach (JObject record in records)
+        {
+            record["t"] = Math.Max(0, ((long?)record["t"] ?? 0) - _epochOrigin);
+            body.Append(new JObject { ["producerSeq"] = ++_sequence, ["record"] = record }.ToString(Formatting.None)).Append('\n');
+        }
+        return body.ToString();
+    }
+
+    private HttpResponseMessage Post(string operation, string body, string contentType)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post,
+            _serverUrl + "/api/live/v2/sessions/" + Uri.EscapeDataString(_sessionId!) + "/" + operation);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _publishToken);
+        request.Content = new StringContent(body, Encoding.UTF8, contentType);
+        return _http.SendAsync(request, _cancellation.Token).GetAwaiter().GetResult();
+    }
+
+    private void RestoreUnacknowledgedEvents(long acknowledged)
+    {
+        if (_pendingBody == null) return;
+        foreach (string line in _pendingBody.Split('\n'))
+        {
+            if (line.Length == 0) continue;
+            JObject envelope = JObject.Parse(line);
+            if ((long?)envelope["producerSeq"] <= acknowledged || envelope["record"] is not JObject record) continue;
+            if ((string?)record["type"] != "event") continue;
+            record["t"] = ((long?)record["t"] ?? 0) + _epochOrigin;
+            _records.Add(record);
+        }
+    }
+
+    private bool LeaseLost(HttpResponseMessage response)
+    {
+        int status = (int)response.StatusCode;
+        // 410 means the former session ended (disconnect retention or TTL). Its
+        // capability cannot be renewed: register a fresh session/watch instead.
+        if (status != 401 && status != 404 && status != 409 && status != 410) return false;
+        _publishToken = null;
+        _status = LivePublisherStatus.Reconnecting;
+        _nextRegistrationAt = _clock.ElapsedMilliseconds + 500;
+        return true;
+    }
+
+    private static JObject ReadObject(HttpResponseMessage response)
+    {
+        string text = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        if (text.Length > 32 * 1024) throw new InvalidOperationException("Oversized relay response.");
+        try { return JObject.Parse(text); }
+        catch (JsonException) { return new JObject(); }
+    }
+
+    private void SetWatchUrl(string? watchId)
+    {
+        if (string.IsNullOrEmpty(watchId) || watchId.Length > 128) return;
+        // Never navigate to a URL supplied by the relay response.
+        Volatile.Write(ref _watchUrl, _serverUrl + "/?watch=" + Uri.EscapeDataString(watchId));
+    }
+
+    private static int RetryDelay(HttpResponseMessage response, int fallback)
+    {
+        TimeSpan? delta = response.Headers.RetryAfter?.Delta;
+        if (delta == null && response.Headers.RetryAfter?.Date is DateTimeOffset date) delta = date - DateTimeOffset.UtcNow;
+        return Math.Clamp((int)(delta?.TotalMilliseconds ?? fallback), 500, 30_000);
+    }
+
+    private void Backoff()
+    {
+        _nextUploadAt = _nextRegistrationAt = _clock.ElapsedMilliseconds + _retryMs;
+        _nextHeartbeatAt = Math.Max(_nextHeartbeatAt, _nextUploadAt);
+        _retryMs = Math.Min(_retryMs * 2, 8000);
+    }
+
+    private void TryEnd()
+    {
+        if (_sessionId == null || _publishToken == null) return;
+        try
+        {
+            // A separate deadline permits end after cancellation without delaying Dispose.
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+            using var request = new HttpRequestMessage(HttpMethod.Post,
+                _serverUrl + "/api/live/v2/sessions/" + Uri.EscapeDataString(_sessionId) + "/end");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _publishToken);
+            request.Content = new StringContent("{\"reason\":\"publisher-stopped\"}", Encoding.UTF8, "application/json");
+            using HttpResponseMessage response = _http.SendAsync(request, deadline.Token).GetAwaiter().GetResult();
+        }
+        catch { /* The lease expires if a final notification cannot arrive. */ }
     }
 
     private void WarnThrottled(string message)
     {
-        // Environment.TickCount64 does not exist on netstandard2.1; TickCount wraps,
-        // so subtract with int arithmetic (wrap-safe for 60 s windows).
-        int now = Environment.TickCount;
-        if (now - _lastWarningAtMs < 60_000 && _lastWarningAtMs != 0) return;
-        _lastWarningAtMs = now;
+        long now = _clock.ElapsedMilliseconds;
+        if (now - Interlocked.Read(ref _lastWarningAt) < 60_000) return;
+        Interlocked.Exchange(ref _lastWarningAt, now);
         _log.LogWarning(message);
     }
 
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
-        try
-        {
-            // Cancel first: the run loop's exit path performs the final drain and
-            // flush. The offline files remain the archival record regardless.
-            _cancellation.Cancel();
-            _signal.Set();
-            if (!_thread.Join(TimeSpan.FromSeconds(3)))
-            {
-                _thread.Join(TimeSpan.FromSeconds(1));
-            }
-        }
-        catch { /* shutdown must never take the game down */ }
-        finally
-        {
-            _cancellation.Dispose();
-            _http.Dispose();
-            _signal.Dispose();
-        }
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        _status = LivePublisherStatus.Stopped;
+        _cancellation.Cancel();
     }
 }

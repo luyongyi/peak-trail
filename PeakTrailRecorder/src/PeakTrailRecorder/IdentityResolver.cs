@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using PhotonPlayer = Photon.Realtime.Player;
@@ -64,9 +65,12 @@ internal static class IdentityResolver
             playerId = character.data.productUserID;
             idSource = "character-product-user-id";
         }
-        if (string.IsNullOrWhiteSpace(playerId) && character?.data != null && character.data.userID != 0)
+        // Recent PEAK builds changed userID from an integer to a string.
+        string characterUserId = character?.data == null ? string.Empty
+            : Convert.ToString(character.data.userID, CultureInfo.InvariantCulture) ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(playerId) && !string.IsNullOrWhiteSpace(characterUserId) && characterUserId != "0")
         {
-            playerId = character.data.userID.ToString();
+            playerId = characterUserId;
             idSource = "character-platform-user-id";
         }
         if (string.IsNullOrWhiteSpace(playerId))

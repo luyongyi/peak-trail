@@ -141,19 +141,26 @@ build ID is captured so the viewer can refuse to overlay a trace on geometry fro
   trails. Static game meshes, materials, icons and outfit references are exported
   by `PeakTrailPlatform/tools/game-assets`, and selected by exact Steam build.
 - Maximum frequency: 5 Hz by default.
-- Optional live publishing (`[Live] Enabled`, default **off**): while recording, a
-  background thread uploads the same records to a relay over outbound HTTP(S).
-  The relay confirms a 4-character run code derived from the room-shared RunId and
-  merges every teammate's upload of the same run into one stream: records carry a
-  `roomTs` envelope (Photon's shared clock) and the relay deduplicates on
-  `type|playerId|roomTs`. The code and protocol are pinned by cross-language
-  vectors (`tests/LiveContract` ↔ `PeakTrailPlatform/server/run-code.mjs`). See
-  `PeakTrailPlatform/server/README.md`. Since 0.7.1, the default `[Live] ServerUrl`
-  is `https://peak.mylus.cn`; set `Enabled = true` to publish directly without a
-  password or token. Existing BepInEx configs keep their saved URL, so update an old
-  localhost URL explicitly. `ServerUrl` accepts HTTP(S) URLs without user information,
-  query strings or fragments; redirects are not followed. The public relay requires
-  no login, so live sessions should be treated as visible to anyone with site access.
+- **Automatic path streaming (0.8.0):** new installations stream every playable run
+  by default. Open the game's **Settings → General → Live path sharing** to turn
+  streaming off or on immediately; the preference is saved across runs and restarts.
+  The main menu and pause menu use the game's original setting cells, on/off control,
+  fonts, sounds and controller navigation. The adjacent **Live viewing link** button
+  copies a read-only link after the relay confirms the session. No browser setup or
+  account is needed. Saved older `[Live] Enabled` preferences are respected.
+- One installation captures the whole synchronized team. If several teammates have
+  the DLL, the relay automatically leases one publisher and the others stand by.
+  Streaming uses temporary per-session player IDs and a separate publisher credential;
+  real platform IDs and the original local recording are not uploaded. New streams use
+  `/api/live/v2`; the old four-character-code upload protocol is disabled by default.
+  Position sampling is independent of local file sampling, and network requests run
+  on a background thread. Local recording can be disabled while streaming continues.
+  The relay keeps a bounded recent viewing window; streaming is not a recording archive.
+- The relay origin remains `[Live] ServerUrl = https://peak.mylus.cn`. Existing saved
+  origins are respected. HTTP(S) origins cannot contain credentials, paths, queries or
+  fragments, and redirects are not followed. Viewing links grant read access to their
+  holders; they do not grant upload rights or appear in a public room directory.
+  Deploy the matching v2 service and web viewer before distributing this DLL.
 - Adaptive thresholds: 0.25 m movement, 5 degrees yaw, or a 1 second stationary heartbeat.
 - A separate `state` record is emitted whenever stamina changes by at least `0.002`, and at
   least once per second even if the player does not move. It contains `stamina`, `maxStamina`,

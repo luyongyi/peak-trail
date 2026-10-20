@@ -15,7 +15,7 @@ namespace PeakTrailRecorder;
 [BepInAutoPlugin]
 public partial class Plugin : BaseUnityPlugin
 {
-    internal const string RecorderVersion = "0.7.1";
+    internal const string RecorderVersion = "0.8.0";
 
     internal static ManualLogSource Log { get; private set; } = null!;
 
@@ -47,6 +47,7 @@ public partial class Plugin : BaseUnityPlugin
     private const float LiveSampleHz = 20f;
     private int _lastFinalizedRunManagerInstanceId;
     private bool _applicationQuitting;
+    private float _nextLiveStartAttemptAt;
 
     private void Awake()
     {
@@ -64,13 +65,15 @@ public partial class Plugin : BaseUnityPlugin
         _liveEnabled = Config.Bind(
             "Live",
             "Enabled",
-            false,
-            "Publish this run's records to a live relay while playing. OFF by default: the relay receives real-time positions and stable player IDs; every recorded participant must consent.");
+            true,
+            "Automatically stream each run's path. Change this immediately in the game's General settings. The live stream uses temporary player IDs; local recordings retain their original format.");
         _liveServerUrl = Config.Bind(
             "Live",
             "ServerUrl",
             LiveRelayConnection.DefaultServerUrl,
-            "Base HTTP(S) URL of the PeakTrail live relay, without user information, query or fragment. The relay confirms a 4-character code derived from the room-shared RunId and merges every teammate's upload into one run.");
+            "Base HTTP(S) URL of the PeakTrail live relay, without user information, query or fragment. Publishing credentials and the single active publisher are managed automatically.");
+
+        NativeLiveSettings.Install(_liveEnabled, () => _session?.LiveWatchUrl, () => _session?.LiveStatus, Log);
 
         _mapExportKey = Config.Bind(
             "MapCapture",
@@ -131,6 +134,7 @@ public partial class Plugin : BaseUnityPlugin
         PlayerAppearanceReader.ClearOutsideRoom();
         PlayerStatusReader.ClearOutsideRoom();
         TryStartMapExport();
+        NativeLiveSettings.EnsureRegistered();
 
         if (Time.realtimeSinceStartup >= _nextSubscriptionRefreshAt)
         {
@@ -143,10 +147,17 @@ public partial class Plugin : BaseUnityPlugin
             Application.runInBackground = true;
         }
 
-        if (!_enabled.Value)
+        if (!_enabled.Value && !_liveEnabled.Value)
         {
-            FinalizeSession("recording_disabled");
+            FinalizeSession("recording_and_live_disabled");
+            _lastFinalizedRunManagerInstanceId = 0;
             return;
+        }
+
+        if (_session != null && _session.RecordsLocally != _enabled.Value)
+        {
+            FinalizeSession("local_recording_setting_changed");
+            _lastFinalizedRunManagerInstanceId = 0;
         }
 
         if (_session != null)
@@ -169,6 +180,14 @@ public partial class Plugin : BaseUnityPlugin
 
         _session!.SampleWorld();
 
+        SynchronizeLiveSetting();
+        // Live sampling has its own clock. Do not put it behind the file sampler's return.
+        if (_session.LiveEnabled && Time.realtimeSinceStartup >= _nextLiveSampleAt)
+        {
+            _nextLiveSampleAt = Time.realtimeSinceStartup + 1f / LiveSampleHz;
+            _session.SampleLivePositions(0.05f, 2f, 1f);
+        }
+
         float hz = Mathf.Clamp(_sampleHz.Value, 1f, 30f);
         if (Time.realtimeSinceStartup < _nextSampleAt)
         {
@@ -183,13 +202,27 @@ public partial class Plugin : BaseUnityPlugin
             Mathf.Max(0f, _minimumYawDegrees.Value),
             Mathf.Max(0.1f, _maximumSilenceSeconds.Value));
 
-        // The relay stream runs at its own higher rate (files stay at SampleHz):
-        // tight position updates cut viewer latency, and the relay-only records
-        // never touch the offline files.
-        if (_session.LiveEnabled && Time.realtimeSinceStartup >= _nextLiveSampleAt)
+    }
+
+    private void SynchronizeLiveSetting()
+    {
+        if (_session == null) return;
+        if (!_liveEnabled.Value)
         {
-            _nextLiveSampleAt = Time.realtimeSinceStartup + 1f / LiveSampleHz;
-            _session.SampleLivePositions(0.05f, 2f, 1f);
+            _session.SetLivePublisher(null);
+            _nextLiveStartAttemptAt = 0f;
+            return;
+        }
+        if (_session.LiveEnabled || Time.realtimeSinceStartup < _nextLiveStartAttemptAt) return;
+        try
+        {
+            _session.SetLivePublisher(new LivePublisher(_liveServerUrl.Value.Trim(), Log));
+            _nextLiveSampleAt = 0f;
+        }
+        catch (Exception exception)
+        {
+            _nextLiveStartAttemptAt = Time.realtimeSinceStartup + 10f;
+            Log.LogWarning($"Live connection unavailable ({exception.GetType().Name}); local recording continues.");
         }
     }
 
@@ -257,22 +290,12 @@ public partial class Plugin : BaseUnityPlugin
             string root = Path.IsPathRooted(configured)
                 ? configured
                 : Path.Combine(Paths.BepInExRootPath, configured);
-            LivePublisher? live = null;
-            if (_liveEnabled.Value && !string.IsNullOrWhiteSpace(_liveServerUrl.Value))
-            {
-                try
-                {
-                    live = new LivePublisher(_liveServerUrl.Value.Trim(), Log);
-                }
-                catch (Exception liveException)
-                {
-                    Log.LogWarning($"Live publishing disabled for this session ({liveException.GetType().Name}). Check Live ServerUrl.");
-                }
-            }
-            _session = new RecordingSession(root, Mathf.Clamp(_sampleHz.Value, 1f, 30f), Log, live);
+            _session = new RecordingSession(root, Mathf.Clamp(_sampleHz.Value, 1f, 30f), Log, recordLocal: _enabled.Value);
             _session.ReconcilePlayers(characters);
             _nextSampleAt = 0f;
             _nextLiveSampleAt = 0f;
+            _nextLiveStartAttemptAt = 0f;
+            SynchronizeLiveSetting();
             return true;
         }
         catch (Exception exception)
@@ -398,6 +421,7 @@ public partial class Plugin : BaseUnityPlugin
 
     private void OnDestroy()
     {
+        NativeLiveSettings.Uninstall();
         PlayerAppearanceReader.Uninstall();
         WorldTelemetryHooks.Uninstall();
         PlayerStatusReader.Uninstall();

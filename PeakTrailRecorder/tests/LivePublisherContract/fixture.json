@@ -1,0 +1,149 @@
+{
+  "manifest": {
+    "schemaVersion": 1,
+    "startedAtUtc": "2026-10-20T00:00:00.0000000+00:00",
+    "gameVersion": "test",
+    "gameBuildId": 25306743,
+    "recorderVersion": "test",
+    "sceneName": "Level_0",
+    "levelIndex": 0,
+    "mapSlot": 0,
+    "projectionVersion": 1,
+    "sampleHz": 5.0,
+    "coordinateSpace": "unity-world-meters",
+    "positionAuthority": "xyz",
+    "segmentResolution": "unassigned",
+    "activeSegmentSemantics": "global-maphandler-segments-index",
+    "timeUnit": "milliseconds",
+    "recordingScope": "all-synchronized-players",
+    "identityMode": "session-player-id"
+  },
+  "records": [
+    {
+      "type": "participant",
+      "t": 1000,
+      "playerId": "p1",
+      "nickname": "测试玩家Name"
+    },
+    {
+      "type": "sample",
+      "t": 1100,
+      "playerId": "p1",
+      "pos": [
+        1.0,
+        2.0,
+        3.0
+      ],
+      "yaw": 45.0,
+      "capacityReady": true,
+      "stamina": 0.8,
+      "item": {
+        "id": "rock",
+        "itemId": 1,
+        "name": "Rock"
+      }
+    },
+    {
+      "type": "state",
+      "t": 1100,
+      "playerId": "p1",
+      "telemetryReady": true,
+      "stamina": 0.8
+    },
+    {
+      "type": "appearance",
+      "t": 1100,
+      "playerId": "p1",
+      "appearance": {
+        "ready": true,
+        "skinIndex": 1,
+        "skinColor": [
+          1.0,
+          0.5,
+          0.2,
+          1.0
+        ],
+        "formMaterialNames": [
+          "Material"
+        ]
+      }
+    },
+    {
+      "type": "inventory",
+      "t": 1100,
+      "playerId": "p1",
+      "inventoryReady": true,
+      "held": null,
+      "slots": [
+        {
+          "location": "slot:0",
+          "container": "main",
+          "index": 0,
+          "slotId": 0,
+          "empty": false,
+          "item": {
+            "id": "rock",
+            "itemId": 1,
+            "name": "Rock"
+          }
+        }
+      ]
+    },
+    {
+      "type": "status",
+      "t": 1100,
+      "playerId": "p1",
+      "reason": "changed",
+      "status": {
+        "ready": true,
+        "complete": true,
+        "dead": false,
+        "values": [
+          {
+            "id": 1,
+            "type": "Cold",
+            "amount": 0.2,
+            "staminaBlock": 0.2,
+            "extraStaminaBlock": 0.0
+          }
+        ],
+        "effects": [
+          {
+            "typeId": 1,
+            "type": "Cold"
+          }
+        ]
+      }
+    },
+    {
+      "type": "route",
+      "t": 1100,
+      "route": {
+        "authority": "maphandler-resolved-biomes",
+        "branch": "volcano-kiln",
+        "segments": [
+          {
+            "index": 0,
+            "biome": "Shore",
+            "biomeId": 0,
+            "name": "Shore",
+            "variantSelected": false
+          }
+        ]
+      }
+    },
+    {
+      "type": "event",
+      "t": 1100,
+      "playerId": "p1",
+      "pos": [
+        1.0,
+        2.0,
+        3.0
+      ],
+      "source": "observed",
+      "event": "item_thrown",
+      "throwCharge": 0.8
+    }
+  ]
+}
