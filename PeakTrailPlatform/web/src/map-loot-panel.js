@@ -99,7 +99,7 @@ export function createMapLootPanel({ getContext, getScene, root = document, load
       if (disposed || abort.signal.aborted || controller !== abort) return;
       source = data;
       for (const type of source?.types || []) if (!known.has(type.id)) {
-        known.add(type.id); if (["chest", "animal"].includes(type.category) || type.category === "item" && allItems) selected.add(type.id);
+        known.add(type.id); if (type.category === "animal" || type.category === "item" && allItems) selected.add(type.id);
       }
     } catch (exception) {
       if (disposed || abort.signal.aborted || controller !== abort) return;

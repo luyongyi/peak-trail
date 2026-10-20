@@ -223,7 +223,7 @@ test('switching marker language preserves filters and positions without fetching
     f.panel.sync(); await settle();
     f.elements.mapLootItems.checked = true; f.elements.mapLootItems.dispatch('change');
     const chest = f.elements.mapLootTypes.children[0].children[0];
-    chest.checked = false; f.elements.mapLootTypes.dispatch('change', chest);
+    chest.checked = true; f.elements.mapLootTypes.dispatch('change', chest);
     const before = f.overlays.at(-1);
     setLocale('en', { persist: false });
     assert.equal(f.elements.mapLootTypes.children[0].children[2].textContent, 'LUGGAGE');
@@ -233,7 +233,7 @@ test('switching marker language preserves filters and positions without fetching
     assert.deepEqual(f.overlays.at(-1).types, before.types);
     assert.deepEqual(f.overlays.at(-1).markers.map(marker => [marker.id, marker.pos]), before.markers.map(marker => [marker.id, marker.pos]));
     assert.equal(f.overlays.at(-1).markers.find(marker => marker.type === 'small').name, 'LUGGAGE');
-    assert.equal(f.elements.mapLootTypes.children[0].children[0].checked, false);
+    assert.equal(f.elements.mapLootTypes.children[0].children[0].checked, true);
     setLocale('zh-CN', { persist: false });
     assert.equal(f.elements.mapLootTypes.children[0].children[2].textContent, '小行李箱');
     f.panel.dispose();
@@ -243,18 +243,20 @@ test('switching marker language preserves filters and positions without fetching
   } finally { f.panel.dispose(); setLocale(previous, { persist: false }); }
 });
 
-test("panel defaults to all chest types, preserves focused rows and selection across chapters, and toggles fixed items", async () => {
+test("panel leaves chests off by default, preserves manual selection across chapters, and toggles fixed items", async () => {
   const f = fixture(); f.panel.sync(); await settle();
-  assert.equal(f.elements.mapLootCount.textContent, "1"); assert.equal(f.overlays.at(-1).markers.length, 2);
+  assert.equal(f.elements.mapLootCount.textContent, "0"); assert.equal(f.overlays.at(-1).markers.length, 2);
+  assert.equal(f.overlays.at(-1).types.has("small"), false);
+  assert.equal(f.overlays.at(-1).types.has("large"), false);
   const row = f.elements.mapLootTypes.children[0], input = row.children[0];
-  input.checked = false; f.elements.mapLootTypes.dispatch("change", input);
-  assert.equal(f.elements.mapLootTypes.children[0], row); assert.equal(f.elements.mapLootCount.textContent, "0");
+  input.checked = true; f.elements.mapLootTypes.dispatch("change", input);
+  assert.equal(f.elements.mapLootTypes.children[0], row); assert.equal(f.elements.mapLootCount.textContent, "1");
   f.elements.mapLootItems.checked = true; f.elements.mapLootItems.dispatch("change");
-  assert.equal(f.elements.mapLootCount.textContent, "1"); assert.ok(f.overlays.at(-1).types.has("berry"));
+  assert.equal(f.elements.mapLootCount.textContent, "2"); assert.ok(f.overlays.at(-1).types.has("berry"));
   f.context = { ...f.context, stageIndex: 1 }; f.panel.sync();
-  assert.equal(f.elements.mapLootCount.textContent, "1"); assert.deepEqual(f.overlays.at(-1).markers.map(marker => marker.id), ["b"]);
+  assert.equal(f.elements.mapLootCount.textContent, "0"); assert.deepEqual(f.overlays.at(-1).markers.map(marker => marker.id), ["b"]);
   f.context = { ...f.context, stageIndex: 0 }; f.panel.sync();
-  assert.equal(f.elements.mapLootTypes.children[0].children[0].checked, false);
+  assert.equal(f.elements.mapLootTypes.children[0].children[0].checked, true);
   f.elements.mapLootNone.dispatch("click"); assert.equal(f.elements.mapLootCount.textContent, "0");
   f.elements.mapLootAll.dispatch("click"); assert.equal(f.elements.mapLootCount.textContent, "2");
   f.panel.dispose(); assert.equal(f.overlays.at(-1).enabled, false);
@@ -303,14 +305,14 @@ test("capybaras have their own default-on animal filter and never join fixed-ite
   raw.maps[0].markers.push({ ...marker("capybara", "animal-capybara"), category: "animal", name: "水豚" });
   const normalized = normalizeMapLoot(raw, pack()); assert.ok(normalized);
   const f = fixture(async () => normalized); f.panel.sync(); await settle();
-  assert.equal(f.elements.mapLootCount.textContent, "2");
+  assert.equal(f.elements.mapLootCount.textContent, "1");
   assert.equal(f.elements.mapLootAnimalCount.textContent, "1");
   assert.equal(f.elements.mapLootAnimalSection.hidden, false);
   assert.equal(f.elements.mapLootItems.checked, false);
   const input = f.elements.mapLootAnimalTypes.children[0].children[0];
   assert.equal(input.checked, true);
   input.checked = false; f.elements.mapLootAnimalTypes.dispatch("change", input);
-  assert.equal(f.elements.mapLootCount.textContent, "1");
+  assert.equal(f.elements.mapLootCount.textContent, "0");
   f.elements.mapLootItems.checked = true; f.elements.mapLootItems.dispatch("change");
   assert.equal(f.overlays.at(-1).types.has("animal-capybara"), false);
   f.context = { ...f.context, stageIndex: 1 }; f.panel.sync();
