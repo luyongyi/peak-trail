@@ -68,6 +68,8 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
     copyFile(resolve(platformSource, "web", "src", "home-art.js"), resolve(platform, "web", "src", "home-art.js")),
     ...["i18n.js", "game-text.js", "i18n-dom.js", "ui-text.js"].map(name => copyFile(resolve(platformSource, "web", "src", name), resolve(platform, "web", "src", name))),
     writeFile(resolve(platform, "web", "index.html"), '<!doctype html><a href="./downloads/recorder/0.7.1/PeakTrailRecorder.dll" download>Download</a>'),
+    writeFile(resolve(platform, "web", "mods.html"), '<!doctype html><a href="./downloads/recorder/0.7.1/PeakTrailRecorder.dll" download="PeakTrailRecorder.dll">Live MOD</a>'),
+    writeFile(resolve(platform, "web", "mods.css"), ".mods-page{}"),
     writeFile(resolve(platform, "web", "guide.html"), '<!doctype html><title>Legacy install guide</title><a href="downloads/recorder/old/PeakTrailRecorder.dll">Old recorder</a>'),
     writeFile(resolve(platform, "web", "routes.html"), '<!doctype html><title>Legacy routes</title><script>oldCollector()</script>'),
     writeFile(resolve(platform, "web", "styles.css"), "body{}"),
@@ -386,7 +388,7 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
   const previewArgs = [resolve(tools, "stage-site.mjs"), "--preview", "--memories-dll", memoriesPath];
   await assert.rejects(execFileAsync(process.execPath, [...previewArgs, "--profile", "server"], memoriesOptions), /Server staging cannot use --preview/);
   assert.equal(await readFile(resolve(staged, "preflight-marker.txt"), "utf8"), "keep on failure");
-  await assert.rejects(execFileAsync(process.execPath, previewArgs, memoriesOptions), /does not match selected/);
+  await assert.rejects(execFileAsync(process.execPath, previewArgs, memoriesOptions), /no download link/);
   assert.equal(await readFile(resolve(staged, "preflight-marker.txt"), "utf8"), "keep on failure");
   await writeFile(resolve(platform, "web", "index.html"), `<!doctype html><a href="./${memoriesRelease.downloadPath}" download>Download</a>`);
   await assert.rejects(execFileAsync(process.execPath, [resolve(tools, "stage-site.mjs")], options), /does not match selected/);
@@ -395,8 +397,10 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
   assert.deepEqual(await readFile(resolve(staged, memoriesRelease.downloadPath)), memoriesBytes);
   assert.deepEqual(JSON.parse(await readFile(resolve(staged, "data", "memories", "release.json"), "utf8")), memoriesRelease);
   assert.deepEqual(await readdir(resolve(staged, "downloads", "memories", "0.8.0")), ["PeakReplayLab.dll"]);
-  await assert.rejects(access(resolve(staged, "downloads", "recorder")), { code: "ENOENT" });
-  await assert.rejects(access(resolve(staged, "data", "recorder")), { code: "ENOENT" });
+  assert.deepEqual(await readFile(resolve(staged, recorderRelease.downloadPath)), recorderBytes);
+  assert.deepEqual(JSON.parse(await readFile(resolve(staged, "data", "recorder", "release.json"), "utf8")), recorderRelease);
+  assert.equal(await readFile(resolve(staged, "mods.html"), "utf8"), await readFile(resolve(platform, "web", "mods.html"), "utf8"));
+  assert.equal(await readFile(resolve(staged, "mods.css"), "utf8"), ".mods-page{}");
   await assert.rejects(access(resolve(staged, "private.peakrun")), { code: "ENOENT" });
   await assert.rejects(access(resolve(staged, "Assembly-CSharp.dll")), { code: "ENOENT" });
   await writeFile(resolve(staged, "preflight-marker.txt"), "keep on failure");
@@ -405,6 +409,13 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
   await assert.rejects(execFileAsync(process.execPath, previewArgs, memoriesOptions), /Memories DLL SHA-256 mismatch/);
   assert.equal(await readFile(resolve(staged, "preflight-marker.txt"), "utf8"), "keep on failure");
   assert.deepEqual(await readFile(resolve(staged, memoriesRelease.downloadPath)), memoriesBytes);
+  await writeFile(memoriesPath, memoriesBytes);
+  const invalidExtraRecorder = Buffer.from(recorderBytes); invalidExtraRecorder[3] ^= 1;
+  await writeFile(recorderPath, invalidExtraRecorder);
+  await assert.rejects(execFileAsync(process.execPath, previewArgs, memoriesOptions), /Recorder DLL SHA-256 mismatch/);
+  assert.equal(await readFile(resolve(staged, "preflight-marker.txt"), "utf8"), "keep on failure");
+  assert.deepEqual(await readFile(resolve(staged, recorderRelease.downloadPath)), recorderBytes);
+  await writeFile(recorderPath, recorderBytes);
   await writeFile(resolve(platform, "web", "index.html"), `<!doctype html><a href="./${recorderRelease.downloadPath}" download>Download</a>`);
   await execFileAsync(process.execPath, [resolve(tools, "stage-site.mjs")], options);
 

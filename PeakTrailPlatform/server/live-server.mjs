@@ -1,5 +1,5 @@
-// PeakTrail memoir service. The historical live relay is retained behind an
-// explicit opt-in; public deployments serve memoir uploads/routes by default.
+// PeakTrail memoir and private-link live v2 service. The historical live relay
+// is retained behind an explicit opt-in.
 //
 // Contract (v1, intentionally minimal):
 //   - The recorder derives a 4-character code from the room-shared RunId
@@ -21,6 +21,7 @@
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { createTrajectoryApi } from "./trajectory-api.mjs";
+import { createLiveV2Api } from "./live-v2-api.mjs";
 import { appendFileSync, mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { deriveRunCode, isValidRunCode, normalizeRunId, runCodeMatches } from "./run-code.mjs";
@@ -48,6 +49,7 @@ function htmlEscape(value) {
 
 export function createLiveServer(options = {}) {
   const legacyLiveEnabled = options.legacyLiveEnabled === true;
+  const liveV2 = createLiveV2Api({ ...options.liveV2, trustedProxy: options.trustedProxy });
   const trajectories = createTrajectoryApi({ root: options.trajectoryDir, catalogPath: options.catalogPath, trustedProxy: options.trustedProxy });
   const persistenceDir = legacyLiveEnabled && options.persistenceDir ? resolve(options.persistenceDir) : null;
   if (persistenceDir) mkdirSync(persistenceDir, { recursive: true });
@@ -350,6 +352,7 @@ export function createLiveServer(options = {}) {
   }
 
   async function handle(req, res) {
+    if (await liveV2.handle(req, res)) return;
     if (await trajectories.handle(req, res)) return;
     const url = new URL(req.url, "http://localhost");
     const path = url.pathname;
@@ -548,7 +551,8 @@ function upsert(playerId, player) {
   });
   server.once("close", () => { if (sweeper) clearInterval(sweeper); });
   server.once("close", trajectories.close);
-  return { server, runs, codeByRunId, startDailyPrewarm };
+  server.once("close", liveV2.close);
+  return { server, runs, codeByRunId, startDailyPrewarm, liveV2 };
 }
 
 export function startCli(argv = process.argv.slice(2)) {
@@ -564,7 +568,7 @@ export function startCli(argv = process.argv.slice(2)) {
   const { server, startDailyPrewarm } = createLiveServer({ persistenceDir: dir, trajectoryDir, legacyLiveEnabled, trustedProxy: argv.includes("--trusted-proxy") });
   startDailyPrewarm();
   server.listen(port, host, () => {
-    console.log(`PeakTrail memoir service on http://${host}:${port}/ (legacy live ${legacyLiveEnabled ? "enabled" : "disabled"})`);
+    console.log(`PeakTrail memoir and live v2 service on http://${host}:${port}/ (legacy live ${legacyLiveEnabled ? "enabled" : "disabled"})`);
     if (legacyLiveEnabled && host !== "127.0.0.1") {
       console.log("WARNING: bound beyond loopback — anyone who guesses the 4-character code can read live positions. Put access control in front (reverse proxy) until token auth lands.");
     }

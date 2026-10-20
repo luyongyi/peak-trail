@@ -248,3 +248,23 @@ test("overview follows a spatially unique interior player without inventing a ce
     assert.equal(f.rigCalls.at(-1).options.interior, false, 'ambiguous overlapping rooms are not asserted to be the interior');
   } finally { f.cleanup(); }
 });
+
+test("touch pinch changes followed-camera distance and lifting a finger resumes one-finger orbit", () => {
+  const f = fixture();
+  try {
+    f.player("p1"); f.scene.setFollowTarget("p1");
+    const event = (id, x, primary = true) => ({ pointerId: id, pointerType: "touch", isPrimary: primary,
+      button: 0, clientX: x, clientY: 10, preventDefault() {} });
+    f.scene.onFollowPointerDown(event(1, 0));
+    f.scene.onFollowPointerDown(event(2, 100, false));
+    const before = f.scene.followDistance;
+    f.scene.onFollowPointerMove(event(2, 200, false));
+    assert.ok(f.scene.followDistance < before);
+    f.scene.onFollowPointerUp(event(1, 0));
+    const azimuth = f.scene.followAzimuth;
+    f.scene.onFollowPointerMove(event(2, 220, false));
+    assert.notEqual(f.scene.followAzimuth, azimuth);
+    f.scene.setFollowTarget(null);
+    assert.equal(f.scene.followTouches.size, 0);
+  } finally { f.cleanup(); }
+});

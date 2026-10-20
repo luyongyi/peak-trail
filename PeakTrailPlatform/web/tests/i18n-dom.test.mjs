@@ -4,6 +4,7 @@ import test from "node:test";
 import { getLocale, setLocale } from "../src/i18n.js";
 import { collectStaticTranslations, initLanguageControls } from "../src/i18n-dom.js";
 import { UI_TEXT, UI_TEXT_PAIRS } from "../src/ui-text.js";
+import "../src/watch-text.js";
 
 const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
 const startupSource = await readFile(new URL("../src/startup.js", import.meta.url), "utf8");
@@ -13,7 +14,7 @@ test("every initial Chinese text and accessibility/metadata attribute has explic
   const attributes = [...html.matchAll(/(?:aria-label|title|placeholder|alt|content)="([^"]+)"/g)].map(match => match[1]);
   const chinese = [...new Set([...texts, ...attributes].filter(value => /\p{Script=Han}/u.test(value)))];
   assert.ok(chinese.length > 190, "cover the complete initial page, including hidden controls");
-  assert.equal(UI_TEXT.size, UI_TEXT_PAIRS.length, "Chinese keys must be unambiguous");
+  assert.equal(new Map(UI_TEXT_PAIRS).size, UI_TEXT_PAIRS.length, "Chinese keys must be unambiguous");
   for (const text of chinese) {
     assert.ok(UI_TEXT.has(text), `Missing static translation: ${text}`);
     assert.ok(UI_TEXT.get(text).length > 0);

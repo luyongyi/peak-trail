@@ -285,10 +285,10 @@ export function normalizeManifest(raw) {
       `查看器只接受 ${REQUIRED_COORDINATE_SPACE}。`,
     );
   }
-  if (raw.identityMode && raw.identityMode !== "platform-user-id") {
+  if (raw.identityMode && !["platform-user-id", "session-player-id"].includes(raw.identityMode)) {
     throw new ProtocolError(
       `不支持的身份模式：${raw.identityMode}`,
-      "本项目要求记录真实、稳定的平台用户 ID。",
+      "支持本地平台身份或直播会话内的匿名玩家身份。",
     );
   }
   const projectionVersion = asFiniteNumber(raw.projectionVersion);
@@ -1219,6 +1219,9 @@ function liveEnsureParticipant(trace, record) {
   if (!trace._participantIds.has(participant.id)) {
     trace._participantIds.add(participant.id);
     trace.participants.push(participant);
+  } else if (["participant", "player"].includes(record.type)) {
+    const existing = trace.participants.find(entry => entry.id === participant.id);
+    if (existing) Object.assign(existing, participant);
   }
   return participant.id;
 }

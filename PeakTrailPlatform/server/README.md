@@ -1,8 +1,14 @@
-# PEAK 回忆录服务
+# PEAK 回忆录与直播服务
 
 默认提供回忆录轨迹上传、路线与热力图、每日地图与部署健康检查，见 [trajectory-v1 运行、上传、审核与查询](trajectory-README.md)。旧足迹直播暂时下线：`/api/runs` 及所有子接口、`/watch` 返回 `410 legacy-live-disabled`，不接收或展示旧直播记录；旧存储保留，不读取或删除。
 
-直播实现仅用于将来恢复或本地兼容测试。必须显式传入 `--legacy-live`（程序调用时为 `legacyLiveEnabled: true`）才会接收 PeakTrailRecorder 实时推送并开放 SSE；该选项不影响回忆录轨迹接口。**旧直播 v1 信任模型：4 位 run 码是唯一凭证**。
+旧直播实现仅用于本地兼容测试。必须显式传入 `--legacy-live`（程序调用时为 `legacyLiveEnabled: true`）才会接收旧版 PeakTrailRecorder 实时推送并开放 v1 SSE；该选项不影响回忆录轨迹接口和新直播 v2。**旧直播 v1 信任模型：4 位 run 码是唯一凭证**。
+
+## 新匿名直播 v2
+
+默认同时提供 `/api/live/v2`，无账号登录，也无公开房间列表。Recorder 0.8.0 用 `POST /api/live/v2/sessions` 注册单推流源；服务端返回随机 `watchId` 和独立 `publishToken`。发布端以 Bearer 凭证调用 `/sessions/:sessionId/records`、`/heartbeat`、`/end`，观众只用 `/watch/:watchId` 与 `/watch/:watchId/stream`（SSE）。**观战链接不能发布数据**，读接口不返回发布凭证、原始房间 ID 或平台用户 ID。
+
+租约为 15 秒，建议每 5 秒心跳；失联 60 秒或持续 24 小时结束，结束后保留 15 分钟供观看，观众不延长生命周期。过期租约接管保留观战链接、更新 epoch 并作废旧凭证；SSE 用 epoch 与 seq 续传，过旧游标重置为有界的最新状态及近期路径快照。v2 默认只存内存、无磁盘持久化，服务重启即清空；`--dir` 不影响 v2。生产 nginx 的通用 `/api/` 转发和关闭 SSE 缓冲即可沿用。
 
 ## 运行
 
@@ -31,7 +37,7 @@ node PeakTrailPlatform/server/live-server.mjs --port 8787 --routes-dir <回忆�
 5. **观看**：`GET /api/runs/:code/stream?after=SEQ`（SSE）。先发 `hello`
    （manifest + 全队最新快照），再回放/推送 `record` 事件；`snapshot` 端点可单独取快照。
 
-## 接口一览
+## 保留的旧接口一览（仅显式启用后）
 
 | 方法/路径 | 说明 |
 | --- | --- |
@@ -49,7 +55,7 @@ node PeakTrailPlatform/server/live-server.mjs --port 8787 --routes-dir <回忆�
 ## 测试
 
 ```powershell
-node --test PeakTrailPlatform/tools/tests/live-server.test.mjs
+node --test PeakTrailPlatform/tools/tests/live-server.test.mjs PeakTrailPlatform/tools/tests/live-v2-api.test.mjs
 ```
 
 覆盖：码校验/合并/撞码回退、跨生产者去重（含缺 roomTs 退化）、坏行隔离、快照、SSE 回放+实时。
@@ -67,7 +73,7 @@ node --test PeakTrailPlatform/tools/tests/live-server.test.mjs
 ### 当前个人服务器部署
 
 - 回忆录网页和 API 共用 `https://peak.mylus.cn`；旧直播 API 默认返回 410。
-- 服务保持 `--host 127.0.0.1 --port 8787`，由 nginx 转发 `/api/`；保留的 SSE 配置仅在显式恢复旧直播后使用。
+- 服务保持 `--host 127.0.0.1 --port 8787`，由 nginx 转发 `/api/`；SSE 配置同时服务新直播 v2。
 - Recorder 0.7.1 的 `Live.ServerUrl` 默认改为 `https://peak.mylus.cn`。已有 BepInEx 配置不会被默认值覆盖，需要手动更新这一项；`Live.Enabled` 仍由用户控制。
 - 当前部署不启用旧直播；以下四位码边界只适用于显式恢复该功能后。
 - 当前模式不读取或写入旧直播存储。本地历史足迹和录像不会自动上传。

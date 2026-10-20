@@ -5,9 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta
       name="description"
-      content="PEAK 每日地图与玩家线路。下载回忆录 Mod，在游戏内录制和回放，主动分享精简轨迹。"
+      content="PEAK 每日地图与玩家线路。下载路线 MOD，分享实时登山路线，或在游戏内录制与回放。"
     />
     <meta name="theme-color" content="#0b1010" />
+    <meta name="referrer" content="no-referrer" />
     <title>PEAK Trail · 地图与回忆录</title>
     <link
       rel="icon"
@@ -31,8 +32,16 @@
           <span><strong>PEAK TRAIL</strong><small>每日地图与玩家线路</small></span>
         </div>
         <nav class="home-actions" aria-label="回忆录与地图工具">
+          <details class="home-watch-entry">
+            <summary class="home-nav-link">观看直播 ↗</summary>
+            <form id="watchJoinForm" class="watch-join-form">
+              <label for="watchLinkInput">粘贴朋友分享的观战链接</label>
+              <div><input id="watchLinkInput" type="text" autocomplete="off" spellcheck="false" placeholder="https://…/?watch=…" required /><button type="submit">观看</button></div>
+              <small id="watchJoinHint">无需登录 · 仅有链接的人可以观看</small>
+            </form>
+          </details>
           <button class="language-toggle" data-language-toggle type="button" aria-label="切换为英语" title="切换为英语" lang="en"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c5 5 5 13 0 18-5-5-5-13 0-18Z" /></svg><span data-language-label>English</span></button>
-          <a class="home-nav-link" href="./downloads/memories/0.8.36/PeakReplayLab.dll" download="PeakReplayLab.dll" aria-label="下载回忆录 Mod 0.8.36 已发布实验版">下载回忆录 Mod <span aria-hidden="true">↓</span></a>
+          <a class="home-nav-link" href="./mods.html">下载路线 MOD <span aria-hidden="true">↓</span></a>
           <button class="home-live is-empty" id="gateLive" type="button" aria-controls="gateLiveList" aria-expanded="false" hidden>
             <i aria-hidden="true"></i><span>现场观测</span><span class="home-live-count" id="homeLiveCount">—</span>
           </button>
@@ -47,9 +56,10 @@
         </header>
 
         <section class="home-intro" aria-label="每日五段路线">
-          <div>
+          <div hidden>
             <p class="home-eyebrow"><span></span> DAILY EXPEDITION <strong class="home-route-summary">五段路线</strong><b id="homeStatus">正在同步轮换</b></p>
           </div>
+          <h1 class="home-title">今日地图</h1>
           <div class="home-date-block">
             <time id="homeDate">—</time>
             <span id="homeDateMeta">当前日期 · 北京时间</span>
@@ -57,7 +67,7 @@
         </section>
 
         <section class="home-route" id="homeRoute" aria-label="每日五段路线主题插画">
-          <div class="home-route-heading">
+          <div class="home-route-heading" hidden>
             <span id="homeRouteLabel">等待确认本轮路线</span>
             <span class="home-countdown"><i aria-hidden="true"></i><span id="homeCountdown">正在获取更新时间</span><button type="button" id="homeRefresh" title="重新同步每日轮换" aria-label="重新同步每日轮换">↻</button></span>
           </div>
@@ -67,40 +77,40 @@
                 <button type="button" class="home-chapter-button" disabled>
                   <img class="home-survey" alt="" hidden /><span class="home-chapter-number">01 <i></i></span>
                   <span class="home-model-status">等待轮换确认</span>
-                  <span class="home-chapter-copy"><small class="home-biome-en">SHORE</small><strong class="home-biome-title">第一关</strong><span class="home-chapter-link">进入地图 <b aria-hidden="true">↗</b></span></span>
+                  <span class="home-chapter-copy"><small class="home-biome-en">SHORE</small><strong class="home-biome-title">第一关</strong><span class="home-chapter-link">进入地图</span></span>
                 </button>
               </li>
               <li class="home-chapter" data-segment="1" data-theme="roots">
                 <button type="button" class="home-chapter-button" disabled>
                   <img class="home-survey" alt="" hidden /><span class="home-chapter-number">02 <i></i></span>
                   <span class="home-model-status">等待轮换确认</span>
-                  <span class="home-chapter-copy"><small class="home-biome-en">CHAPTER 2</small><strong class="home-biome-title">第二关</strong><span class="home-chapter-link">进入地图 <b aria-hidden="true">↗</b></span></span>
+                  <span class="home-chapter-copy"><small class="home-biome-en">CHAPTER 2</small><strong class="home-biome-title">第二关</strong><span class="home-chapter-link">进入地图</span></span>
                 </button>
               </li>
               <li class="home-chapter" data-segment="2" data-theme="alpine">
                 <button type="button" class="home-chapter-button" disabled>
                   <img class="home-survey" alt="" hidden /><span class="home-chapter-number">03 <i></i></span>
                   <span class="home-model-status">等待轮换确认</span>
-                  <span class="home-chapter-copy"><small class="home-biome-en">CHAPTER 3</small><strong class="home-biome-title">第三关</strong><span class="home-chapter-link">进入地图 <b aria-hidden="true">↗</b></span></span>
+                  <span class="home-chapter-copy"><small class="home-biome-en">CHAPTER 3</small><strong class="home-biome-title">第三关</strong><span class="home-chapter-link">进入地图</span></span>
                 </button>
               </li>
               <li class="home-chapter" data-segment="3" data-theme="volcano">
                 <button type="button" class="home-chapter-button" disabled>
                   <img class="home-survey" alt="" hidden /><span class="home-chapter-number">04 <i></i></span>
                   <span class="home-model-status">等待轮换确认</span>
-                  <span class="home-chapter-copy"><small class="home-biome-en">CHAPTER 4</small><strong class="home-biome-title">第四关</strong><span class="home-chapter-link">进入地图 <b aria-hidden="true">↗</b></span></span>
+                  <span class="home-chapter-copy"><small class="home-biome-en">CHAPTER 4</small><strong class="home-biome-title">第四关</strong><span class="home-chapter-link">进入地图</span></span>
                 </button>
               </li>
               <li class="home-chapter home-chapter-finale" id="homeFinale" data-segment="4" data-theme="unknown" hidden>
                 <button type="button" class="home-chapter-button" id="homeEndingExplore" disabled>
                   <img class="home-survey" id="homeEndingArt" alt="" hidden loading="lazy" decoding="async" /><span class="home-chapter-number">05 <i></i></span>
                   <span class="home-model-status" id="homeEndingStatus">等待路线确认</span>
-                  <span class="home-chapter-copy"><small class="home-biome-en" id="homeEndingEnglish">FINAL ASCENT</small><strong class="home-biome-title" id="homeEnding">终段待确认</strong><span class="home-chapter-link">进入地图 <b aria-hidden="true">↗</b></span></span>
+                  <span class="home-chapter-copy"><small class="home-biome-en" id="homeEndingEnglish">FINAL ASCENT</small><strong class="home-biome-title" id="homeEnding">终段待确认</strong><span class="home-chapter-link">进入地图</span></span>
                 </button>
               </li>
             </ol>
           </div>
-          <section class="home-destinations" aria-labelledby="homeDestinationsTitle">
+          <section class="home-destinations" aria-labelledby="homeDestinationsTitle" hidden>
             <div class="home-destinations-heading">
               <span>TWO POSSIBLE ENDINGS</span>
               <h2 id="homeDestinationsTitle">两种结局</h2>
@@ -149,7 +159,13 @@
           <span id="dailyCountdown">—</span>
         </div>
 
+        <div class="watch-status" id="watchStatus" hidden>
+          <strong id="watchStatusText" role="status">正在连接直播</strong>
+          <span id="watchFreshness">等待游戏数据</span>
+        </div>
+
         <div class="top-actions">
+          <button class="button button-ghost" id="watchShare" type="button" hidden>分享链接</button>
           <input
             id="mapInput"
             class="visually-hidden"
@@ -196,6 +212,16 @@
           <canvas id="sceneCanvas" tabindex="0"></canvas>
 
           <div class="viewport-fade" aria-hidden="true"></div>
+
+          <div class="watch-notice" id="watchNotice" role="status" hidden>
+            <strong id="watchNoticeText">正在连接直播…</strong>
+            <button id="watchRetry" type="button" hidden>重新连接</button>
+          </div>
+          <div class="watch-camera" id="watchCamera" hidden aria-label="观战视角">
+            <button id="watchAllPlayers" type="button">全队视角</button>
+            <button id="watchNextPlayer" type="button">跟随下一位</button>
+            <button id="watchPlayers" type="button" aria-expanded="false" aria-controls="watchInspector">玩家</button>
+          </div>
 
           <div class="viewport-toolbar">
             <div class="viewport-statuses">
@@ -341,7 +367,8 @@
           </div>
         </section>
 
-        <aside class="inspector" aria-label="地图路线与热力筛选">
+        <aside class="inspector" id="watchInspector" aria-label="地图路线与热力筛选">
+          <button id="watchClosePlayers" class="watch-close-players" type="button">收起玩家面板 ↓</button>
           <section class="inspector-section community-section" id="communityPanel" aria-label="大家的路线与热力设置" hidden>
             <div class="section-heading compact"><div><span class="eyebrow">走过这张地图的人</span><h2>大家的路线</h2></div><div class="community-heading-actions"><button type="button" class="community-refresh" id="communityRefresh">刷新</button><button type="button" class="community-refresh" id="communityCollapse" aria-label="收起路线设置，保留地图与路线">收起</button></div></div>
             <form id="communitySearchForm" class="community-team-search" aria-label="按成员搜索队伍">
@@ -475,6 +502,10 @@
       </main>
 
       <footer class="timeline-panel">
+        <div class="watch-timebar" id="watchTimebar" hidden>
+          <span id="watchTimeStatus">实时 · 最近 2 分钟可回看</span>
+          <button id="watchGoLive" type="button">回到实时</button>
+        </div>
         <button class="play-button" id="playButton" type="button" disabled aria-label="播放">
           <svg class="play-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 11 7-11 7V5Z" /></svg>
           <svg class="pause-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7V5Zm6 0h4v14h-4V5Z" /></svg>

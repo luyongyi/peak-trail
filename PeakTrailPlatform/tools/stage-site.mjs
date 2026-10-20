@@ -11,7 +11,7 @@ import { normalizeMapLoot } from "../web/src/map-loot.js";
 import { fitMapAlignment, validateMapAlignment } from "../server/map-alignment.mjs";
 import { createHash } from "node:crypto";
 import { HOME_ART_FILES } from "../web/src/home-art.js";
-import { checkSiteBudget, checkSiteDownloadReferences, loadSiteArtifact, readSiteRelease, siteReleaseOptions, readSiteStagingProfile } from "./lib/site-release.mjs";
+import { checkSiteBudget, checkSiteDownloadReferences, loadSiteArtifact, optionValue, readSiteRelease, siteReleaseOptions, readSiteStagingProfile } from "./lib/site-release.mjs";
 import { createPublicAssetWriter } from "./lib/public-asset-pool.mjs";
 
 const toolDirectory = dirname(fileURLToPath(import.meta.url));
@@ -38,11 +38,22 @@ const profile = await readSiteStagingProfile(resolve(toolDirectory, "site-build-
 if (env.PEAK_TRAIL_PUBLIC_ASSET_POOL !== undefined && (profile !== "server" || preview))
   throw new Error("Public asset pool is only available for receiver server staging");
 const assetWriter = await createPublicAssetWriter(env.PEAK_TRAIL_PUBLIC_ASSET_POOL);
-// Verify the one selected DLL before replacing a previously staged site.
+// Verify every advertised DLL before replacing a previously staged site.
 const downloadOptions = siteReleaseOptions(argv, env);
 const downloadRelease = await readSiteRelease(dataDirectory, downloadOptions.product);
 const downloadBytes = await loadSiteArtifact(downloadRelease, { ...downloadOptions, preview });
-checkSiteDownloadReferences([await readFile(resolve(webDirectory, "index.html"), "utf8"), retiredEntryPage], downloadRelease);
+const downloads = [{ product: downloadOptions.product, release: downloadRelease, bytes: downloadBytes }];
+if (downloadOptions.product === "memories") {
+  const release = await readSiteRelease(dataDirectory, "recorder");
+  const localPath = optionValue(argv, "--recorder-dll") || env.PEAK_TRAIL_RECORDER_DLL;
+  const bytes = await loadSiteArtifact(release, { product: "recorder", localPath });
+  downloads.push({ product: "recorder", release, bytes });
+}
+checkSiteDownloadReferences([
+  await readFile(resolve(webDirectory, "index.html"), "utf8"),
+  await readFile(resolve(webDirectory, "mods.html"), "utf8"),
+  retiredEntryPage,
+], downloadRelease, downloads[1]?.release);
 // Only allowlisted illustrations are public; never copy a local folder wholesale.
 const homeArtSources = new Map();
 for (const file of HOME_ART_FILES) {
@@ -178,12 +189,16 @@ for (const [build, { index, chunks }] of lootCatalogs) {
 }
 for (const [filename, evidence] of trajectorySidecars) await writeFile(resolve(outputDirectory, "data", "maps", filename), JSON.stringify(evidence, null, 2) + "\n");
 await mkdir(resolve(outputDirectory, "schema"), { recursive: true });
-await mkdir(dirname(resolve(outputDirectory, downloadRelease.downloadPath)), { recursive: true });
-await mkdir(resolve(outputDirectory, "data", downloadOptions.product), { recursive: true });
-await assetWriter.stageImmutableBytes(downloadBytes, resolve(outputDirectory, downloadRelease.downloadPath));
-await writeFile(resolve(outputDirectory, "data", downloadOptions.product, "release.json"), JSON.stringify(downloadRelease, null, 2) + "\n");
+for (const { product, release, bytes } of downloads) {
+  await mkdir(dirname(resolve(outputDirectory, release.downloadPath)), { recursive: true });
+  await mkdir(resolve(outputDirectory, "data", product), { recursive: true });
+  await assetWriter.stageImmutableBytes(bytes, resolve(outputDirectory, release.downloadPath));
+  await writeFile(resolve(outputDirectory, "data", product, "release.json"), JSON.stringify(release, null, 2) + "\n");
+}
 await Promise.all([
   cp(resolve(webDirectory, "index.html"), resolve(outputDirectory, "index.html")),
+  cp(resolve(webDirectory, "mods.html"), resolve(outputDirectory, "mods.html")),
+  cp(resolve(webDirectory, "mods.css"), resolve(outputDirectory, "mods.css")),
   writeFile(resolve(outputDirectory, "guide.html"), retiredEntryPage),
   writeFile(resolve(outputDirectory, "routes.html"), retiredEntryPage),
   cp(resolve(webDirectory, "styles.css"), resolve(outputDirectory, "styles.css")),
@@ -250,7 +265,7 @@ console.log(`Staged ${preview ? "local preview (not a public release; GitHub Pag
 console.log(`${fileCount} files, ${(totalBytes / 1_000_000).toFixed(1)} MB; ${catalog.mapPacks.length} map packs. No private recordings are staged.`);
 const publicAssetPool = assetWriter.stats();
 if (publicAssetPool.enabled) console.log(`Public asset pool: ${JSON.stringify(publicAssetPool)}`);
-return { outputDirectory, release: downloadRelease, product: downloadOptions.product, preview, profile, fileCount, totalBytes, publicAssetPool };
+return { outputDirectory, release: downloadRelease, releases: downloads.map(item => item.release), product: downloadOptions.product, preview, profile, fileCount, totalBytes, publicAssetPool };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url))

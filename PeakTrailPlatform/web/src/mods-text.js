@@ -1,0 +1,40 @@
+import { UI_TEXT } from "./ui-text.js";
+import { initLanguageControls } from "./i18n-dom.js";
+
+const pairs = [
+  ["下载路线 MOD · PEAK Trail", "Download Route MODs · PEAK Trail"],
+  ["下载 PEAK 路线 MOD：直播 MOD 实时分享攀登路线，回忆录 MOD 在游戏内录制与回放，按需分享轨迹。", "Download PEAK Route MODs: stream your climb with Live Trail, or record and replay in game with Memories and share when you choose."],
+  ["PEAK Trail 今日地图", "PEAK Trail — Today’s maps"],
+  ["返回今日地图", "Back to today’s maps"],
+  ["选择你的路线 MOD", "Choose your Route MOD"],
+  ["实时分享这场攀登，也可以把旅程留在回忆里。", "Share your climb live, or keep the journey as a memory."],
+  ["直播 MOD", "Live Trail MOD"],
+  ["让朋友，跟上你的每一步。", "Let friends follow every step."],
+  ["把游戏中的玩家位置与行进路线同步到网页。朋友打开观战链接，就能在地图上看你们一起向上。", "Share player positions and paths on the web. Friends open your watch link to follow the team’s climb on the map."],
+  ["安装即开启", "Ready after installation"],
+  ["每局默认直播，在游戏设置中随时开启或关闭。", "Streaming starts each run. Turn it on or off in game settings."],
+  ["复制链接，一起看", "Copy a link and watch together"],
+  ["把观战链接发给朋友，电脑、手机都能打开。", "Send the watch link to friends on desktop or mobile."],
+  ["无需登录", "No login"],
+  ["通过链接直接观看，跟随玩家，也能回看近期路径。", "Open the link to watch, follow players, and replay recent paths."],
+  ["下载直播 MOD", "Download Live Trail MOD"],
+  ["下载直播 MOD 0.8.0", "Download Live Trail MOD 0.8.0"],
+  ["· Windows 游戏电脑", "· Windows gaming PC"],
+  ["将 DLL 放入已安装 BepInEx 的游戏目录", "With BepInEx installed, place the DLL in"],
+  ["，然后重启 PEAK。", ", then restart PEAK."],
+  ["回忆录 MOD", "Memories MOD"],
+  ["把走过的路，留给以后的自己。", "Keep the paths you walked for another day."],
+  ["记录一路上的攀登与相聚，在游戏里重新回到那一刻。想分享时，再把走过的轨迹带到地图上。", "Record your climb and return to those moments in game. When you choose to share, bring your paths to the map."],
+  ["在游戏里录制", "Record in game"],
+  ["保存值得回味的片段，也可以记录完整旅程。", "Save memorable moments or record the entire journey."],
+  ["在游戏里回看", "Replay in game"],
+  ["打开回忆录，重温自己和队友一起走过的路线。", "Open Memories and revisit the paths you walked with your team."],
+  ["主动分享轨迹", "Share when you choose"],
+  ["选择想分享的记录，把路线留给其他攀登者。", "Choose recordings to share with other climbers."],
+  ["下载回忆录 MOD", "Download Memories MOD"],
+  ["下载回忆录 MOD 0.8.36", "Download Memories MOD 0.8.36"],
+  ["PEAK Trail · 非官方粉丝工具", "PEAK Trail · Unofficial fan tools"],
+  ["按需选择安装，两款 MOD 可配合使用。", "Install either MOD or use both together."],
+];
+for (const [zh, en] of pairs) UI_TEXT.set(zh, en);
+initLanguageControls();

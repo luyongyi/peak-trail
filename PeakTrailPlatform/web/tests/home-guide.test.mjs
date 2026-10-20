@@ -4,18 +4,21 @@ import test from "node:test";
 
 const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
 const guideHtml = await readFile(new URL("../guide.html", import.meta.url), "utf8");
+const modsHtml = await readFile(new URL("../mods.html", import.meta.url), "utf8");
 const css = await readFile(new URL("../home.css", import.meta.url), "utf8");
 const release = JSON.parse(await readFile(new URL("../../data/memories/release.json", import.meta.url), "utf8"));
+const recorder = JSON.parse(await readFile(new URL("../../data/recorder/release.json", import.meta.url), "utf8"));
 const download = `./${release.downloadPath}`;
 const guide = guideHtml.match(/<section class="home-guide"[\s\S]*?<\/section>/)[0];
 
-test("the homepage downloads the advertised memories DLL without a retired guide entry", () => {
+test("the homepage opens the MOD chooser with both pinned downloads and no retired guide entry", () => {
   assert.equal(release.product, "peak-memories");
   assert.match(release.version, /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/);
   assert.equal(release.filename, "PeakReplayLab.dll");
   assert.equal(release.downloadPath, `downloads/memories/${release.version}/PeakReplayLab.dll`);
   const nav = html.match(/<nav class="home-actions"[\s\S]*?<\/nav>/)[0];
-  assert.ok(nav.includes(`href="${download}"`));
+  assert.ok(nav.includes('href="./mods.html"'));
+  assert.doesNotMatch(nav, /href="[^"]*downloads\//);
   assert.doesNotMatch(nav, /href="\.\/guide\.html"|安装教程/);
   assert.doesNotMatch(html, /<section class="home-guide"|id="homeGuide"/);
   assert.ok(guideHtml.includes('href="./"'));
@@ -23,7 +26,13 @@ test("the homepage downloads the advertised memories DLL without a retired guide
   assert.ok(guide.includes(`v${release.version}`));
   assert.ok(guide.includes(`${(release.size / 1024 ** 2).toFixed(1)} MiB`));
   assert.match(guide, /id="homeGuide" aria-labelledby="homeGuideTitle"/);
-  for (const page of [html, guideHtml]) {
+  for (const descriptor of [release, recorder]) {
+    assert.ok(modsHtml.includes(`href="./${descriptor.downloadPath}"`));
+    assert.ok(modsHtml.includes(`download="${descriptor.filename}"`));
+    assert.ok(modsHtml.includes(`v${descriptor.version}`));
+  }
+  assert.deepEqual([...modsHtml.matchAll(/\bdownload="([^"]+)"/g)].map(match => match[1]).sort(), [release.filename, recorder.filename].sort());
+  for (const page of [guideHtml]) {
     const filenames = [...page.matchAll(/\bdownload="([^"]+)"/g)].map(match => match[1]);
     assert.ok(filenames.length); assert.ok(filenames.every(filename => filename === release.filename));
     assert.doesNotMatch(page, /href="[^"]*(?:downloads\/recorder|recorder-v0\.7\.1)/);

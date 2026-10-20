@@ -183,6 +183,7 @@ test("disabled legacy drop intake prevents browser file navigation without trave
   assert.ok(drop);
   let handler, prevented = 0, reads = 0;
   const ports = {
+    state: { watch: { active: false } },
     FEATURES, window: { addEventListener: (_, callback) => { handler = callback; } },
     elements: { dropOverlay: { classList: { remove() {} } } },
     collectDroppedFiles: () => { reads++; throw new Error("unexpected directory traversal"); },

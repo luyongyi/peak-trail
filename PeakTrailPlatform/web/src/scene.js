@@ -194,6 +194,7 @@ export class TrailScene {
     this.followAutoRotate = false;
     this.followAutoSwitchAt = 0;
     this.followPointer = null;
+    this.followTouches = new Map();
     this.followDownAt = null;
     this.raycaster = new THREE.Raycaster();
     this.followTerrain = new FollowTerrainQuery(THREE);
@@ -1046,6 +1047,10 @@ export class TrailScene {
       this.controls.enabled = true;
       this.followAutoRotate = false;
       this.followRig?.reset();
+      for (const id of this.followTouches?.keys() || []) {
+        try { this.canvas.releasePointerCapture?.(id); } catch { /* optional */ }
+      }
+      this.followTouches?.clear();
       if (this.followPointer) {
         try { this.canvas.releasePointerCapture?.(this.followPointer.id); } catch { /* optional */ }
         this.followPointer = null;
@@ -1182,6 +1187,13 @@ export class TrailScene {
     this.mapLootFocus?.interrupt();
     this.lootPointerIds ||= new Set();
     this.lootPointerIds.add(event.pointerId);
+    if (event.pointerType === "touch" && this.followTargetId !== null && this.freeCamera.mode !== "free") {
+      this.followTouches ||= new Map();
+      this.followTouches.set(event.pointerId, { id: event.pointerId, x: event.clientX, y: event.clientY });
+      event.preventDefault();
+      try { this.canvas.setPointerCapture?.(event.pointerId); } catch { /* optional */ }
+      if (this.followTouches.size > 1) { this.followDownAt = null; return; }
+    }
     if (event.isPrimary === false || event.button !== 0 || this.lootPointerIds.size > 1) {
       this.followDownAt = null;
       return;
@@ -1195,6 +1207,18 @@ export class TrailScene {
   }
 
   onFollowPointerMove(event) {
+    if (this.followTouches?.has(event.pointerId)) {
+      const previous = [...this.followTouches.values()];
+      this.followTouches.set(event.pointerId, { id: event.pointerId, x: event.clientX, y: event.clientY });
+      if (this.followTouches.size > 1) {
+        const next = [...this.followTouches.values()];
+        const before = Math.hypot(previous[0].x - previous[1].x, previous[0].y - previous[1].y);
+        const after = Math.hypot(next[0].x - next[1].x, next[0].y - next[1].y);
+        if (before > 0 && after > 0) this.onFollowWheel({ deltaY: Math.log(before / after) / 0.001, preventDefault() {} });
+        event.preventDefault();
+        return;
+      }
+    }
     if (this.followDownAt && (this.followDownAt.id === undefined || this.followDownAt.id === event.pointerId)
         && Math.hypot(event.clientX - this.followDownAt.x, event.clientY - this.followDownAt.y) > 6) this.followDownAt.moved = true;
     if (this.followTargetId === null || this.freeCamera.mode === "free" || this.followPointer?.id !== event.pointerId) return;
@@ -1211,6 +1235,13 @@ export class TrailScene {
 
   onFollowPointerUp(event) {
     this.lootPointerIds?.delete(event.pointerId);
+    if (this.followTouches?.has(event.pointerId)) {
+      this.followTouches.delete(event.pointerId);
+      try { this.canvas.releasePointerCapture?.(event.pointerId); } catch { /* optional */ }
+      this.followPointer = this.followTouches.values().next().value || null;
+      this.followDownAt = null;
+      return;
+    }
     if (this.followPointer?.id === event.pointerId) {
       this.followPointer = null;
       try { this.canvas.releasePointerCapture?.(event.pointerId); } catch { /* optional */ }
@@ -1230,6 +1261,13 @@ export class TrailScene {
 
   onFollowPointerCancel(event) {
     this.lootPointerIds?.delete(event.pointerId);
+    if (this.followTouches?.has(event.pointerId)) {
+      this.followTouches.delete(event.pointerId);
+      try { this.canvas.releasePointerCapture?.(event.pointerId); } catch { /* optional */ }
+      this.followPointer = this.followTouches.values().next().value || null;
+      this.followDownAt = null;
+      return;
+    }
     this.followDownAt = null;
     if (this.followPointer?.id === event.pointerId) {
       this.followPointer = null;

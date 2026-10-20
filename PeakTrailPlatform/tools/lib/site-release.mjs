@@ -44,21 +44,26 @@ export async function loadSiteArtifact(release, { product = "memories", preview 
   throw new Error("Unknown site download product");
 }
 
-export function checkSiteDownloadReferences(htmls, release) {
-  let found = false;
+export function checkSiteDownloadReferences(htmls, release, additionalRelease) {
+  const releases = additionalRelease ? [release, additionalRelease] : [release];
+  const allowed = new Map(releases.map(item => [item.downloadPath, item]));
+  if (allowed.size !== releases.length) throw new Error("Duplicate site download descriptors.");
+  const found = new Set();
   for (const html of htmls) for (const match of html.matchAll(/(?:href|src)=["']([^"']+)["']/g)) {
     const reference = match[1].replace(/^(?:\.\/|\/)/, "");
     if (!reference.startsWith("downloads/")) continue;
-    if (reference !== release.downloadPath) throw new Error(`Site download link ${reference} does not match selected ${release.filename} descriptor (${release.downloadPath}).`);
-    found = true;
+    if (!allowed.has(reference)) throw new Error(`Site download link ${reference} does not match selected download descriptors (${[...allowed.keys()].join(", ")}).`);
+    found.add(reference);
   }
   for (const html of htmls) for (const match of html.matchAll(/<a\b[^>]*>/gi)) {
     const href = match[0].match(/\bhref=["']([^"']+)["']/)?.[1]?.replace(/^(?:\.\/|\/)/, "");
-    if (href !== release.downloadPath) continue;
+    const descriptor = allowed.get(href);
+    if (!descriptor) continue;
     const filename = match[0].match(/\bdownload=["']([^"']*)["']/)?.[1];
-    if (filename && filename !== release.filename) throw new Error("Site download filename does not match selected descriptor.");
+    if (filename && filename !== descriptor.filename) throw new Error("Site download filename does not match selected descriptor.");
   }
-  if (!found) throw new Error(`Site HTML has no download link for selected ${release.filename} descriptor.`);
+  for (const descriptor of releases)
+    if (!found.has(descriptor.downloadPath)) throw new Error(`Site HTML has no download link for selected ${descriptor.filename} descriptor.`);
 }
 
 export function validateSiteBuildProfile(value) {

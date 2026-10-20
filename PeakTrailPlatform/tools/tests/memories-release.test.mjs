@@ -105,6 +105,16 @@ test("site entrypoints cannot select legacy bytes behind memories links or mix d
   assert.throws(() => checkSiteDownloadReferences([link.replace('download="PeakReplayLab.dll"', 'download="PeakTrailRecorder.dll"')], release), /filename does not match/);
 });
 
+test("two pinned MOD descriptors permit exactly their own paths and filenames", () => {
+  const recorder = { filename: "PeakTrailRecorder.dll", downloadPath: "downloads/recorder/0.8.0/PeakTrailRecorder.dll" };
+  const links = [release, recorder].map(item => `<a href="./${item.downloadPath}" download="${item.filename}">Download</a>`);
+  assert.doesNotThrow(() => checkSiteDownloadReferences(links, release, recorder));
+  assert.throws(() => checkSiteDownloadReferences([links[0]], release, recorder), /no download link/);
+  assert.throws(() => checkSiteDownloadReferences([...links, '<a href="./downloads/recorder/old/PeakTrailRecorder.dll">Old</a>'], release, recorder), /does not match selected/);
+  assert.throws(() => checkSiteDownloadReferences([links[0], links[1].replace('download="PeakTrailRecorder.dll"', 'download="PeakReplayLab.dll"')], release, recorder), /filename does not match/);
+  assert.throws(() => checkSiteDownloadReferences(links, release, release), /Duplicate/);
+});
+
 test("checker is offline metadata-only by default, verifies explicit bytes, and refuses --public", async t => {
   const platform = await mkdtemp(resolve(tmpdir(), "peak-memories-checker-"));
   t.after(() => rm(platform, { recursive: true, force: true }));
@@ -123,21 +133,31 @@ test("checker is offline metadata-only by default, verifies explicit bytes, and 
   await assert.rejects(execFileAsync(process.execPath, [script, "--dll", dll]), /SHA-256 mismatch/);
 });
 
-test("default HTML checker exempts only the new pinned memories path and validates the guide too", async t => {
+test("default HTML checker exempts only the two pinned MOD paths and validates MOD and guide pages", async t => {
   const platform = await mkdtemp(resolve(tmpdir(), "peak-memories-html-"));
   t.after(() => rm(platform, { recursive: true, force: true }));
-  await Promise.all(["web/tools", "web/src", "tools/lib", "data/memories"].map(path => mkdir(resolve(platform, path), { recursive: true })));
+  await Promise.all(["web/tools", "web/src", "tools/lib", "data/memories", "data/recorder"].map(path => mkdir(resolve(platform, path), { recursive: true })));
+  const recorder = { schemaVersion: 1, version: "0.8.0", filename: "PeakTrailRecorder.dll", sourceRevision: "e".repeat(40),
+    size: bytes.length, sha256: "f".repeat(64), artifactUrl: "https://github.com/luyongyi/peak-trail/releases/download/recorder-v0.8.0/PeakTrailRecorder.dll",
+    downloadPath: "downloads/recorder/0.8.0/PeakTrailRecorder.dll" };
   await Promise.all([
     copyFile(resolve(platformSource, "web/tools/verify.mjs"), resolve(platform, "web/tools/verify.mjs")),
     ...["site-release", "memories-release", "recorder-release"].map(name => copyFile(resolve(platformSource, `tools/lib/${name}.mjs`), resolve(platform, `tools/lib/${name}.mjs`))),
     ...["app", "protocol", "scene", "community-map-panel", "community-routes"].map(name => writeFile(resolve(platform, `web/src/${name}.js`), "export {};")),
     writeFile(resolve(platform, "data/memories/release.json"), JSON.stringify(release)),
+    writeFile(resolve(platform, "data/recorder/release.json"), JSON.stringify(recorder)),
   ]);
   const html = path => `<script type="importmap">{}</script><a href="./${path}" download>Download</a>`;
   await writeFile(resolve(platform, "web/index.html"), html(release.downloadPath));
   await writeFile(resolve(platform, "web/guide.html"), html(release.downloadPath));
+  await writeFile(resolve(platform, "web/mods.html"), html(recorder.downloadPath));
   const script = resolve(platform, "web/tools/verify.mjs");
   await execFileAsync(process.execPath, [script]);
+  await mkdir(resolve(platform, "web/downloads/recorder/other"), { recursive: true });
+  await writeFile(resolve(platform, "web/downloads/recorder/other/PeakTrailRecorder.dll"), bytes);
+  await writeFile(resolve(platform, "web/mods.html"), html("downloads/recorder/other/PeakTrailRecorder.dll"));
+  await assert.rejects(execFileAsync(process.execPath, [script]), /缺少本地静态资源/);
+  await writeFile(resolve(platform, "web/mods.html"), html(recorder.downloadPath));
   await writeFile(resolve(platform, "web/guide.html"), html("downloads/recorder/0.7.1/PeakTrailRecorder.dll"));
   await assert.rejects(execFileAsync(process.execPath, [script]), /缺少本地静态资源/);
   await writeFile(resolve(platform, "web/guide.html"), html("downloads/memories/0.8.0/Other.dll"));

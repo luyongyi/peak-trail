@@ -33,6 +33,9 @@ import { createMapLootPanel } from "./map-loot-panel.js";
 import { historicalRouteTitle, historicalRouteUrl, loadHistoricalRouteLink, parseHistoricalRouteLink } from "./historical-route-link.js";
 import { getLocale, tr, onLocaleChange, biomeName, gameItemName, formatNumber } from "./i18n.js";
 import { initLanguageControls } from "./i18n-dom.js";
+import { WatchClient, parseWatchId } from "./watch-client.js";
+import { trimWatchTrace } from "./watch-window.js";
+import { watchText } from "./watch-text.js";
 
 initLanguageControls();
 
@@ -202,6 +205,9 @@ const state = {
     demoTimer: 0,
   },
   gateDiag: null,
+  watch: { active: false, id: null, client: null, timer: null, trace: null, status: "connecting",
+    connection: "connecting", lastRecordAt: null, following: true, dirty: false, records: 0,
+    playerKey: "", epoch: null, initializing: false },
 };
 
 const gameAssetLoads = new Map();
@@ -894,7 +900,7 @@ document.addEventListener("visibilitychange", () => wakeLock.handleVisibilityCha
 
 /** 直播会话存在（SSE 或演示定时器）或回放播放中 → 请求屏幕常亮；暂停/断开即允许熄屏。 */
 function syncWakeLock() {
-  wakeLock.setDesired(Boolean(state.live?.es || state.live?.demoTimer || state.playing));
+  wakeLock.setDesired(Boolean((state.watch?.active && state.watch.status !== "ended") || state.live?.es || state.live?.demoTimer || state.playing));
   syncWakeLockChip();
 }
 
@@ -1461,6 +1467,205 @@ function disconnectLive(silent = false) {
   }
 }
 
+// V2 observation is a separate link-only workspace. The legacy public-run gate
+// remains off and this path never requests the retired /api/runs endpoints.
+function stopWatch() {
+  const watch = state.watch;
+  if (watch.active) setPlaying(false);
+  watch.client?.stop();
+  clearInterval(watch.timer);
+  watch.client = null;
+  watch.timer = null;
+  watch.active = false;
+  watch.trace = null;
+  ++state.traceSelectionRevision;
+  elements.appShell.classList.remove("watch-players-open");
+  elements.appShell.classList.remove("watch-loading");
+  for (const id of ["watchStatus", "watchShare", "watchCamera", "watchTimebar", "watchNotice"]) $(id).hidden = true;
+  elements.timeline.min = "0";
+  syncWakeLock();
+}
+
+function updateWatchStatus() {
+  const watch = state.watch;
+  if (!watch.active) return;
+  const labels = { live: watchText("直播中"), reconnecting: watchText("主播重连中"), ended: watchText("直播已结束") };
+  const text = watch.connection === "error" ? watchText("无法打开直播")
+    : watch.status === "ended" ? labels.ended
+    : watch.connection === "reconnecting" ? watchText("观看连接重连中")
+    : watch.connection === "connecting" ? watchText("正在连接直播") : labels[watch.status] || watchText("等待游戏数据");
+  $("watchStatusText").textContent = text;
+  $("watchStatus").dataset.status = watch.status === "ended" ? "ended" : watch.connection === "error" ? "error" : watch.status;
+  const age = Number.isFinite(watch.lastRecordAt) ? Math.max(0, Math.floor((Date.now() - watch.lastRecordAt) / 1000)) : null;
+  $("watchFreshness").textContent = `${state.trace?.manifest?.sceneName || watch.sceneName || watchText("等待地图")} · ${age === null ? watchText("等待游戏数据") : age === 0 ? watchText("刚刚更新") : tr(`${age} 秒前更新`, `Updated ${age}s ago`)}`;
+  const notice = watch.initializing || !watch.trace || !watch.trace.sampleCount || watch.connection === "error";
+  $("watchNotice").hidden = !notice;
+  $("watchNoticeText").textContent = watchText(watch.message) || (watch.initializing ? watchText("正在匹配本局地图…")
+    : watch.status === "ended" ? watchText("直播已结束，本次没有可显示的路径")
+    : watch.trace ? watchText("已连接，等待玩家位置…") : watchText("正在连接直播…"));
+  $("watchRetry").hidden = !["error", "reconnecting"].includes(watch.connection);
+  const behind = Math.max(0, (watch.trace?.duration || 0) - state.currentTime);
+  $("watchTimeStatus").textContent = watch.status === "ended"
+    ? watchText("直播已结束 · 可回看保留的路径")
+    : watch.following ? watchText("实时 · 最近 2 分钟可回看") : tr(`正在回看 · 落后 ${Math.round(behind)} 秒`, `Replaying · ${Math.round(behind)}s behind`);
+  $("watchGoLive").textContent = watch.status === "ended" ? watchText("回到最后") : watchText("回到实时");
+  $("watchGoLive").disabled = !watch.trace || (watch.following && watch.status !== "ended");
+  const running = state.playing || watch.following && watch.status !== "ended";
+  elements.playButton.classList.toggle("is-playing", running);
+  elements.playButton.setAttribute("aria-label", running ? watchText("暂停观看") : watchText("播放回看"));
+}
+
+async function applyWatchSnapshot(snapshot, trace) {
+  const watch = state.watch;
+  if (!watch.active) return;
+  const revision = ++state.traceSelectionRevision;
+  finalizeLiveFlush(trace);
+  trimWatchTrace(trace);
+  finalizeLiveFlush(trace);
+  trace.warnings = [watchText("直播仅保留最近约 2 分钟的路径；玩家身份只在本次会话内有效。")];
+  watch.trace = trace;
+  watch.epoch = snapshot.epoch;
+  watch.initializing = true;
+  elements.appShell.classList.add("watch-loading");
+  watch.dirty = true;
+  watch.playerKey = "";
+  state.trace = trace;
+  state.lastRenderSignature = null;
+  state.traceCollection = { sessions: [trace], days: [], warnings: trace.warnings };
+  state.workspaceMode = "watch";
+  resetSegmentNavigation(trace);
+  viewer?.setFollowTarget(null);
+  state.currentTime = Math.max(trace.windowStart || 0, trace.duration - (watch.status === "ended" ? 0 : LIVE_TRAIL_S));
+  setPlaying(false);
+  syncGameAssetsForTrace(trace, revision);
+  try { await syncMapForTrace(trace); }
+  catch {
+    if (revision !== state.traceSelectionRevision || state.trace !== trace) return;
+    await clearAutomaticMap();
+  }
+  if (revision !== state.traceSelectionRevision || !watch.active || state.trace !== trace) return;
+  state.compatibility = assessCompatibility(trace.manifest, state.mapPack);
+  await renderData();
+  if (revision !== state.traceSelectionRevision || !watch.active || state.trace !== trace) return;
+  updateTraceUI();
+  updateMapUI();
+  updateCompatibilityUI(false);
+  state.currentTime = Math.max(trace.windowStart || 0, trace.duration - (watch.status === "ended" ? 0 : LIVE_TRAIL_S));
+  watch.initializing = false;
+  elements.appShell.classList.remove("watch-loading");
+  flushWatch();
+  updatePlaybackTime(state.currentTime, false);
+}
+
+function flushWatch() {
+  const watch = state.watch, trace = watch.trace;
+  if (!watch.active || !trace || watch.initializing || state.trace !== trace) return;
+  if (watch.dirty) {
+    watch.dirty = false;
+    finalizeLiveFlush(trace);
+    trimWatchTrace(trace);
+    finalizeLiveFlush(trace);
+    state.segmentTimeline = buildSegmentTimeline(trace);
+    // Keep the user's selected camera/chapter while updating the growing data.
+    viewer?.refreshTracks();
+    const playerKey = trace.participants.filter(p => trace.tracks.get(p.id)?.length).map(p => `${p.id}:${p.nickname}`).join("|");
+    if (playerKey !== watch.playerKey) { watch.playerKey = playerKey; updatePlayers(); }
+    const scroll = elements.eventList.scrollTop;
+    updateEvents();
+    elements.eventList.scrollTop = scroll;
+    elements.timeline.min = String(trace.windowStart || 0);
+    elements.timeline.max = String(trace.duration);
+    elements.totalTime.textContent = formatTime(trace.duration);
+    elements.sampleCount.textContent = formatNumber(trace.sampleCount);
+    if (state.currentTime < (trace.windowStart || 0)) updatePlaybackTime(trace.windowStart, false);
+    syncSegmentToPlayback();
+    updatePlayerTelemetry();
+  }
+  updateWatchStatus();
+}
+
+async function startWatch(id, { replaceUrl = true } = {}) {
+  if (!parseWatchId(id)) return;
+  stopWatch();
+  disconnectLive(true);
+  const watch = state.watch;
+  Object.assign(watch, { active: true, id, trace: null, status: "connecting", connection: "connecting",
+    lastRecordAt: null, following: true, dirty: false, records: 0, playerKey: "", epoch: null,
+    initializing: false, message: "", sceneName: null });
+  state.trace = null;
+  state.historicalRoute = null;
+  state.traceCollection = null;
+  state.mapSourceKind = state.mapPack ? "archive" : null;
+  state.workspaceMode = "watch";
+  elements.appShell.classList.add("watch-loading");
+  setPlaying(false);
+  state.lastRenderSignature = null;
+  resetSegmentNavigation(null);
+  viewer?.setFollowTarget(null);
+  syncWorkspaceState();
+  dismissGate();
+  elements.modeChip.textContent = watchText("观战");
+  for (const key of ["watchStatus", "watchShare", "watchCamera", "watchTimebar"]) $(key).hidden = false;
+  if (replaceUrl) {
+    const url = new URL(location.href);
+    url.search = new URLSearchParams({ watch: id }).toString();
+    url.hash = "";
+    history.replaceState(null, "", url);
+  }
+  updateWatchStatus();
+  const client = new WatchClient({
+    watchId: id,
+    onSnapshot: data => {
+      // Parsing is synchronous before the first await: malformed snapshots throw
+      // into the controller's recovery path instead of accepting a bad cursor.
+      const trace = createLiveTrace({ ...data.manifest, sessionId: data.sessionId }, {
+        code: data.watchId, sessionId: `${data.sessionId}:${data.epoch}`,
+      });
+      for (const entry of data.snapshot.records) appendLiveRecord(trace, entry.record);
+      const promise = applyWatchSnapshot(data, trace);
+      promise.catch(error => {
+        if (state.watch.client !== client) return;
+        watch.message = tr(`直播数据无法显示：${error.message}`, `Unable to display live data: ${error.message}`);
+        watch.connection = "error";
+        updateWatchStatus();
+      });
+    },
+    onRecord: data => {
+      if (!watch.active || state.watch.client !== client || !watch.trace) return;
+      if (appendLiveRecord(watch.trace, data.record)) {
+        watch.dirty = true;
+        watch.lastRecordAt = Date.now();
+        if (data.record.type === "sample") state.live.trail?.observe(performance.now());
+      }
+    },
+    onState: data => {
+      if (!watch.active || state.watch.client !== client) return;
+      if (data.status) watch.status = data.status;
+      if (data.manifest?.sceneName) watch.sceneName = data.manifest.sceneName;
+      const time = typeof data.lastRecordAt === "number" ? data.lastRecordAt : Date.parse(data.lastRecordAt);
+      if (Number.isFinite(time)) watch.lastRecordAt = time;
+      if (data.status === "ended") {
+        watch.message = "";
+        if (watch.trace && !watch.initializing && watch.following) updatePlaybackTime(watch.trace.duration, false);
+      }
+      updateWatchStatus();
+      syncWakeLock();
+    },
+    onConnection: (connection, message) => {
+      if (!watch.active || state.watch.client !== client) return;
+      watch.connection = connection;
+      watch.message = message || "";
+      updateWatchStatus();
+      syncWakeLock();
+    },
+  });
+  watch.client = client;
+  state.live.trail = createTrailEstimator();
+  watch.timer = setInterval(flushWatch, 1000);
+  syncWakeLock();
+  await client.start();
+}
+
 function formatSessionLabel(trace) {
   const started = new Date(trace.manifest.startedAtUtc);
   const time = Number.isFinite(started.getTime())
@@ -1664,6 +1869,7 @@ function syncWorkspaceState() {
   shell.dataset.replayState = replayEmpty ? "empty" : state.trace ? "ready" : "explore";
   if (state.workspaceMode === "explore") elements.modeChip.textContent = state.historicalRoute
     ? state.historicalRoute.inspectionId ? tr("验收预览", "Review preview") : state.historicalRoute.teamId ? tr("团队路线", "Team route") : tr("历史路线", "Historical route") : tr("地图", "Map");
+  else if (state.workspaceMode === "watch") elements.modeChip.textContent = tr("观战", "Watch");
   else elements.modeChip.textContent = state.workspaceMode === "live" ? tr("直播", "Live")
     : FEATURES.legacyReplayVisible ? tr("回放", "Replay") : tr("地图", "Map");
   syncCommunityContext();
@@ -1853,6 +2059,7 @@ function createEventButton(event) {
   button.style.setProperty("--event-color", presentation.color);
   button.title = [event.source, event.confidence].filter(Boolean).join(" · ");
   button.addEventListener("click", () => {
+    if (state.watch?.active) state.watch.following = false;
     setPlaying(false);
     updatePlaybackTime(event.t, true);
     showEventToast(event);
@@ -1886,7 +2093,7 @@ function createEventButton(event) {
  * session carries thousands of item events; keeping them all in the DOM made every
  * layout pass — and therefore every replay frame — an order of magnitude slower. */
 function renderEventWindow() {
-  const events = state.trace?.events || [];
+  const events = (state.trace?.events || []).filter(event => !state.watch?.active || event.t >= (state.trace.windowStart || 0));
   const list = elements.eventList;
   if (!events.length) return;
   const viewport = list.clientHeight || 400;
@@ -1920,7 +2127,7 @@ function updateEvents() {
   state.eventRows.clear();
   elements.timelineMarkers.replaceChildren();
   elements.eventList.scrollTop = 0;
-  const events = state.trace?.events || [];
+  const events = (state.trace?.events || []).filter(event => !state.watch?.active || event.t >= (state.trace.windowStart || 0));
   elements.eventCount.textContent = formatNumber(events.length);
   if (!events.length) {
     const empty = document.createElement("p");
@@ -1937,14 +2144,15 @@ function updateEvents() {
   spacer.style.height = `${events.length * EVENT_ROW_STRIDE}px`;
   elements.eventList.append(spacer);
 
-  const duration = Math.max(0.001, state.trace.duration);
+  const windowStart = state.watch?.active ? state.trace.windowStart || 0 : 0;
+  const duration = Math.max(0.001, state.trace.duration - windowStart);
   const markerFragment = document.createDocumentFragment();
   // Overlapping ticks at this width are indistinguishable, and a long session can
   // carry thousands of events. Bucketing keeps the timeline strip at a few hundred
   // nodes instead of tens of thousands, whose layout cost dominated every frame.
   const markers = new Map();
   for (const event of events) {
-    const percent = Math.min(100, Math.max(0, (event.t / duration) * 100));
+    const percent = Math.min(100, Math.max(0, ((event.t - windowStart) / duration) * 100));
     const bucket = Math.round(percent / TIMELINE_MARKER_STEP);
     // The latest event in a bucket wins, so tick colors stay chronological.
     markers.set(bucket, { left: Math.min(100, bucket * TIMELINE_MARKER_STEP),
@@ -1988,7 +2196,8 @@ const EVENT_WINDOW_OVERSCAN = 6;
 function updatePlaybackTime(nextTime, detectEvents = true) {
   const duration = state.trace?.duration || 0;
   const previous = state.currentTime;
-  state.currentTime = Math.min(duration, Math.max(0, Number(nextTime) || 0));
+  const windowStart = state.watch?.active ? state.trace?.windowStart || 0 : 0;
+  state.currentTime = Math.min(duration, Math.max(windowStart, Number(nextTime) || 0));
   const eligibleMap = !state.trace || state.compatibility?.compatible ? state.mapPack : null;
   const nextRoute = resolveReplayRoute(eligibleMap, state.trace, state.currentTime);
   if (nextRoute.key !== state.routeView?.key) {
@@ -1999,7 +2208,7 @@ function updatePlaybackTime(nextTime, detectEvents = true) {
   // clamp the slider so it visibly freezes and then jumps once per second.
   if (duration > Number(elements.timeline.max)) elements.timeline.max = String(duration);
   elements.currentTime.textContent = formatTime(state.currentTime);
-  const percent = duration ? (state.currentTime / duration) * 100 : 0;
+  const percent = duration > windowStart ? ((state.currentTime - windowStart) / (duration - windowStart)) * 100 : 0;
   elements.timeline.style.background = `linear-gradient(90deg, var(--accent) ${percent}%, rgba(255, 255, 255, 0.12) ${percent}%)`;
   syncSegmentToPlayback();
   viewer?.setTime(state.currentTime);
@@ -2034,6 +2243,8 @@ function setPlaying(playing) {
  * newest record (smooth interpolation, prompt state), snapping forward after a
  * stall. Only while the live trace is the one on display. */
 function isLiveFollowing() {
+  const watch = state.watch;
+  if (watch?.active) return Boolean(watch.trace && state.trace === watch.trace && watch.following && !watch.initializing && watch.status !== "ended");
   const live = state.live;
   // 演示模式没有 SSE（es 为 null，demoTimer 供数），同样参与跟随。
   return Boolean((live?.es || live?.demoTimer) && live.trace && state.trace === live.trace && elements.liveFollow.checked);
@@ -2253,6 +2464,7 @@ async function syncMapForTrace(trace, refreshCatalog = false) {
 }
 
 async function syncDailyMap(daily, refreshCatalog = false) {
+  if (state.workspaceMode === "watch") return;
   if (state.workspaceMode === "replay" && !state.trace) return;
   if (state.manualMapLoads > 0 || (state.mapSourceKind && state.mapSourceKind !== "daily")) return;
   const startingRevision = state.mapRequestRevision;
@@ -2415,6 +2627,14 @@ elements.gateLive.addEventListener("click", () => {
   }
 });
 elements.backToGate.addEventListener("click", () => {
+  if (state.watch?.active) {
+    stopWatch();
+    state.trace = null;
+    state.traceCollection = state.replayCollection;
+    const url = new URL(location.href);
+    url.searchParams.delete("watch");
+    history.replaceState(null, "", url);
+  }
   elements.importMenu.open = false;
   if (state.historicalRoute) { state.historicalRoute = null; clearHistoricalRouteUrl(); updateDailyCountdown(); }
   showGate();
@@ -2502,7 +2722,7 @@ window.addEventListener("keydown", (event) => {
   } else if (event.key === "Escape" && viewer.followTargetId !== null) {
     event.preventDefault();
     viewer.setFollowTarget(null);
-  } else if (event.key === "Tab" && !event.ctrlKey && !event.altKey && !event.metaKey) {
+  } else if (event.key === "Tab" && !state.watch?.active && !event.ctrlKey && !event.altKey && !event.metaKey) {
     const target = event.target;
     if (target && (target.tagName === "INPUT" || target.tagName === "SELECT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
     if (!state.trace) return;
@@ -2540,14 +2760,52 @@ elements.dismissError.addEventListener("click", hideError);
 const replayInspector = document.querySelector(".inspector");
 const isAtPhoneInspector = () => replayInspector.getBoundingClientRect().top < window.innerHeight / 2;
 function updatePhonePanelButton() {
+  if (state.watch?.active) {
+    elements.phonePanelButton.textContent = tr("玩家", "Players");
+    elements.phonePanelButton.setAttribute("aria-label", tr("展开玩家面板", "Open players"));
+    return;
+  }
   const atInspector = isAtPhoneInspector();
   elements.phonePanelButton.textContent = atInspector ? tr("地图 ↑", "Map ↑") : tr("玩家 ↓", "Players ↓");
   elements.phonePanelButton.setAttribute("aria-label", atInspector ? tr("回到地图", "Back to map") : tr("跳到玩家状态与回放设置", "Go to player status and replay settings"));
 }
 elements.phonePanelButton.addEventListener("click", () => {
+  if (state.watch?.active) { toggleWatchPlayers(); return; }
   const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
   if (isAtPhoneInspector()) document.querySelector(".app-shell").scrollIntoView({ block: "start", behavior });
   else replayInspector.scrollIntoView({ block: "start", behavior });
+});
+function toggleWatchPlayers(open = !elements.appShell.classList.contains("watch-players-open")) {
+  elements.appShell.classList.toggle("watch-players-open", open);
+  $("watchPlayers").setAttribute("aria-expanded", String(open));
+}
+$("watchJoinForm").addEventListener("submit", event => {
+  event.preventDefault();
+  const id = parseWatchId($("watchLinkInput").value, location.href);
+  if (!id) { $("watchJoinHint").textContent = watchText("请粘贴完整的观战链接"); return; }
+  $("watchJoinHint").textContent = watchText("无需登录 · 仅有链接的人可以观看");
+  void startWatch(id);
+});
+$("watchRetry").addEventListener("click", () => void startWatch(state.watch.id));
+$("watchGoLive").addEventListener("click", () => {
+  if (!state.watch.trace) return;
+  state.watch.following = true;
+  setPlaying(false);
+  updatePlaybackTime(state.watch.status === "ended" ? state.trace.duration : state.trace.duration - LIVE_TRAIL_S, false);
+  updateWatchStatus();
+});
+$("watchAllPlayers").addEventListener("click", () => { viewer?.setFollowTarget(null); viewer?.fitView(); });
+$("watchNextPlayer").addEventListener("click", () => viewer?.cycleFollowTarget());
+$("watchPlayers").addEventListener("click", () => toggleWatchPlayers());
+$("watchClosePlayers").addEventListener("click", () => toggleWatchPlayers(false));
+$("watchShare").addEventListener("click", async () => {
+  const url = new URL(location.pathname, location.origin);
+  url.searchParams.set("watch", state.watch.id);
+  try {
+    await navigator.clipboard.writeText(url.href);
+    $("watchShare").textContent = watchText("已复制链接");
+    setTimeout(() => { $("watchShare").textContent = watchText("分享链接"); }, 2000);
+  } catch { showError(watchText("请复制地址栏链接"), watchText("当前浏览器未允许自动复制，地址栏中的链接可直接分享。")); }
 });
 window.addEventListener("scroll", updatePhonePanelButton, { passive: true, capture: true });
 elements.topViewButton.addEventListener("click", () => viewer?.topView());
@@ -2653,6 +2911,7 @@ elements.sceneCanvas.addEventListener("peaktrail-map-status", (event) => {
 elements.trackToggle.addEventListener("change", () => viewer?.setTrackVisibility(elements.trackToggle.checked));
 elements.markerToggle.addEventListener("change", () => viewer?.setMarkerVisibility(elements.markerToggle.checked));
 elements.timeline.addEventListener("input", () => {
+  if (state.watch?.active) { state.watch.following = false; setPlaying(false); updateWatchStatus(); }
   // Scrubbing takes over from live-follow: the chase must not fight the user
   // dragging through the buffered records. Re-check 跟随 to resume the edge.
   if (isLiveFollowing()) elements.liveFollow.checked = false;
@@ -2660,7 +2919,10 @@ elements.timeline.addEventListener("input", () => {
 });
 elements.playButton.addEventListener("click", () => {
   if (!state.trace) return;
-  if (!state.playing && state.currentTime >= state.trace.duration) updatePlaybackTime(0, false);
+  if (state.watch?.active && state.watch.following && state.watch.status !== "ended") {
+    state.watch.following = false; setPlaying(false); updateWatchStatus(); return;
+  }
+  if (!state.playing && state.currentTime >= state.trace.duration) updatePlaybackTime(state.watch?.active ? state.trace.windowStart || 0 : 0, false);
   setPlaying(!state.playing);
 });
 elements.speedSelect.addEventListener("change", () => {
@@ -2678,6 +2940,7 @@ document.addEventListener("keydown", (event) => {
 
 let dragDepth = 0;
 window.addEventListener("dragenter", (event) => {
+  if (state.watch?.active) { event.preventDefault(); return; }
   if (!event.dataTransfer?.types.includes("Files")) return;
   event.preventDefault();
   if (!FEATURES.legacyReplayVisible) return;
@@ -2694,6 +2957,7 @@ window.addEventListener("dragleave", (event) => {
 });
 window.addEventListener("drop", async (event) => {
   event.preventDefault();
+  if (state.watch?.active) return;
   dragDepth = 0;
   elements.dropOverlay.classList.remove("is-visible");
   if (!FEATURES.legacyReplayVisible) return;
@@ -2711,6 +2975,7 @@ window.addEventListener("drop", async (event) => {
 });
 
 window.addEventListener("beforeunload", () => {
+  state.watch.client?.stop();
   disposeLocaleUi();
   window.removeEventListener("scroll", updatePhonePanelButton, true);
   disposeCameraTouch();
@@ -2763,12 +3028,16 @@ async function bootstrap() {
     input.disabled = !FEATURES.legacyReplayVisible;
   }
   elements.gateDebug.closest("details").hidden = !FEATURES.liveVisible;
-  showGate();
+  const watchId = parseWatchId(new URL(location.href).searchParams.get("watch"));
+  if (watchId) void startWatch(watchId, { replaceUrl: false });
+  else showGate();
   updateCompatibilityUI();
   updateRangeFill(elements.heightScale);
   requestAnimationFrame(playbackLoop);
-  await bootstrapMapFromQuery();
-  await bootstrapHistoricalRouteFromQuery();
+  if (!watchId) {
+    await bootstrapMapFromQuery();
+    await bootstrapHistoricalRouteFromQuery();
+  }
   await loadDailyStatus();
   setInterval(updateDailyCountdown, 30_000);
   setInterval(() => void dailyClock.wake(), 5 * 60_000);
@@ -2902,6 +3171,7 @@ function refreshLocaleUi() {
     renderErrorUi();
   }
   viewer?.refreshLocaleUi();
+  updateWatchStatus();
 }
 
 const disposeLocaleUi = onLocaleChange(refreshLocaleUi);
