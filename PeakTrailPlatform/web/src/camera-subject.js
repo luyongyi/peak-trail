@@ -147,7 +147,7 @@ function localIndexedBounds(THREE, geometry) {
  * Indexed draw ranges are essential: Unity static batches can share a position
  * buffer containing unrelated geometry far outside the primitive being drawn.
  */
-export function collectCameraParts(THREE, group, origin, { onPart } = {}) {
+export function collectCameraParts(THREE, group, origin) {
   if (!group?.updateWorldMatrix || !group?.traverseVisible) return [];
   group.updateWorldMatrix(true, true);
   if (!Number.isFinite(group.matrixWorld.determinant()) || group.matrixWorld.determinant() === 0) return [];
@@ -178,9 +178,7 @@ export function collectCameraParts(THREE, group, origin, { onPart } = {}) {
       for (const x of [bounds.min.x, bounds.max.x]) for (const y of [bounds.min.y, bounds.max.y]) for (const z of [bounds.min.z, bounds.max.z]) {
         points.push(corner.set(x, y, z).applyMatrix4(relative).add(offset).toArray());
       }
-      const part = { bounds: result, points, materials };
-      parts.push(part);
-      onPart?.(part, mesh, index);
+      parts.push({ bounds: result, points, materials });
     }
   });
   return parts;

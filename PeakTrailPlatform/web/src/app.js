@@ -383,7 +383,7 @@ function segmentStatusKey(segment) {
 }
 
 function overviewSegmentOptions() {
-  return state.segmentOptions.filter((option) => !state.routeView?.hiddenSegments.has(option.segment));
+  return state.segmentOptions.filter((option) => !option.isVoid && !state.routeView?.hiddenSegments.has(option.segment));
 }
 
 function adjacentSegment(options, selected, direction) {
@@ -458,9 +458,7 @@ function renderSegmentNavigation() {
   const isOverview = state.selectedSegment === null;
   elements.routeSummary.textContent = [state.historicalRoute?.title, state.routeView?.message || tr("关卡分支未确认", "Route unconfirmed")].filter(Boolean).join(" · ");
   elements.segmentOrdinal.textContent = isOverview
-    ? overviewSegmentOptions().some(option => option.isVoid)
-      ? tr(`${chapters.length} 关＋天底`, `${formatNumber(chapters.length)} stages + NADIR`)
-      : tr(`共 ${chapters.length} 关`, `${formatNumber(chapters.length)} stages`)
+    ? tr(`共 ${chapters.length} 关`, `${formatNumber(chapters.length)} stages`)
     : active?.isVoid ? tr("额外区域 · 天底", "Extra area · NADIR") : tr(`第 ${activeIndex + 1} / ${chapters.length} 关`, `Stage ${formatNumber(activeIndex + 1)} / ${formatNumber(chapters.length)}`);
   elements.segmentName.textContent = isOverview ? tr("所有关概览", "All chapters") : segmentDisplayName(active);
   elements.segmentOriginalName.textContent = isOverview

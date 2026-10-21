@@ -133,33 +133,19 @@ test("stale request errors cannot overwrite current status or evict a newer cach
   assert.equal(scene.statuses.at(-1)[0], "ready");
 });
 
-test("overview loads and displays the actual Void layer alongside chapters, and selection still isolates it", async () => {
+test("an explicit Void chapter loads normally but overview neither loads nor reveals it", async () => {
   const { scene, requests } = fixture(null);
   const voidLayer = { id: "Void", segment: 5, biome: "Void" };
   scene.mapPack.layers.push(voidLayer);
   const voidGroup = group(voidLayer); scene.terrainRoot.children.push(voidGroup);
   scene.applyLayerVisibility();
-  assert.equal(voidGroup.visible, true);
-  assert.equal(scene.isGeometryLayerRequested(voidLayer), true);
-  const pending = scene.ensureGeometryLayers();
-  for (const [index, id] of ['A', 'B', 'C', 'Void'].entries()) {
-    assert.equal(requests[index].layer, id); requests[index].resolve(model()); await flush();
-  }
-  await pending;
-  assert.equal(voidGroup.userData.loaded, true);
-  assert.equal(scene.terrainRoot.children.every(group => group.visible), true);
+  assert.equal(voidGroup.visible, false);
+  assert.equal(scene.isGeometryLayerRequested(voidLayer), false);
   scene.setActiveSegment(5);
-  await flush();
-  assert.deepEqual(requests.map((request) => request.layer), ["A", "B", "C", "Void"]);
+  assert.deepEqual(requests.map((request) => request.layer), ["Void"]);
+  requests[0].resolve(model()); await flush();
   assert.equal(voidGroup.visible, true);
   assert.equal(voidGroup.userData.loaded, true);
-  assert.equal(scene.terrainRoot.children.filter(group => group.visible).length, 1);
-  assert.ok(Object.hasOwn(voidGroup.userData, 'nadirSourceParts'));
-  scene.setActiveSegment(0); requests[4].resolve(model()); await flush();
-  assert.equal(voidGroup.userData.loaded, false);
-  for (const key of ['nadirSourceParts', 'nadirOverviewHidden', 'nadirCameraParts', 'nadirCameraBounds']) {
-    assert.equal(Object.hasOwn(voidGroup.userData, key), false, `${key} cannot retain meshes from a disposed chapter`);
-  }
 });
 
 test("Nadir camera fitting uses real transformed instances without shrinking player or trail bounds", () => {
