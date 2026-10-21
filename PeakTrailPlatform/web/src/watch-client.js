@@ -10,6 +10,55 @@ export function parseWatchId(value, base = "https://watch.invalid/") {
   } catch { return null; }
 }
 
+export function parseWatchCode(value) {
+  const text = String(value || "").trim();
+  return /^[a-z]{4}$/i.test(text) ? text.toUpperCase() : null;
+}
+
+// Only short alphabetic input is a code. URLs and legacy identifiers keep their case.
+export function normalizeWatchInput(value) {
+  const text = String(value || "");
+  return /^[a-z]{0,4}$/i.test(text.trim()) ? text.toUpperCase() : text;
+}
+
+export async function resolveWatchInput(value, { base = "https://watch.invalid/", signal,
+  fetchImpl = (...args) => globalThis.fetch(...args) } = {}) {
+  const watchId = parseWatchId(value, base);
+  if (watchId) return { watchId, watchCode: null };
+  const code = parseWatchCode(value);
+  if (!code) throw Object.assign(new Error("invalid-watch-input"), { code: "invalid-watch-input" });
+  const response = await fetchImpl(`/api/live/v2/codes/${code}`, { cache: "no-store", signal });
+  if (!response.ok) {
+    if (response.status === 429) {
+      const data = await response.json().catch(() => ({}));
+      const retryAfterMs = Number.isFinite(data.retryAfterMs) && data.retryAfterMs > 0 ? data.retryAfterMs : 60_000;
+      throw Object.assign(new Error("rate-limited"), { code: "rate-limited", retryAfterMs });
+    }
+    const error = [404, 410].includes(response.status) ? "unknown-watch-code" : "watch-service-unavailable";
+    throw Object.assign(new Error(error), { code: error });
+  }
+  const data = await response.json();
+  const resolvedId = parseWatchId(data.watchId);
+  if (!resolvedId || parseWatchCode(data.watchCode) !== code || !["live", "reconnecting"].includes(data.status)) {
+    throw Object.assign(new Error("watch-service-unavailable"), { code: "watch-service-unavailable" });
+  }
+  return { watchId: resolvedId, watchCode: code };
+}
+
+export function watchSharePayload(watch, href, kind = "code") {
+  const code = watch.status !== "ended" && parseWatchCode(watch.code);
+  if (kind === "code" && code) return { text: code, kind: "code" };
+  const url = new URL(href);
+  url.search = new URLSearchParams({ watch: watch.id }).toString();
+  url.hash = "";
+  return { text: url.href, kind: "link" };
+}
+
+export function watchCodeFromState(currentCode, data) {
+  if (data.status === "ended") return null;
+  return Object.hasOwn(data, "watchCode") ? parseWatchCode(data.watchCode) : currentCode;
+}
+
 export class WatchClient {
   constructor({ watchId, base = "", fetchImpl = (...args) => globalThis.fetch(...args), EventSourceImpl = globalThis.EventSource,
     onSnapshot = () => {}, onRecord = () => {}, onState = () => {}, onConnection = () => {},

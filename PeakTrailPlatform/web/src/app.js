@@ -33,7 +33,7 @@ import { createMapLootPanel } from "./map-loot-panel.js";
 import { historicalRouteTitle, historicalRouteUrl, loadHistoricalRouteLink, parseHistoricalRouteLink } from "./historical-route-link.js";
 import { getLocale, tr, onLocaleChange, biomeName, gameItemName, formatNumber } from "./i18n.js";
 import { initLanguageControls } from "./i18n-dom.js";
-import { WatchClient, parseWatchId } from "./watch-client.js";
+import { WatchClient, parseWatchId, parseWatchCode, normalizeWatchInput, resolveWatchInput, watchSharePayload, watchCodeFromState } from "./watch-client.js";
 import { trimWatchTrace } from "./watch-window.js";
 import { watchText } from "./watch-text.js";
 
@@ -205,6 +205,7 @@ const state = {
     demoTimer: 0,
   },
   gateDiag: null,
+  watchJoin: { revision: 0, controller: null, pending: false, error: null, retryAt: 0 },
   watch: { active: false, id: null, client: null, timer: null, trace: null, status: "connecting",
     connection: "connecting", lastRecordAt: null, following: true, dirty: false, records: 0,
     playerKey: "", epoch: null, initializing: false },
@@ -213,6 +214,7 @@ const state = {
 const gameAssetLoads = new Map();
 const homePage = new HomePage({ root: elements.modeGate, loadCatalog: () => ensureMapCatalog(),
   loadMapPack: loadMapPackUrl, onExplore: (map, segment, view, intent) => {
+    cancelWatchJoin();
     void openHomeChapter(map, segment, view, intent).catch(error => {
       const detail = describeError(error); showError(detail.title, detail.message);
     });
@@ -1478,10 +1480,12 @@ function stopWatch() {
   watch.timer = null;
   watch.active = false;
   watch.trace = null;
+  watch.code = null;
+  watch.copiedUntil = 0;
   ++state.traceSelectionRevision;
   elements.appShell.classList.remove("watch-players-open");
   elements.appShell.classList.remove("watch-loading");
-  for (const id of ["watchStatus", "watchShare", "watchCamera", "watchTimebar", "watchNotice"]) $(id).hidden = true;
+  for (const id of ["watchStatus", "watchShare", "watchShareLink", "watchCamera", "watchTimebar", "watchNotice"]) $(id).hidden = true;
   elements.timeline.min = "0";
   syncWakeLock();
 }
@@ -1489,6 +1493,7 @@ function stopWatch() {
 function updateWatchStatus() {
   const watch = state.watch;
   if (!watch.active) return;
+  updateWatchShareUI();
   const labels = { live: watchText("直播中"), reconnecting: watchText("主播重连中"), ended: watchText("直播已结束") };
   const text = watch.connection === "error" ? watchText("无法打开直播")
     : watch.status === "ended" ? labels.ended
@@ -1584,14 +1589,15 @@ function flushWatch() {
   updateWatchStatus();
 }
 
-async function startWatch(id, { replaceUrl = true } = {}) {
+async function startWatch(id, { replaceUrl = true, watchCode = null } = {}) {
   if (!parseWatchId(id)) return;
+  cancelWatchJoin();
   stopWatch();
   disconnectLive(true);
   const watch = state.watch;
   Object.assign(watch, { active: true, id, trace: null, status: "connecting", connection: "connecting",
     lastRecordAt: null, following: true, dirty: false, records: 0, playerKey: "", epoch: null,
-    initializing: false, message: "", sceneName: null });
+    initializing: false, message: "", sceneName: null, code: parseWatchCode(watchCode), copiedUntil: 0, copiedKind: null });
   state.trace = null;
   state.historicalRoute = null;
   state.traceCollection = null;
@@ -1641,10 +1647,13 @@ async function startWatch(id, { replaceUrl = true } = {}) {
     onState: data => {
       if (!watch.active || state.watch.client !== client) return;
       if (data.status) watch.status = data.status;
+      watch.code = watchCodeFromState(watch.code, data);
       if (data.manifest?.sceneName) watch.sceneName = data.manifest.sceneName;
       const time = typeof data.lastRecordAt === "number" ? data.lastRecordAt : Date.parse(data.lastRecordAt);
       if (Number.isFinite(time)) watch.lastRecordAt = time;
       if (data.status === "ended") {
+        watch.code = null;
+        watch.copiedUntil = 0;
         watch.message = "";
         if (watch.trace && !watch.initializing && watch.following) updatePlaybackTime(watch.trace.duration, false);
       }
@@ -2779,12 +2788,73 @@ function toggleWatchPlayers(open = !elements.appShell.classList.contains("watch-
   elements.appShell.classList.toggle("watch-players-open", open);
   $("watchPlayers").setAttribute("aria-expanded", String(open));
 }
+function updateWatchJoinUI() {
+  const join = state.watchJoin;
+  $("watchJoinForm").setAttribute("aria-busy", String(join.pending));
+  $("watchJoinButton").disabled = join.pending;
+  $("watchJoinButton").textContent = watchText(join.pending ? "查找中…" : "观看");
+  $("watchLinkInput").setAttribute("aria-invalid", String(["invalid-watch-input", "unknown-watch-code"].includes(join.error)));
+  const messages = {
+    "invalid-watch-input": "请输入 4 位英文字母直播码，或粘贴观战链接",
+    "unknown-watch-code": "直播码不存在或已过期，请向主播确认",
+    "watch-service-unavailable": "暂时无法连接直播服务",
+    network: "网络不可用，请重试",
+  };
+  if (join.error === "rate-limited") {
+    const seconds = Math.max(0, Math.ceil((join.retryAt - Date.now()) / 1000));
+    $("watchJoinHint").textContent = tr("请求过于频繁，请 " + seconds + " 秒后重试", "Too many attempts. Try again in " + seconds + "s");
+  } else $("watchJoinHint").textContent = watchText(join.pending ? "正在查找直播…" : messages[join.error] || "输入直播码即可观看，无需登录");
+}
+
+function cancelWatchJoin() {
+  const join = state.watchJoin;
+  ++join.revision;
+  join.controller?.abort();
+  join.controller = null;
+  join.pending = false;
+  join.error = null;
+  updateWatchJoinUI();
+}
+
+async function joinWatchFromInput(value) {
+  const join = state.watchJoin;
+  if (join.pending) return;
+  // A local cooldown respects the API's failed-attempt limit without extra requests.
+  if (join.retryAt > Date.now() && !parseWatchId(value, location.href)) {
+    join.error = "rate-limited"; updateWatchJoinUI(); return;
+  }
+  cancelWatchJoin();
+  const revision = join.revision;
+  const controller = new AbortController();
+  join.controller = controller;
+  join.pending = true;
+  updateWatchJoinUI();
+  try {
+    const target = await resolveWatchInput(value, { base: location.href, signal: controller.signal });
+    if (revision !== join.revision || controller.signal.aborted) return;
+    await startWatch(target.watchId, { watchCode: target.watchCode });
+  } catch (error) {
+    if (revision !== join.revision || controller.signal.aborted) return;
+    join.error = ["invalid-watch-input", "unknown-watch-code", "watch-service-unavailable", "rate-limited"].includes(error.code) ? error.code : "network";
+    if (join.error === "rate-limited") join.retryAt = Date.now() + error.retryAfterMs;
+  } finally {
+    if (revision === join.revision) { join.pending = false; join.controller = null; updateWatchJoinUI(); }
+  }
+}
+
+$("watchLinkInput").addEventListener("input", event => {
+  if (event.isComposing) return;
+  const input = event.currentTarget;
+  const normalized = normalizeWatchInput(input.value);
+  if (normalized !== input.value) input.value = normalized;
+  cancelWatchJoin();
+});
+$("watchJoinForm").closest("details").addEventListener("toggle", event => {
+  if (!event.currentTarget.open) cancelWatchJoin();
+});
 $("watchJoinForm").addEventListener("submit", event => {
   event.preventDefault();
-  const id = parseWatchId($("watchLinkInput").value, location.href);
-  if (!id) { $("watchJoinHint").textContent = watchText("请粘贴完整的观战链接"); return; }
-  $("watchJoinHint").textContent = watchText("无需登录 · 仅有链接的人可以观看");
-  void startWatch(id);
+  void joinWatchFromInput($("watchLinkInput").value);
 });
 $("watchRetry").addEventListener("click", () => void startWatch(state.watch.id));
 $("watchGoLive").addEventListener("click", () => {
@@ -2798,15 +2868,38 @@ $("watchAllPlayers").addEventListener("click", () => { viewer?.setFollowTarget(n
 $("watchNextPlayer").addEventListener("click", () => viewer?.cycleFollowTarget());
 $("watchPlayers").addEventListener("click", () => toggleWatchPlayers());
 $("watchClosePlayers").addEventListener("click", () => toggleWatchPlayers(false));
-$("watchShare").addEventListener("click", async () => {
-  const url = new URL(location.pathname, location.origin);
-  url.searchParams.set("watch", state.watch.id);
+function updateWatchShareUI() {
+  const watch = state.watch;
+  if (!watch.active) return;
+  const hasCode = watch.status !== "ended" && Boolean(parseWatchCode(watch.code));
+  const copied = watch.copiedUntil > Date.now();
+  $("watchShare").textContent = copied && watch.copiedKind === (hasCode ? "code" : "link")
+    ? watchText(hasCode ? "直播码已复制" : "已复制链接")
+    : hasCode ? watchText("复制直播码") + " " + watch.code : watchText("复制观战链接");
+  $("watchShareLink").hidden = !hasCode;
+  $("watchShareLink").textContent = watchText(copied && watch.copiedKind === "link" ? "已复制链接" : "复制链接");
+}
+
+async function copyWatchShare(kind = "code") {
+  const watch = state.watch;
+  const id = watch.id;
+  const payload = watchSharePayload(watch, location.href, kind);
+  const current = () => watch.active && watch.id === id;
   try {
-    await navigator.clipboard.writeText(url.href);
-    $("watchShare").textContent = watchText("已复制链接");
-    setTimeout(() => { $("watchShare").textContent = watchText("分享链接"); }, 2000);
-  } catch { showError(watchText("请复制地址栏链接"), watchText("当前浏览器未允许自动复制，地址栏中的链接可直接分享。")); }
-});
+    await navigator.clipboard.writeText(payload.text);
+    if (!current() || payload.kind === "code" && payload.text !== watch.code) return;
+    watch.copiedKind = payload.kind;
+    watch.copiedUntil = Date.now() + 2000;
+    updateWatchShareUI();
+    setTimeout(() => { if (current()) updateWatchShareUI(); }, 2100);
+  } catch {
+    if (!current()) return;
+    if (payload.kind === "code") showError(watchText("请手动复制直播码"), payload.text);
+    else showError(watchText("请复制地址栏链接"), watchText("当前浏览器未允许自动复制，地址栏中的链接可直接分享。"));
+  }
+}
+$("watchShare").addEventListener("click", () => void copyWatchShare());
+$("watchShareLink").addEventListener("click", () => void copyWatchShare("link"));
 window.addEventListener("scroll", updatePhonePanelButton, { passive: true, capture: true });
 elements.topViewButton.addEventListener("click", () => viewer?.topView());
 elements.fitViewButton.addEventListener("click", () => viewer?.fitView());
@@ -2975,6 +3068,7 @@ window.addEventListener("drop", async (event) => {
 });
 
 window.addEventListener("beforeunload", () => {
+  cancelWatchJoin();
   state.watch.client?.stop();
   disposeLocaleUi();
   window.removeEventListener("scroll", updatePhonePanelButton, true);
@@ -3171,6 +3265,7 @@ function refreshLocaleUi() {
     renderErrorUi();
   }
   viewer?.refreshLocaleUi();
+  updateWatchJoinUI();
   updateWatchStatus();
 }
 

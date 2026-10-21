@@ -8,6 +8,10 @@
 
 默认同时提供 `/api/live/v2`，无账号登录，也无公开房间列表。Recorder 0.8.0 用 `POST /api/live/v2/sessions` 注册单推流源；服务端返回随机 `watchId` 和独立 `publishToken`。发布端以 Bearer 凭证调用 `/sessions/:sessionId/records`、`/heartbeat`、`/end`，观众只用 `/watch/:watchId` 与 `/watch/:watchId/stream`（SSE）。**观战链接不能发布数据**，读接口不返回发布凭证、原始房间 ID 或平台用户 ID。
 
+服务端另分配四位大写 `watchCode`，使用 `ABCDEFGHJKLMNPQRSTUVWXYZ`（不含 I/O）随机生成，冲突最多重试 32 次。注册成功仍为 `201`；成功响应和待命端的 `409 publisher-active` 都带同一场的码，重注册及租约接管不换码。`GET /api/live/v2/codes/:code` 在直播或断线重连宽限期返回 `{watchCode,watchId,watchPath,status}`，不返回发布凭证；格式错误、未知码和已结束会话均为 `404 unknown-watch-code`。该入口每 IP 每分钟最多 30 次，成功和失败查询都计数，超限返回 `429 rate-limited` 与 `retryAfterMs:60000`，不占用旧长链接的读取额度。
+
+短码只便于输入观战，不能发布，也不提供长随机链接同等的防猜测能力。结束即停止短码解析，码仍保留至会话清理以免立即指向另一场；原 `/?watch=<watchId>` 长链接及结束快照照常保留。观战元数据与 SSE `hello` 带 `watchCode`，结束后为 `null`。没有公开房间列表或短码列表接口。
+
 租约为 15 秒，建议每 5 秒心跳；失联 60 秒或持续 24 小时结束，结束后保留 15 分钟供观看，观众不延长生命周期。过期租约接管保留观战链接、更新 epoch 并作废旧凭证；SSE 用 epoch 与 seq 续传，过旧游标重置为有界的最新状态及近期路径快照。v2 默认只存内存、无磁盘持久化，服务重启即清空；`--dir` 不影响 v2。生产 nginx 的通用 `/api/` 转发和关闭 SSE 缓冲即可沿用。
 
 ## 运行

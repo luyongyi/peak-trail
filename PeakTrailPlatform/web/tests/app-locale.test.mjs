@@ -38,7 +38,7 @@ test("language repaint preserves chapter, camera, playback and the selected reco
   };
   for (const name of ["updateMapUI", "updateTraceSourceLabels", "updateCompatibilityUI", "renderSegmentNavigation",
     "renderEventWindow", "updatePlayerTelemetry", "syncWorkspaceState", "syncFollowHud", "syncWakeLockChip",
-    "updatePhonePanelButton", "updateDailyCard", "renderGateRuns", "updateWatchStatus"]) ports[name] = () => calls.push(name);
+    "updatePhonePanelButton", "updateDailyCard", "renderGateRuns", "updateWatchStatus", "updateWatchJoinUI"]) ports[name] = () => calls.push(name);
   const api = new Function(...Object.keys(ports), `${["errorUiText", "renderErrorUi", "showError", "refreshLocaleUi"].map(appFunction).join("\n")}; return {showError,refreshLocaleUi};`)(...Object.values(ports));
   api.showError("地图身份无效", "请检查地图文件", 0);
   const previous = { ...state };

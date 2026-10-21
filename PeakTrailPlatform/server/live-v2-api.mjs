@@ -1,5 +1,5 @@
 // Anonymous, capability-authorized live sharing. Watching never grants publishing.
-import { randomBytes, timingSafeEqual } from "node:crypto";
+import { randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 
 export const LIVE_V2_LIMITS = Object.freeze({
   sessions: 200, players: 16, batchLines: 256, bodyBytes: 256 * 1024,
@@ -8,7 +8,7 @@ export const LIVE_V2_LIMITS = Object.freeze({
   stateBytes: 128 * 1024, snapshotBytes: 256 * 1024, globalBytes: 64 * 1024 * 1024,
   viewersPerSession: 20, viewers: 100, viewerBufferBytes: 512 * 1024,
   requestsPerMinute: 1_200, bytesPerMinute: 12 * 1024 * 1024,
-  createsPerMinute: 60, readsPerMinute: 300, rateEntries: 5_000, concurrentBodies: 16,
+  createsPerMinute: 60, readsPerMinute: 300, codeLookupsPerMinute: 30, rateEntries: 5_000, concurrentBodies: 16,
   leaseMs: 15_000, endedAfterMs: 60_000, ttlMs: 24 * 60 * 60_000,
   endedRetentionMs: 15 * 60_000, heartbeatMs: 5_000,
 });
@@ -16,6 +16,9 @@ export const LIVE_V2_LIMITS = Object.freeze({
 const PREFIX = "/api/live/v2";
 const ID = /^[a-f0-9]{32}$/;
 const HASH = /^[a-f0-9]{64}$/;
+const WATCH_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+const WATCH_CODE = /^[A-HJ-NP-Z]{4}$/;
+const randomWatchCode = () => Array.from({ length: 4 }, () => WATCH_CODE_ALPHABET[randomInt(WATCH_CODE_ALPHABET.length)]).join("");
 const TYPES = new Set(["participant", "sample", "state", "inventory", "appearance", "status", "route", "event"]);
 const stateTypes = new Set(["participant", "sample", "state", "inventory", "appearance", "status", "route"]);
 const eventStateFamilies = new Map([
@@ -142,9 +145,9 @@ export function validateLiveManifest(raw) {
 }
 
 export function createLiveV2Api({ now = Date.now, limits: overrides = {}, trustedProxy = false,
-  sweepIntervalMs = 1_000, pingIntervalMs = 15_000 } = {}) {
+  sweepIntervalMs = 1_000, pingIntervalMs = 15_000, watchCodeGenerator = randomWatchCode } = {}) {
   const limits = { ...LIVE_V2_LIMITS, ...overrides };
-  const sessions = new Map(), rooms = new Map(), watches = new Map(), rates = new Map();
+  const sessions = new Map(), rooms = new Map(), watches = new Map(), codes = new Map(), rates = new Map();
   let residentBytes = 0, viewerCount = 0, activeBodies = 0, closed = false;
   const headers = {
     "content-type": "application/json; charset=utf-8", "cache-control": "no-store",
@@ -171,6 +174,7 @@ export function createLiveV2Api({ now = Date.now, limits: overrides = {}, truste
   function metadata(session) {
     return {
       sessionId: session.sessionId, watchId: session.watchId, epoch: session.epoch,
+      watchCode: session.status === "ended" ? null : session.watchCode,
       manifest: session.manifest, status: session.status, lastSeq: session.lastSeq,
       createdAt: session.createdAt, lastRecordAt: session.lastRecordAt,
       leaseExpiresAt: session.leaseExpiresAt, endedAt: session.endedAt, reason: session.reason,
@@ -216,6 +220,7 @@ export function createLiveV2Api({ now = Date.now, limits: overrides = {}, truste
     for (const viewer of [...session.viewers]) detach(session, viewer, true);
     residentBytes -= session.bytes;
     sessions.delete(session.sessionId); watches.delete(session.watchId);
+    if (codes.get(session.watchCode) === session) codes.delete(session.watchCode);
     if (rooms.get(session.roomKey) === session) rooms.delete(session.roomKey);
   }
   function sweep() {
@@ -247,10 +252,20 @@ export function createLiveV2Api({ now = Date.now, limits: overrides = {}, truste
   function registration(session) {
     return {
       sessionId: session.sessionId, watchId: session.watchId, publishToken: session.token,
+      watchCode: session.watchCode,
       epoch: session.epoch, watchPath: `/?watch=${session.watchId}`,
       heartbeatMs: limits.heartbeatMs, leaseMs: limits.leaseMs,
       lastProducerSeq: session.lastProducerSeq, lastSeq: session.lastSeq,
     };
+  }
+  function allocateWatchCode() {
+    // Keep ended sessions reserved until removal so an old code cannot instantly
+    // open a different room. Both this index and collision work are bounded.
+    for (let attempt = 0; attempt < 32; attempt += 1) {
+      const code = watchCodeGenerator();
+      if (typeof code === "string" && WATCH_CODE.test(code) && !codes.has(code)) return code;
+    }
+    throw fail("watch-code-capacity", 503);
   }
   function touch(session, record = false) {
     const changed = session.status !== "live";
@@ -387,6 +402,7 @@ export function createLiveV2Api({ now = Date.now, limits: overrides = {}, truste
         if (session && now() < session.leaseExpiresAt) {
           if (session.clientId !== body.clientId) throw fail("publisher-active", 409, {
             retryAfterMs: 5_000, sessionId: session.sessionId, watchId: session.watchId,
+            watchCode: session.watchCode,
           });
           touch(session);
           json(res, 201, registration(session));
@@ -394,9 +410,10 @@ export function createLiveV2Api({ now = Date.now, limits: overrides = {}, truste
           if (!session) {
             if (sessions.size >= limits.sessions) throw fail("too-many-sessions", 503);
             session = { roomKey: body.roomKey, sessionId: randomBytes(16).toString("hex"),
-              watchId: randomBytes(16).toString("hex"), createdAt: now(), epoch: 0, bytes: 0, viewers: new Set() };
+              watchId: randomBytes(16).toString("hex"), watchCode: allocateWatchCode(), createdAt: now(), epoch: 0, bytes: 0, viewers: new Set() };
             startEpoch(session, body.clientId, body.manifest);
             sessions.set(session.sessionId, session); watches.set(session.watchId, session); rooms.set(body.roomKey, session);
+            codes.set(session.watchCode, session);
           } else startEpoch(session, body.clientId, body.manifest);
           json(res, 201, registration(session));
         }
@@ -426,6 +443,16 @@ export function createLiveV2Api({ now = Date.now, limits: overrides = {}, truste
           else touch(session);
           json(res, 200, { status: session.status, epoch: session.epoch, leaseExpiresAt: session.leaseExpiresAt });
         }
+        return true;
+      }
+      if (req.method === "GET" && (path === `${PREFIX}/codes` || path.startsWith(`${PREFIX}/codes/`))) {
+        // Count malformed and unknown codes too; code lookup never shares the
+        // more generous watch/stream budget or reveals a directory of rooms.
+        if (limited(req, "code-lookup", limits.codeLookupsPerMinute)) throw fail("rate-limited", 429, { retryAfterMs: 60_000 });
+        const code = path.slice(`${PREFIX}/codes/`.length);
+        const session = WATCH_CODE.test(code) ? codes.get(code) : null;
+        if (!session || session.status === "ended") throw fail("unknown-watch-code", 404);
+        json(res, 200, { watchCode: session.watchCode, watchId: session.watchId, watchPath: `/?watch=${session.watchId}`, status: session.status });
         return true;
       }
       const watcher = path.match(/^\/api\/live\/v2\/watch\/([a-f0-9]{32})(\/stream)?$/);

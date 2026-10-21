@@ -35,9 +35,9 @@
           <details class="home-watch-entry">
             <summary class="home-nav-link">观看直播 ↗</summary>
             <form id="watchJoinForm" class="watch-join-form">
-              <label for="watchLinkInput">粘贴朋友分享的观战链接</label>
-              <div><input id="watchLinkInput" type="text" autocomplete="off" spellcheck="false" placeholder="https://…/?watch=…" required /><button type="submit">观看</button></div>
-              <small id="watchJoinHint">无需登录 · 仅有链接的人可以观看</small>
+              <label for="watchLinkInput">输入 4 位直播码</label>
+              <div><input id="watchLinkInput" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-describedby="watchJoinHint" placeholder="ABCD 或粘贴观战链接" required /><button id="watchJoinButton" type="submit">观看</button></div>
+              <small id="watchJoinHint" role="status">输入直播码即可观看，无需登录</small>
             </form>
           </details>
           <button class="language-toggle" data-language-toggle type="button" aria-label="切换为英语" title="切换为英语" lang="en"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c5 5 5 13 0 18-5-5-5-13 0-18Z" /></svg><span data-language-label>English</span></button>
@@ -165,7 +165,8 @@
         </div>
 
         <div class="top-actions">
-          <button class="button button-ghost" id="watchShare" type="button" hidden>分享链接</button>
+          <button class="button button-ghost" id="watchShare" type="button" hidden>复制观战链接</button>
+          <button class="button button-ghost watch-share-link" id="watchShareLink" type="button" hidden>复制链接</button>
           <input
             id="mapInput"
             class="visually-hidden"

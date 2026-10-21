@@ -72,6 +72,7 @@ test("v2 anonymous registration separates watching from publishing and has no pu
   const session = created.body;
   assert.match(session.sessionId, /^[a-f0-9]{32}$/u);
   assert.match(session.watchId, /^[a-f0-9]{32}$/u);
+  assert.match(session.watchCode, /^[A-HJ-NP-Z]{4}$/u);
   assert.match(session.publishToken, /^[a-f0-9]{64}$/u);
   assert.equal(session.watchPath, `/?watch=${session.watchId}`);
   assert.equal(session.leaseMs, 15_000);
@@ -79,11 +80,14 @@ test("v2 anonymous registration separates watching from publishing and has no pu
   const read = await f.request(`/api/live/v2/watch/${session.watchId}`);
   assert.equal(read.status, 200);
   assert.equal(read.body.manifest.sessionId, session.sessionId);
+  assert.equal(read.body.watchCode, session.watchCode);
   for (const secret of [roomKey, clientId, session.publishToken]) assert.ok(!JSON.stringify(read.body).includes(secret));
   assert.equal((await f.request("/api/live/v2/sessions")).status, 404);
   assert.equal((await f.request("/api/live/v2/watch")).status, 404);
+  assert.deepEqual(await f.request("/api/live/v2/codes"), { status: 404, body: { error: "unknown-watch-code" } });
   assert.equal((await f.send(session, [wrap(sample(0), 1)], "c".repeat(64))).status, 401);
   assert.equal((await f.send(session, [wrap(sample(0), 1)], session.watchId)).status, 401);
+  assert.equal((await f.send(session, [wrap(sample(0), 1)], session.watchCode)).status, 401);
   assert.equal((await f.send(session, [wrap(sample(0), 1)])).status, 200);
 });
 
@@ -104,10 +108,11 @@ test("same client registration is idempotent and a second active publisher canno
   const repeated = await f.create();
   assert.equal(repeated.body.publishToken, session.publishToken);
   assert.equal(repeated.body.epoch, session.epoch);
+  assert.equal(repeated.body.watchCode, session.watchCode);
   assert.equal(repeated.body.lastProducerSeq, 1);
   const other = await f.create({ clientId: "c".repeat(32) });
   assert.equal(other.status, 409);
-  assert.deepEqual(other.body, { error: "publisher-active", retryAfterMs: 5_000, sessionId: session.sessionId, watchId: session.watchId });
+  assert.deepEqual(other.body, { error: "publisher-active", retryAfterMs: 5_000, sessionId: session.sessionId, watchId: session.watchId, watchCode: session.watchCode });
 });
 
 test("expired lease takeover keeps the watch link, rotates credentials, resets epoch and updates existing viewers", async (t) => {
@@ -122,15 +127,96 @@ test("expired lease takeover keeps the watch link, rotates credentials, resets e
   assert.equal(taken.status, 201);
   const next = taken.body;
   assert.equal(next.watchId, old.watchId); assert.equal(next.sessionId, old.sessionId);
+  assert.equal(next.watchCode, old.watchCode);
   assert.equal(next.epoch, old.epoch + 1); assert.notEqual(next.publishToken, old.publishToken);
   assert.equal(next.lastSeq, 0); assert.equal(next.lastProducerSeq, 0);
   const reset = await view.next();
   assert.equal(reset.event, "hello"); assert.equal(reset.body.epoch, next.epoch);
+  assert.equal(reset.body.watchCode, old.watchCode);
   assert.deepEqual(reset.body.snapshot.records, []);
   assert.equal((await f.send(old, [wrap(sample(1), 2)])).status, 401);
   await f.send(next, [wrap(sample(0), 1)]);
   const record = await view.next();
   assert.equal(record.body.epoch, next.epoch); assert.equal(record.body.seq, 1);
+});
+
+test("short codes resolve only a minimal public watch destination and remain usable during reconnect grace", async (t) => {
+  const f = await fixture(t, { watchCodeGenerator: () => "TEST" }), session = (await f.create()).body;
+  const path = `/api/live/v2/codes/${session.watchCode}`;
+  assert.deepEqual(await f.request(path), { status: 200, body: {
+    watchCode: session.watchCode, watchId: session.watchId, watchPath: session.watchPath, status: "live",
+  } });
+  const view = await f.stream(session);
+  assert.equal((await view.next()).body.watchCode, session.watchCode);
+  for (const code of ["", "ZZZZ", "AAAAA", "1234", "IIII", "OOOO", session.watchCode.toLowerCase(), "ABCD/extra", "%41BCD"]) {
+    assert.deepEqual(await f.request(`/api/live/v2/codes/${code}`), { status: 404, body: { error: "unknown-watch-code" } });
+  }
+  assert.equal((await f.request(path, {})).status, 404);
+  f.advance(15_001);
+  assert.deepEqual(await f.request(path), { status: 200, body: {
+    watchCode: session.watchCode, watchId: session.watchId, watchPath: session.watchPath, status: "reconnecting",
+  } });
+  f.advance(45_000);
+  assert.deepEqual(await f.request(path), { status: 404, body: { error: "unknown-watch-code" } });
+  const retained = await f.request(`/api/live/v2/watch/${session.watchId}`);
+  assert.equal(retained.status, 200); assert.equal(retained.body.status, "ended"); assert.equal(retained.body.watchCode, null);
+  const late = await f.stream(session);
+  assert.equal((await late.next()).body.watchCode, null);
+  assert.equal(await late.next(), null);
+});
+
+test("short code collisions retry without replacing a room and ended codes stay reserved until cleanup", async (t) => {
+  const candidates = ["AAAA", "AAAA", "BBBB", "AAAA", "CCCC", "AAAA"];
+  let calls = 0;
+  const f = await fixture(t, { watchCodeGenerator: () => { calls += 1; return candidates.shift(); } });
+  const first = (await f.create()).body;
+  const second = (await f.create({ roomKey: "c".repeat(64) })).body;
+  assert.equal(first.watchCode, "AAAA"); assert.equal(second.watchCode, "BBBB"); assert.equal(calls, 3);
+  await f.action(first, "end");
+  assert.deepEqual(await f.request("/api/live/v2/codes/AAAA"), { status: 404, body: { error: "unknown-watch-code" } });
+  const third = (await f.create()).body;
+  assert.equal(third.watchCode, "CCCC"); assert.equal(calls, 5);
+  assert.notEqual(third.watchId, first.watchId);
+  assert.equal((await f.request("/api/live/v2/codes/BBBB")).body.watchId, second.watchId);
+  assert.equal((await f.request(`/api/live/v2/watch/${first.watchId}`)).body.watchCode, null);
+  f.advance(15 * 60_000);
+  assert.equal((await f.request(`/api/live/v2/watch/${first.watchId}`)).status, 404);
+  const reused = await f.create({ roomKey: "d".repeat(64) });
+  assert.equal(reused.status, 201); assert.equal(reused.body.watchCode, "AAAA"); assert.equal(calls, 6);
+  assert.notEqual(reused.body.watchId, first.watchId);
+});
+
+test("short code allocation gives up after exactly 32 collisions without leaking a half-created session", async (t) => {
+  let calls = 0;
+  const f = await fixture(t, { watchCodeGenerator: () => { calls += 1; return "AAAA"; } });
+  const session = (await f.create()).body, initial = f.live.liveV2.stats();
+  const result = await f.create({ roomKey: "d".repeat(64) });
+  assert.deepEqual(result, { status: 503, body: { error: "watch-code-capacity" } });
+  assert.equal(calls, 33); assert.deepEqual(f.live.liveV2.stats(), initial);
+  assert.equal((await f.request("/api/live/v2/codes/AAAA")).body.watchId, session.watchId);
+  const retry = await f.create();
+  assert.equal(retry.status, 201); assert.equal(retry.body.watchCode, "AAAA"); assert.equal(calls, 33);
+});
+
+test("short code lookups count success and malformed attempts in a separate 30-per-minute budget", async (t) => {
+  const f = await fixture(t), session = (await f.create()).body;
+  const path = `/api/live/v2/codes/${session.watchCode}`;
+  for (let index = 0; index < 30; index += 1) {
+    assert.equal((await f.request(index % 2 ? "/api/live/v2/codes/bad" : path)).status, index % 2 ? 404 : 200);
+  }
+  assert.deepEqual(await f.request(path), { status: 429, body: { error: "rate-limited", retryAfterMs: 60_000 } });
+  assert.equal((await f.request("/api/live/v2/codes")).status, 429);
+  assert.equal((await f.request(`/api/live/v2/watch/${session.watchId}`)).status, 200);
+  assert.equal((await f.action(session, "heartbeat")).status, 200);
+  assert.equal((await f.create()).status, 201);
+  f.advance(60_000);
+  const next = (await f.create()).body;
+  assert.equal((await f.request(`/api/live/v2/codes/${next.watchCode}`)).status, 200);
+  const independent = await fixture(t, { limits: { readsPerMinute: 1 } });
+  const other = (await independent.create()).body;
+  assert.equal((await independent.request(`/api/live/v2/watch/${other.watchId}`)).status, 200);
+  assert.equal((await independent.request(`/api/live/v2/watch/${other.watchId}`)).status, 429);
+  assert.equal((await independent.request(`/api/live/v2/codes/${other.watchCode}`)).status, 200);
 });
 
 test("records retry idempotently and malformed or gapped batches never partially commit", async (t) => {
@@ -302,6 +388,7 @@ test("explicit stop ends immediately, and the hard lifetime applies even with he
   const view = await f.stream(session); await view.next();
   const stopped = await f.action(session, "end", { reason: "disabled-in-settings" });
   assert.equal(stopped.body.status, "ended");
+  assert.equal((await f.request(`/api/live/v2/codes/${session.watchCode}`)).status, 404);
   assert.equal((await view.next()).body.reason, "disabled-in-settings");
   assert.equal((await f.send(session, [wrap(sample(0), 1)])).status, 410);
   const next = (await f.create()).body;
@@ -310,6 +397,8 @@ test("explicit stop ends immediately, and the hard lifetime applies even with he
   f.advance(10_000);
   const meta = await f.request(`/api/live/v2/watch/${next.watchId}`);
   assert.equal(meta.body.status, "ended"); assert.equal(meta.body.reason, "maximum-duration");
+  assert.equal(meta.body.watchCode, null);
+  assert.equal((await f.request(`/api/live/v2/codes/${next.watchCode}`)).status, 404);
 });
 
 test("body, line, player, state, session, global memory and rate budgets reject excess without corrupting cursors", async (t) => {

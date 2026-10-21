@@ -3313,7 +3313,11 @@ body.gate-open .app-shell { visibility: hidden; }
 /* Link-only observation has its own controls; legacy replay and relay settings
    remain available to their original workspaces. */
 .watch-status[hidden], .watch-camera[hidden], .watch-notice[hidden],
-.watch-timebar[hidden], #watchShare[hidden], #watchRetry[hidden] { display: none; }
+.watch-timebar[hidden], #watchShare[hidden], #watchShareLink[hidden], #watchRetry[hidden] { display: none; }
+.watch-share-link { color: var(--muted-strong); }
+#watchShare { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.watch-join-form button:disabled { opacity: .6; cursor: wait; }
+.watch-join-form input[aria-invalid="true"] { border-color: var(--danger, #e3887b); }
 .watch-status { display: grid; gap: 5px; min-width: 0; text-align: center; }
 .watch-status strong { font-size: 13px; color: var(--success); }
 .watch-status span { font-size: 11px; color: var(--muted); }
