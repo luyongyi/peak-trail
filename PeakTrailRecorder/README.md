@@ -1,6 +1,6 @@
 # PeakTrailRecorder
 
-Read-only BepInEx recorder for PEAK (0.8.2 is built against Steam build 25739797). It samples every human character returned by
+Read-only BepInEx recorder for PEAK (0.8.3 is built against Steam build 25739797). It samples every human character returned by
 `PlayerHandler.GetAllPlayerCharacters()` and writes a local, crash-recoverable trace for the
 PeakTrail 2.5D viewer. The same DLL also captures the currently loaded map for the viewer;
 there is no second end-user map-exporter mod.
@@ -44,6 +44,27 @@ by `recordingId`. Native `summit` and `nadir` mean the observed player's actual 
 Void or collecting an item never proves completion. The two soul phases retain separate events.
 The native local checkpoint belongs only to the living, non-warping local player; global stage
 changes do not award a checkpoint to everyone.
+
+Since **0.8.3**, the same independent archive also carries optional `itemEvents` with exactly
+two kinds: `item-use` records the observed actor's center at native use/throw, and `item-spawn`
+records the actual final placement point. An exact native source context links the two by
+`actionId`; no distance/time matching is used. Both IDs are scoped to this recording, so another
+observer cannot accidentally overwrite an event. Spawn metadata uses the generated prefab name,
+while the original item ID can supply its icon. No rotation, subsequent movement or despawn is recorded.
+
+The initial placement hooks cover climbing spikes (including the pocket-slot hammer path),
+Constructable placements, ShelfShroom/CloudFungus deployment, hand-placed rope anchors and the
+rope shooter's final anchor. The projectile at the gun muzzle is only a source association;
+it does not emit a final spawn. A remote native spawn without a witnessed source is retained
+with unknown actor and no invented use event. Identity unknown at capture stays unknown for that
+action, including its later spawn, so already acknowledged events remain immutable.
+
+These events work with `[Recording] Enabled=false` and `[Live] Enabled=true`. Native callbacks
+queue plain DTOs; `LateUpdate` groups that frame's events into one forced disk sync and one
+cumulative-prefix upload request. Closing sharing drains the queue before sealing. Upload and
+gzip stay on the existing worker; a crash before the end of a frame can lose that frame's events.
+The first 4,096 item events per archive are retained; reaching that limit logs a warning and
+does not discard the earlier journal. Old journals without item events export the original schema.
 
 The service contract limits a member prefix to four hours, 12 MiB compressed and 64 MiB decoded.
 The exporter additionally bounds retained points/events to protect game-process memory. A prefix

@@ -65,7 +65,7 @@ internal sealed class LivePayload
             "state" => Stamina,
             "inventory" => "inventoryReady authority selectedSlotKnown selectedSlot heldPresent backpackContentsPresent backpackContentsReady source",
             "status" => "reason",
-            "event" => "pos source event confidence cause fromLocation toLocation throwCharge",
+            "event" => "pos source event confidence cause fromLocation toLocation throwCharge id actionId",
             _ => "",
         };
         JObject result = Pick(source, Common + " " + fields);

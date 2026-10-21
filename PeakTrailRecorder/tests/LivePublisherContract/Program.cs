@@ -67,6 +67,12 @@ Check(!projected.Contains("actorNumber") && !projected.Contains("idSource") && !
 Check(fixtureRecords.Take(6).All(record => (string?)record["playerId"] == "p1"), "A player must keep one anonymous identity.");
 Check((string?)fixtureRecords[0]["nickname"] == "测试玩家Name", "Control characters must not poison a valid batch.");
 Check(projector.Record(Record("world_snapshot", 1, ("objects", new object[0]))) == null, "World data is outside the public v2 contract.");
+var itemAction = new string('c',64);
+var itemEvent = projector.Record(Record("event",1100,("event","item-spawn"),("id",new string('d',64)),("actionId",itemAction),
+    ("playerId",rawPlayer),("pos",new[]{5f,6f,7f}),("item",new{itemId=1,prefabName="ClimbingSpikeHammered",instanceId="private-guid"})))!;
+Check((string?)itemEvent["id"]==new string('d',64) && (string?)itemEvent["actionId"]==itemAction && (string?)itemEvent["playerId"]=="p1",
+    "Item event identity/anonymous player mapping was stripped.");
+Check(!itemEvent.ToString().Contains("private-guid") && !itemEvent.ToString().Contains(rawPlayer),"Item event leaked private IDs.");
 Check(projector.Record(Record("inventory", 1, ("playerId", rawPlayer), ("slots",
     Enumerable.Range(0, 32).Select(i => new { location = "slot" + i, item = new { id = "x", name = new string('界', 256), displayName = new string('界', 256) } }).ToArray()))) == null,
     "An oversized DTO must not poison an otherwise valid batch.");

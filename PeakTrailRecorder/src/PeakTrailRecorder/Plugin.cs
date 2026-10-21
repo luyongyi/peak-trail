@@ -15,7 +15,7 @@ namespace PeakTrailRecorder;
 [BepInAutoPlugin]
 public partial class Plugin : BaseUnityPlugin
 {
-    internal const string RecorderVersion = "0.8.2";
+    internal const string RecorderVersion = "0.8.3";
 
     internal static ManualLogSource Log { get; private set; } = null!;
 
@@ -128,6 +128,7 @@ public partial class Plugin : BaseUnityPlugin
         catch (Exception e) { Log.LogError("Route archive disk initialization failed (" + e.GetType().Name + ")."); }
         NativeRouteHooks.Capture = CaptureRouteBoundary;
         NativeRouteHooks.Install(message => Log.LogWarning(message));
+        NativeItemHooks.Install(message => Log.LogWarning(message));
         SubscribeGlobalEvents();
         Log.LogWarning(
             "PeakTrailRecorder records every synchronized human player's location trail, stamina, statuses, appearance, held items and inventory, "
@@ -249,7 +250,8 @@ public partial class Plugin : BaseUnityPlugin
             try
             {
                 _routeArchive = new NativeRouteArchive(_routeOutbox, _liveServerUrl.Value,
-                    (kind, player, stage, position) => _session?.RecordNativeRouteEvent(kind, player, stage, position));
+                    (kind, player, stage, position) => _session?.RecordNativeRouteEvent(kind, player, stage, position),
+                    (observation, stage) => _session?.RecordNativeItemEvent(observation, stage));
             }
             catch (Exception e) { _nextArchiveStartAttempt = Time.realtimeSinceStartup + 10; Log.LogError("Route archive could not start (" + e.GetType().Name + "); retrying."); }
         }
@@ -261,6 +263,12 @@ public partial class Plugin : BaseUnityPlugin
     {
         try { _routeArchive?.Capture(critical, kind, seal); }
         catch (Exception e) { Log.LogError("Route archive boundary write failed (" + e.GetType().Name + ")."); }
+    }
+
+    private void LateUpdate()
+    {
+        try { _routeArchive?.FlushItemEvents(); }
+        catch (Exception e) { Log.LogError("Item archive flush failed (" + e.GetType().Name + "). Existing journal retained."); }
     }
 
     private void CloseRouteArchive()
@@ -487,6 +495,7 @@ public partial class Plugin : BaseUnityPlugin
     {
         CloseRouteArchive();
         NativeRouteHooks.Uninstall();
+        NativeItemHooks.Uninstall();
         NativeLiveSettings.Uninstall();
         PlayerAppearanceReader.Uninstall();
         WorldTelemetryHooks.Uninstall();

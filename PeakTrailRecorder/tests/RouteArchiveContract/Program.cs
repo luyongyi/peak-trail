@@ -20,6 +20,10 @@ var header = new RouteArchiveHeader { Server = "http://127.0.0.1:1", RecordingId
 RouteArchiveActor Actor(int id, int z, int flags = 1) => new() { Id = id, Key = RouteArchiveIdentity.Player(run, "synthetic-" + id), Name = "Synthetic " + id, Position = [0, 0, z], Flags = flags, Warp=0 };
 var frames = new List<RouteArchiveFrame>();
 for (int i = 0; i <= 12; i++) frames.Add(new() { Time = i * 100, Stage = 0, RunKey = run, Origin = -2000, Actors = [Actor(1, i * 100, 3), Actor(2, i * 100)] });
+frames[1].ItemEvents = [new() { Id=Sha("item-use"),ActionId=Sha("item-action"),Kind="item-use",Time=100,Stage=0,Position=[0,0,100],Actor=1,
+    Item=JObject.Parse("{\"itemId\":1,\"prefabName\":\"ClimbingSpike\"}") },
+    new() { Id=Sha("item-spawn"),ActionId=Sha("item-action"),Kind="item-spawn",Time=100,Stage=0,Position=[100,0,100],Actor=1,
+    Item=JObject.Parse("{\"itemId\":1,\"prefabName\":\"ClimbingSpikeHammered\"}") }];
 frames.Add(new() { Time = 1300, Stage = 1, RunKey = run, Origin = -2000, Checkpoint = 0, Seal = true, Actors = [Actor(1,1300,3), Actor(2,1300)] });
 frames.Add(new() { Time = 1400, Stage = 2, RunKey = run, Origin = -2000, Actors = [Actor(1,5000,7), Actor(2,1300,0)] });
 frames.Add(new() { Time = 1500, Stage = 2, RunKey = run, Origin = -2000, Actors = [Actor(1,5000,3), Actor(2,1300,0)] });
@@ -91,6 +95,30 @@ Check(File.Exists(resumePath+".receipt.json")&&requests==2,"failed HTTP did not 
 await responder;
 Check(File.Exists(resumePath),"ACK deleted permanent local journal");
 Check((long)JObject.Parse(File.ReadAllText(resumePath+".receipt.json"))["length"]! == new FileInfo(resumePath).Length,"receipt advanced wrong prefix");
+// A live unsealed run with no RunId must not publish fallback identities. Once
+// RunId arrives the same journal prefix is rekeyed before its first HTTP upload.
+string waitingRoot=Path.Combine(temp,"waiting-for-run");
+var waitingHeader=JsonConvert.DeserializeObject<RouteArchiveHeader>(JsonConvert.SerializeObject(header))!;
+waitingHeader.RecordingId=Sha("synthetic-waiting-run");
+var waitingOutbox=new RouteArchiveOutbox(waitingRoot,_=>{});
+var waitingWriter=new RouteArchiveJournal(waitingOutbox,waitingHeader);
+waitingWriter.Append(new(){Time=0,Stage=0,Actors=[Actor(1,0,3)],Seal=true},true);
+var awaitingRequest=listener.GetContextAsync();
+deadline=DateTime.UtcNow.AddSeconds(5);
+while(!File.Exists(waitingWriter.Path+".pending.gz")&&DateTime.UtcNow<deadline) await Task.Delay(20);
+Check(File.Exists(waitingWriter.Path+".pending.gz"),"pending run was not evaluated by upload worker");
+await Task.Delay(100);
+Check(!awaitingRequest.IsCompleted,"missing RunId published a fallback live identity");
+waitingWriter.Append(new(){Time=100,Stage=0,RunKey=run,Origin=0,Actors=[Actor(1,100,3)],Seal=true},true);
+var readyRequest=await awaitingRequest.WaitAsync(TimeSpan.FromSeconds(5));
+using(var zip=new GZipStream(readyRequest.Request.InputStream,CompressionMode.Decompress))
+using(var reader=new StreamReader(zip)) Check((string?)Parse(await reader.ReadToEndAsync())["runKey"]==run,"late run key was not used for first upload");
+readyRequest.Response.StatusCode=201;
+await readyRequest.Response.OutputStream.WriteAsync(Encoding.UTF8.GetBytes("{\"uploadId\":\""+new string('c',64)+"\"}"));readyRequest.Response.Close();
+deadline=DateTime.UtcNow.AddSeconds(5);
+while(!File.Exists(waitingWriter.Path+".receipt.json")&&DateTime.UtcNow<deadline) await Task.Delay(20);
+Check(File.Exists(waitingWriter.Path+".receipt.json"),"known run prefix did not receive ACK");
+waitingWriter.Dispose();
 // Optional explicit fixture path makes cross-language validation repeatable.
 if(args.Length==2&&args[0]=="--fixture") File.WriteAllText(args[1],package.ToString(Formatting.Indented)+"\n",new UTF8Encoding(false));
 Console.WriteLine("Route archive contract passed: native outcomes/owner checkpoint/late identity/shared clock/crash-tail/gzip/startup recovery/retry/budgets.");

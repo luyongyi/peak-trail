@@ -29,6 +29,10 @@ internal sealed class NativeRouteArchive : IDisposable
     private readonly int _voidStage;
     private readonly int _summitStage;
     private readonly Action<string, Character?, int, Vector3?> _liveEvent;
+    private readonly Action<NativeItemEvents.Observation, int> _liveItemEvent;
+    private readonly NativeItemEvents _items;
+    private readonly List<RouteArchiveItemEvent> _pendingItems = new();
+    private bool _itemSealPending;
     private bool _closed, _capturing;
     private long _nextSample;
     private int _lastStage = -1;
@@ -37,9 +41,11 @@ internal sealed class NativeRouteArchive : IDisposable
     private Guid _lastRunId;
     public int RunManagerId { get; }
     public string Scene { get; }
-    public NativeRouteArchive(RouteArchiveOutbox outbox, string server, Action<string, Character?, int, Vector3?> liveEvent)
+    public NativeRouteArchive(RouteArchiveOutbox outbox, string server, Action<string, Character?, int, Vector3?> liveEvent,
+        Action<NativeItemEvents.Observation, int> liveItemEvent)
     {
         _liveEvent = liveEvent;
+        _liveItemEvent = liveItemEvent;
         Scene = SceneManager.GetActiveScene().name;
         RunManagerId = RunManager.Instance.GetInstanceID();
         _recordingId = RouteArchiveIdentity.Hash("peak-memories/recording/" + Guid.NewGuid().ToString("N"));
@@ -48,8 +54,38 @@ internal sealed class NativeRouteArchive : IDisposable
         _voidStage = Array.FindIndex(stages, s => (string?)s["name"] == "Void");
         _summitStage = Array.FindLastIndex(stages, s => (string?)s["name"] != "Void");
         _journal = new RouteArchiveJournal(outbox, header);
+        _items = new NativeItemEvents(_recordingId, ItemActor, ItemEvent);
         try { Capture(true); }
         catch { foreach (var actor in _actors.Values) Detach(actor); _journal.Dispose(); throw; }
+        NativeItemHooks.Active = _items;
+    }
+    // LateUpdate groups all callbacks in a rendered frame into one fsynced prefix.
+    // Closing the archive also drains this queue before any upload can be canceled.
+    public void FlushItemEvents()
+    { if (!_closed && _itemSealPending) Capture(true, null, true); }
+    private NativeItemEvents.Actor ItemActor(Character? character)
+    {
+        if (!character) return new NativeItemEvents.Actor();
+        var owner = character!.photonView ? character.photonView.Owner : null;
+        string key = owner != null ? "actor:" + owner.ActorNumber : "view:" + (character.photonView ? character.photonView.ViewID : character.GetInstanceID());
+        if (!_actors.ContainsKey(key)) Capture(false);
+        // Once an event is uploaded its content is immutable. Never attach a
+        // fallback actor key that could later be replaced by a known UserId.
+        return new NativeItemEvents.Actor { Id = !string.IsNullOrEmpty(owner?.UserId) && _actors.TryGetValue(key, out var actor) ? actor.Id : null,
+            LiveId = owner != null ? IdentityResolver.FromCharacter(character).PlayerId : null };
+    }
+    private void ItemEvent(NativeItemEvents.Observation observation)
+    {
+        if (_closed) return;
+        int stage = NativeStage();
+        if (stage < 0) return;
+        int now = Math.Max(_lastFrameTime, checked((int)_clock.ElapsedMilliseconds));
+        var p = observation.Position;
+        _pendingItems.Add(new RouteArchiveItemEvent { Id = observation.Id, ActionId = observation.ActionId, Kind = observation.Kind,
+            Time = now, Stage = stage, Position = new[] { RouteArchiveIdentity.Cm(p.x), RouteArchiveIdentity.Cm(p.y), RouteArchiveIdentity.Cm(p.z) },
+            Item = (JObject)observation.Item.DeepClone(), Actor = observation.Actor.Id });
+        _itemSealPending = true;
+        _liveItemEvent(observation, stage);
     }
     public void Tick()
     {
@@ -123,6 +159,12 @@ internal sealed class NativeRouteArchive : IDisposable
             }
             if (nativeEvent == "nadir-ready") _liveEvent(nativeEvent, null, stage, null);
             if (scopeChanged) frame.Keys = _actors.Values.ToDictionary(a => a.Id, a => RouteArchiveIdentity.Player(runKey, a.Identity));
+            if (_pendingItems.Count != 0)
+            {
+                frame.ItemEvents = new List<RouteArchiveItemEvent>(_pendingItems);
+                frame.Time = Math.Max(frame.Time, _pendingItems.Max(e => e.Time));
+                critical = true;
+            }
             if (_lastStage >= 0 && frame.Stage != _lastStage) { critical = true; frame.Seal = true; }
             frame.Time = Math.Max(frame.Time, _lastFrameTime);
             if (frame.Stage != _lastStage) { frame.Time = Math.Max(frame.Time, _lastStageTime + 1); _lastStageTime = frame.Time; }
@@ -130,6 +172,8 @@ internal sealed class NativeRouteArchive : IDisposable
             _lastStage = frame.Stage;
             _lastFrameTime = frame.Time;
             _journal.Append(frame, critical);
+            _pendingItems.Clear();
+            if (frame.Seal) _itemSealPending = false;
         }
         finally { _capturing = false; }
     }
@@ -144,7 +188,7 @@ internal sealed class NativeRouteArchive : IDisposable
     {
         if (_closed) return;
         try { Capture(true, "end", true); }
-        finally { _closed = true; foreach (var actor in _actors.Values) Detach(actor); _journal.Dispose(); }
+        finally { _closed = true; if (NativeItemHooks.Active == _items) NativeItemHooks.Active = null; foreach (var actor in _actors.Values) Detach(actor); _journal.Dispose(); }
     }
     private static string CleanName(string name) => new(name.Where(c => c >= 32 && c != 127).Take(100).ToArray());
     private int NativeStage()

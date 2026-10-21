@@ -903,6 +903,16 @@ internal sealed class RecordingSession : IDisposable
         WriteEvent(kind, id, stage, position, "native-state");
     }
 
+    internal void RecordNativeItemEvent(NativeItemEvents.Observation observation, int stage)
+    {
+        var record = new Dictionary<string, object?> { ["type"] = "event", ["event"] = observation.Kind,
+            ["id"] = observation.Id, ["t"] = ElapsedMilliseconds, ["activeSegment"] = stage,
+            ["playerId"] = observation.Actor.LiveId, ["pos"] = PositionArray(observation.Position),
+            ["item"] = observation.Item.DeepClone(), ["source"] = "native-state" };
+        if (observation.ActionId.Length != 0) record["actionId"] = observation.ActionId;
+        WriteRecord(record);
+    }
+
     private void WriteEvent(
         string eventName,
         string? playerId,

@@ -30,8 +30,31 @@ internal sealed class RouteArchiveFrame
     [JsonProperty("e", NullValueHandling = NullValueHandling.Ignore)] public string? Event;
     [JsonProperty("checkpoint", NullValueHandling = NullValueHandling.Ignore)] public int? Checkpoint;
     [JsonProperty("keys", NullValueHandling = NullValueHandling.Ignore)] public Dictionary<int, string>? Keys;
+    [JsonProperty("itemEvents", NullValueHandling = NullValueHandling.Ignore)] public List<RouteArchiveItemEvent>? ItemEvents;
     [JsonProperty("seal", DefaultValueHandling = DefaultValueHandling.Ignore)] public bool Seal;
     [JsonProperty("closed", DefaultValueHandling = DefaultValueHandling.Ignore)] public bool Closed;
+}
+
+// Actor is a journal-local integer. Resolve its final scoped key at export so an
+// identity arriving after the action also rekeys that action without raw IDs.
+internal sealed class RouteArchiveItemEvent
+{
+    public string Id = "", ActionId = "", Kind = "";
+    public int Time, Stage;
+    public int[] Position = new int[3];
+    public JObject Item = new();
+    [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public int? Actor;
+}
+
+internal sealed class ItemEventIdentity
+{
+    private readonly string _scope;
+    private long _sequence;
+    private readonly HashSet<string> _spawned = new(StringComparer.Ordinal);
+    public ItemEventIdentity(string recordingId) { _scope = recordingId; }
+    public string Action() => RouteArchiveIdentity.Hash("peaktrail/item-action/v1/" + _scope + "/" + (++_sequence).ToString(CultureInfo.InvariantCulture));
+    public string Event(string action, string kind, string nativeKey) => RouteArchiveIdentity.Hash("peaktrail/item-event/v1/" + _scope + "/" + action + "/" + kind + "/" + nativeKey);
+    public bool FirstSpawn(string nativeKey) => _spawned.Add(nativeKey);
 }
 
 internal sealed class RouteArchiveActor
@@ -74,6 +97,7 @@ internal sealed class RouteArchiveBuilder
     }
     private readonly RouteArchiveHeader _header;
     private readonly Dictionary<int, Track> _tracks = new();
+    private readonly Dictionary<string, RouteArchiveItemEvent> _itemEvents = new(StringComparer.Ordinal);
     private readonly JObject[] _stages;
     private string? _runKey;
     private long? _origin;
@@ -163,6 +187,12 @@ internal sealed class RouteArchiveBuilder
             { Event(pair.Value, frame.Time, "leave"); Event(pair.Value, frame.Time, "break"); pair.Value.Present = false; pair.Value.Position = null; }
         if (frame.Keys != null) foreach (var pair in frame.Keys)
             if (_tracks.TryGetValue(pair.Key, out var track)) track.Key = pair.Value;
+        if (frame.ItemEvents != null) foreach (var itemEvent in frame.ItemEvents)
+        {
+            if (_itemEvents.ContainsKey(itemEvent.Id)) continue;
+            if (_itemEvents.Count >= 4096) throw new RouteArchiveBudgetException("item-event-budget");
+            _itemEvents.Add(itemEvent.Id, itemEvent);
+        }
     }
     public JObject Finish()
     {
@@ -174,6 +204,19 @@ internal sealed class RouteArchiveBuilder
             ["startedUtc"] = _header.StartedUtc, ["durationMs"] = _duration, ["sampleHz"] = 10, ["coordinateUnit"] = "cm",
             ["map"] = _header.Map.DeepClone(), ["difficulty"] = _header.Difficulty.DeepClone(), ["players"] = players };
         if (_runKey != null && _origin.HasValue) { result["runKey"] = _runKey; result["timeOriginMs"] = _origin.Value; }
+        if (_itemEvents.Count != 0)
+        {
+            var events = new JArray();
+            foreach (var itemEvent in _itemEvents.Values.OrderBy(e => e.Time).ThenBy(e => e.Id, StringComparer.Ordinal))
+            {
+                var value = new JObject { ["id"] = itemEvent.Id, ["kind"] = itemEvent.Kind, ["tMs"] = itemEvent.Time,
+                    ["stageIndex"] = itemEvent.Stage, ["positionCm"] = new JArray(itemEvent.Position), ["item"] = itemEvent.Item.DeepClone() };
+                if (itemEvent.ActionId.Length != 0) value["actionId"] = itemEvent.ActionId;
+                if (itemEvent.Actor is int actor && _tracks.TryGetValue(actor, out var track) && track.Key.Length == 64) value["playerKey"] = track.Key;
+                events.Add(value);
+            }
+            result["itemEvents"] = events;
+        }
         return result;
     }
     private static double Distance(int[] a, int[] b) => Math.Sqrt(Math.Pow((double)a[0]-b[0],2)+Math.Pow((double)a[1]-b[1],2)+Math.Pow((double)a[2]-b[2],2));
