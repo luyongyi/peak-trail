@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "builds": [
+    {
+      "gameBuildId": "25739797",
+      "catalog": "25739797/catalog.json"
+    }
+  ]
+}

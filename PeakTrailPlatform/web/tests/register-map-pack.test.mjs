@@ -137,14 +137,23 @@ for (const [identityVersion, isGzip] of [[2, false], [3, false], [3, true]]) tes
 
     // Exercise the shipping validator in an isolated platform, including GLB bytes.
     await mkdir(resolve(root, "data", "daily"), { recursive: true });
-    await mkdir(resolve(assetRoot, "game-assets"), { recursive: true });
+    const avatarRoot = resolve(assetRoot, "game-assets", String(manifest.gameBuildId));
+    await mkdir(avatarRoot, { recursive: true });
+    const avatar = Buffer.from(JSON.stringify({ parts: [{ positions: [0, 0, 0, 1, 0, 0, 0, 1, 0],
+      uv: [0, 0, 1, 0, 0, 1], groups: [{ indices: [0, 1, 2], material: { color: [1, 1, 1, 1] } }] }] }));
+    const avatarCatalog = { schemaVersion: 1, gameBuildId: String(manifest.gameBuildId), items: [],
+      customization: { avatar: { model: "avatar.json" } },
+      assets: [{ path: "avatar.json", bytes: avatar.length, sha256: sha256(avatar) }] };
     const platform = resolve(testDirectory, "..", "..");
     await Promise.all([
       copyFile(resolve(platform, "tools", "validate-data.mjs"), resolve(toolDirectory, "validate-data.mjs")),
       copyFile(resolve(platform, "tools", "lib", "game-assets.mjs"), resolve(toolDirectory, "lib", "game-assets.mjs")),
       copyFile(resolve(platform, "data", "daily", "current.json"), resolve(root, "data", "daily", "current.json")),
       copyFile(resolve(platform, "data", "daily", "history.json"), resolve(root, "data", "daily", "history.json")),
-      writeFile(resolve(assetRoot, "game-assets", "catalog.json"), '{"schemaVersion":1,"builds":[]}'),
+      writeFile(resolve(assetRoot, "game-assets", "catalog.json"), JSON.stringify({ schemaVersion: 1,
+        builds: [{ gameBuildId: String(manifest.gameBuildId), catalog: `${manifest.gameBuildId}/catalog.json` }] })),
+      writeFile(resolve(avatarRoot, "catalog.json"), JSON.stringify(avatarCatalog)),
+      writeFile(resolve(avatarRoot, "avatar.json"), avatar),
     ]);
     await execFileAsync(process.execPath, [resolve(toolDirectory, "validate-data.mjs")], executionOptions);
     await writeFile(resolve(registered, manifest.layers[0].geometry), "corrupt registered geometry");

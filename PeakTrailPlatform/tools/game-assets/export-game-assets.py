@@ -22,9 +22,38 @@ def slug(value):
     return re.sub(r"[^a-zA-Z0-9_-]+", "-", value).strip("-") or "asset"
 
 
+def verify_installed_build(game, build):
+    if not re.fullmatch(r"[1-9]\d*", str(build)):
+        raise ValueError("A numeric Steam build ID is required")
+    manifest = Path(game).parent.parent / "appmanifest_3527290.acf"
+    match = re.search(r'"buildid"\s+"(\d+)"', manifest.read_text(encoding="utf8"))
+    if not match or match.group(1) != str(build):
+        raise ValueError("Requested asset build does not match the installed Steam build")
+
+
+def update_build_index(output, build):
+    if not re.fullmatch(r"[1-9]\d*", str(build)):
+        raise ValueError("A numeric Steam build ID is required")
+    path = Path(output) / "catalog.json"
+    index = json.loads(path.read_text(encoding="utf8")) if path.exists() else {"schemaVersion": 1, "builds": []}
+    if index.get("schemaVersion") != 1 or not isinstance(index.get("builds"), list):
+        raise ValueError("Invalid existing game-assets index")
+    entries = {}
+    for entry in index["builds"]:
+        key = str(entry.get("gameBuildId", ""))
+        if not re.fullmatch(r"[1-9]\d*", key) or key in entries or entry.get("catalog") != f"{key}/catalog.json":
+            raise ValueError("Invalid existing game-assets build reference")
+        entries[key] = entry
+    entries[str(build)] = {"gameBuildId": str(build), "catalog": f"{build}/catalog.json"}
+    temporary = path.with_suffix(".json.tmp")
+    temporary.write_text(json.dumps({"schemaVersion": 1, "builds": [entries[key] for key in sorted(entries, key=int)]}, indent=2), encoding="utf8")
+    os.replace(temporary, path)
+
+
 class Exporter:
     def __init__(self, game, output, build):
         self.game, self.output, self.build = Path(game), Path(output), str(build)
+        verify_installed_build(self.game, self.build)
         self.root = self.output / self.build
         self.root.mkdir(parents=True, exist_ok=True)
         self.data = Path(os.environ.get("PEAK_TRAIL_GAME_DATA", self.game / "PEAK_Data"))
@@ -181,6 +210,41 @@ class Exporter:
         self.save("catalog.json",catalog)
         print(json.dumps({"head":catalog["customization"]["avatar"],"assets":len(catalog["assets"])}))
 
+    def complete_hat_models(self, catalog):
+        """Outfit overrides also reference non-selectable playerHats entries."""
+        hats = catalog["customization"]["hats"]
+        indexed = {entry["index"]: entry for entry in hats}
+        added = []
+        for index, ref in enumerate(self.refs["playerHats"]):
+            if index in indexed and indexed[index].get("model"):
+                continue
+            renderer = self.resolve(self.refs_obj, ref)
+            if renderer is None:
+                raise ValueError(f"Native hat renderer {index} is unavailable")
+            option = indexed.get(index)
+            if option is None:
+                option = {"index": index, "name": renderer.read().m_GameObject.read().m_Name, "selectable": False}
+                hats.append(option)
+            option["model"] = self.save(f"models/hat-{index}.json", {"parts": [self.renderer_model(ref, role="hat")]})
+            option["sourceRenderer"] = {"asset": renderer.assets_file.name, "pathId": renderer.path_id}
+            added.append(option["model"])
+        hats.sort(key=lambda option: option["index"])
+        for outfit in catalog["customization"]["fits"]:
+            if outfit.get("overrideHat") and outfit.get("overrideHatIndex") not in {entry["index"] for entry in hats}:
+                raise ValueError("An outfit override refers to an unavailable native hat")
+        return added
+
+    def update_extra_hat_models(self):
+        catalog = json.loads((self.root / "catalog.json").read_text(encoding="utf8"))
+        if str(catalog.get("gameBuildId")) != self.build:
+            raise ValueError("Hat completion requires the exact installed build catalog")
+        added = self.complete_hat_models(catalog)
+        allowed = {entry["path"] for entry in catalog["assets"]} | set(added) | set(self.images.values())
+        catalog["assets"] = [{"path": path, "sha256": hashlib.sha256((self.root / path).read_bytes()).hexdigest(),
+                              "bytes": (self.root / path).stat().st_size} for path in sorted(allowed)]
+        self.save("catalog.json", catalog)
+        print(json.dumps({"nativeHatRenderers": len(self.refs["playerHats"]), "added": added, "assets": len(catalog["assets"])}))
+
     def run(self):
         catalog={"schemaVersion":1,"gameBuildId":self.build,"source":"local-unity-assets",
                  "generatedAtUtc":datetime.now(timezone.utc).isoformat(),"items":[],"ui":{},"customization":{}}
@@ -256,13 +320,13 @@ class Exporter:
                     option["model"]=self.save(f"models/medal-{index}.json",{"parts":[self.renderer_model(self.refs["medalRenderer"],role="medal")]})
                 options.append(option)
             catalog["customization"][group]=options
+        self.complete_hat_models(catalog)
         # Keep generated geometry/PNGs under a strict deploy allowlist.
         catalog["assets"]=[{"path":str(p.relative_to(self.root)).replace("\\","/"),
                             "sha256":hashlib.sha256(p.read_bytes()).hexdigest(),"bytes":p.stat().st_size}
             for p in sorted(self.root.rglob("*")) if p.is_file() and p.suffix in (".png",".json") and p.name!="catalog.json"]
         self.save("catalog.json",catalog)
-        index_path=self.output/"catalog.json"
-        index_path.write_text(json.dumps({"schemaVersion":1,"builds":[{"gameBuildId":self.build,"catalog":f"{self.build}/catalog.json"}]},indent=2),encoding="utf8")
+        update_build_index(self.output, self.build)
         print(json.dumps({"items":len(catalog["items"]),"textures":len(self.images),"assets":len(catalog["assets"]),"output":str(self.root)}))
 
 
@@ -272,6 +336,11 @@ if __name__=="__main__":
     parser.add_argument("--output",default=str(Path(__file__).resolve().parents[3]/"local/assets/game-assets"))
     parser.add_argument("--build",default="25306743")
     parser.add_argument("--head-only",action="store_true",help="Add separate head cosmetic models to an existing catalog")
+    parser.add_argument("--extra-hats-only",action="store_true",help="Add all native outfit-override hats to an existing catalog")
     args=parser.parse_args()
     exporter=Exporter(args.game,args.output,args.build)
-    exporter.update_head_models() if args.head_only else exporter.run()
+    if args.head_only and args.extra_hats_only:
+        parser.error("Choose one additive export mode")
+    if args.head_only: exporter.update_head_models()
+    elif args.extra_hats_only: exporter.update_extra_hat_models()
+    else: exporter.run()

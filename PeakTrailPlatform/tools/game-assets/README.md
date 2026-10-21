@@ -14,8 +14,9 @@ the map tools' `requirements-all.txt` locks all shared dependencies. A copied
 virtual environment from another project is neither needed nor supported.
 By default the exporter writes `local/assets/game-assets` using the repository
 root derived from `__file__`, independent of the working directory. `--output`
-can override it. All assets and private captures remain gitignored under
-`local/`; the old project's artifacts/decompiled trees are not inputs.
+can override it. Extraction workspaces and private captures remain gitignored
+under `local/`; only explicitly selected derivatives may enter the publishing
+bundle described below. The old project's artifacts/decompiled trees are not inputs.
 
 The `--build` value must match the installed Steam build. `--game` selects the
 installation directory; raw game files stay in Steam, not in this repository.
@@ -27,7 +28,10 @@ The exporter reads:
   null icons in the game and remain explicitly unavailable.
 - `level3`: the airport `Customization` arrays, whose order defines all recorded
   customization indices. There are 9 skin colors, 18 eyes, 19 mouths, 21 accessories,
-  34 outfits, 45 selectable hats, 10 sashes, and 2 medal choices in this build.
+  34 outfits, 45 selectable hats, 10 sashes, and 2 medal choices in build 25739797.
+  `CustomizationRefs.playerHats` has 47 real renderers: indices 45/46 are the
+  Blue/Pink Ice Hoods selected by outfits 19/20. They are exported with their
+  original indices and `selectable: false`, rather than lost outside the menu array.
 - `sharedassets3.assets` and referenced resources: the original customization
   textures, meshes, materials, renderer references, skeleton and bind poses.
 - `InventoryItemUI`: the real backpack/carrying/slot artwork.
@@ -68,6 +72,57 @@ its `overrideHatIndex` instead of the player's raw hat choice.
 `catalog.json` contains an explicit `assets` array with relative path, byte length
 and SHA-256. The site stage copies only that list. Do not put private player logs or
 Steam stat cache output inside `local/assets/game-assets`.
+
+## Publishing an additional character build
+
+The deployment receiver's existing asset root may be read-only. Approved character
+derivatives can instead be bundled under `PeakTrailPlatform/data/avatar-assets/`:
+one top-level `catalog.json`, `<build>/catalog.json`, and exactly the files named by
+that build's checksummed `assets` allowlist. Export to a separate local directory,
+then run preview and form exports before copying the allowlist. The full exporter
+verifies the installed Steam build and preserves other build entries in its index;
+re-exporting a build still rewrites that build's derived catalog, so rerun additive
+steps before publishing. Raw Unity files, player captures and extraction caches
+are not part of this bundle.
+
+The bundled current-build pack is 25739797. Its catalog records the installed
+assembly and Unity bundle SHA-256, plus the exporter source hashes. For a bundled
+installation, first unpack into an ignored directory and set `PEAK_TRAIL_GAME_DATA`.
+An example isolated export sequence is:
+
+```powershell
+$env:PEAK_TRAIL_GAME_DATA = 'local/unpacked/25739797'
+& local/python/.venv/Scripts/python.exe PeakTrailPlatform/tools/game-assets/export-game-assets.py --build 25739797 --output local/avatar-assets-25739797
+& local/python/.venv/Scripts/python.exe PeakTrailPlatform/tools/game-assets/render-previews.py local/avatar-assets-25739797/25739797
+& local/python/.venv/Scripts/python.exe PeakTrailPlatform/tools/game-assets/export-form-assets.py --build 25739797 --output local/avatar-assets-25739797
+& local/python/.venv/Scripts/python.exe PeakTrailPlatform/tools/game-assets/export-ghost-assets.py --build 25739797 --output local/avatar-assets-25739797
+& local/python/.venv/Scripts/python.exe PeakTrailPlatform/tools/game-assets/export-state-assets.py --build 25739797 --output local/avatar-assets-25739797
+```
+
+`--extra-hats-only` adds missing native hat renderers to an existing catalog while
+preserving its decoded face previews and additive form resources. Completeness
+tests check all 47 native hats, outfit overrides, model/texture closure and hashes.
+
+Validation and staging merge the installed `game-assets` index with the optional
+bundled avatar index into the existing public `data/game-assets/catalog.json`.
+Older builds remain available at their original URLs. A duplicate build is accepted
+only when its build-catalog bytes are identical and both copies pass every resource
+size/hash check; differing metadata or artwork fails before replacing the staged
+site. Catalog references and references inside JSON models, including material
+textures, decoded previews and additive `customization.ghost` art, must all belong
+to the same build's allowlist. A map catalog declaring `activeGameBuildId` must have
+that exact build's non-empty avatar model; a missing new character pack is a build
+failure, rather than a silent fallback to another game's artwork. This requires no
+receiver, shared-root permissions or public URL changes.
+
+The independent PlayerGhost body/face layers and the original petrification and
+blindness layers are also archived with source geometry, material properties,
+textures and activation evidence. They are marked `telemetrySupported: false`:
+recorder 0.8.4 cannot select them from actual instance visibility, and a death or
+status amount alone must not be used to invent that visual state. The three
+recorded transformations below remain the supported live forms. Custom Unity
+shaders, animation and shadow-only/first-person proxy renderers are not presented
+as reconstructed third-person characters.
 
 ## Private current-local appearance preview
 

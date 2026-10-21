@@ -1,7 +1,7 @@
 import { cp, lstat, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { readGameAssets } from "./lib/game-assets.mjs";
+import { readGameAssets, readMergedGameAssets, requireActiveCharacterAssets } from "./lib/game-assets.mjs";
 import { localAssetHint, localAssetPaths } from "./lib/local-paths.mjs";
 import { normalizeMapFog } from "../web/src/map-fog.js";
 import { normalizeMapWater } from "../web/src/map-water.js";
@@ -22,6 +22,7 @@ const mapsDirectory = resolve(dataDirectory, "maps");
 const schemaDirectory = resolve(platformDirectory, "schema");
 const bundledHomeArtDirectory = resolve(dataDirectory, "home-art");
 const itemEventAssetsDirectory = resolve(dataDirectory, "item-event-assets");
+const avatarAssetsDirectory = resolve(dataDirectory, "avatar-assets");
 const outputDirectory = resolve(platformDirectory, "site-dist");
 const { gameAssetsDirectory, mapPacksDirectory, mapEnclosuresDirectory, homeArtDirectory } = localAssetPaths;
 
@@ -76,7 +77,7 @@ for (const file of HOME_ART_FILES) {
 // Fail before replacing the running preview if an extraction is incomplete.
 let gameAssets;
 try {
-  gameAssets = await readGameAssets(gameAssetsDirectory);
+  gameAssets = await readMergedGameAssets(gameAssetsDirectory, avatarAssetsDirectory);
 } catch (error) {
   throw new Error(`Local game assets are missing or invalid at ${localAssetHint(gameAssetsDirectory)}: ${error.message}`);
 }
@@ -100,6 +101,7 @@ const catalog = JSON.parse(await readFile(resolve(mapsDirectory, "catalog.json")
 if (catalog.schemaVersion !== 1 || !Array.isArray(catalog.mapPacks)) {
   throw new Error("Cannot stage an invalid map catalog");
 }
+requireActiveCharacterAssets(gameAssets, catalog.activeGameBuildId);
 const mapPacks = [];
 const enclosureFiles = new Set();
 const trajectorySidecars = new Map();
@@ -250,8 +252,9 @@ for (const reference of gameAssets.files) {
   await mkdir(dirname(destination), { recursive: true });
   // Catalogs describe each release; explicitly allowlisted static models can
   // also be JSON and share bytes just like textures and geometry.
-  if (reference === "catalog.json" || /^\d+\/catalog\.json$/.test(reference)) await cp(resolve(gameAssetsDirectory, reference), destination);
-  else await assetWriter.stageImmutable(resolve(gameAssetsDirectory, reference), destination);
+  if (reference === "catalog.json") await writeFile(destination, JSON.stringify(gameAssets.catalog, null, 2) + "\n");
+  else if (/^\d+\/catalog\.json$/.test(reference)) await cp(gameAssets.sourceFiles.get(reference), destination);
+  else await assetWriter.stageImmutable(gameAssets.sourceFiles.get(reference), destination);
 }
 for (const reference of itemEventAssets?.files ?? []) {
     const destination = resolve(outputDirectory, "data", "game-assets", "item-events", reference);

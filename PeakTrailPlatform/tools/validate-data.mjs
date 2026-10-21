@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SUPPORTED_MAP_PACK_IDENTITY_VERSIONS, verifyMapPackIdentity, verifyGeometryGlb } from "./lib/map-pack-identity.mjs";
-import { readGameAssets } from "./lib/game-assets.mjs";
+import { readMergedGameAssets, requireActiveCharacterAssets } from "./lib/game-assets.mjs";
 import { localAssetHint, localAssetPaths } from "./lib/local-paths.mjs";
 
 const toolDirectory = dirname(fileURLToPath(import.meta.url));
@@ -127,7 +127,8 @@ for (const [index, entry] of catalog.mapPacks.entries()) {
 
 let gameAssets;
 try {
-  gameAssets = await readGameAssets(gameAssetsDirectory);
+  gameAssets = await readMergedGameAssets(gameAssetsDirectory, resolve(platformDirectory, "data", "avatar-assets"));
+  requireActiveCharacterAssets(gameAssets, catalog.activeGameBuildId);
 } catch (error) {
   throw new Error(`Local game assets are missing or invalid at ${localAssetHint(gameAssetsDirectory)}: ${error.message}`);
 }

@@ -26,6 +26,7 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
   const enclosures = resolve(assets, "maps", "enclosures");
   const gameAssets = resolve(assets, "game-assets");
   const itemEventAssets = resolve(platform, "data", "item-event-assets");
+  const avatarAssets = resolve(platform, "data", "avatar-assets");
   const schemas = [
     "daily-map.schema.json", "map-catalog.schema.json", "map-pack.schema.json",
     "peaktrace-manifest.schema.json", "peaktrace-stream.schema.json", "peaktrace-history.schema.json",
@@ -50,6 +51,7 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
     mkdir(resolve(enclosures, "private"), { recursive: true }),
     mkdir(resolve(gameAssets, "123", "icons"), { recursive: true }),
     mkdir(resolve(itemEventAssets, "123"), { recursive: true }),
+    mkdir(resolve(avatarAssets, "456"), { recursive: true }),
     mkdir(resolve(assets, "home-art"), { recursive: true }),
     mkdir(resolve(repository, "local", "recordings"), { recursive: true }),
   ]);
@@ -195,6 +197,11 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
     assets: [{ path: "icons/item.png", bytes: item.length, sha256: sha256(item) },
       { path: "item-model.json", bytes: modelJson.length, sha256: sha256(modelJson) }],
   };
+  const avatarIndex = { schemaVersion: 1, builds: [{ gameBuildId: "456", catalog: "456/catalog.json" }] };
+  const avatarModel = Buffer.from(JSON.stringify({ parts: [{ groups: [{ material: { texture: "face.png" } }] }] }));
+  const avatarCatalog = { schemaVersion: 1, gameBuildId: "456", items: [], customization: { avatar: { model: "avatar.json" } },
+    assets: [{ path: "avatar.json", bytes: avatarModel.length, sha256: sha256(avatarModel) },
+      { path: "face.png", bytes: item.length, sha256: sha256(item) }] };
   await Promise.all([
     writeFile(resolve(platform, "data", "maps", "catalog.json"), JSON.stringify({
       schemaVersion: 1,
@@ -234,6 +241,11 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
       assets: [{ path: "spawn.json", bytes: modelJson.length, sha256: sha256(modelJson) }] })),
     writeFile(resolve(itemEventAssets, "123", "spawn.json"), modelJson),
     writeFile(resolve(itemEventAssets, "123", "private-session.ndjson"), "must not publish"),
+    writeFile(resolve(avatarAssets, "catalog.json"), JSON.stringify(avatarIndex)),
+    writeFile(resolve(avatarAssets, "456", "catalog.json"), JSON.stringify(avatarCatalog)),
+    writeFile(resolve(avatarAssets, "456", "avatar.json"), avatarModel),
+    writeFile(resolve(avatarAssets, "456", "face.png"), item),
+    writeFile(resolve(avatarAssets, "456", "private-save.json"), "must not publish"),
   ]);
 
   const recorderBytes = Buffer.from("MZ pinned recorder fixture");
@@ -251,6 +263,11 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
   const staged = resolve(platform, "site-dist");
   assert.deepEqual(await readFile(resolve(staged, "data/game-assets/item-events/123/spawn.json")), modelJson);
   assert.deepEqual((await readdir(resolve(staged, "data/game-assets/item-events/123"))).sort(), ["catalog.json", "spawn.json"]);
+  const mergedAssetIndex = JSON.parse(await readFile(resolve(staged, "data/game-assets/catalog.json"), "utf8"));
+  assert.deepEqual(mergedAssetIndex.builds.map(build => build.gameBuildId), ["123", "456"]);
+  assert.deepEqual(await readFile(resolve(staged, "data/game-assets/123/icons/item.png")), item);
+  assert.deepEqual(await readFile(resolve(staged, "data/game-assets/456/avatar.json")), avatarModel);
+  assert.deepEqual((await readdir(resolve(staged, "data/game-assets/456"))).sort(), ["avatar.json", "catalog.json", "face.png"]);
   const publicLootSource = { kind: "canonical-map-geometry-survey", itemCoverage: "Audited reference points" };
   const stagedLootIndex = JSON.parse(await readFile(resolve(staged, "data", "maps", "loot.123.json"), "utf8"));
   assert.deepEqual(stagedLootIndex, { schemaVersion: 1, kind: "map-loot-index", gameBuildId: "123", source: publicLootSource,
@@ -263,6 +280,24 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
     assert.deepEqual(survey, { schemaVersion: 1, gameBuildId: "123", types: lootEvidence.types, source: publicLootSource, maps: [entry] });
   }
   await writeFile(resolve(staged, "preflight-marker.txt"), "keep on failure");
+  const mapCatalogPath = resolve(platform, "data/maps/catalog.json");
+  const mapCatalog = JSON.parse(await readFile(mapCatalogPath, "utf8"));
+  await writeFile(mapCatalogPath, JSON.stringify({ ...mapCatalog, activeGameBuildId: "999" }));
+  await assert.rejects(execFileAsync(process.execPath, [resolve(tools, "stage-site.mjs")], options), /Missing character assets for active game build: 999/);
+  assert.equal(await readFile(resolve(staged, "preflight-marker.txt"), "utf8"), "keep on failure");
+  await writeFile(mapCatalogPath, JSON.stringify({ ...mapCatalog, activeGameBuildId: "456" }));
+  await execFileAsync(process.execPath, [resolve(tools, "stage-site.mjs")], options);
+  await writeFile(resolve(staged, "preflight-marker.txt"), "keep on failure");
+  await writeFile(mapCatalogPath, JSON.stringify(mapCatalog));
+  await mkdir(resolve(avatarAssets, "123"));
+  await writeFile(resolve(avatarAssets, "123", "catalog.json"), JSON.stringify({ ...avatarCatalog, gameBuildId: "123" }));
+  await writeFile(resolve(avatarAssets, "123", "avatar.json"), avatarModel);
+  await writeFile(resolve(avatarAssets, "123", "face.png"), item);
+  await writeFile(resolve(avatarAssets, "catalog.json"), JSON.stringify({ schemaVersion: 1,
+    builds: [...avatarIndex.builds, { gameBuildId: "123", catalog: "123/catalog.json" }] }));
+  await assert.rejects(execFileAsync(process.execPath, [resolve(tools, "stage-site.mjs")], options), /Conflicting game-assets build: 123/);
+  assert.equal(await readFile(resolve(staged, "preflight-marker.txt"), "utf8"), "keep on failure");
+  await writeFile(resolve(avatarAssets, "catalog.json"), JSON.stringify(avatarIndex));
   await writeFile(resolve(itemEventAssets, "123", "spawn.json"), Buffer.alloc(modelJson.length));
   await assert.rejects(execFileAsync(process.execPath, [resolve(tools, "stage-site.mjs")], options), /Game asset hash mismatch: spawn.json/);
   assert.equal(await readFile(resolve(staged, "preflight-marker.txt"), "utf8"), "keep on failure");
