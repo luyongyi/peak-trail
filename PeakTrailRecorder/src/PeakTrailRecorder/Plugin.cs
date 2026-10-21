@@ -15,7 +15,7 @@ namespace PeakTrailRecorder;
 [BepInAutoPlugin]
 public partial class Plugin : BaseUnityPlugin
 {
-    internal const string RecorderVersion = "0.8.1";
+    internal const string RecorderVersion = "0.8.2";
 
     internal static ManualLogSource Log { get; private set; } = null!;
 
@@ -48,6 +48,10 @@ public partial class Plugin : BaseUnityPlugin
     private int _lastFinalizedRunManagerInstanceId;
     private bool _applicationQuitting;
     private float _nextLiveStartAttemptAt;
+    private RouteArchiveOutbox? _routeOutbox;
+    private NativeRouteArchive? _routeArchive;
+    private int _lastArchivedRun;
+    private float _nextArchiveStartAttempt;
 
     private void Awake()
     {
@@ -120,6 +124,10 @@ public partial class Plugin : BaseUnityPlugin
         PlayerAppearanceReader.Install(Log);
         WorldTelemetryHooks.Install(Log);
         PlayerStatusReader.Install(Log);
+        try { _routeOutbox = new RouteArchiveOutbox(Path.Combine(Paths.BepInExRootPath, "PeakTrailRoutes"), message => Log.LogWarning(message)); }
+        catch (Exception e) { Log.LogError("Route archive disk initialization failed (" + e.GetType().Name + ")."); }
+        NativeRouteHooks.Capture = CaptureRouteBoundary;
+        NativeRouteHooks.Install(message => Log.LogWarning(message));
         SubscribeGlobalEvents();
         Log.LogWarning(
             "PeakTrailRecorder records every synchronized human player's location trail, stamina, statuses, appearance, held items and inventory, "
@@ -136,6 +144,8 @@ public partial class Plugin : BaseUnityPlugin
         PlayerStatusReader.ClearOutsideRoom();
         TryStartMapExport();
         NativeLiveSettings.EnsureRegistered();
+        if (!_liveEnabled.Value) _session?.SetLivePublisher(null);
+        SynchronizeRouteArchive();
 
         if (Time.realtimeSinceStartup >= _nextSubscriptionRefreshAt)
         {
@@ -225,6 +235,41 @@ public partial class Plugin : BaseUnityPlugin
             _nextLiveStartAttemptAt = Time.realtimeSinceStartup + 10f;
             Log.LogWarning($"Live connection unavailable ({exception.GetType().Name}); local recording continues.");
         }
+    }
+
+    private void SynchronizeRouteArchive()
+    {
+        bool ready = IsPlayableRunReady();
+        if (_routeArchive != null && (!_liveEnabled.Value || !ready || RunManager.Instance.GetInstanceID() != _routeArchive.RunManagerId
+            || SceneManager.GetActiveScene().name != _routeArchive.Scene)) CloseRouteArchive();
+        if (!_liveEnabled.Value) { _lastArchivedRun = 0; return; }
+        if (!ready || _routeOutbox == null) return;
+        if (_routeArchive == null && RunManager.Instance.GetInstanceID() != _lastArchivedRun && Time.realtimeSinceStartup >= _nextArchiveStartAttempt)
+        {
+            try
+            {
+                _routeArchive = new NativeRouteArchive(_routeOutbox, _liveServerUrl.Value,
+                    (kind, player, stage, position) => _session?.RecordNativeRouteEvent(kind, player, stage, position));
+            }
+            catch (Exception e) { _nextArchiveStartAttempt = Time.realtimeSinceStartup + 10; Log.LogError("Route archive could not start (" + e.GetType().Name + "); retrying."); }
+        }
+        try { _routeArchive?.Tick(); }
+        catch (Exception e) { Log.LogError("Route archive capture failed (" + e.GetType().Name + "). Existing journal retained."); CloseRouteArchive(); }
+    }
+
+    private void CaptureRouteBoundary(bool critical, string? kind, bool seal)
+    {
+        try { _routeArchive?.Capture(critical, kind, seal); }
+        catch (Exception e) { Log.LogError("Route archive boundary write failed (" + e.GetType().Name + ")."); }
+    }
+
+    private void CloseRouteArchive()
+    {
+        var archive = _routeArchive; _routeArchive = null;
+        if (archive == null) return;
+        _lastArchivedRun = archive.RunManagerId;
+        try { archive.Dispose(); }
+        catch (Exception e) { Log.LogError("Route archive final flush failed (" + e.GetType().Name + "). Existing journal retained."); }
     }
 
     private void TryStartMapExport()
@@ -349,6 +394,8 @@ public partial class Plugin : BaseUnityPlugin
         GlobalEvents.OnItemConsumed += OnItemConsumed;
         GlobalEvents.OnItemThrown += OnItemThrown;
         GlobalEvents.OnRunEnded += OnRunEnded;
+        GlobalEvents.OnSoulFreed += OnSoulFreed;
+        GlobalEvents.OnBeforeSceneLoad += OnBeforeSceneLoad;
     }
 
     private void UnsubscribeGlobalEvents()
@@ -360,6 +407,8 @@ public partial class Plugin : BaseUnityPlugin
         GlobalEvents.OnItemConsumed -= OnItemConsumed;
         GlobalEvents.OnItemThrown -= OnItemThrown;
         GlobalEvents.OnRunEnded -= OnRunEnded;
+        GlobalEvents.OnSoulFreed -= OnSoulFreed;
+        GlobalEvents.OnBeforeSceneLoad -= OnBeforeSceneLoad;
     }
 
     private void OnPlayerConnected(PhotonPlayer player)
@@ -394,7 +443,20 @@ public partial class Plugin : BaseUnityPlugin
 
     private void OnRunEnded()
     {
+        CaptureRouteBoundary(true, "run-end", true);
+        CloseRouteArchive();
         FinalizeSession("game_run_end");
+    }
+
+    private void OnSoulFreed(int phase)
+    {
+        if (phase == 0 || phase == 1) CaptureRouteBoundary(true, phase == 0 ? "nadir-wall" : "nadir-chase", false);
+    }
+
+    private void OnBeforeSceneLoad(string scene)
+    {
+        CaptureRouteBoundary(true, "scene-exit", true);
+        CloseRouteArchive();
     }
 
     private void OnSceneLoaded(Scene _, LoadSceneMode __)
@@ -417,11 +479,14 @@ public partial class Plugin : BaseUnityPlugin
     private void OnApplicationQuit()
     {
         _applicationQuitting = true;
+        CloseRouteArchive();
         FinalizeSession("application_quit");
     }
 
     private void OnDestroy()
     {
+        CloseRouteArchive();
+        NativeRouteHooks.Uninstall();
         NativeLiveSettings.Uninstall();
         PlayerAppearanceReader.Uninstall();
         WorldTelemetryHooks.Uninstall();

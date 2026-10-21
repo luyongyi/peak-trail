@@ -897,6 +897,12 @@ internal sealed class RecordingSession : IDisposable
         WriteEvent(eventName, player.Identity.PlayerId, GetActiveSegment(), position, source);
     }
 
+    internal void RecordNativeRouteEvent(string kind, Character? player, int stage, Vector3? position)
+    {
+        string? id = player && player!.photonView?.Owner != null ? IdentityResolver.FromCharacter(player).PlayerId : null;
+        WriteEvent(kind, id, stage, position, "native-state");
+    }
+
     private void WriteEvent(
         string eventName,
         string? playerId,

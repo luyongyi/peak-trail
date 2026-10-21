@@ -1,0 +1,411 @@
+{
+  "format": "trajectory-v1",
+  "recordingId": "a0f1a07d33f0c97d51dc6cc8c3dbb232f8b6747d8813ca5228ea3769e163db1f",
+  "startedUtc": "2026-10-21T00:00:00.0000000Z",
+  "durationMs": 1650,
+  "sampleHz": 10,
+  "coordinateUnit": "cm",
+  "map": {
+    "buildId": 25739797,
+    "scene": "Level_0",
+    "route": [
+      "Shore",
+      "Tropics",
+      "Void"
+    ],
+    "stages": [
+      {
+        "index": 0,
+        "name": "Shore",
+        "enterZCm": 0,
+        "exitZCm": 1000
+      },
+      {
+        "index": 1,
+        "name": "Tropics",
+        "enterZCm": 1000,
+        "exitZCm": 2000
+      },
+      {
+        "index": 2,
+        "name": "Void"
+      }
+    ]
+  },
+  "difficulty": {
+    "ascent": 8,
+    "custom": false,
+    "mini": false
+  },
+  "players": [
+    {
+      "key": "5d13bcc73f8741b91b1a543b92c4ca74a7be7ab319ecbdfcae9498448f778c83",
+      "name": "Synthetic 2",
+      "owner": false,
+      "evidence": "native-state",
+      "points": [
+        [
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          100,
+          0,
+          0,
+          100
+        ],
+        [
+          200,
+          0,
+          0,
+          200
+        ],
+        [
+          300,
+          0,
+          0,
+          300
+        ],
+        [
+          400,
+          0,
+          0,
+          400
+        ],
+        [
+          500,
+          0,
+          0,
+          500
+        ],
+        [
+          600,
+          0,
+          0,
+          600
+        ],
+        [
+          700,
+          0,
+          0,
+          700
+        ],
+        [
+          800,
+          0,
+          0,
+          800
+        ],
+        [
+          900,
+          0,
+          0,
+          900
+        ],
+        [
+          1000,
+          0,
+          0,
+          1000
+        ],
+        [
+          1100,
+          0,
+          0,
+          1100
+        ],
+        [
+          1200,
+          0,
+          0,
+          1200
+        ],
+        [
+          1300,
+          0,
+          0,
+          1300
+        ],
+        [
+          1400,
+          0,
+          0,
+          1300
+        ]
+      ],
+      "events": [
+        {
+          "tMs": 0,
+          "kind": "join"
+        },
+        {
+          "tMs": 0,
+          "kind": "game-stage",
+          "stageIndex": 0,
+          "positionCm": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "tMs": 1100,
+          "kind": "finish",
+          "stageIndex": 0,
+          "positionCm": [
+            0,
+            0,
+            1100
+          ]
+        },
+        {
+          "tMs": 1300,
+          "kind": "game-stage",
+          "stageIndex": 1,
+          "positionCm": [
+            0,
+            0,
+            1300
+          ]
+        },
+        {
+          "tMs": 1400,
+          "kind": "dead"
+        },
+        {
+          "tMs": 1400,
+          "kind": "game-stage",
+          "stageIndex": 2,
+          "positionCm": [
+            0,
+            0,
+            1300
+          ]
+        }
+      ]
+    },
+    {
+      "key": "8eb90b5a517a594e2ff19f44864490e97e9aaf703b1cda485be1534c23e28458",
+      "name": "Synthetic 1",
+      "owner": true,
+      "evidence": "native-state",
+      "points": [
+        [
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          100,
+          0,
+          0,
+          100
+        ],
+        [
+          200,
+          0,
+          0,
+          200
+        ],
+        [
+          300,
+          0,
+          0,
+          300
+        ],
+        [
+          400,
+          0,
+          0,
+          400
+        ],
+        [
+          500,
+          0,
+          0,
+          500
+        ],
+        [
+          600,
+          0,
+          0,
+          600
+        ],
+        [
+          700,
+          0,
+          0,
+          700
+        ],
+        [
+          800,
+          0,
+          0,
+          800
+        ],
+        [
+          900,
+          0,
+          0,
+          900
+        ],
+        [
+          1000,
+          0,
+          0,
+          1000
+        ],
+        [
+          1100,
+          0,
+          0,
+          1100
+        ],
+        [
+          1200,
+          0,
+          0,
+          1200
+        ],
+        [
+          1300,
+          0,
+          0,
+          1300
+        ],
+        [
+          1400,
+          0,
+          0,
+          5000
+        ],
+        [
+          1500,
+          0,
+          0,
+          5000
+        ],
+        [
+          1600,
+          0,
+          0,
+          5050
+        ]
+      ],
+      "events": [
+        {
+          "tMs": 0,
+          "kind": "join"
+        },
+        {
+          "tMs": 0,
+          "kind": "game-stage",
+          "stageIndex": 0,
+          "positionCm": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "tMs": 1100,
+          "kind": "finish",
+          "stageIndex": 0,
+          "positionCm": [
+            0,
+            0,
+            1100
+          ]
+        },
+        {
+          "tMs": 1300,
+          "kind": "game-stage",
+          "stageIndex": 1,
+          "positionCm": [
+            0,
+            0,
+            1300
+          ]
+        },
+        {
+          "tMs": 1300,
+          "kind": "native-checkpoint",
+          "stageIndex": 0,
+          "positionCm": [
+            0,
+            0,
+            1300
+          ]
+        },
+        {
+          "tMs": 1400,
+          "kind": "warp",
+          "positionCm": [
+            0,
+            0,
+            5000
+          ]
+        },
+        {
+          "tMs": 1400,
+          "kind": "break"
+        },
+        {
+          "tMs": 1400,
+          "kind": "game-stage",
+          "stageIndex": 2,
+          "positionCm": [
+            0,
+            0,
+            5000
+          ]
+        },
+        {
+          "tMs": 1500,
+          "kind": "nadir-entry",
+          "stageIndex": 2,
+          "positionCm": [
+            0,
+            0,
+            5000
+          ]
+        },
+        {
+          "tMs": 1550,
+          "kind": "nadir-wall",
+          "stageIndex": 2,
+          "positionCm": [
+            0,
+            0,
+            5025
+          ]
+        },
+        {
+          "tMs": 1550,
+          "kind": "nadir-chase",
+          "stageIndex": 2,
+          "positionCm": [
+            0,
+            0,
+            5025
+          ]
+        },
+        {
+          "tMs": 1650,
+          "kind": "nadir",
+          "stageIndex": 2,
+          "positionCm": [
+            0,
+            0,
+            5075
+          ]
+        }
+      ]
+    }
+  ],
+  "runKey": "d192660d226b41e8f11358246abbde7f39c4cccb099e4b0148a3c5ac8ad38095",
+  "timeOriginMs": -2000
+}

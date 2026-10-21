@@ -1,6 +1,6 @@
 # PeakTrailRecorder
 
-Read-only BepInEx recorder for PEAK 2.4.c. It samples every human character returned by
+Read-only BepInEx recorder for PEAK (0.8.2 is built against Steam build 25739797). It samples every human character returned by
 `PlayerHandler.GetAllPlayerCharacters()` and writes a local, crash-recoverable trace for the
 PeakTrail 2.5D viewer. The same DLL also captures the currently loaded map for the viewer;
 there is no second end-user map-exporter mod.
@@ -21,6 +21,36 @@ singleton lifecycle. Instead, capture each map when that scene is genuinely load
 as ordinary static assets and daily selection no longer needs the mod or game to be running.
 
 ## Output
+
+Since **0.8.2**, enabling live sharing also records an independent 10 Hz route journal under
+`BepInEx/PeakTrailRoutes/`, even when `[Recording] Enabled=false`. This compact archive stores
+centimeter positions, scoped player hashes, native map landmarks/gates, difficulty and native
+progress/outcome events. It contains no raw platform/account ID or inventory. Nicknames remain
+visible. Its `runKey`, `playerKey` and shared run-clock anchor follow Memories v0.8.36, so installing
+both mods does not create a second participant identity for the same run.
+
+Each journal is flushed to disk at most 900 ms after the preceding sync while the game is ticking.
+Stage transitions, warps, native progress, soul phases and wins force a sample and disk sync.
+At stage/progress/end boundaries a worker compresses and uploads the cumulative prefix to
+`/api/route-uploads`; there is no HTTP or full-archive compression in the game Update loop.
+Ordinary sampling does not create a new periodic submission. Disabling sharing immediately stops
+live publishing, then seals the already captured route; it does not cancel the durable upload.
+
+`*.ndjson` is retained locally after upload. `*.receipt.json` acknowledges the uploaded byte prefix;
+`*.pending.gz` is a retryable export. Next launch recovers unfinished journals directly, including
+valid tail records, even if the process stopped before producing a gzip or closing the session.
+A torn final JSON line is ignored. With no reliable run identity the recovered route stays isolated
+by `recordingId`. Native `summit` and `nadir` mean the observed player's actual win; simply entering
+Void or collecting an item never proves completion. The two soul phases retain separate events.
+The native local checkpoint belongs only to the living, non-warping local player; global stage
+changes do not award a checkpoint to everyone.
+
+The service contract limits a member prefix to four hours, 12 MiB compressed and 64 MiB decoded.
+The exporter additionally bounds retained points/events to protect game-process memory. A prefix
+outside those budgets remains on disk with a `*.failure.json` pending-budget status rather than
+being truncated or deleted. Ordinary unsynced data has a sub-second power-loss window; disk errors
+are logged and never reported as successful upload. These journals complement the relay's durable
+live stream; the website can retain its short viewing window.
 
 The default output root is `BepInEx/PeakTrailRecordings/`. While recording, a session contains:
 

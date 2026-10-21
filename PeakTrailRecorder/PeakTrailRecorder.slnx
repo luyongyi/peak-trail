@@ -8,6 +8,7 @@
     <Project Path="tests/LiveContract/LiveContract.csproj" />
     <Project Path="tests/LivePublisherContract/LivePublisherContract.csproj" />
     <Project Path="tests/RouteContract/RouteContract.csproj" />
+    <Project Path="tests/RouteArchiveContract/RouteArchiveContract.csproj" />
     <Project Path="tests/TelemetryContract/TelemetryContract.csproj" />
     <Project Path="tests/StatusContract/StatusContract.csproj" />
     <Project Path="tests/WorldContract/WorldContract.csproj" />

@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings>
+    <ImportDirectoryBuildTargets>false</ImportDirectoryBuildTargets><EnableNETAnalyzers>false</EnableNETAnalyzers>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../src/PeakTrailRecorder/RouteArchiveModel.cs" Link="RouteArchiveModel.cs" />
+    <Compile Include="../../src/PeakTrailRecorder/RouteArchiveOutbox.cs" Link="RouteArchiveOutbox.cs" />
+    <Compile Include="../../src/PeakTrailRecorder/LiveRelayConnection.cs" Link="LiveRelayConnection.cs" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+</Project>
