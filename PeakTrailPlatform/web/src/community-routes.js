@@ -27,7 +27,7 @@ export function createCommunityRoutes({ fetchImpl = globalThis.fetch?.bind(globa
     return { status: "idle", groups: [], group: null, pinnedGroupId: null, inspectionId: null, inspectionLoaded: false,
       stageIndex: null, difficulty: "", difficulties: [],
       routes: [], heatmap: null, players: [], heightBands: [], heightBand: null, mode: "off",
-      teamId: null, teamLoaded: false, teams: [], teamSearchStatus: "idle", teamSearchMessage: "", searchMember: "", searchAllMaps: false,
+      teamId: null, teamRevision: null, teamLoaded: false, teams: [], teamSearchStatus: "idle", teamSearchMessage: "", searchMember: "", searchAllMaps: false,
       countBy: "team", referencePlayerKey: null, summitCompleted: false, stageCompleted: false, finisherKeys: [], nadirCompleted: false, nadirFinisherKeys: [],
       totalRouteCount: 0, truncated: false, unavailableCount: 0, message: "" };
   }
@@ -37,7 +37,7 @@ export function createCommunityRoutes({ fetchImpl = globalThis.fetch?.bind(globa
   function invalidate() { request?.abort(); request = null; requestKind = null; revision++; }
   function begin(kind) { invalidate(); request = new AbortController(); requestKind = kind; return { revision, signal: request.signal }; }
   function clearData() {
-    Object.assign(state, { routes: [], heatmap: null, players: [], heightBands: [], heightBand: null, totalRouteCount: 0, truncated: false, inspectionLoaded: false, teamLoaded: false, summitCompleted: false, stageCompleted: false, finisherKeys: [], nadirCompleted: false, nadirFinisherKeys: [] });
+    Object.assign(state, { routes: [], heatmap: null, players: [], heightBands: [], heightBand: null, totalRouteCount: 0, truncated: false, inspectionLoaded: false, teamLoaded: false, teamRevision: null, summitCompleted: false, stageCompleted: false, finisherKeys: [], nadirCompleted: false, nadirFinisherKeys: [] });
   }
   function active(token) { return !disposed && token.revision === revision && mapPack !== null; }
   async function readApi(path, signal, { retryRate = false } = {}) {

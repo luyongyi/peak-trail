@@ -1,6 +1,6 @@
 # 历史轨迹收集（trajectory-v1）
 
-本模块接收回忆录 Mod 重新提取的小包，以及 Recorder 本地持久记录后封存的原生轨迹累计前缀。它不接收 `.peakrun`、录像资源、库存、状态条、音频或世界物件。旧足迹直播接口默认关闭，回忆录上传、路线与热力查询保持正常。通过白名单协议验证的新投稿自动 `approved`，已有人工撤回状态除外；公开路线与热力仍只使用完整的个人关卡尝试，并要求原生地图对齐证明。
+本模块接收回忆录 Mod 重新提取的小包，以及 Recorder 本地持久记录后封存的原生轨迹累计前缀。它不接收 `.peakrun`、录像资源、库存、状态条、音频或完整世界物件；可选的道具记录仅包括使用点和生成点两种有限事件。旧足迹直播接口默认关闭，回忆录上传、路线与热力查询保持正常。通过白名单协议验证的新投稿自动 `approved`，已有人工撤回状态除外；公开路线与热力仍只使用完整的个人关卡尝试，并要求原生地图对齐证明。
 
 ## 队伍搜索与查看
 
@@ -17,6 +17,10 @@
 至少一名原生状态证明仍存活的成员触发明确的 `summit` 事件，整个队伍即为 `summitCompleted:true`，`finisherKeys` 标识实际完成者。旧 `finish` 同时曾用于几何出口，不能据此宣布全队登顶；到达熔炉或最后关也不等于登顶。团队完成标记不会把死亡队员的部分线路伪造成完整线路，也不替他们增加热力。每位队员的坐标只保留存活区间，死亡当刻的真实采样保留，后续幽灵坐标丢弃；确实复活后恢复记录并在生死边界断开连接。连接状态与生死状态独立：`join` 只恢复在场，不会把死亡者变为存活；只有明确 `revive` 清除死亡状态，离线者还必须重新加入。
 
 已批准但只有部分线路的地图组也可查询和打开；它们不贡献公开完整路线或热力。所有队伍接口按每次请求的当前审核状态生成，隐藏、拒绝或保留投稿立即撤销对应来源。
+
+`GET /api/route-teams/<teamId>/stages/<stage>/item-events?cursor=<可选上一页末尾id>` 返回 `{teamId,groupId,stageIndex,teamRevision,mapCompatibility,mapPackId,mapAlignment,coordinateSpace,events,truncated:false,nextCursor}`。事件来自当前所有 approved 来源，不因某份录像优先用于路线而丢弃其他观察；按 `id` 去重，内容不一致返回 503，不按空间距离合并。可选 `playerName` 来自其明确 `playerKey` 对应的成员，未知归属不补玩家。每页按 ID 排序，最多 512 条并受 512 KiB 响应预算限制，跟随 `nextCursor` 读完；客户端须拒绝混合不同 `teamRevision` 的页。单队读取受 100,000 个唯一事件 / 32 MiB 原事件预算限制，超限返回 503。未知或已全部撤回的队伍/关卡为 404，非法或不存在的游标为 400，损坏来源为 503。
+
+道具点使用与该队伍路线相同的地图刚体变换和关卡编号；已验证时为 `canonical-map-world-cm`，地图不匹配时返回 `recording-world-cm` 原坐标，不能直接叠加到模型。`tMs` 保持各来源的原录制时间，不能以不同录像的 tMs 排成统一动作时间线。道具事件不增加路线数、点数、完整关卡数或热力；生成点静态展示，不追踪物体之后的状态。
 
 Nadir 与登顶独立：队伍摘要/关卡响应增加 `nadirCompleted/nadirFinisherKeys`，成员与关卡路线增加各自的 `nadirCompleted`；不把其中一种结局冒充另一种，也不替其他队员补个人赢。关卡路线的 `milestones` 保留原生切关、checkpoint、summit 和 Nadir 阶段事件；其可选 `positionCm` 与路线点使用同一已验证的地图变换，`tMs` 保持录制时间。部分轨迹仍可显示真实阶段和完成状态，但 `completed`、`gameCompleted`、`summitCompleted` 和 `nadirCompleted` 含义分开。
 
@@ -62,7 +66,14 @@ players:
     name, owner: bool, evidence: native-state | legacy-unknown,
     points: [[tMs,xCm,yCm,zCm]],
     events: [{tMs,kind: join|leave|dead|revive|break|warp|finish|summit|game-stage|checkpoint|native-checkpoint|nadir-ready|nadir-entry|nadir-wall|nadir-chase|nadir,stageIndex?,positionCm?:[xCm,yCm,zCm]}]}]
+itemEvents?: [{id: SHA256, actionId?: SHA256, kind: item-use|item-spawn,
+  tMs, stageIndex, positionCm:[xCm,yCm,zCm], playerKey?: 本包成员 key,
+  item:{itemId?: 0..1000000 整数, name?: 最多100字符, prefabName?: 最多100字符}}]
 ```
+
+`itemEvents` 每包最多 4096 条，`tMs` 为 0 到 `durationMs` 的整数，关卡必须存在，坐标是三个 ±100,000,000 以内的整数厘米；`itemId` 或非空 `prefabName` 至少有一个。两种事件分别保存真实使用点和真实生成点，不接受旋转、状态或任意附加字段。`id` 在录制作用域内唯一且内容不可变，`actionId` 可关联同一次使用与生成；客户端不能用跨观察端的原生对象 ID 直接代替录制作用域哈希。归属明确时 `playerKey` 必须属于本包 `players`，未知时省略，不能猜测。
+
+新字段保持可选：旧包缺失时 canonical 不添加空数组，旧 SHA / uploadId 完全不变。存在时按 `tMs/id` 排序后纳入包 SHA，随累计前缀重传去重。事件原样保存于现有私有 manifest，沿用字节容量、fsync、审核、撤回继承和迁移校验，不新增公开写入口或独立物品数据库，也不进入 points / 热力计算。
 
 不设独立玩家人数上限，所有成员均按白名单协议接收；每人每 100 ms 桶最多一个真实点，不插值补点；整数厘米保留 XYZ。单次上传仍须满足下述字节和时长预算，不能通过增加人数绕过资源保护。`stages` 必须连续编号且名字与 `route` 一致。原生关卡门限必须成对且 `exitZCm > enterZCm`；旧录像可以同时缺失。昵称仅在玩家头信息中写一次，同名玩家凭哈希 key 区分。`summit` 只允许 `native-state`，必须带最后一个非 Void 关卡编号；它表示原生个人完成状态，不能由 Z 门限推算。
 

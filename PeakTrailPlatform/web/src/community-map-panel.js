@@ -7,7 +7,7 @@ import { milestoneText, runOutcomeLabel } from "./route-milestones.js";
 
 // The same map/camera remains in place while a small history layer is selected.
 // This panel never enters replay, opens sockets, or creates a render loop.
-export function createCommunityMapPanel({ getContext, getScene, root = document, fetchImpl, onOpenTeam = null } = {}) {
+export function createCommunityMapPanel({ getContext, getScene, root = document, fetchImpl, onOpenTeam = null, onSnapshot = () => {} } = {}) {
   const $ = id => root.getElementById(id);
   const elements = Object.fromEntries(["appShell", "communityToggle", "communityLayerControl", "communityMode", "communityPanel", "communityRefresh",
     "communityStatus", "communityFilters", "communityGroupField", "communityGroup", "communityDifficulty",
@@ -39,6 +39,7 @@ export function createCommunityMapPanel({ getContext, getScene, root = document,
     if (clear) controller.clear();
   }
   function applyOverlay(snapshot) {
+    onSnapshot(snapshot);
     const context = getContext();
     const ready = context.enabled && context.mapPack?.mapPackId === snapshot.mapPackId && context.stageIndex === snapshot.stageIndex
       && ["ready", "empty"].includes(snapshot.status) && snapshot.group;

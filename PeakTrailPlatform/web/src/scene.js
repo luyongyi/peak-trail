@@ -8,6 +8,7 @@ import { layoutPortraitLabels, clusterPlayerEntries } from "./portrait-layout.js
 import { ReplayCamera, REPLAY_CAMERA_HELP } from "./replay-camera.js";
 import { chooseRecordedInteriorPose, isInteriorLayer } from "./camera-placement.js";
 import { WorldRenderer } from "./world-renderer.js";
+import { ItemEventOverlay } from "./item-event-overlay.js";
 import { pointInBounds, clipTrailSegment } from "./trail-spatial.js";
 import { FogDepthPass } from "./fog-depth-pass.js";
 import { latestLifeEventBefore, MARKER_LIFE_EVENT_TYPES } from "./protocol.js";
@@ -319,7 +320,7 @@ export class TrailScene {
     this.updateCameraMarkerVisibility();
     this.fogDepthPass.render({ renderer: this.renderer, scene: this.scene, camera: this.camera,
       fogEntries: this.worldRenderer.entries.values(), depthEntries: this.waterDepthEntries,
-      hiddenRoots: [this.trailRoot, this.gridRoot, this.communityOverlay?.root, this.mapLootOverlay?.root].filter(Boolean) });
+      hiddenRoots: [this.trailRoot, this.gridRoot, this.communityOverlay?.root, this.mapLootOverlay?.root, this.itemEventOverlay?.root].filter(Boolean) });
     this.renderer.render(this.scene, this.camera);
     this.updatePlayerLabelPositions();
     this.worldRenderer.projectLabels(this.camera, this.viewportWidth, this.viewportHeight, true);
@@ -333,6 +334,7 @@ export class TrailScene {
     this.lootFocusTerrainKey = null;
     this.communityOverlay?.clear();
     this.mapLootOverlay?.clear();
+    this.itemEventOverlay?.setData({ enabled: false }, this.origin, this.heightScale);
     const retainReplayCamera = Boolean(trace && this.trace === trace);
     const retainedPreset = retainReplayCamera ? this.surveyPreset : null;
     const autoFrame = !retainReplayCamera || Boolean(retainedPreset);
@@ -1255,6 +1257,8 @@ export class TrailScene {
     if (down.moved || moved > 6 || elapsed > 500 || this.lootPointerIds?.size) return;
     const hit = this.pickPlayerMarker(event);
     if (hit) { this.lockFollowTarget(hit); return; }
+    const item = this.pickItemEvent?.(event);
+    if (item) { this.canvas.dispatchEvent(new CustomEvent("peaktrail-item-event", { detail: { id: item.id } })); return; }
     const marker = this.pickMapLootMarker(event);
     if (marker) this.mapLootFocus?.focus(marker, down.cameraSnapshot);
   }
@@ -1412,6 +1416,7 @@ export class TrailScene {
     this.worldRenderer.update(this.currentTime, { players: worldPlayers, heightScale: this.heightScale,
       segment: this.activeSegment,
       bounds: this.useMap && this.activeSegment !== null ? this.viewBounds() : null });
+    this.itemEventOverlay?.setTime(this.currentTime, this.playerVisibility);
     updateRecordedMineVisibility(this.terrainRoot, this.worldRenderer.objects, this.trace?.events, this.currentTime);
     // The verified map sidecar identifies original fog surfaces even when a
     // captured world is empty or its live fog has moved. Never leave a fixed
@@ -1466,6 +1471,26 @@ export class TrailScene {
     }
   }
 
+  setItemEvents(input = { enabled: false }) {
+    if (!this.itemEventOverlay && !input.enabled) return;
+    if (!this.itemEventOverlay) { this.itemEventOverlay = new ItemEventOverlay(this.canvas); this.worldRoot.add(this.itemEventOverlay.root); }
+    const valid = input.live ? Boolean(this.trace) : this.useMap && input.mapPackId === this.mapPack?.mapPackId;
+    this.itemEventOverlay.setData({ ...input, enabled: input.enabled && valid, playerVisibility: this.playerVisibility }, this.origin, this.heightScale);
+  }
+
+  selectItemEvent(id) { this.itemEventOverlay?.select(id); }
+
+  pickItemEvent(event) {
+    const rect = this.canvas.getBoundingClientRect();
+    return this.itemEventOverlay?.pickScreen({ x: event.clientX - rect.left, y: event.clientY - rect.top, width: rect.width, height: rect.height, camera: this.camera });
+  }
+
+  focusItemEvent(event) {
+    if (!event?.pos) return;
+    this.focusWorldEvent({ ...event, objectId: event.id });
+    this.setCameraPlacementNote("道具事件 · 记录位置", "Item event · recorded location");
+  }
+
   setMapLoot({ mapPackId, markers = [], types = null, enabled = false } = {}) {
     if (!this.mapLootOverlay) return false;
     if (!this.useMap || !enabled || mapPackId !== this.mapPack?.mapPackId) {
@@ -1503,6 +1528,7 @@ export class TrailScene {
     this.terrainRoot.scale.y = this.heightScale;
     this.trailRoot.scale.y = this.heightScale;
     if (this.communityOverlay) this.communityOverlay.root.scale.y = this.heightScale;
+    if (this.itemEventOverlay) this.itemEventOverlay.root.scale.y = this.heightScale;
     this.worldRenderer.root.scale.y = this.heightScale;
     if (this.sourceWater) this.sourceWater.root.scale.y = this.heightScale;
     if (this.enclosureContext) this.enclosureContext.root.scale.y = this.heightScale;
@@ -1834,6 +1860,7 @@ export class TrailScene {
     this.followListeners = [];
     this.freeCamera.dispose();
     this.worldRenderer.dispose();
+    this.itemEventOverlay?.dispose();
     this.communityOverlay?.dispose();
     this.mapLootOverlay?.dispose();
     this.sourceWater?.dispose();

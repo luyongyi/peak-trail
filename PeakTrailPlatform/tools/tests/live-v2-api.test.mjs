@@ -361,6 +361,22 @@ test("late hello retains native milestones independently of the recent path wind
   assert.deepEqual(hello.body.snapshot.records.filter(entry => entry.record.type === "event").map(entry => entry.record.event), names);
 });
 
+test("live item use/spawn keeps actual positions and linked IDs with a bounded newest item snapshot", async (t) => {
+  const f = await fixture(t, { limits: { itemEvents: 2 } }), session = (await f.create()).body;
+  const actionId = "a".repeat(64), records = [1, 2, 3].map((n, index) => ({ type: "event", t: n,
+    event: index ? "item-spawn" : "item-use", id: String(n).repeat(64), actionId,
+    item: { itemId: 7, name: "Campfire" }, pos: [n, 2, 3], activeSegment: 0 }));
+  assert.equal((await f.send(session, records.map((record, index) => wrap(record, index + 1)))).status, 200);
+  const view = await f.stream(session), hello = await view.next();
+  assert.deepEqual(hello.body.snapshot.records.map(entry => entry.record), records.slice(1));
+  assert.equal(hello.body.snapshotSeq, 3);
+  await f.send(session, [wrap(sample(10), 4)]);
+  const item = (await f.stream(session));
+  assert.equal((await item.next()).body.snapshot.records.filter(entry => entry.record.type === "event").length, 2);
+  for (const change of [{ id: "bad" }, { actionId: "bad" }, { pos: null }, { item: null }])
+    assert.equal((await f.send(session, [wrap({ ...records[0], ...change }, 5)])).status, 400);
+});
+
 test("SSE resumes every retained record and resets with a snapshot for an evicted cursor or old epoch", async (t) => {
   const f = await fixture(t, { limits: { historyRecords: 4 } }), session = (await f.create()).body;
   await f.send(session, Array.from({ length: 6 }, (_, i) => wrap(sample(i), i + 1)));

@@ -161,3 +161,28 @@ actual instance fields take precedence over these reference values.
 Only existing allowlisted resources and newly exported references enter the
 updated pack allowlist. A source export cannot reconstruct historical dropped
 items, surviving/cull-randomized zombies or triggered mines from 0.5 logs.
+
+## Item event reference assets (recorder 0.8.3+)
+
+`export-item-event-assets.py` builds the small, version-specific public pack in
+`data/item-event-assets/`. It exports source item icons and the real generated
+prefabs for pitons, mushrooms, rope anchors and construction items. Particle-only
+prefabs retain their icon without an invented solid model. The web uses this
+pack only for a matching recorded game build; no older model is substituted.
+
+```powershell
+& local/python/.venv/Scripts/python.exe PeakTrailPlatform/tools/game-assets/export-item-event-assets.py --build 25739797 --output PeakTrailPlatform/data/item-event-assets
+```
+
+For a bundled installed game, first unpack it with
+`tools/offline-maps/unpack_game_data.py` into an ignored local directory, then set
+`PEAK_TRAIL_GAME_DATA` to that directory for the export command. Managed assembly
+metadata still comes from the installed game. The export verifies the installed
+build and records the source assembly SHA-256. The raw input is never published.
+
+Staging reads only the dedicated pack's explicit asset allowlist, verifies each
+byte count and SHA-256 before replacing a release, and copies only the two levels
+of catalogs plus their referenced derivatives. Receiver staging shares immutable
+model/image bytes through the existing asset pool; catalogs remain independent.
+Event markers are historical positions. Default model orientation is illustrative;
+the recorder does not capture object rotation or later movement for these events.

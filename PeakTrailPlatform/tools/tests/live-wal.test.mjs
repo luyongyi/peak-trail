@@ -297,3 +297,15 @@ test("path projection retains life and native milestones without item or stamina
   assert.equal(projectLivePathRecord({ type: "appearance", t: 1, playerId: "p1" }), null);
   assert.equal(projectLivePathRecord({ type: "status", t: 1, playerId: "p1", status: { ready: true } }), null);
 });
+
+test("only the two explicit item events preserve their safe item and immutable IDs across WAL restart", async t => {
+  const { root, wal } = await walFixture(t), value = session(); await wal.open(value);
+  const actionId = "c".repeat(64);
+  const records = ["item-use", "item-spawn"].map((event, index) => ({ type: "event", event, t: index,
+    id: String(index + 3).repeat(64), actionId, pos: [index, 2, 3], item: { itemId: 7, prefabName: "Campfire" } }));
+  await wal.batch(value, records.map((record, index) => wrap(record, index + 1)), records.map((record, index) => ({ seq: index + 1, record })), 100_001);
+  await wal.end(value, "done", 100_002); await wal.close();
+  const recovered = createLiveWal({ root }); await recovered.ready(); await recovered.close();
+  assert.deepEqual((await frames(root, value))[1].transaction.records.map(entry => entry.record), records);
+  assert.equal(projectLivePathRecord({ ...records[0], event: "inventory_changed" }).item, undefined);
+});

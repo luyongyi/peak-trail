@@ -1,5 +1,5 @@
 import { parentPort, workerData } from "node:worker_threads";
-import { ingestUpload, listGroups, queryRoutes, autoApprovePending, queryInspection, listTeams, queryTeam, queryTeamRoutes } from "./trajectory-store.mjs";
+import { ingestUpload, listGroups, queryRoutes, autoApprovePending, queryInspection, listTeams, queryTeam, queryTeamRoutes, queryTeamItemEvents } from "./trajectory-store.mjs";
 
 let migrationComplete = false;
 try {
@@ -11,6 +11,7 @@ try {
       : operation === "teams" ? await listTeams(root, workerData)
       : operation === "team" ? await queryTeam(root, catalogPath, workerData.team)
       : operation === "team-routes" ? await queryTeamRoutes(root, catalogPath, workerData.team, workerData.stage, { cursor: workerData.cursor })
+      : operation === "team-item-events" ? await queryTeamItemEvents(root, catalogPath, workerData.team, workerData.stage, { cursor: workerData.cursor })
       : operation === "inspection" ? await queryInspection(root, catalogPath, workerData.group, workerData.upload, workerData.stage)
       : await queryRoutes(root, catalogPath, workerData.group, workerData.stage, workerData.difficulty, workerData.limit, operation === "heatmap", { team: workerData.team, countBy: workerData.countBy });
   parentPort.postMessage({ json: JSON.stringify(result), duplicate: result.duplicate, migrationComplete });

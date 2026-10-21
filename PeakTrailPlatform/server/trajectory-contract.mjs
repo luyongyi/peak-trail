@@ -13,6 +13,7 @@ const INTERRUPTIONS = new Set(["join", "leave", "dead", "revive", "break", "warp
 export function problem(message, statusCode = 400) { return Object.assign(new Error(message), { statusCode }); }
 export function digest(value) { return createHash("sha256").update(typeof value === "string" ? value : JSON.stringify(value)).digest("hex"); }
 export function validHash(value) { return typeof value === "string" && HASH.test(value); }
+export const ITEM_EVENT_LIMITS = Object.freeze({ perUpload: 4096, pageCount: 512, pageBytes: 512 * 1024, queryEvents: 100_000, queryBytes: 32 * 1024 * 1024 });
 function object(value, keys, required, label) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw problem(`${label}: object required`);
   for (const key of Object.keys(value)) if (!keys.includes(key)) throw problem(`${label}: unexpected field ${key}`);
@@ -29,10 +30,39 @@ function text(value, max, label, empty = false) {
 function nullableBool(value, label) { if (value !== null && typeof value !== "boolean") throw problem(`${label}: boolean or null required`); return value; }
 function array(value, max, label, min = 0) { if (!Array.isArray(value) || value.length < min || value.length > max) throw problem(`${label}: invalid array size`); return value; }
 
+export function validateItemEvents(raw, { durationMs, map, players }) {
+  const ids = new Set(), stages = new Set(map.stages.map(stage => stage.index)), members = new Set(players.map(player => player.key));
+  return array(raw, ITEM_EVENT_LIMITS.perUpload, "itemEvents").map(event => {
+    object(event, ["id", "actionId", "kind", "tMs", "stageIndex", "positionCm", "item", "playerKey"],
+      ["id", "kind", "tMs", "stageIndex", "positionCm", "item"], "item event");
+    if (!validHash(event.id) || ids.has(event.id)) throw problem("item event id: unique SHA256 required");
+    ids.add(event.id);
+    if (!["item-use", "item-spawn"].includes(event.kind)) throw problem("unsupported item event kind");
+    const value = { id: event.id };
+    if (Object.hasOwn(event, "actionId")) { if (!validHash(event.actionId)) throw problem("item actionId: SHA256 required"); value.actionId = event.actionId; }
+    Object.assign(value, { kind: event.kind, tMs: integer(event.tMs, 0, durationMs, "item event time"),
+      stageIndex: integer(event.stageIndex, 0, LIMITS.stages - 1, "item event stage") });
+    if (!stages.has(value.stageIndex)) throw problem("item event references absent stage");
+    value.positionCm = array(event.positionCm, 3, "item event position", 3).map(part => integer(part, -100_000_000, 100_000_000, "item event position cm"));
+    object(event.item, ["itemId", "name", "prefabName"], [], "event item");
+    const item = {};
+    if (Object.hasOwn(event.item, "itemId")) item.itemId = integer(event.item.itemId, 0, 1_000_000, "event itemId");
+    if (Object.hasOwn(event.item, "name")) item.name = text(event.item.name, 100, "event item name", true);
+    if (Object.hasOwn(event.item, "prefabName")) item.prefabName = text(event.item.prefabName, 100, "event prefabName");
+    if (item.itemId === undefined && !item.prefabName) throw problem("event item identity required");
+    value.item = item;
+    if (Object.hasOwn(event, "playerKey")) {
+      if (!validHash(event.playerKey) || !members.has(event.playerKey)) throw problem("item event references absent player");
+      value.playerKey = event.playerKey;
+    }
+    return value;
+  }).sort((a, b) => a.tMs - b.tMs || a.id.localeCompare(b.id));
+}
+
 // A separate whitelist format deliberately cannot carry the original replay's inventory,
 // world objects, audio, textures or platform IDs. Reconstruct every accepted property.
 export function validateTrajectory(raw) {
-  object(raw, ["format", "recordingId", "runKey", "timeOriginMs", "startedUtc", "durationMs", "sampleHz", "coordinateUnit", "map", "difficulty", "players"],
+  object(raw, ["format", "recordingId", "runKey", "timeOriginMs", "startedUtc", "durationMs", "sampleHz", "coordinateUnit", "map", "difficulty", "players", "itemEvents"],
     ["format", "recordingId", "startedUtc", "durationMs", "sampleHz", "coordinateUnit", "map", "difficulty", "players"], "trajectory");
   if (!["trajectory-v1", "trajectory-v2"].includes(raw.format) || raw.sampleHz !== 10 || raw.coordinateUnit !== "cm") throw problem("unsupported trajectory format/rate/coordinates");
   if (!validHash(raw.recordingId)) throw problem("recordingId: SHA256 required");
@@ -118,6 +148,8 @@ export function validateTrajectory(raw) {
     validateNativeStageEvents(events, result.map.stages, player.evidence);
     return { key: player.key, name: text(player.name, 100, "player.name", true), owner: player.owner, evidence: player.evidence, points, events };
   }).sort((a, b) => a.key.localeCompare(b.key));
+  // Absence stays absent: old canonical bytes and upload identities never change.
+  if (Object.hasOwn(raw, "itemEvents")) result.itemEvents = validateItemEvents(raw.itemEvents, result);
   if (raw.format === "trajectory-v2" && Buffer.byteLength(JSON.stringify(result), "utf8") > LIMITS.decodedBytes)
     throw problem("point-run expanded trajectory byte limit exceeded", 413);
   return { trajectory: result, totalPoints };

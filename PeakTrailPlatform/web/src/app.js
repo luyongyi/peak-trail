@@ -30,6 +30,7 @@ import { bindCameraTouchControls } from "./camera-touch.js";
 import { FEATURES, shouldPollLive } from "./features.js";
 import { createCommunityMapPanel } from "./community-map-panel.js";
 import { createMapLootPanel } from "./map-loot-panel.js";
+import { createItemEventPanel } from "./item-event-panel.js";
 import { historicalRouteTitle, historicalRouteUrl, loadHistoricalRouteLink, parseHistoricalRouteLink } from "./historical-route-link.js";
 import { getLocale, tr, onLocaleChange, biomeName, gameItemName, formatNumber } from "./i18n.js";
 import { initLanguageControls } from "./i18n-dom.js";
@@ -610,19 +611,36 @@ function syncGameAssetsForTrace(trace, selectionRevision) {
 }
 
 let viewer;
+let itemEventPanel, communitySnapshot = null;
 const communityMapPanel = createCommunityMapPanel({
   getContext: () => ({ enabled: state.workspaceMode === "explore", mapPack: state.mapPack, stageIndex: state.selectedSegment,
     routeGroupId: state.historicalRoute?.group.id || null, inspectionId: state.historicalRoute?.inspectionId || null,
     teamId: state.historicalRoute?.teamId || null }),
   getScene: () => viewer,
   onOpenTeam: openCommunityTeam,
+  onSnapshot: snapshot => { communitySnapshot = snapshot; itemEventPanel?.sync(); },
 });
 const mapLootPanel = createMapLootPanel({
   getContext: () => ({ enabled: state.workspaceMode !== "home" && state.usingCompatibleMap,
     mapPack: state.mapPack, layers: state.routeView?.layers || state.mapPack?.layers, stageIndex: state.selectedSegment }),
   getScene: () => viewer,
 });
-function syncCommunityContext(options) { communityMapPanel.sync(options); mapLootPanel.sync(); }
+itemEventPanel = createItemEventPanel({ getScene: () => viewer, getContext: () => {
+  if (state.watch.active && state.workspaceMode === "watch") return { enabled: true, live: true,
+    trace: state.watch.trace, participants: state.watch.trace?.participants, stageIndex: state.selectedSegment,
+    gameBuildId: state.watch.trace?.manifest.gameBuildId, timeMs: state.currentTime * 1000,
+    fallbackPack: state.gameAssetPack, persistence: state.watch.persistence };
+  const snapshot = communitySnapshot;
+  return { enabled: state.workspaceMode === "explore" && Boolean(snapshot?.teamId) && !snapshot?.inspectionId,
+    ready: ["ready", "empty"].includes(snapshot?.status) && Boolean(snapshot?.teamRevision)
+      && snapshot?.stageIndex === state.selectedSegment && snapshot?.mapPackId === state.mapPack?.mapPackId, live: false,
+    teamId: snapshot?.teamId, groupId: snapshot?.group?.id, stageIndex: state.selectedSegment,
+    teamRevision: snapshot?.teamRevision, alignmentId: snapshot?.group?.mapAlignment?.id,
+    mapPackId: state.mapPack?.mapPackId, gameBuildId: state.mapPack?.gameBuildId,
+    visiblePlayers: new Set(snapshot?.players.filter(player => player.visible).map(player => player.playerKey) || []),
+    fallbackPack: state.gameAssetPack };
+} });
+function syncCommunityContext(options) { communityMapPanel.sync(options); mapLootPanel.sync(); itemEventPanel?.sync(); }
 async function initializeViewer() {
   try {
     // File selection and replay controls must work even when the 3D dependency is slow
@@ -1587,6 +1605,7 @@ function flushWatch() {
     syncSegmentToPlayback();
     updatePlayerTelemetry();
   }
+  itemEventPanel?.sync();
   updateWatchStatus();
 }
 
@@ -3085,6 +3104,7 @@ window.addEventListener("beforeunload", () => {
   disposeMapLootFocus();
   communityMapPanel.dispose();
   mapLootPanel.dispose();
+  itemEventPanel.dispose();
   homePage.dispose();
   dailyClock.dispose();
   state.mapPack?.disposeAssets?.();

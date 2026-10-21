@@ -18,7 +18,8 @@ export function projectLivePathRecord(record) {
   if (record.type === "participant") return { ...common, ...pick(record, ["nickname"]) };
   if (record.type === "sample") return { ...common, ...pick(record, ["pos", "yaw"]) };
   if (record.type === "route") return { ...common, route: record.route };
-  if (record.type === "event") return { ...common, ...pick(record, ["event", "pos", "source", "confidence", "cause", "targetPlayerId"]) };
+  if (record.type === "event") return { ...common, ...pick(record, ["event", "pos", "source", "confidence", "cause", "targetPlayerId"]),
+    ...(["item-use", "item-spawn"].includes(record.event) ? pick(record, ["id", "actionId", "item"]) : {}) };
   if (record.type === "status" && typeof record.status?.dead === "boolean")
     return { ...common, status: pick(record.status, ["ready", "dead", "authority"]), ...pick(record, ["reason"]) };
   return null;

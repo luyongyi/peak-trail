@@ -96,6 +96,7 @@ export function createTrajectoryApi({ root = null, catalogPath = null, trustedPr
       else {
         const teamDetail = path.match(/^\/api\/route-teams\/([a-f0-9]{64})$/);
         const teamStage = path.match(/^\/api\/route-teams\/([a-f0-9]{64})\/stages\/(\d+)\/routes$/);
+        const teamItems = path.match(/^\/api\/route-teams\/([a-f0-9]{64})\/stages\/(\d+)\/item-events$/);
         const inspection = path.match(/^\/api\/route-groups\/([a-f0-9]{64})\/uploads\/([a-f0-9]{64})\/stages\/(\d+)\/inspection$/);
         const match = path.match(/^\/api\/route-groups\/([a-f0-9]{64})\/stages\/(\d+)\/(routes|heatmap)$/);
         if (req.method !== "GET") throw problem("method not allowed", 405);
@@ -107,6 +108,12 @@ export function createTrajectoryApi({ root = null, catalogPath = null, trustedPr
           const cursor = url.searchParams.get("cursor") ?? "";
           if (cursor && !validHash(cursor)) throw problem("invalid team page cursor");
           json(res, 200, (await job({ operation: "team-routes", team: teamStage[1], stage: Number(teamStage[2]), cursor })).json);
+          return true;
+        }
+        if (teamItems) {
+          const cursor = url.searchParams.get("cursor") ?? "";
+          if (cursor && !validHash(cursor)) throw problem("invalid item event page cursor");
+          json(res, 200, (await job({ operation: "team-item-events", team: teamItems[1], stage: Number(teamItems[2]), cursor })).json);
           return true;
         }
         if (inspection) {

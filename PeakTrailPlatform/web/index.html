@@ -192,6 +192,7 @@
             </div>
           </details>
           <button class="button button-ghost" id="communityToggle" type="button" aria-expanded="false" aria-controls="communityPanel" hidden>路线与热力</button>
+          <button class="button button-ghost" id="itemEventsToggle" type="button" aria-pressed="true" hidden>道具事件</button>
           <button class="language-toggle" data-language-toggle type="button" aria-label="切换为英语" title="切换为英语" lang="en"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c5 5 5 13 0 18-5-5-5-13 0-18Z" /></svg><span data-language-label>English</span></button>
           <button class="button button-ghost" id="backToGate" type="button" title="返回模式选择">返回</button>
         </div>
@@ -360,6 +361,15 @@
             <span id="eventToastIcon">◆</span>
             <div><strong id="eventToastTitle"></strong><small id="eventToastMeta"></small></div>
           </div>
+
+          <small class="item-event-status" id="itemEventStatus" role="status" hidden></small>
+          <section class="item-event-card" id="itemEventCard" aria-label="道具事件" hidden>
+            <button type="button" id="itemEventClose" class="button button-ghost">关闭</button>
+            <img id="itemEventIcon" alt="" hidden /><strong id="itemEventName"></strong>
+            <span id="itemEventMeta"></span><small id="itemEventNote"></small>
+            <div><button type="button" id="itemEventLocate" class="button button-secondary">靠近记录位置</button>
+              <button type="button" id="itemEventUse" class="button button-ghost" hidden>查看使用点</button></div>
+          </section>
 
           <div class="follow-hud" id="followHud" hidden>
             <span class="follow-dot" aria-hidden="true"></span>

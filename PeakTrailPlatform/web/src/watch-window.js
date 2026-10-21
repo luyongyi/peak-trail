@@ -1,6 +1,7 @@
 import { buildWorldTimeline, worldObjectsAtTime } from "./world-timeline.js";
 import { milestoneLabel } from "./route-milestones.js";
 import { tr } from "./i18n.js";
+import { retainLiveItemEvents } from "./item-events.js";
 
 export const WATCH_WINDOW_SECONDS = 120;
 const MAX_TRACK_RECORDS = 6000;
@@ -32,6 +33,7 @@ function trimTrack(records, cutoff, limit = MAX_TRACK_RECORDS) {
 /** Bound memory before rebuilding derived scene geometry. Preserve state at the
  * left boundary; never invent empty inventory or an alive player when trimming. */
 export function trimWatchTrace(trace, seconds = WATCH_WINDOW_SECONDS) {
+  retainLiveItemEvents(trace);
   const cutoff = Math.max(0, trace.duration - seconds);
   for (const name of ["tracks", "telemetryTracks", "inventoryTracks", "appearanceTracks", "statusTracks"]) {
     for (const records of trace[name]?.values() || []) trimTrack(records, cutoff);

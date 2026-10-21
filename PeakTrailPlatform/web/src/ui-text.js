@@ -1,6 +1,11 @@
 // Website UI copy. Game names (PEAK/NADIR) and BACK retain the exact runtime
 // terms from SerializedTermsData; map, sharing, and replay explanations are ours.
 export const UI_TEXT_PAIRS = Object.freeze([
+  ["道具事件", "Item events"],
+  ["关闭", "Close"],
+  ["道具生成", "Item spawned"],
+  ["靠近记录位置", "View recorded location"],
+  ["查看使用点", "View use point"],
   ["今日地图", "Today’s maps"],
   ["下载路线 MOD", "Download Route MODs"],
   ["点击地图标记，靠近查看；再次点击返回", "Click a map marker for a closer look; click it again to return."],

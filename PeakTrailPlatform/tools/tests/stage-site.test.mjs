@@ -25,6 +25,7 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
   const secondPack = resolve(assets, "maps", "packs", secondPackId);
   const enclosures = resolve(assets, "maps", "enclosures");
   const gameAssets = resolve(assets, "game-assets");
+  const itemEventAssets = resolve(platform, "data", "item-event-assets");
   const schemas = [
     "daily-map.schema.json", "map-catalog.schema.json", "map-pack.schema.json",
     "peaktrace-manifest.schema.json", "peaktrace-stream.schema.json", "peaktrace-history.schema.json",
@@ -48,6 +49,7 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
     mkdir(secondPack, { recursive: true }),
     mkdir(resolve(enclosures, "private"), { recursive: true }),
     mkdir(resolve(gameAssets, "123", "icons"), { recursive: true }),
+    mkdir(resolve(itemEventAssets, "123"), { recursive: true }),
     mkdir(resolve(assets, "home-art"), { recursive: true }),
     mkdir(resolve(repository, "local", "recordings"), { recursive: true }),
   ]);
@@ -225,6 +227,13 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
     writeFile(resolve(gameAssets, "123", "catalog.json"), JSON.stringify(buildCatalog)),
     writeFile(resolve(gameAssets, "123", "icons", "item.png"), item),
     writeFile(resolve(gameAssets, "123", "item-model.json"), modelJson),
+    writeFile(resolve(itemEventAssets, "catalog.json"), JSON.stringify({ schemaVersion: 1,
+      builds: [{ gameBuildId: "123", catalog: "123/catalog.json" }] })),
+    writeFile(resolve(itemEventAssets, "123", "catalog.json"), JSON.stringify({ schemaVersion: 1, gameBuildId: "123",
+      items: [], worldObjects: [{ prefabName: "ClimbingSpikeHammered", model: "spawn.json" }],
+      assets: [{ path: "spawn.json", bytes: modelJson.length, sha256: sha256(modelJson) }] })),
+    writeFile(resolve(itemEventAssets, "123", "spawn.json"), modelJson),
+    writeFile(resolve(itemEventAssets, "123", "private-session.ndjson"), "must not publish"),
   ]);
 
   const recorderBytes = Buffer.from("MZ pinned recorder fixture");
@@ -240,6 +249,8 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
   const options = { env: { ...process.env, PEAK_TRAIL_ASSET_ROOT: assets, PEAK_TRAIL_DOWNLOAD_PRODUCT: "recorder", PEAK_TRAIL_RECORDER_DLL: recorderPath } };
   await execFileAsync(process.execPath, [resolve(tools, "stage-site.mjs")], options);
   const staged = resolve(platform, "site-dist");
+  assert.deepEqual(await readFile(resolve(staged, "data/item-event-assets/123/spawn.json")), modelJson);
+  assert.deepEqual((await readdir(resolve(staged, "data/item-event-assets/123"))).sort(), ["catalog.json", "spawn.json"]);
   const publicLootSource = { kind: "canonical-map-geometry-survey", itemCoverage: "Audited reference points" };
   const stagedLootIndex = JSON.parse(await readFile(resolve(staged, "data", "maps", "loot.123.json"), "utf8"));
   assert.deepEqual(stagedLootIndex, { schemaVersion: 1, kind: "map-loot-index", gameBuildId: "123", source: publicLootSource,
@@ -252,6 +263,10 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
     assert.deepEqual(survey, { schemaVersion: 1, gameBuildId: "123", types: lootEvidence.types, source: publicLootSource, maps: [entry] });
   }
   await writeFile(resolve(staged, "preflight-marker.txt"), "keep on failure");
+  await writeFile(resolve(itemEventAssets, "123", "spawn.json"), Buffer.alloc(modelJson.length));
+  await assert.rejects(execFileAsync(process.execPath, [resolve(tools, "stage-site.mjs")], options), /Game asset hash mismatch: spawn.json/);
+  assert.equal(await readFile(resolve(staged, "preflight-marker.txt"), "utf8"), "keep on failure");
+  await writeFile(resolve(itemEventAssets, "123", "spawn.json"), modelJson);
   const invalidLoot = structuredClone(lootEvidence); invalidLoot.maps[0].sourceSceneSha256 = "0".repeat(64);
   await writeFile(lootPath, JSON.stringify(invalidLoot));
   await assert.rejects(execFileAsync(process.execPath, [resolve(tools, "stage-site.mjs")], options), /Map supply survey does not match/);
@@ -357,12 +372,13 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
     for (const id of [packId, secondPackId]) assert.equal((await stat(resolve(staged, 'data', 'maps', 'packs', id, reference))).ino, old.ino);
   }
   for (const reference of [`data/home-art/${HOME_ART_FILES[0]}`, `data/maps/enclosures/${enclosureFilename}`, 'data/game-assets/123/icons/item.png',
-    'data/game-assets/123/item-model.json', recorderRelease.downloadPath])
+    'data/game-assets/123/item-model.json', 'data/item-event-assets/123/spawn.json', recorderRelease.downloadPath])
     assert.equal((await stat(resolve(priorRelease, reference))).ino, (await stat(resolve(staged, reference))).ino);
   assert.deepEqual(await readFile(resolve(staged, recorderRelease.downloadPath)), recorderBytes);
   assert.deepEqual(await readFile(resolve(staged, 'data/game-assets/123/item-model.json')), modelJson);
   assert.deepEqual(await readFile(resolve(staged, `data/maps/packs/${packId}/shore.geometry.json`)), geometryJson);
-  for (const reference of [`data/maps/packs/${packId}/map-pack.json`, 'data/game-assets/catalog.json', 'data/game-assets/123/catalog.json', 'data/recorder/release.json'])
+  for (const reference of [`data/maps/packs/${packId}/map-pack.json`, 'data/game-assets/catalog.json', 'data/game-assets/123/catalog.json',
+    'data/item-event-assets/catalog.json', 'data/item-event-assets/123/catalog.json', 'data/recorder/release.json'])
     assert.notEqual((await stat(resolve(priorRelease, reference))).ino, (await stat(resolve(staged, reference))).ino);
   const oldMetadataPath = resolve(priorRelease, 'data', 'maps', 'packs', packId, 'map-pack.json');
   assert.equal(JSON.parse(await readFile(oldMetadataPath, 'utf8')).route.segments[0].displayName, undefined);

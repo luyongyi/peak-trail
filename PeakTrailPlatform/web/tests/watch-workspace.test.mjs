@@ -6,7 +6,7 @@ import { trimWatchTrace } from "../src/watch-window.js";
 
 const source = readFileSync(new URL("../src/app.js", import.meta.url), "utf8");
 function functions(names, ports) {
-  ports = { watchText: value => value, tr: value => value, formatNumber: String, ...ports };
+  ports = { itemEventPanel: { sync() {} }, watchText: value => value, tr: value => value, formatNumber: String, ...ports };
   return new Function(...Object.keys(ports), names.map(name => {
     const match = source.match(new RegExp(`^(?:async )?function ${name}\\([^]*?^\\}`, "m"));
     assert.ok(match, name); return match[0];

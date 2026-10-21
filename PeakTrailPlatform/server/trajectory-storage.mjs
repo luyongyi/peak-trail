@@ -308,8 +308,13 @@ export function createReferencedRouteReader(root) {
     if (!player || !Number.isSafeInteger(player.pointCount) || player.pointCount < 0 || player.pointCount > MAX_EXPANDED_POINTS) throw problem("stored selected player unavailable", 503);
     const points = player.pointCount ? (await readRange({ uploadId: entry.id, playerKey: key, pointCount: player.pointCount,
       source: { version: 2, manifestSha256: entry.storageManifestSha256, playerKey: key, first: 0, after: player.pointCount, breaks: [] } }, false)).points : [];
-    const { pointCount, pointBlocks, ...metadata } = player;
-    return validateTrajectory({ ...trajectory, players: [{ ...metadata, points }] }).trajectory.players[0];
+    // Top-level item events can refer to another member. Preserve their member
+    // metadata while expanding only the selected player's coordinate blocks.
+    const players = trajectory.players.map(value => {
+      const { pointCount, pointBlocks, ...metadata } = value;
+      return { ...metadata, points: value.key === key ? points : [] };
+    });
+    return validateTrajectory({ ...trajectory, players }).trajectory.players.find(value => value.key === key);
   };
   readRange.inspection = async (entry, key, stageIndex, { allowUnavailable = false } = {}) => {
     let lookup = inspections.get(entry);

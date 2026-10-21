@@ -6,6 +6,7 @@ export const LIVE_V2_LIMITS = Object.freeze({
   recordBytes: 8 * 1024, manifestBytes: 32 * 1024,
   historyRecords: 12_000, historyBytes: 512 * 1024, historyMs: 120_000,
   stateBytes: 128 * 1024, snapshotBytes: 256 * 1024, globalBytes: 64 * 1024 * 1024,
+  itemEvents: 128,
   viewersPerSession: 20, viewers: 100, viewerBufferBytes: 512 * 1024,
   requestsPerMinute: 1_200, bytesPerMinute: 12 * 1024 * 1024,
   createsPerMinute: 60, readsPerMinute: 300, codeLookupsPerMinute: 30, rateEntries: 5_000, concurrentBodies: 16,
@@ -116,6 +117,7 @@ const recordShapes = {
   event: {
     event: string(80), pos, source: text, confidence: text, cause: text, item,
     fromLocation: text, toLocation: text, targetPlayerId: playerId, throwCharge: num,
+    ...fields("id actionId", (value) => { if (typeof value !== "string" || !HASH.test(value)) throw fail("item-event-hash-required"); return value; }),
   },
 };
 
@@ -126,6 +128,8 @@ export function validateLiveRecord(raw) {
   if (raw.type === "sample" && !result.pos) throw fail("position-required");
   if (raw.type === "participant" && !Object.hasOwn(result, "nickname")) throw fail("nickname-required");
   if (raw.type === "event" && !result.event) throw fail("event-required");
+  if (raw.type === "event" && ["item-use", "item-spawn"].includes(result.event)
+      && (!result.id || !result.item || !result.pos)) throw fail("item-event-id-item-position-required");
   for (const key of ["appearance", "status", "route"]) if (raw.type === key && !result[key]) throw fail(`${key}-required`);
   return result;
 }
@@ -266,13 +270,18 @@ export function createLiveV2Api({ now = Date.now, limits: overrides = {}, truste
   }
   function snapshot(session) {
     const selected = new Map([...session.latest.values()].map((entry) => [entry.seq, entry]));
+    const itemIds = new Set([...selected.values()].filter(entry => entry.record.type === "event"
+      && ["item-use", "item-spawn"].includes(entry.record.event)).map(entry => entry.record.id));
     let size = [...selected.values()].reduce((sum, entry) => sum + entry.bytes, 0);
     // Preserve complete latest state first, then the newest path/events fitting the budget.
     for (let index = session.history.length - 1; index >= 0; index -= 1) {
       const entry = session.history[index];
       if (selected.has(entry.seq)) continue;
+      const isItem = entry.record.type === "event" && ["item-use", "item-spawn"].includes(entry.record.event);
+      if (isItem && (itemIds.has(entry.record.id) || itemIds.size >= limits.itemEvents)) continue;
       if (size + entry.bytes > limits.snapshotBytes) break;
       selected.set(entry.seq, entry); size += entry.bytes;
+      if (isItem) itemIds.add(entry.record.id);
     }
     return { records: [...selected.values()].sort((a, b) => a.seq - b.seq).map(({ seq, record }) => ({ seq, record })) };
   }
@@ -385,7 +394,14 @@ export function createLiveV2Api({ now = Date.now, limits: overrides = {}, truste
         key = `event:${eventStateFamilies.get(record.event)}:${record.playerId}`;
       }
       else if (record.type === "event" && milestones.has(record.event)) key = `milestone:${record.event}:${record.playerId ?? ""}:${record.activeSegment ?? ""}`;
+      else if (record.type === "event" && ["item-use", "item-spawn"].includes(record.event)) key = `item-event:${record.id}`;
       if (key) { stateBytes -= latest.get(key)?.bytes ?? 0; latest.set(key, entry); stateBytes += entry.bytes; }
+      // Keep a bounded recent item layer in hello; permanent history comes from
+      // canonical itemEvents, not this live cache. Other latest state survives.
+      if (key?.startsWith("item-event:")) {
+        const items = [...latest.entries()].filter(([name]) => name.startsWith("item-event:")).sort((a, b) => a[1].seq - b[1].seq);
+        while (items.length > limits.itemEvents) { const [oldKey, oldEntry] = items.shift(); latest.delete(oldKey); stateBytes -= oldEntry.bytes; }
+      }
       history.push(entry); historyBytes += entry.bytes;
     }
     if (stateBytes > limits.stateBytes) throw fail("session-state-capacity", 413);

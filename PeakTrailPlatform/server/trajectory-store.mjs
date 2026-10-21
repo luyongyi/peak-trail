@@ -4,7 +4,7 @@ import { gunzipSync } from "node:zlib";
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { setTimeout as pause } from "node:timers/promises";
-import { LIMITS, problem, digest, validHash, validateTrajectory, difficultyInfo, groupId,
+import { LIMITS, ITEM_EVENT_LIMITS, problem, digest, validHash, validateTrajectory, difficultyInfo, groupId,
   extractStageRoutes, extractInspectionStage, playerSummitCompleted, playerNadirCompleted, playerMilestones, routeDedupeKey, dedupeRoutes, aggregateHeatmap } from "./trajectory-contract.mjs";
 import { syncDirectory, writeDurable } from "./durable-file.mjs";
 import { fitMapAlignment, alignedRoutePoints, validateMapAlignment } from "./map-alignment.mjs";
@@ -538,4 +538,48 @@ export async function queryTeamRoutes(root, catalogPath, teamId, stage, { cursor
   if (Buffer.byteLength(JSON.stringify({ ...base, routes })) > TEAM_LIMITS.pageBytes) throw problem("individual team route response exceeds page capacity", 413);
   return { ...base, routes, totalRouteCount: allMembers.length, pointCount, truncated: false,
     nextCursor: after + selections.length < allMembers.length ? selections.at(-1).key : null };
+}
+
+export async function queryTeamItemEvents(root, catalogPath, teamId, stage, { cursor = "" } = {}) {
+  if (!validHash(teamId) || !Number.isInteger(stage) || stage < 0 || stage >= LIMITS.stages
+      || (cursor && !validHash(cursor))) throw problem("invalid team/stage/item cursor");
+  const team = collectTeams(await loadIndex(root)).get(teamId);
+  if (!team || !team.map.stages.some(value => value.index === stage)) throw problem("unknown public team/stage", 404);
+  const base = { teamId, groupId: team.groupId, stageIndex: stage,
+    teamRevision: digest(team.entries.map(entry => entry.id).sort()), ...(await mapMatch(team.map, catalogPath)) };
+  base.coordinateSpace = base.mapAlignment.status === "verified" ? "canonical-map-world-cm" : "recording-world-cm";
+  const seen = new Map(), reader = createReferencedRouteReader(root); let retainedBytes = 0;
+  // Every approved source can contribute unique events, even when a different
+  // recording wins route selection. Immutable IDs never merge by proximity.
+  for (const entry of [...team.entries].sort((a, b) => a.id.localeCompare(b.id))) {
+    let trajectory;
+    try { trajectory = entry.storageManifestSha256 ? await reader.metadata(entry) : await readInspectionTrajectory(root, entry); }
+    catch { throw problem("stored item events unavailable", 503); }
+    const members = new Map(trajectory.players.map(player => [player.key, player.name]));
+    for (const event of trajectory.itemEvents ?? []) {
+      const previous = seen.get(event.id);
+      if (previous) {
+        if (!isDeepStrictEqual(previous.event, event)) throw problem("conflicting item event sources", 503);
+        continue;
+      }
+      retainedBytes += Buffer.byteLength(JSON.stringify(event));
+      if (seen.size >= ITEM_EVENT_LIMITS.queryEvents || retainedBytes > ITEM_EVENT_LIMITS.queryBytes) throw problem("team item event capacity exceeded", 503);
+      seen.set(event.id, { event, playerName: event.playerKey ? members.get(event.playerKey) : undefined });
+    }
+  }
+  const available = [...seen.values()].filter(value => value.event.stageIndex === stage).sort((a, b) => a.event.id.localeCompare(b.event.id));
+  const after = cursor ? available.findIndex(value => value.event.id === cursor) + 1 : 0;
+  if (cursor && !after) throw problem("unknown item event page cursor");
+  const events = []; let used = Buffer.byteLength(JSON.stringify(base)) + 200;
+  for (let index = after; index < available.length && events.length < ITEM_EVENT_LIMITS.pageCount; index += 1) {
+    const { event, playerName } = available[index];
+    const value = { ...event,
+      positionCm: alignedRoutePoints([[event.tMs, ...event.positionCm]], base.mapAlignment)[0].slice(1),
+      ...(playerName === undefined ? {} : { playerName }) };
+    const size = Buffer.byteLength(JSON.stringify(value)) + 1;
+    if (events.length && used + size > ITEM_EVENT_LIMITS.pageBytes) break;
+    if (used + size > ITEM_EVENT_LIMITS.pageBytes) throw problem("item event response exceeds capacity", 413);
+    events.push(value); used += size;
+  }
+  return { ...base, events, truncated: false, nextCursor: after + events.length < available.length ? events.at(-1).id : null };
 }

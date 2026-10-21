@@ -21,6 +21,7 @@ const dataDirectory = resolve(platformDirectory, "data");
 const mapsDirectory = resolve(dataDirectory, "maps");
 const schemaDirectory = resolve(platformDirectory, "schema");
 const bundledHomeArtDirectory = resolve(dataDirectory, "home-art");
+const itemEventAssetsDirectory = resolve(dataDirectory, "item-event-assets");
 const outputDirectory = resolve(platformDirectory, "site-dist");
 const { gameAssetsDirectory, mapPacksDirectory, mapEnclosuresDirectory, homeArtDirectory } = localAssetPaths;
 
@@ -79,6 +80,10 @@ try {
 } catch (error) {
   throw new Error(`Local game assets are missing or invalid at ${localAssetHint(gameAssetsDirectory)}: ${error.message}`);
 }
+const itemEventCatalog = await lstat(resolve(itemEventAssetsDirectory, "catalog.json"))
+  .catch(error => { if (error.code === "ENOENT") return null; throw error; });
+if (itemEventCatalog && (!itemEventCatalog.isFile() || itemEventCatalog.isSymbolicLink())) throw new Error("Invalid bundled item-event catalog");
+const itemEventAssets = itemEventCatalog ? await readGameAssets(itemEventAssetsDirectory) : null;
 const publishedSchemas = [
   "daily-map.schema.json",
   "map-catalog.schema.json",
@@ -247,6 +252,12 @@ for (const reference of gameAssets.files) {
   // also be JSON and share bytes just like textures and geometry.
   if (reference === "catalog.json" || /^\d+\/catalog\.json$/.test(reference)) await cp(resolve(gameAssetsDirectory, reference), destination);
   else await assetWriter.stageImmutable(resolve(gameAssetsDirectory, reference), destination);
+}
+for (const reference of itemEventAssets?.files ?? []) {
+  const destination = resolve(outputDirectory, "data", "item-event-assets", reference);
+  await mkdir(dirname(destination), { recursive: true });
+  if (reference === "catalog.json" || /^\d+\/catalog\.json$/.test(reference)) await cp(resolve(itemEventAssetsDirectory, reference), destination);
+  else await assetWriter.stageImmutable(resolve(itemEventAssetsDirectory, reference), destination);
 }
 await writeFile(resolve(outputDirectory, ".nojekyll"), "", "utf8");
 

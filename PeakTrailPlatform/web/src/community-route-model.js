@@ -151,7 +151,7 @@ export function normalizeCommunityTeamStage(value, group, mapPack, stageIndex, t
     || value.teamRevision !== undefined && !HASH.test(value.teamRevision)
     || !Number.isSafeInteger(value.totalRouteCount) || value.totalRouteCount < 0
     || value.finisherKeys !== undefined && (!Array.isArray(value.finisherKeys) || value.finisherKeys.some(key => !HASH.test(key)))) throw communityRouteError("队伍登顶状态无效。", "Invalid team summit status.");
-  return { routes: response.routes, heatmap: null, totalRouteCount: response.totalRouteCount, truncated: Boolean(response.truncated),
+  return { routes: response.routes, heatmap: null, totalRouteCount: response.totalRouteCount, truncated: Boolean(response.truncated), teamRevision: value.teamRevision || null,
     nadirCompleted: value.nadirCompleted === true, nadirFinisherKeys: value.nadirFinisherKeys || [],
     summitCompleted: value.summitCompleted === true, stageCompleted: value.stageCompleted === true || response.routes.some(route => route.gameCompleted === true), finisherKeys: value.finisherKeys || [],
     teamLoaded: true, heightBands: heightBands(response.routes, null) };

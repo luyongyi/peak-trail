@@ -14,11 +14,13 @@
 
 租约为 15 秒，建议每 5 秒心跳；失联 60 秒或持续 24 小时结束，结束后保留 15 分钟供观看，观众不延长生命周期。过期租约接管保留观战链接、更新 epoch 并作废旧凭证；SSE 用 epoch 与 seq 续传，过旧游标重置为有界的最新状态及近期路径快照。`summit`、各 `nadir-*`、`nadir`、`native-checkpoint` 和 `run_end` 另按事件、玩家和关卡保留最新里程碑，路径窗口淘汰不会使新观众漏掉这些状态；这不改变个人通关的证据要求。生产 nginx 的通用 `/api/` 转发和关闭 SSE 缓冲即可沿用。
 
+道具只记录 `event:"item-use"`（实际使用位置）与 `event:"item-spawn"`（实际生成位置）两个事件，均须带 `id`、`pos`（米）和现有白名单 `item`，可带同一次动作的 `actionId`；两种 ID 均为 64 位小写 SHA256。不能证明归属时省略 `playerId`，不以附近玩家或人物坐标猜生成点。`hello` 只保留最近 128 个道具事件，仍受全部最新状态合计 128 KiB 和快照预算约束；全程历史由下面的持久通道承接。生成点是静态记录，不包含物体旋转、后续移动、消耗或生命周期状态。
+
 ### 直播路径持久化
 
 生产 v2 必须配置 `--routes-dir`（或 `PEAK_TRAJECTORY_DIR`）。服务在其私有 `live-archive/<sessionId>.wal` 追加路径事务：注册、epoch 接管、接收记录和结束先写入并完成文件 fsync，再返回成功或广播 SSE；新文件还同步父目录。元数据和 `hello` 的 `persistence:"durable"` 明确表示此模式。没有私有目录时注册返回 `503 live-archive-unconfigured`，不悄悄降级；只有程序化测试可显式设 `liveV2.memoryOnly:true`，读接口会标明 `persistence:"memory"`。`--dir` 仍仅影响旧 v1。
 
-WAL 保留匿名参与者、坐标/朝向/关卡、原生路线、生死和事件的白名单投影，省略背包、外观、体力、物品明细；不保存 roomKey、clientId 或 publishToken。每个事务记录 session/epoch、连续的服务端 seq 和 producerSeq 范围，即使该批只有被省略的内容也保存空投影事务。同一 session 的写入、接管和结束串行；已接受的 producerSeq 重传不追加第二份。不同 epoch 的 p1 不作为同一人拼接，WAL 不从全队 activeSegment、直播断开或 `run_end` 猜测个人通关。
+WAL 保留匿名参与者、坐标/朝向/关卡、原生路线、生死和事件的白名单投影，省略背包、外观、体力和一般事件的物品明细；仅 `item-use` / `item-spawn` 额外保留经过直播白名单验证的 `item/id/actionId`。不保存 roomKey、clientId 或 publishToken。每个事务记录 session/epoch、连续的服务端 seq 和 producerSeq 范围，即使该批只有被省略的内容也保存空投影事务。同一 session 的写入、接管和结束串行；已接受的 producerSeq 重传不追加第二份。不同 epoch 的 p1 不作为同一人拼接，WAL 不从全队 activeSegment、直播断开或 `run_end` 猜测个人通关。
 
 启动后第一次写入先流式校验已有 WAL 的 SHA256、事务和序号连续性，仅截去未以换行结束的半条尾事务；完整但损坏的事务、非普通文件和不安全路径均阻止新写入。写入或 fsync 出错后本进程继续拒绝写入，需管理员排查并重启恢复；可能完整写入但未确认的事务仍留在私有档案。重启不恢复旧 token 或直播会话，旧 session/watch 查询返回 404，客户端新建会话；旧路径档案保留。正常 SIGTERM/SIGINT 会等待进行中的持久化并追加结束事务。
 

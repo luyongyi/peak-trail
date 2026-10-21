@@ -6,6 +6,7 @@ Uses serialized Item.UIData.icon and Customization array order, never filename g
 import argparse
 import hashlib
 import json
+import os
 import re
 from pathlib import Path
 from datetime import datetime, timezone
@@ -26,7 +27,8 @@ class Exporter:
         self.game, self.output, self.build = Path(game), Path(output), str(build)
         self.root = self.output / self.build
         self.root.mkdir(parents=True, exist_ok=True)
-        self.env = UnityPy.load(*[str(self.game / "PEAK_Data" / f) for f in
+        self.data = Path(os.environ.get("PEAK_TRAIL_GAME_DATA", self.game / "PEAK_Data"))
+        self.env = UnityPy.load(*[str(self.data / f) for f in
             ["resources.assets", "level3", "sharedassets3.assets"]])
         generator = TypeTreeGenerator(self.env.objects[0].assets_file.unity_version)
         generator.load_local_game(str(self.game))
