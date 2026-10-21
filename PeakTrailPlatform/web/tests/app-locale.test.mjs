@@ -128,7 +128,7 @@ test("scene language refresh repaints current geometry status and camera help wi
     const Scene = new Function("tr", "formatNumber", "REPLAY_CAMERA_HELP", `${source}\nreturn TrailScene;`)(i18n.tr, i18n.formatNumber, REPLAY_CAMERA_HELP);
     const scene = Object.create(Scene.prototype);
     const events = [];
-    const group = { names: {}, members: new Map([["one", {}], ["two", {}]]), nicknames: ["小峰", "Test"] };
+    const group = { names: {}, count: { style: {} }, members: new Map([["one", {}], ["two", {}]]), nicknames: ["小峰", "Test"] };
     Object.assign(scene, { canvas: { dispatchEvent(event) { events.push(event); } },
       lastMapStatus: { status: "ready", message: ["本关真实网格已就绪", "Stage geometry ready"], segment: 2 },
       cameraPlacementLabels: ["内部几何参考点（非玩家位置）", "Interior geometry reference point (not a player position)"],
@@ -140,6 +140,8 @@ test("scene language refresh repaints current geometry status and camera help wi
     assert.equal(events[2].detail.mode, "free");
     assert.doesNotMatch(events[2].detail.help, /\p{Script=Han}/u);
     assert.equal(group.names.textContent, "2 players · 小峰 · Test");
+    assert.equal(group.count.textContent, "2 players");
+    assert.equal(group.count.style.width, `${group.countWidth}px`, "the compact count's layout width follows its translated text");
     assert.equal(scene.activeSegment, 2);
     assert.equal(scene.cameraSelectionRevision, 7);
   } finally { i18n.setLocale("zh-CN", { persist: false }); }

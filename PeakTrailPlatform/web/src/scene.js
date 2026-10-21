@@ -4,7 +4,7 @@ import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { loadGameGeometry, updateRecordedMineVisibility, updateMapFogSurfaceVisibility } from "./geometry-loader.js";
-import { layoutPortraitLabels, clusterPlayerEntries } from "./portrait-layout.js";
+import { layoutPortraitLabels, clusterPlayerEntries, portraitScreenSize } from "./portrait-layout.js";
 import { ReplayCamera, REPLAY_CAMERA_HELP } from "./replay-camera.js";
 import { chooseRecordedInteriorPose, isInteriorLayer } from "./camera-placement.js";
 import { WorldRenderer } from "./world-renderer.js";
@@ -577,7 +577,7 @@ export class TrailScene {
     if (this.cameraPlacementLabels) this.setCameraPlacementNote(...this.cameraPlacementLabels);
     this.canvas.dispatchEvent(new CustomEvent("cameramodechange", { detail: { mode: this.freeCamera.mode, help: REPLAY_CAMERA_HELP } }));
     for (const group of this.playerGroups.values()) {
-      group.names.textContent = `${tr(`${group.members.size} 人`, `${formatNumber(group.members.size)} players`)} · ${group.nicknames.join(" · ")}`;
+      this.updatePlayerGroupCount(group);
     }
   }
 
@@ -843,6 +843,7 @@ export class TrailScene {
       const name = document.createElement("span");
       name.className = "trail-player-name";
       name.textContent = participant.nickname || participant.id;
+      label.title = name.textContent;
       label.append(portrait, name);
       this.labelOverlay.append(leader, label);
       this.playerLabels.set(participant.id, { element: label, leader, image, fallback, url: null });
@@ -859,12 +860,16 @@ export class TrailScene {
       let visible = Boolean(object?.group.visible && object?.marker.visible);
       if (visible) {
         object.marker.getWorldPosition(this.labelPosition);
-        const pos = [this.labelPosition.x, this.labelPosition.y, this.labelPosition.z];
-        this.labelPosition.project(this.camera);
+        // Marker-local metres preserve the real separation, including ghost poses;
+        // its parents may exaggerate height or mirror the rendered map.
+        const pos = object.marker.position.toArray();
+        this.labelPosition.applyMatrix4(this.camera.matrixWorldInverse);
+        const size = portraitScreenSize(-this.labelPosition.z, height, this.camera);
+        this.labelPosition.applyMatrix4(this.camera.projectionMatrix);
         const { x, y, z } = this.labelPosition;
         visible = Number.isFinite(x + y + z) && z >= -1 && z <= 1 && Math.abs(x) < 1 && Math.abs(y) < 1;
         if (visible) {
-          entries.push({ id, x: (x + 1) * width / 2, y: (1 - y) * height / 2, pos, label });
+          entries.push({ id, x: (x + 1) * width / 2, y: (1 - y) * height / 2, pos, size, label });
           continue;
         }
       }
@@ -872,18 +877,19 @@ export class TrailScene {
       if (label.leader) label.leader.hidden = true;
     }
 
-    // Players within 10 recorded metres share one big circle containing every
-    // member's head portrait; only genuinely separate players keep their own label.
+    // Merge only genuinely nearby players whose projected portraits crowd each other.
     const anchors = [];
     const activeGroups = new Set();
     for (const cluster of clusterPlayerEntries(entries)) {
       if (cluster.length === 1) {
         const entry = cluster[0];
         entry.label.element.hidden = false;
-        // Measured once per label. A forced layout read on every frame re-lays out
-        // the whole viewer DOM (its event list can hold thousands of rows) and was
-        // the single most expensive thing in the frame.
-        anchors.push({ id: entry.id, x: entry.x, y: entry.y, ...this.labelElementSize(entry.label, 80, 62) });
+        const near = entry.size >= 27;
+        entry.label.element.dataset.detail = near ? "near" : "far";
+        entry.label.element.style.setProperty("--portrait-size", `${entry.size}px`);
+        const labelWidth = near ? 90 : entry.size;
+        entry.label.element.style.width = `${labelWidth}px`;
+        anchors.push({ id: entry.id, x: entry.x, y: entry.y, width: labelWidth, height: entry.size + (near ? 17 : 0) });
         continue;
       }
       for (const entry of cluster) {
@@ -893,9 +899,13 @@ export class TrailScene {
       const group = this.ensurePlayerGroup(cluster);
       activeGroups.add(group.key);
       group.element.hidden = false;
+      const size = Math.min(22, ...cluster.map(entry => entry.size));
+      group.element.style.setProperty("--group-size", `${size}px`);
+      const groupWidth = size * (1 + (Math.min(4, cluster.length) - 1) * .72) + 4 + group.countWidth;
+      group.element.style.width = `${groupWidth}px`;
       const anchorX = cluster.reduce((sum, entry) => sum + entry.x, 0) / cluster.length;
       const anchorY = cluster.reduce((sum, entry) => sum + entry.y, 0) / cluster.length;
-      anchors.push({ id: group.key, x: anchorX, y: anchorY, ...this.labelElementSize(group, 96, 96) });
+      anchors.push({ id: group.key, x: anchorX, y: anchorY, width: groupWidth, height: Math.max(size, 18) });
     }
     for (const [key, group] of this.playerGroups) {
       if (!activeGroups.has(key)) {
@@ -904,7 +914,7 @@ export class TrailScene {
       }
     }
 
-    for (const position of layoutPortraitLabels(anchors, { width, height })) {
+    for (const position of layoutPortraitLabels(anchors, { width, height }, { gap: 4, anchorGap: 4, maxDisplacement: 20 })) {
       const label = this.playerLabels.get(position.id) || this.playerGroups.get(position.id);
       if (!label) continue;
       label.element.style.transform = `translate(${position.left}px, ${position.top}px)`;
@@ -920,17 +930,14 @@ export class TrailScene {
     }
   }
 
-  /** Element box cached after its first visible frame. Label content never changes
-   * size after creation (fixed portrait boxes, names set once), so re-measuring
-   * every frame would only force a synchronous layout of the entire viewer. */
-  labelElementSize(target, fallbackWidth, fallbackHeight) {
-    if (!target.size?.width) {
-      target.size = {
-        width: target.element.offsetWidth || fallbackWidth,
-        height: target.element.offsetHeight || fallbackHeight,
-      };
-    }
-    return target.size;
+  updatePlayerGroupCount(group) {
+    const text = tr(`${group.members.size}人`, `${formatNumber(group.members.size)} players`);
+    group.count.textContent = text;
+    // Explicit boxes keep collision layout in sync with scaling and locale changes,
+    // without forcing a DOM layout read in the render loop.
+    group.countWidth = 12 + Array.from(text).reduce((sum, char) => sum + (/[^\x00-\x7f]/.test(char) ? 10 : 6), 0);
+    group.count.style.width = `${group.countWidth}px`;
+    group.names.textContent = `${text} · ${group.nicknames.join(" · ")}`;
   }
 
   /** One badge per exact member set; the key rebuilds it whenever the party
@@ -947,7 +954,9 @@ export class TrailScene {
       ring.className = "trail-player-group-ring";
       const names = document.createElement("span");
       names.className = "trail-player-group-names";
-      element.append(ring, names);
+      const count = document.createElement("span");
+      count.className = "trail-player-group-count";
+      element.append(ring, count, names);
       const leader = document.createElement("div");
       leader.className = "trail-player-leader trail-player-group-leader";
       leader.hidden = true;
@@ -972,14 +981,9 @@ export class TrailScene {
         ring.append(portrait);
         members.set(entry.id, { image, fallback });
       }
-      // Pack the heads tightly — up to three per row — so the badge hugs its members
-      // instead of framing a big empty circle. CSS owns the pixel sizes and derives
-      // the width from the column count.
-      const columns = Math.min(3, cluster.length);
-      ring.style.setProperty("--group-columns", String(columns));
-      names.textContent = `${tr(`${cluster.length} 人`, `${formatNumber(cluster.length)} players`)} · ${nicknames.join(" · ")}`;
       element.title = nicknames.join(" · ");
-      group = { key, element, ring, names, leader, members, columns, nicknames };
+      group = { key, element, ring, count, names, leader, members, nicknames };
+      this.updatePlayerGroupCount(group);
       this.playerGroups.set(key, group);
     }
     for (const [id, member] of group.members) {

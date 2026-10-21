@@ -5,6 +5,7 @@ import test from "node:test";
 import * as THREE from "../../vendor/three/0.180.0/build/three.module.js";
 import { pointInBounds, clipTrailSegment } from "../src/trail-spatial.js";
 import { latestLifeEventBefore, MARKER_LIFE_EVENT_TYPES } from "../src/protocol.js";
+import * as portraitLayout from "../src/portrait-layout.js";
 
 // Load the bundled Three line implementations unchanged apart from their import/export
 // wiring. These are real instanced geometries and shader materials, not hand-written
@@ -23,7 +24,7 @@ const sceneSource = (await readFile(new URL("../src/scene.js", import.meta.url),
   .replace(/^import .*;\r?\n/gm, "").replace("export class TrailScene", "class TrailScene");
 
 function fixture({ samples = defaultSamples(), events = [], activeSegment = null, spatial = {} } = {}) {
-  const ports = { ...i18n, THREE, LineSegmentsGeometry, LineMaterial, LineSegments2, pointInBounds, clipTrailSegment, updateRecordedMineVisibility() {}, updateMapFogSurfaceVisibility() {}, latestLifeEventBefore, MARKER_LIFE_EVENT_TYPES, ...spatial };
+  const ports = { ...i18n, ...portraitLayout, THREE, LineSegmentsGeometry, LineMaterial, LineSegments2, pointInBounds, clipTrailSegment, updateRecordedMineVisibility() {}, updateMapFogSurfaceVisibility() {}, latestLifeEventBefore, MARKER_LIFE_EVENT_TYPES, ...spatial };
   const TrailScene = new Function(...Object.keys(ports), `${sceneSource}\nreturn TrailScene;`)(...Object.values(ports));
   const scene = Object.create(TrailScene.prototype);
   Object.assign(scene, {
@@ -56,6 +57,35 @@ function close(actual, expected, tolerance = 1e-5) {
   assert.equal(actual.length, expected.length);
   actual.forEach((value, i) => assert.ok(Math.abs(value - expected[i]) <= tolerance, `${value} != ${expected[i]} at ${i}`));
 }
+
+test("rendered map height scaling does not change native-metre player grouping", () => {
+  const scene = fixture();
+  const element = () => ({ style: { setProperty() {} }, dataset: {}, hidden: false });
+  Object.assign(scene, { viewportWidth: 640, viewportHeight: 480, labelPosition: new THREE.Vector3(), playerLabels: new Map() });
+  scene.camera.position.set(0, 0, 1000); scene.camera.updateMatrixWorld();
+  for (const [id, y] of [["a", 0], ["b", 2]]) {
+    const group = new THREE.Group(), marker = new THREE.Object3D();
+    marker.position.y = y; group.add(marker); scene.trailRoot.add(group);
+    scene.playerObjects.set(id, { group, marker });
+    scene.playerLabels.set(id, { element: element(), leader: element() });
+  }
+  let grouped = [];
+  scene.ensurePlayerGroup = (cluster) => {
+    grouped = cluster.map(entry => entry.id);
+    const group = { key: grouped.join("+"), element: element(), leader: element(), countWidth: 28 };
+    scene.playerGroups.set(group.key, group);
+    return group;
+  };
+  for (const scale of [1, 10]) {
+    scene.trailRoot.scale.y = scale; scene.trailRoot.updateMatrixWorld(true);
+    grouped = []; scene.updatePlayerLabelPositions();
+    assert.deepEqual(grouped, ["a", "b"], `native 2 m separation must stay 2 m at height scale ${scale}`);
+  }
+  scene.playerObjects.get("b").marker.position.set(0, 0, 20);
+  scene.trailRoot.updateMatrixWorld(true); grouped = []; scene.updatePlayerLabelPositions();
+  assert.deepEqual(grouped, [], "players 20 m apart on the same camera ray remain separate");
+  assert.ok([...scene.playerLabels.values()].every(label => !label.element.hidden));
+});
 
 test("observed ghost uses its independent interpolated position and quaternion without changing corpse tracks", () => {
   const scene = fixture({ events: [{ type: "death", playerId: "synthetic-player", t: .2 }] });

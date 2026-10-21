@@ -2,7 +2,7 @@ import * as i18n from "../src/i18n.js";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { layoutPortraitLabels, clusterPlayerEntries } from "../src/portrait-layout.js";
+import { layoutPortraitLabels, clusterPlayerEntries, portraitScreenSize } from "../src/portrait-layout.js";
 import { latestLifeEventBefore, MARKER_LIFE_EVENT_TYPES } from "../src/protocol.js";
 import { chooseRecordedInteriorPose, isInteriorLayer } from "../src/camera-placement.js";
 import { ReplayCamera } from "../src/replay-camera.js";
@@ -37,8 +37,8 @@ function model() {
 function fixture(selected = 0) {
   const requests = [];
   const load = (layer, signal, gameBuildId) => new Promise((resolve, reject) => requests.push({ layer: layer.id, signal, gameBuildId, resolve, reject }));
-  const TrailScene = new Function("THREE", "loadGameGeometry", "cancelAnimationFrame", "layoutPortraitLabels", "clusterPlayerEntries", "latestLifeEventBefore", "MARKER_LIFE_EVENT_TYPES", "isInteriorLayer", "chooseRecordedInteriorPose", "nadirCameraBounds", "nadirCameraParts", "collectCameraParts", "selectCameraSubjectParts", "tr", "formatNumber", `${source}\nreturn TrailScene;`)(
-    THREE, load, () => {}, layoutPortraitLabels, clusterPlayerEntries, latestLifeEventBefore, MARKER_LIFE_EVENT_TYPES, isInteriorLayer, chooseRecordedInteriorPose, nadirCameraBounds, nadirCameraParts, collectCameraParts, selectCameraSubjectParts, i18n.tr, i18n.formatNumber,
+  const TrailScene = new Function("THREE", "loadGameGeometry", "cancelAnimationFrame", "layoutPortraitLabels", "clusterPlayerEntries", "portraitScreenSize", "latestLifeEventBefore", "MARKER_LIFE_EVENT_TYPES", "isInteriorLayer", "chooseRecordedInteriorPose", "nadirCameraBounds", "nadirCameraParts", "collectCameraParts", "selectCameraSubjectParts", "tr", "formatNumber", `${source}\nreturn TrailScene;`)(
+    THREE, load, () => {}, layoutPortraitLabels, clusterPlayerEntries, portraitScreenSize, latestLifeEventBefore, MARKER_LIFE_EVENT_TYPES, isInteriorLayer, chooseRecordedInteriorPose, nadirCameraBounds, nadirCameraParts, collectCameraParts, selectCameraSubjectParts, i18n.tr, i18n.formatNumber,
   );
   const layers = [
     { id: "A", segment: 0, biome: "shore" },
@@ -234,32 +234,34 @@ test("map overview fits the entire mountain instead of a short imported route", 
 
 test("portrait overlays follow visible players and are clipped outside the camera", () => {
   const { scene } = fixture();
-  const label = { element: { hidden: true, style: {} } };
-  let point = { x: 0, y: 0, z: 0 };
-  const marker = { visible: true, getWorldPosition(vector) { Object.assign(vector, point); } };
-  scene.labelPosition = { project() {} };
+  const label = { element: { hidden: true, dataset: {}, style: { setProperty() {} } } };
+  const marker = new THREE.Object3D();
+  scene.camera = new THREE.PerspectiveCamera(38, 1000 / 600, .1, 2000);
+  scene.camera.position.set(0, 0, 50); scene.camera.lookAt(0, 0, 0); scene.camera.updateMatrixWorld(true);
+  scene.labelPosition = new THREE.Vector3();
   scene.canvas = { clientWidth: 1000, clientHeight: 600 };
   scene.playerLabels = new Map([["qa", label]]);
   scene.playerObjects = new Map([["qa", { group: { visible: true }, marker }]]);
   scene.updatePlayerLabelPositions();
   assert.equal(label.element.hidden, false);
-  assert.equal(label.element.style.transform, "translate(460px, 230px)");
+  assert.equal(label.element.dataset.detail, "near");
+  assert.equal(label.element.style.transform, "translate(455px, 247px)");
   marker.visible = false;
   scene.updatePlayerLabelPositions();
   assert.equal(label.element.hidden, true);
-  marker.visible = true; point = { x: 0, y: 0, z: 2 };
+  marker.visible = true; marker.position.set(0, 0, 60);
   scene.updatePlayerLabelPositions();
   assert.equal(label.element.hidden, true);
-  point = { x: 0, y: 0, z: 0 }; scene.playerObjects.get("qa").group.visible = false;
+  marker.position.set(0, 0, 0); scene.playerObjects.get("qa").group.visible = false;
   scene.updatePlayerLabelPositions();
   assert.equal(label.element.hidden, true);
 });
 
-test("players within 10 recorded metres pack into one badge holding every member head", () => {
+test("players within 4 recorded metres and overlapping in the real camera share a compact count badge", () => {
   const { scene } = fixture();
   const fakeElement = (tag) => ({
     tag, className: "", hidden: false, title: "", textContent: "", alt: "",
-    children: [], dataset: {}, style: { setProperty() {} },
+    children: [], dataset: {}, style: { setProperty(key, value) { this[key] = value; } },
     append(...nodes) { this.children.push(...nodes); },
     removeAttribute() {},
   });
@@ -269,18 +271,18 @@ test("players within 10 recorded metres pack into one badge holding every member
     const overlay = { children: [], append(...nodes) { this.children.push(...nodes); } };
     scene.labelOverlay = overlay;
     scene.canvas = { clientWidth: 1000, clientHeight: 600 };
-    // A linear world → NDC stand-in for the camera so world offsets stay observable.
-    scene.labelPosition = { project() { this.x /= 100; this.y /= 100; this.z = 0; } };
-    const positions = { a: { x: 0, y: 0, z: 0 }, b: { x: 2, y: 0, z: 0 }, c: { x: 4, y: 0, z: 0 },
-      d: { x: 6, y: 0, z: 0 }, e: { x: 8, y: 0, z: 0 } };
+    scene.camera = new THREE.PerspectiveCamera(38, 1000 / 600, .1, 2000);
+    scene.camera.position.set(0, 0, 100); scene.camera.lookAt(0, 0, 0); scene.camera.updateMatrixWorld(true);
+    scene.labelPosition = new THREE.Vector3();
+    const positions = { a: [0, 0, 0], b: [.5, 0, 0], c: [1, 0, 0], d: [1.5, 0, 0], e: [2, 0, 0] };
     for (const id of Object.keys(positions)) {
       scene.playerLabels.set(id, { element: fakeElement("div"), leader: fakeElement("div") });
-      scene.playerObjects.set(id, { group: { visible: true },
-        marker: { visible: true, getWorldPosition(vector) { Object.assign(vector, positions[id]); } } });
+      const marker = new THREE.Object3D(); marker.position.fromArray(positions[id]);
+      scene.playerObjects.set(id, { group: { visible: true }, marker });
     }
 
     scene.updatePlayerLabelPositions();
-    assert.equal(scene.playerGroups.size, 1, "one badge for the five players inside 10 m");
+    assert.equal(scene.playerGroups.size, 1, "all pairs are inside 4 m and their projected portraits overlap");
     for (const id of Object.keys(positions)) assert.equal(scene.playerLabels.get(id).element.hidden, true,
       "the individual label yields to the shared badge");
     const group = scene.playerGroups.values().next().value;
@@ -288,15 +290,22 @@ test("players within 10 recorded metres pack into one badge holding every member
     assert.equal(group.members.size, 5);
     assert.deepEqual([...group.members.keys()].sort(), ["a", "b", "c", "d", "e"]);
     assert.equal(group.ring.children.length, 5, "every member keeps a portrait slot");
-    assert.equal(group.columns, 3, "five heads wrap as a 3 + 2 block instead of one wide row");
-    assert.equal(group.names.textContent.startsWith("5 人 · "), true);
-    // The badge sits on the members' average anchor (500…540 px), not on one member.
-    assert.deepEqual(group.element.style.transform, "translate(472px, 196px)");
+    assert.equal(group.count.textContent, "5人");
+    assert.equal(group.names.textContent, "5人 · a · b · c · d · e", "the hidden metadata retains every name");
+    assert.equal(group.element.title, "a · b · c · d · e");
+    assert.deepEqual(group.element.children, [group.ring, group.count, group.names]);
+    const size = portraitScreenSize(100, 600, scene.camera);
+    assert.equal(group.element.style["--group-size"], `${size}px`);
+    assert.ok(parseFloat(group.element.style.width) < 100, "only four overlapping heads and a compact count reserve layout space");
+    const [left, top] = group.element.style.transform.match(/-?[\d.]+/g).map(Number);
+    const center = new THREE.Vector3(1, 0, 0).project(scene.camera);
+    assert.ok(Math.abs(left + parseFloat(group.element.style.width) / 2 - (center.x + 1) * 500) < 1e-8);
+    assert.ok(Math.abs(top + size + 4 - 300) < 1e-8, "the compact row stays just above the members' actual anchor");
     assert.ok(overlay.children.includes(group.element));
     assert.ok(overlay.children.includes(group.leader));
 
     // Walking apart restores the original label for everyone who left the badge.
-    Object.assign(positions, { c: { x: 60, y: 0, z: 0 }, d: { x: 71, y: 0, z: 0 }, e: { x: 82, y: 0, z: 0 } });
+    for (const [id, x] of [["c", 18], ["d", 30], ["e", 42]]) scene.playerObjects.get(id).marker.position.x = x;
     scene.updatePlayerLabelPositions();
     assert.equal(group.element.hidden, true, "the old badge is hidden once the party splits");
     for (const id of ["c", "d", "e"]) {
@@ -304,7 +313,7 @@ test("players within 10 recorded metres pack into one badge holding every member
     }
     const pair = [...scene.playerGroups.values()].find((entry) => entry.element.hidden === false);
     assert.deepEqual([...pair.members.keys()].sort(), ["a", "b"], "only the two still together stay grouped");
-    assert.equal(pair.columns, 2);
+    assert.equal(pair.count.textContent, "2人");
     assert.equal(scene.playerLabels.get("a").element.hidden, true);
   } finally {
     globalThis.document = previousDocument;

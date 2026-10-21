@@ -1,51 +1,52 @@
 const finite = (value, fallback) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
-export const GROUP_RADIUS_METERS = 10;
+export const GROUP_RADIUS_METERS = 4;
 
-/** Transitive world-space clustering of `{ id, pos:[x,y,z] }` entries: players within
- * `radius` metres of a chain-mate share one badge (A–B 9 m, B–C 9 m groups all
- * three). Screen distance is never used — "10米" describes the recorded mountain,
- * not the current camera. Entries without a finite position become their own
- * cluster so a broken sample cannot swallow other players' labels. */
+/** Native metre positions decide proximity, independently of map height scaling.
+ * Every pair in a group must be close: a chain cannot swallow distant players.
+ * Projected entries also need overlapping portraits, so zooming in separates them. */
 export function clusterPlayerEntries(entries, radius = GROUP_RADIUS_METERS) {
-  const valid = [];
-  const clusters = [];
-  for (const entry of entries || []) {
-    const pos = Array.isArray(entry?.pos) && entry.pos.length === 3
-      && entry.pos.every((value) => Number.isFinite(value)) ? entry.pos : null;
-    if (pos) valid.push({ entry, pos });
-    else clusters.push([entry]);
-  }
-  const parent = valid.map((_, index) => index);
-  const find = (index) => {
-    while (parent[index] !== index) { parent[index] = parent[parent[index]]; index = parent[index]; }
-    return index;
-  };
+  const clusters = [...(entries || [])].sort((a, b) => String(a.id).localeCompare(String(b.id))).map(entry => [entry]);
   const limit = Math.max(0, finite(radius, GROUP_RADIUS_METERS));
-  for (let i = 0; i < valid.length; i += 1) {
-    for (let j = i + 1; j < valid.length; j += 1) {
-      if (find(i) === find(j)) continue;
-      const [ax, ay, az] = valid[i].pos;
-      const [bx, by, bz] = valid[j].pos;
-      if (Math.hypot(ax - bx, ay - by, az - bz) <= limit) parent[find(j)] = find(i);
+  const validPosition = entry => Array.isArray(entry?.pos) && entry.pos.length === 3 && entry.pos.every(Number.isFinite);
+  const pairDistance = (a, b) => {
+    if (!validPosition(a) || !validPosition(b)) return Infinity;
+    const distance = Math.hypot(...a.pos.map((value, axis) => value - b.pos[axis]));
+    if (distance > limit) return Infinity;
+    const projected = [a.x, a.y, a.size, b.x, b.y, b.size];
+    if (projected.every(Number.isFinite)
+      && Math.hypot(a.x - b.x, a.y - b.y) > (a.size + b.size) / 2 + 4) return Infinity;
+    return distance;
+  };
+  for (;;) {
+    let best = null;
+    for (let i = 0; i < clusters.length; i += 1) {
+      for (let j = i + 1; j < clusters.length; j += 1) {
+        const distance = Math.max(...clusters[i].flatMap(a => clusters[j].map(b => pairDistance(a, b))));
+        if (Number.isFinite(distance) && (!best || distance < best.distance)) best = { i, j, distance };
+      }
     }
+    if (!best) return clusters;
+    clusters[best.i].push(...clusters[best.j]);
+    clusters.splice(best.j, 1);
   }
-  const grouped = new Map();
-  for (let index = 0; index < valid.length; index += 1) {
-    const root = find(index);
-    if (!grouped.has(root)) grouped.set(root, []);
-    grouped.get(root).push(valid[index].entry);
-  }
-  return [...grouped.values(), ...clusters];
+}
+
+/** Project a modest 2.4 m marker into CSS pixels, with readable but compact limits. */
+export function portraitScreenSize(depth, viewportHeight, { fov = 38, zoom = 1 } = {}) {
+  const pixels = Math.max(1, finite(viewportHeight, 1)) * 2.4 * Math.max(.01, finite(zoom, 1))
+    / (2 * Math.tan(clamp(finite(fov, 38), 1, 179) * Math.PI / 360) * Math.max(.01, finite(depth, 10000)));
+  return clamp(pixels, 14, 32);
 }
 
 /** Deterministic, small-group label layout. Anchors stay untouched for leader lines. */
-export function layoutPortraitLabels(anchors, viewport, { gap = 6, padding = 4 } = {}) {
+export function layoutPortraitLabels(anchors, viewport, { gap = 6, padding = 4, anchorGap = 8, maxDisplacement = Infinity } = {}) {
   const width = Math.max(1, finite(viewport?.width, 1));
   const height = Math.max(1, finite(viewport?.height, 1));
   const edge = clamp(finite(padding, 4), 0, (Math.min(width, height) - 1) / 2);
   const spacing = Math.max(0, finite(gap, 6));
+  const displacement = Math.max(0, finite(maxDisplacement, Infinity));
   const placed = [];
   const sorted = [...anchors].sort((a, b) => String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0);
   for (const anchor of sorted) {
@@ -56,11 +57,17 @@ export function layoutPortraitLabels(anchors, viewport, { gap = 6, padding = 4 }
     const maxX = width - edge - w;
     const maxY = height - edge - h;
     const initialX = clamp(anchorX - w / 2, edge, maxX);
-    const initialY = clamp(anchorY - h - 8, edge, maxY);
+    const initialY = clamp(anchorY - h - Math.max(0, finite(anchorGap, 8)), edge, maxY);
     // Existing rectangle edges give exact non-overlapping alternatives without
     // a pixel search, force simulation, animation state or input-order jitter.
     const xs = new Set([initialX, edge, maxX]);
     const ys = new Set([initialY, edge, maxY]);
+    if (Number.isFinite(displacement)) {
+      xs.add(clamp(initialX - displacement, edge, maxX));
+      xs.add(clamp(initialX + displacement, edge, maxX));
+      ys.add(clamp(initialY - displacement, edge, maxY));
+      ys.add(clamp(initialY + displacement, edge, maxY));
+    }
     for (const other of placed) {
       xs.add(clamp(other.left - w - spacing, edge, maxX));
       xs.add(clamp(other.left + other.width + spacing, edge, maxX));
@@ -69,6 +76,7 @@ export function layoutPortraitLabels(anchors, viewport, { gap = 6, padding = 4 }
     }
     let best = null;
     for (const left of xs) for (const top of ys) {
+      if (Math.hypot(left - initialX, top - initialY) > displacement + 1e-6) continue;
       let overlap = 0;
       for (const other of placed) {
         const x = Math.max(0, Math.min(left + w + spacing, other.left + other.width + spacing)

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { layoutPortraitLabels, clusterPlayerEntries, GROUP_RADIUS_METERS } from "../src/portrait-layout.js";
+import { layoutPortraitLabels, clusterPlayerEntries, GROUP_RADIUS_METERS, portraitScreenSize } from "../src/portrait-layout.js";
 
 const viewport = { width: 640, height: 480 };
 function assertInside(placements, bounds = viewport) {
@@ -69,10 +69,10 @@ test("mixed label sizes and small viewports never produce offscreen or nonfinite
 });
 
 test("players within the group radius merge into one cluster, farther ones stay apart", () => {
-  assert.equal(GROUP_RADIUS_METERS, 10);
+  assert.equal(GROUP_RADIUS_METERS, 4);
   const clusters = clusterPlayerEntries([
     { id: "near-a", pos: [0, 10, 0] },
-    { id: "near-b", pos: [9, 10, 3] },
+    { id: "near-b", pos: [3, 10, 1] },
     { id: "far", pos: [0, 10, 40] },
   ]);
   assert.equal(clusters.length, 2);
@@ -81,14 +81,15 @@ test("players within the group radius merge into one cluster, farther ones stay 
   assert.deepEqual(clusters.find((cluster) => cluster.length === 1).map((entry) => entry.id), ["far"]);
 });
 
-test("grouping is transitive: a 10 m chain shares one circle even with a 16 m span", () => {
-  const clusters = clusterPlayerEntries([
+test("a chain cannot merge players beyond the group's real diameter, regardless of input order", () => {
+  const entries = [
     { id: "a", pos: [0, 0, 0] },
-    { id: "b", pos: [9, 0, 0] },
-    { id: "c", pos: [17.5, 0, 0] },
-  ]);
-  assert.equal(clusters.length, 1);
-  assert.equal(clusters[0].length, 3);
+    { id: "b", pos: [3, 0, 0] },
+    { id: "c", pos: [6, 0, 0] },
+  ];
+  const clusters = clusterPlayerEntries(entries);
+  assert.deepEqual(clusters.map(group => group.map(entry => entry.id)), [["a", "b"], ["c"]]);
+  assert.deepEqual(clusterPlayerEntries([...entries].reverse()), clusters);
 });
 
 test("players just beyond the radius and boundary coordinates stay ungrouped", () => {
@@ -110,7 +111,7 @@ test("players just beyond the radius and boundary coordinates stay ungrouped", (
 test("entries without a finite world position keep their own cluster", () => {
   const clusters = clusterPlayerEntries([
     { id: "ok", pos: [0, 0, 0] },
-    { id: "broken", pos: [0, 0, 5] },
+    { id: "broken", pos: [0, 0, 2] },
     { id: "nan", pos: [Number.NaN, 0, 0] },
     { id: "short", pos: [1, 2] },
     { id: "none" },
@@ -119,4 +120,35 @@ test("entries without a finite world position keep their own cluster", () => {
   assert.deepEqual(sizes, [2, 1, 1, 1]);
   assert.equal(clusters.flat().length, 5);
   assert.deepEqual(clusterPlayerEntries([]), []);
+});
+
+test("zoom separates close players when their portraits no longer overlap", () => {
+  const entries = [
+    { id: "a", pos: [0, 0, 0], x: 200, y: 200, size: 14 },
+    { id: "b", pos: [3, 0, 0], x: 210, y: 200, size: 14 },
+  ];
+  assert.equal(clusterPlayerEntries(entries).length, 1);
+  assert.equal(clusterPlayerEntries([entries[0], { ...entries[1], x: 250, size: 32 }]).length, 2);
+  assert.equal(clusterPlayerEntries([entries[0], { ...entries[1], pos: [0, 0, 30], x: 200 }]).length, 2,
+    "aligned screen positions must never merge physically distant players");
+});
+
+test("portrait size follows projected distance and zoom within compact limits", () => {
+  assert.equal(portraitScreenSize(10, 720), 32);
+  assert.equal(portraitScreenSize(10000, 720), 14);
+  const mid = portraitScreenSize(120, 720);
+  assert.ok(mid > 14 && mid < 32);
+  assert.ok(portraitScreenSize(100, 720) > mid);
+  assert.ok(portraitScreenSize(120, 720, { zoom: 1.2 }) > mid);
+  assert.ok(portraitScreenSize(120, 900) > mid);
+  for (const depth of [null, NaN, Infinity, -1, 0]) assert.ok(Number.isFinite(portraitScreenSize(depth, NaN)));
+});
+
+test("bounded collision avoidance never pulls distant overlapping players away from their positions", () => {
+  const anchors = ["a", "b", "c", "d"].map(id => ({ id, x: 320, y: 240, width: 14, height: 14 }));
+  const result = layoutPortraitLabels(anchors, viewport, { gap: 4, anchorGap: 4, maxDisplacement: 20 });
+  for (const item of result) assert.ok(Math.hypot(item.left - 313, item.top - 222) <= 20.000001);
+  assertInside(result);
+  const edge = layoutPortraitLabels(anchors.map(a => ({ ...a, x: 0, y: 0 })), viewport, { maxDisplacement: 20 });
+  assertInside(edge);
 });
