@@ -1,5 +1,6 @@
 // Anonymous, capability-authorized live sharing. Watching never grants publishing.
 import { randomBytes, randomInt, timingSafeEqual } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 
 export const LIVE_V2_LIMITS = Object.freeze({
   sessions: 200, players: 16, batchLines: 256, bodyBytes: 256 * 1024,
@@ -152,7 +153,7 @@ export function validateLiveManifest(raw) {
 export function createLiveV2Api({ now = Date.now, limits: overrides = {}, trustedProxy = false,
   sweepIntervalMs = 1_000, pingIntervalMs = 15_000, watchCodeGenerator = randomWatchCode, archive = null, memoryOnly = false } = {}) {
   const limits = { ...LIVE_V2_LIMITS, ...overrides };
-  const sessions = new Map(), rooms = new Map(), watches = new Map(), codes = new Map(), rates = new Map();
+  const sessions = new Map(), rooms = new Map(), reservationRooms = new Map(), watches = new Map(), codes = new Map(), rates = new Map();
   let residentBytes = 0, reservedBytes = 0, viewerCount = 0, activeBodies = 0, closed = false, closing, sweeping;
   const gates = new Map(); let queuedMutations = 0;
   function exclusive(key, action) {
@@ -237,6 +238,7 @@ export function createLiveV2Api({ now = Date.now, limits: overrides = {}, truste
     await persist("end", session, reason, now());
     session.status = "ended"; session.endedAt = now(); session.reason = reason;
     if (rooms.get(session.roomKey) === session) rooms.delete(session.roomKey);
+    if (reservationRooms.get(session.airportRoomKey) === session) reservationRooms.delete(session.airportRoomKey);
     broadcastState(session);
     for (const viewer of [...session.viewers]) { detach(session, viewer); viewer.res.end(); }
   }
@@ -245,7 +247,7 @@ export function createLiveV2Api({ now = Date.now, limits: overrides = {}, truste
     const time = now();
     if (time - session.createdAt >= limits.ttlMs) return end(session, "maximum-duration");
     if (time - session.lastSeenAt >= limits.endedAfterMs) return end(session, "publisher-timeout");
-    const next = time >= session.leaseExpiresAt ? "reconnecting" : "live";
+    const next = session.epoch === 0 ? "waiting" : time >= session.leaseExpiresAt ? "reconnecting" : "live";
     if (next !== session.status) { session.status = next; broadcastState(session); }
   }
   function remove(session) {
@@ -254,6 +256,7 @@ export function createLiveV2Api({ now = Date.now, limits: overrides = {}, truste
     sessions.delete(session.sessionId); watches.delete(session.watchId);
     if (codes.get(session.watchCode) === session) codes.delete(session.watchCode);
     if (rooms.get(session.roomKey) === session) rooms.delete(session.roomKey);
+    if (reservationRooms.get(session.airportRoomKey) === session) reservationRooms.delete(session.airportRoomKey);
   }
   function sweep() {
     if (sweeping) return sweeping;
@@ -294,8 +297,12 @@ export function createLiveV2Api({ now = Date.now, limits: overrides = {}, truste
   function registration(session) {
     return {
       sessionId: session.sessionId, watchId: session.watchId, publishToken: session.token,
+      // Owner-only evidence for refusing to publish a new run into a stale airport alias.
+      runRoomKey: session.roomKey ?? null,
       watchCode: session.watchCode,
       epoch: session.epoch, watchPath: `/?watch=${session.watchId}`,
+      status: session.status,
+      ...(session.epoch === 0 ? { manifest: null } : {}),
       heartbeatMs: limits.heartbeatMs, leaseMs: limits.leaseMs,
       lastProducerSeq: session.lastProducerSeq, lastSeq: session.lastSeq,
     };
@@ -310,22 +317,23 @@ export function createLiveV2Api({ now = Date.now, limits: overrides = {}, truste
     throw fail("watch-code-capacity", 503);
   }
   function touch(session, record = false) {
-    const changed = session.status !== "live";
-    session.lastSeenAt = now(); session.leaseExpiresAt = now() + limits.leaseMs; session.status = "live";
+    const status = session.epoch === 0 ? "waiting" : "live", changed = session.status !== status;
+    session.lastSeenAt = now(); session.leaseExpiresAt = now() + limits.leaseMs; session.status = status;
     if (record) session.lastRecordAt = now();
     if (changed) broadcastState(session);
   }
-  async function startEpoch(session, clientId, manifest) {
+  async function startEpoch(session, clientId, manifest, { activate = false } = {}) {
     const nextManifest = { ...manifest, sessionId: session.sessionId };
     const size = bytes(nextManifest);
     const release = reserve(size, session.bytes);
     try {
-      if (session.epoch === 0) await persist("open", { ...session, manifest: nextManifest });
+      if (activate) await persist("activate", session, nextManifest, now());
+      else if (session.epoch === 0) await persist("open", { ...session, manifest: nextManifest });
       else await persist("epoch", session, nextManifest, now());
     } finally { release(); }
     residentBytes -= session.bytes;
     Object.assign(session, {
-      clientId, manifest: nextManifest, token: randomBytes(32).toString("hex"), epoch: session.epoch + 1,
+      clientId, manifest: nextManifest, token: activate ? session.token : randomBytes(32).toString("hex"), epoch: session.epoch + 1,
       lastSeq: 0, lastProducerSeq: 0, latest: new Map(), history: [], players: new Set(),
       historyBytes: 0, stateBytes: 0, bytes: size, lastRecordAt: null,
       status: "live", endedAt: null, reason: null, budget: { since: now(), count: 0, bytes: 0 },
@@ -333,6 +341,15 @@ export function createLiveV2Api({ now = Date.now, limits: overrides = {}, truste
     });
     residentBytes += size; touch(session);
     for (const viewer of session.viewers) hello(session, viewer);
+  }
+  async function reserveSession(session, clientId, first) {
+    if (first) await persist("reserve", session);
+    else await persist("claimReservation", session, now());
+    Object.assign(session, { clientId, token: randomBytes(32).toString("hex"), manifest: null,
+      lastSeq: 0, lastProducerSeq: 0, latest: new Map(), history: [], players: new Set(),
+      historyBytes: 0, stateBytes: 0, lastRecordAt: null, status: "waiting", endedAt: null, reason: null,
+      budget: { since: now(), count: 0, bytes: 0 }, archived: !memoryOnly });
+    touch(session);
   }
   async function readBody(req, limit) {
     if (activeBodies >= limits.concurrentBodies) throw fail("live-service-busy", 429);
@@ -448,31 +465,67 @@ export function createLiveV2Api({ now = Date.now, limits: overrides = {}, truste
     try {
       if (closed) throw fail("live-service-stopped", 503);
       await sweep();
-      if (path === `${PREFIX}/sessions` && req.method === "POST") {
+      if ((path === `${PREFIX}/sessions` || path === `${PREFIX}/reservations`) && req.method === "POST") {
+        const reservation = path === `${PREFIX}/reservations`;
         if (limited(req, "create", limits.createsPerMinute)) throw fail("rate-limited", 429, { retryAfterMs: 5_000 });
         const body = object(await readJson(req, limits.manifestBytes), {
           roomKey: (value) => { if (typeof value !== "string" || !HASH.test(value)) throw fail("room-key-required"); return value; },
           clientId: (value) => { if (typeof value !== "string" || !ID.test(value)) throw fail("client-id-required"); return value; },
-          manifest: validateLiveManifest,
-        }, ["roomKey", "clientId", "manifest"]);
+          ...(reservation ? {} : { manifest: validateLiveManifest }),
+        }, reservation ? ["roomKey", "clientId"] : ["roomKey", "clientId", "manifest"]);
         await exclusive("registration", async () => {
-          let session = rooms.get(body.roomKey);
+          const index = reservation ? reservationRooms : rooms;
+          let session = index.get(body.roomKey);
           await exclusive(session ?? "new-session", async () => {
             if (session) { await updateStatus(session); if (session.status === "ended") session = null; }
             if (session && now() < session.leaseExpiresAt) {
               if (session.clientId !== body.clientId) throw fail("publisher-active", 409, {
                 retryAfterMs: 5_000, sessionId: session.sessionId, watchId: session.watchId, watchCode: session.watchCode,
+                ...(reservation ? { status: session.status, epoch: session.epoch } : {}),
               });
               touch(session);
             } else if (!session) {
               if (sessions.size >= limits.sessions) throw fail("too-many-sessions", 503);
-              session = { roomKey: body.roomKey, sessionId: randomBytes(16).toString("hex"),
+              session = { ...(reservation ? { airportRoomKey: body.roomKey, roomKey: null } : { roomKey: body.roomKey }), sessionId: randomBytes(16).toString("hex"),
                 watchId: randomBytes(16).toString("hex"), watchCode: allocateWatchCode(), createdAt: now(), epoch: 0, bytes: 0, viewers: new Set() };
-              await startEpoch(session, body.clientId, body.manifest);
-              sessions.set(session.sessionId, session); watches.set(session.watchId, session); rooms.set(body.roomKey, session);
+              if (reservation) await reserveSession(session, body.clientId, true);
+              else await startEpoch(session, body.clientId, body.manifest);
+              sessions.set(session.sessionId, session); watches.set(session.watchId, session); index.set(body.roomKey, session);
               codes.set(session.watchCode, session);
-            } else await startEpoch(session, body.clientId, body.manifest);
+            } else if (reservation && session.epoch === 0) await reserveSession(session, body.clientId, false);
+            else await startEpoch(session, body.clientId, reservation ? session.manifest : body.manifest);
             json(res, 201, registration(session));
+          });
+        });
+        return true;
+      }
+      const activation = path.match(/^\/api\/live\/v2\/sessions\/([a-f0-9]{32})\/activate$/);
+      if (activation && req.method === "POST") {
+        if (limited(req, "create", limits.createsPerMinute)) throw fail("rate-limited", 429, { retryAfterMs: 5_000 });
+        const body = object(await readJson(req, limits.manifestBytes), {
+          roomKey: value => { if (typeof value !== "string" || !HASH.test(value)) throw fail("room-key-required"); return value; },
+          manifest: validateLiveManifest,
+        }, ["roomKey", "manifest"]);
+        await exclusive("registration", async () => {
+          const session = sessions.get(activation[1]);
+          await exclusive(session, async () => {
+            await authorize(req, session);
+            if (!session.airportRoomKey) throw fail("session-not-reserved", 409);
+            if (session.epoch > 0) {
+              if (session.roomKey !== body.roomKey || !isDeepStrictEqual(session.manifest, { ...body.manifest, sessionId: session.sessionId }))
+                throw fail("activation-conflict", 409);
+              touch(session);
+            } else {
+              const other = rooms.get(body.roomKey);
+              if (other && other !== session) {
+                await exclusive(other, () => updateStatus(other));
+                if (other.status !== "ended") throw fail("run-room-active", 409, { retryAfterMs: 5_000 });
+              }
+              await startEpoch(session, session.clientId, body.manifest, { activate: true });
+              session.roomKey = body.roomKey;
+              rooms.set(body.roomKey, session);
+            }
+            json(res, 200, registration(session));
           });
         });
         return true;
@@ -482,6 +535,7 @@ export function createLiveV2Api({ now = Date.now, limits: overrides = {}, truste
         const session = sessions.get(writer[1]);
         await exclusive(session, async () => {
           await authorize(req, session);
+          if (writer[2] === "records" && session.epoch === 0) throw fail("session-not-active", 409);
           if (now() - session.budget.since >= 60_000) session.budget = { since: now(), count: 0, bytes: 0 };
           if (++session.budget.count > limits.requestsPerMinute) throw fail("rate-limited", 429, { retryAfterMs: 1_000 });
         });

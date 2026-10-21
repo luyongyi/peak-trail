@@ -43,14 +43,20 @@ function advance(previous, transaction, sessionId) {
       || !Number.isSafeInteger(transaction.at) || transaction.at < 0) throw failure("live-archive-corrupt");
   const { kind, epoch } = transaction;
   if (!previous) {
-    if (kind !== "open" || transaction.sessionId !== sessionId || !ID.test(transaction.watchId)
-        || !CODE.test(transaction.watchCode) || epoch !== 1 || !transaction.manifest
-        || !isDeepStrictEqual(transaction.manifest, pick(transaction.manifest, MANIFEST_FIELDS))) throw failure("live-archive-corrupt");
+    if (transaction.sessionId !== sessionId || !ID.test(transaction.watchId) || !CODE.test(transaction.watchCode)
+        || (kind === "reserve" ? epoch !== 0 || transaction.manifest !== null
+          : kind !== "open" || epoch !== 1 || !transaction.manifest
+            || !isDeepStrictEqual(transaction.manifest, pick(transaction.manifest, MANIFEST_FIELDS)))) throw failure("live-archive-corrupt");
     return { tx: transaction.tx, epoch, producerSeq: 0, seq: 0, ended: false };
   }
   if (previous.ended) throw failure("live-archive-corrupt");
-  if (kind === "epoch") {
-    if (epoch !== previous.epoch + 1 || !transaction.manifest
+  if (kind === "reservation-claim") {
+    if (previous.epoch !== 0 || epoch !== 0) throw failure("live-archive-corrupt");
+    return { ...previous, tx: transaction.tx };
+  }
+  if (kind === "epoch" || kind === "activate") {
+    if ((kind === "activate" ? previous.epoch !== 0 : previous.epoch < 1)
+        || epoch !== previous.epoch + 1 || !transaction.manifest
         || !isDeepStrictEqual(transaction.manifest, pick(transaction.manifest, MANIFEST_FIELDS))) throw failure("live-archive-corrupt");
     return { tx: transaction.tx, epoch, producerSeq: 0, seq: 0, ended: false };
   }
@@ -59,7 +65,7 @@ function advance(previous, transaction, sessionId) {
     if (typeof transaction.reason !== "string" || transaction.reason.length > 100) throw failure("live-archive-corrupt");
     return { ...previous, tx: transaction.tx, ended: true };
   }
-  if (kind !== "batch" || !Number.isSafeInteger(transaction.toSeq) || !Number.isSafeInteger(transaction.producerThrough)
+  if (epoch < 1 || kind !== "batch" || !Number.isSafeInteger(transaction.toSeq) || !Number.isSafeInteger(transaction.producerThrough)
       || transaction.fromSeq !== previous.seq + 1 || transaction.producerFrom !== previous.producerSeq + 1
       || transaction.toSeq < transaction.fromSeq || transaction.producerThrough < transaction.producerFrom
       || transaction.toSeq - transaction.fromSeq !== transaction.producerThrough - transaction.producerFrom
@@ -190,6 +196,10 @@ export function createLiveWal({ root, limits: overrides = {}, beforeSync = null 
   }
   return {
     ready,
+    reserve: session => commit(session.sessionId, { kind: "reserve", at: session.createdAt, epoch: 0,
+      sessionId: session.sessionId, watchId: session.watchId, watchCode: session.watchCode, manifest: null }, true),
+    claimReservation: (session, at) => commit(session.sessionId, { kind: "reservation-claim", at, epoch: 0 }),
+    activate: (session, manifest, at) => commit(session.sessionId, { kind: "activate", at, epoch: 1, manifest: pick(manifest, MANIFEST_FIELDS) }),
     open: session => commit(session.sessionId, { kind: "open", at: session.createdAt, epoch: 1,
       sessionId: session.sessionId, watchId: session.watchId, watchCode: session.watchCode,
       manifest: pick(session.manifest, MANIFEST_FIELDS) }, true),

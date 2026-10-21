@@ -44,6 +44,14 @@ test('code resolution distinguishes expired, throttled and invalid service respo
   }
 });
 
+test('airport codes resolve and remain shareable while the host is waiting', async () => {
+  assert.deepEqual(await resolveWatchInput('abcd', { fetchImpl: async () => ({ ok: true,
+    json: async () => ({ watchId: id, watchCode: 'ABCD', status: 'waiting' }) }) }), { watchId: id, watchCode: 'ABCD' });
+  assert.deepEqual(watchSharePayload({ id, status: 'waiting', code: 'ABCD' }, url), { text: 'ABCD', kind: 'code' });
+  assert.equal(watchCodeFromState('ABCD', { status: 'waiting', epoch: 0 }), 'ABCD');
+  assert.equal(watchCodeFromState('ABCD', { status: 'ended', epoch: 0 }), null);
+});
+
 test('code lookup retains the native fetch receiver', async () => {
   const previous = globalThis.fetch;
   globalThis.fetch = async function () {

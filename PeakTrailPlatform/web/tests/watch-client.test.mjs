@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { WatchClient, parseWatchId } from "../src/watch-client.js";
+import { WatchClient, parseWatchId, isEmptyWatchSnapshot } from "../src/watch-client.js";
 
 const id = "a".repeat(32);
 function fixture({ response = { ok: true, json: async () => ({ status: "live" }) } } = {}) {
@@ -23,6 +23,58 @@ function fixture({ response = { ok: true, json: async () => ({ status: "live" })
 }
 const hello = (epoch = 1, seq = 8) => ({ sessionId: "s", watchId: id, epoch, status: "live", snapshotSeq: seq,
   lastSeq: seq, manifest: {}, snapshot: { records: [{ seq: 1, record: {} }, { seq, record: {} }] } });
+const waiting = (status = "waiting") => ({ sessionId: "s", watchId: id, watchCode: 'ABCD', epoch: 0, status,
+  manifest: null, lastSeq: 0, snapshotSeq: 0, snapshot: { records: [] } });
+
+test('reserved rooms accept empty epoch zero and activate on the same socket with the same code', async () => {
+  const f = fixture({ response: { ok: true, json: async () => waiting() } }); await f.client.start();
+  const socket = f.streams[0]; socket.emit('hello', waiting());
+  assert.equal(f.client.epoch, 0); assert.equal(f.client.seq, 0); assert.equal(f.records.length, 0);
+  socket.emit('ping', {}); socket.emit('state', { epoch: 0, status: 'waiting' });
+  assert.equal(f.states.at(-1).status, 'waiting');
+  socket.emit('hello', { ...hello(1, 0), watchCode: 'ABCD', snapshot: { records: [] } });
+  socket.emit('record', { epoch: 1, seq: 1, record: { type: 'participant' } });
+  assert.equal(f.streams.length, 1); assert.equal(f.snapshots.length, 2);
+  assert.equal(f.snapshots[0].watchCode, f.snapshots[1].watchCode);
+  assert.equal(f.client.epoch, 1); assert.equal(f.client.seq, 1); assert.equal(f.records.length, 1);
+  f.client.stop();
+});
+
+test('waiting reconnects carry an explicit zero cursor and can then receive activation hello', async () => {
+  const f = fixture(); await f.client.start(); f.streams[0].emit('hello', waiting());
+  f.streams[0].onerror(); await f.runTimer(f.client.retryTimer);
+  assert.equal(f.streams[1].url, `/api/live/v2/watch/${id}/stream?epoch=0&after=0`);
+  f.streams[1].emit('resumed', { epoch: 0, status: 'waiting', lastSeq: 0 });
+  f.streams[1].emit('hello', hello()); assert.equal(f.client.epoch, 1); f.client.stop();
+});
+
+test('an unused room can end with no manifest, and a live room cannot regress to an empty waiting snapshot', async () => {
+  const f = fixture(); await f.client.start(); f.streams[0].emit('hello', waiting('ended'));
+  assert.equal(f.snapshots.length, 1); assert.equal(f.client.ended, true); assert.equal(f.streams[0].closed, true);
+  assert.equal(f.timers.size, 0);
+  const g = fixture(); await g.client.start(); g.streams[0].emit('hello', hello()); g.streams[0].emit('hello', waiting());
+  assert.equal(g.snapshots.length, 1); assert.equal(g.client.epoch, 1); assert.equal(g.client.seq, 8); g.client.stop();
+});
+
+test('epoch-zero records and nonempty or malformed waiting snapshots cannot fabricate a game world', async () => {
+  for (const extra of [{ manifest: {} }, { status: 'live' }, { epoch: 1 }, { lastSeq: 1 }, { snapshotSeq: 1 }, { snapshot: { records: [{ seq: 1, record: {} }] } }]) {
+    const data = { ...waiting(), ...extra };
+    assert.equal(isEmptyWatchSnapshot(data), false);
+    const f = fixture(); await f.client.start(); f.streams[0].emit('hello', data);
+    assert.equal(f.snapshots.length, 0); assert.equal(f.client.seq, 0); assert.equal(f.streams[0].closed, true); f.client.stop();
+  }
+  const f = fixture(); await f.client.start(); f.streams[0].emit('hello', waiting());
+  f.streams[0].emit('record', { epoch: 0, seq: 1, record: {} });
+  assert.equal(f.records.length, 0); assert.equal(f.client.seq, 0); f.client.stop();
+});
+
+test('expired waiting rooms stop retrying without claiming a path was received', async () => {
+  let reads = 0;
+  const f = fixture({ response: () => ++reads === 1 ? { ok: true, json: async () => waiting() } : { ok: false, status: 404 } });
+  await f.client.start(); f.streams[0].emit('hello', waiting());
+  for (let n = 0; n < 3; n++) { f.streams.at(-1).onerror(); await f.runTimer(f.client.retryTimer); }
+  assert.equal(f.client.closed, true); assert.deepEqual(f.connections.at(-1), ['error', '链接不存在或已过期']);
+});
 
 test("all default browser ports retain native receivers through connect, retry and cleanup", async () => {
   const original = { fetch: globalThis.fetch, setTimeout: globalThis.setTimeout,

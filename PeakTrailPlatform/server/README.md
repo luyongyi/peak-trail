@@ -12,6 +12,14 @@
 
 短码只便于输入观战，不能发布，也不提供长随机链接同等的防猜测能力。结束即停止短码解析，码仍保留至会话清理以免立即指向另一场；原 `/?watch=<watchId>` 长链接及结束快照照常保留。观战元数据与 SSE `hello` 带 `watchCode`，结束后为 `null`。没有公开房间列表或短码列表接口。
 
+机场阶段可先 `POST /api/live/v2/reservations {roomKey,clientId}` 预约：`roomKey` 是同一 Photon 机场房间的 64 位小写散列，`clientId` 是本发布端的 32 位小写随机 ID。首次预约和同 owner 重试均返回 `201`，字段沿用注册响应并增加 `status:"waiting"`、`epoch:0`、`manifest:null`；序号均为 0。四位码和旧长链接立即可访问，但元数据和 SSE `hello` 只给等待状态、空快照与空 manifest，网页此时不得加载假地图。别的发布端在有效租约内收到 `409 publisher-active`，含同一 session/watch/code、status 和 epoch，不含 token。预约与直接开播共用唯一短码索引、创建限流和会话配额，不存在单独可枚举的预约列表。
+
+进入真实对局后，由预约 owner 以原 Bearer 凭证调用 `POST /api/live/v2/sessions/:sessionId/activate {roomKey,manifest}`；这里的 `roomKey` 为正式对局散列，manifest 必须通过既有直播验证。持久化完成后返回 `200` 注册响应，将状态升级到 `live`、epoch 1，sessionId/watchId/watchCode/publishToken 全部保留，并向已经等待的 SSE 观众发一次真实 manifest 的 `hello`。完全相同的激活重试返回现有序号，不再次写入、重置快照或发 hello。已激活后更换 roomKey/manifest 返回 `409 activation-conflict`；正式对局已有另一未结束发布者则返回 `409 run-room-active`，保留当前预约，不抢占或合并另一直播。
+
+机场房间索引保留至会话结束，包括已经激活的阶段。新版发布端始终先调用 `/reservations`，避免较早加载完成的待命端另开一场：同 owner 重试仍返回现有直播；租约过期后新 owner 在同一个预约接口接管，等待阶段保持 epoch 0，已经开播则复用已验证 manifest 并按现有规则进入新 epoch，两者都保留观战码并轮换 token。等待时复用 `/heartbeat` 与 `/end`，心跳保持 `waiting`；`/records` 返回 `409 session-not-active`。15 秒租约、60 秒失联结束、24 小时最大生命周期（从预约创建起算）、结束后 15 分钟保留沿用原规则。取消或超时且从未激活的长链接终态为 `ended`、epoch 0、null manifest、空快照；短码即时变 404，并隔离至清理。退出机场、关闭直播或返回机场准备新一局时，发布端应主动结束旧会话再预约。旧 `/sessions` 直接注册接口仍兼容原客户端。
+
+仅成功 owner 注册/激活响应另带私有 `runRoomKey`：等待时为 null，激活后为正式对局散列。发布端必须核对它与当前真实对局一致才发送轨迹；若旧场结束请求丢失、预约误接管了旧场，应先结束旧会话再预约，不能把新场记录送入旧 manifest。该字段和散列不出现在 409 待命响应、观战元数据、SSE、短码解析或 WAL 中。
+
 租约为 15 秒，建议每 5 秒心跳；失联 60 秒或持续 24 小时结束，结束后保留 15 分钟供观看，观众不延长生命周期。过期租约接管保留观战链接、更新 epoch 并作废旧凭证；SSE 用 epoch 与 seq 续传，过旧游标重置为有界的最新状态及近期路径快照。`summit`、各 `nadir-*`、`nadir`、`native-checkpoint` 和 `run_end` 另按事件、玩家和关卡保留最新里程碑，路径窗口淘汰不会使新观众漏掉这些状态；这不改变个人通关的证据要求。生产 nginx 的通用 `/api/` 转发和关闭 SSE 缓冲即可沿用。
 
 道具只记录 `event:"item-use"`（实际使用位置）与 `event:"item-spawn"`（实际生成位置）两个事件，均须带 `id`、`pos`（米）和现有白名单 `item`，可带同一次动作的 `actionId`；两种 ID 均为 64 位小写 SHA256。不能证明归属时省略 `playerId`，不以附近玩家或人物坐标猜生成点。`hello` 只保留最近 128 个道具事件，仍受全部最新状态合计 128 KiB 和快照预算约束；全程历史由下面的持久通道承接。生成点是静态记录，不包含物体旋转、后续移动、消耗或生命周期状态。
@@ -21,6 +29,8 @@
 生产 v2 必须配置 `--routes-dir`（或 `PEAK_TRAJECTORY_DIR`）。服务在其私有 `live-archive/<sessionId>.wal` 追加路径事务：注册、epoch 接管、接收记录和结束先写入并完成文件 fsync，再返回成功或广播 SSE；新文件还同步父目录。元数据和 `hello` 的 `persistence:"durable"` 明确表示此模式。没有私有目录时注册返回 `503 live-archive-unconfigured`，不悄悄降级；只有程序化测试可显式设 `liveV2.memoryOnly:true`，读接口会标明 `persistence:"memory"`。`--dir` 仍仅影响旧 v1。
 
 WAL 保留匿名参与者、坐标/朝向/关卡、原生路线、生死和事件的白名单投影，省略背包、外观、体力和一般事件的物品明细；仅 `item-use` / `item-spawn` 额外保留经过直播白名单验证的 `item/id/actionId`。不保存 roomKey、clientId 或 publishToken。每个事务记录 session/epoch、连续的服务端 seq 和 producerSeq 范围，即使该批只有被省略的内容也保存空投影事务。同一 session 的写入、接管和结束串行；已接受的 producerSeq 重传不追加第二份。不同 epoch 的 p1 不作为同一人拼接，WAL 不从全队 activeSegment、直播断开或 `run_end` 猜测个人通关。
+
+预约首先写 `reserve`（epoch 0、null manifest），等待接管写 `reservation-claim`，首次进图写 `activate`（epoch 1、真实 manifest），取消可以直接接 `end`；这些事务同样先 fsync 再确认，尚未激活时禁止 batch。原有 `open/epoch/batch/end` 档案仍可校验。预约/激活与直接注册使用同一注册锁，并与 session 内写入/结束串行，只有持久化成功才更新房间索引、身份或 SSE。预约也不保存机场房间散列、客户端 ID 和发布凭证；心跳只续当前进程租约，不恢复重启前的身份。
 
 启动后第一次写入先流式校验已有 WAL 的 SHA256、事务和序号连续性，仅截去未以换行结束的半条尾事务；完整但损坏的事务、非普通文件和不安全路径均阻止新写入。写入或 fsync 出错后本进程继续拒绝写入，需管理员排查并重启恢复；可能完整写入但未确认的事务仍留在私有档案。重启不恢复旧 token 或直播会话，旧 session/watch 查询返回 404，客户端新建会话；旧路径档案保留。正常 SIGTERM/SIGINT 会等待进行中的持久化并追加结束事务。
 
@@ -73,7 +83,7 @@ node PeakTrailPlatform/server/live-server.mjs --port 8787 --routes-dir <回忆�
 ## 测试
 
 ```powershell
-node --test PeakTrailPlatform/tools/tests/live-server.test.mjs PeakTrailPlatform/tools/tests/live-v2-api.test.mjs PeakTrailPlatform/tools/tests/live-wal.test.mjs
+node --test PeakTrailPlatform/tools/tests/live-server.test.mjs PeakTrailPlatform/tools/tests/live-v2-api.test.mjs PeakTrailPlatform/tools/tests/live-wal.test.mjs PeakTrailPlatform/tools/tests/live-reservations.test.mjs
 ```
 
 覆盖：旧协议兼容、匿名权限与短码、序号重传/接管、快照淘汰和慢观众预算；真实临时私有目录验证 fsync 前不确认/广播、持久化投影、重启和半尾恢复、损坏拒写、维护标记、配额、重试去重与关闭排空。

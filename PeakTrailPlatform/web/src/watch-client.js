@@ -39,7 +39,7 @@ export async function resolveWatchInput(value, { base = "https://watch.invalid/"
   }
   const data = await response.json();
   const resolvedId = parseWatchId(data.watchId);
-  if (!resolvedId || parseWatchCode(data.watchCode) !== code || !["live", "reconnecting"].includes(data.status)) {
+  if (!resolvedId || parseWatchCode(data.watchCode) !== code || !["waiting", "live", "reconnecting"].includes(data.status)) {
     throw Object.assign(new Error("watch-service-unavailable"), { code: "watch-service-unavailable" });
   }
   return { watchId: resolvedId, watchCode: code };
@@ -57,6 +57,13 @@ export function watchSharePayload(watch, href, kind = "code") {
 export function watchCodeFromState(currentCode, data) {
   if (data.status === "ended") return null;
   return Object.hasOwn(data, "watchCode") ? parseWatchCode(data.watchCode) : currentCode;
+}
+
+// Reserved rooms have no invented game manifest or positions. An unused room
+// may also end before activation; its final snapshot has the same empty shape.
+export function isEmptyWatchSnapshot(data) {
+  return data?.epoch === 0 && ["waiting", "ended"].includes(data.status) && data.manifest === null
+    && data.lastSeq === 0 && data.snapshotSeq === 0 && Array.isArray(data.snapshot?.records) && data.snapshot.records.length === 0;
 }
 
 export class WatchClient {
@@ -116,9 +123,11 @@ export class WatchClient {
     });
     es.onopen = () => { if (current()) this.onConnection("connected"); };
     receive("hello", data => {
-      if (!Number.isSafeInteger(data.epoch) || data.epoch < 1
+      if (!Number.isSafeInteger(data.epoch) || data.epoch < 0
         || !Number.isSafeInteger(data.snapshotSeq) || data.snapshotSeq < 0
         || !Array.isArray(data.snapshot?.records)) throw new Error("Invalid snapshot");
+      if (data.epoch === 0 ? !isEmptyWatchSnapshot(data) || this.epoch > 0
+        : data.status === "waiting" || !data.manifest || typeof data.manifest !== "object" || Array.isArray(data.manifest)) throw new Error("Invalid snapshot phase");
       this.onSnapshot(data);
       this.epoch = data.epoch;
       this.seq = data.snapshotSeq;
@@ -127,6 +136,7 @@ export class WatchClient {
       if (data.status === "ended") this.finish();
     });
     receive("record", data => {
+      if (this.epoch === 0) throw new Error("Reserved room cannot contain records");
       if (data.epoch !== this.epoch) {
         this.epoch = null; this.seq = 0;
         this.reconnect("正在同步新数据");
@@ -180,7 +190,7 @@ export class WatchClient {
         if (this.closed || this.ended || generation !== this.generation) return;
         if ([404, 410].includes(response.status)) {
           this.stop();
-          this.onConnection("error", "链接不存在或已过期，已保留最后收到的路径");
+          this.onConnection("error", this.epoch > 0 ? "链接不存在或已过期，已保留最后收到的路径" : "链接不存在或已过期");
           return;
         }
         if (!response.ok) { this.reconnect("观看连接中断，正在重连"); return; }
