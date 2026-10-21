@@ -901,7 +901,7 @@ export class TrailScene {
       group.element.hidden = false;
       const size = Math.min(22, ...cluster.map(entry => entry.size));
       group.element.style.setProperty("--group-size", `${size}px`);
-      const groupWidth = size * (1 + (Math.min(4, cluster.length) - 1) * .72) + 4 + group.countWidth;
+      const groupWidth = size * (1 + (Math.min(4, cluster.length) - 1) * .5) + 4 + group.countWidth;
       group.element.style.width = `${groupWidth}px`;
       const anchorX = cluster.reduce((sum, entry) => sum + entry.x, 0) / cluster.length;
       const anchorY = cluster.reduce((sum, entry) => sum + entry.y, 0) / cluster.length;

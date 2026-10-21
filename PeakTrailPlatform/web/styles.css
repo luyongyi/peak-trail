@@ -1685,7 +1685,7 @@ button:disabled {
   font-size: calc(var(--group-size, var(--portrait-size, 24px)) * .44);
   box-shadow: 0 1px 4px #0009;
 }
-.trail-player-group-portrait + .trail-player-group-portrait { margin-left: calc(var(--group-size, var(--portrait-size, 24px)) * -.28); }
+.trail-player-group-portrait + .trail-player-group-portrait { margin-left: calc(var(--group-size, var(--portrait-size, 24px)) * -.5); }
 .trail-player-group-portrait:nth-child(n+5) { display: none; }
 .trail-player-group-portrait img { width: 100%; height: 100%; object-fit: contain; }
 .trail-player-group-portrait img[hidden], .trail-player-group-portrait span[hidden] { display: none; }
