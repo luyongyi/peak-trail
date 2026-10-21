@@ -16,7 +16,7 @@ namespace PeakTrailRecorder;
 [BepInAutoPlugin]
 public partial class Plugin : BaseUnityPlugin
 {
-    internal const string RecorderVersion = "0.8.4";
+    internal const string RecorderVersion = "0.8.5";
 
     internal static ManualLogSource Log { get; private set; } = null!;
 

@@ -685,7 +685,7 @@ export class TrailScene {
 
     for (const participant of this.trace.participants) {
       const samples = this.trace.tracks.get(participant.id) || [];
-      if (!samples.length) continue;
+      if (!samples.length && !this.trace.appearanceTracks?.get(participant.id)?.length) continue;
       const blockingEvents = this.trace.events.filter(
         (event) =>
           DISCONTINUITY_EVENTS.has(event.type) && (!event.playerId || event.playerId === participant.id),
@@ -1098,6 +1098,37 @@ export class TrailScene {
     return true;
   }
 
+  ghostMarkerAtTime(playerId, time, maxGap = 1.5, blockingEvents = []) {
+    const entries = this.trace?.appearanceTracks?.get(playerId) || [];
+    let low = 0, high = entries.length;
+    while (low < high) { const middle = (low + high) >>> 1; if (entries[middle].t <= time) low = middle + 1; else high = middle; }
+    const entry = entries[low - 1], appearance = entry?.appearance;
+    const pos = appearance?.ghostPosition;
+    if (appearance?.ghostReady !== true || appearance.ghostActive !== true
+      || !Array.isArray(pos) || pos.length !== 3 || !pos.every(Number.isFinite)) return null;
+    const rotation = appearance.ghostRotation;
+    const pose = { pos: [...pos], t: entry.t, activeSegment: entry.activeSegment, nativeVisible: appearance.ghostVisible,
+      rotation: Array.isArray(rotation) && rotation.length === 4 && rotation.every(Number.isFinite) ? [...rotation] : null };
+    const next = entries[low], nextAppearance = next?.appearance, nextPos = nextAppearance?.ghostPosition;
+    const gap = next ? next.t - entry.t : Infinity;
+    if (Number.isInteger(entry.activeSegment) && next?.activeSegment === entry.activeSegment
+      && gap > 0 && gap <= maxGap && time > entry.t
+      && nextAppearance?.ghostReady === true && nextAppearance.ghostActive === true
+      && Array.isArray(nextPos) && nextPos.length === 3 && nextPos.every(Number.isFinite)
+      && !blockingEvents.some(event => event.t > entry.t && event.t <= next.t)) {
+      const alpha = Math.min(1, (time - entry.t) / gap);
+      pose.pos = pos.map((value, index) => value + (nextPos[index] - value) * alpha);
+      const nextRotation = nextAppearance.ghostRotation;
+      if (pose.rotation && Array.isArray(nextRotation) && nextRotation.length === 4 && nextRotation.every(Number.isFinite)) {
+        pose.rotation = new THREE.Quaternion().fromArray(pose.rotation).normalize()
+          .slerp(new THREE.Quaternion().fromArray(nextRotation).normalize(), alpha).toArray();
+      }
+    }
+    // activeSegment is team progress, not this flying entity's physical layer.
+    // Its own position is clipped to the displayed layer's real bounds below.
+    return pose;
+  }
+
   canFollowPlayer(id) {
     const object = this.playerObjects.get(id);
     return Boolean(object?.marker && object.group?.visible !== false
@@ -1392,24 +1423,29 @@ export class TrailScene {
       outline.visible = this.showTracks;
       occludedLine.visible = this.showTracks;
       const sample = sampleAtTime(samples, this.currentTime, maxGap, blockingEvents);
+      const ghost = this.ghostMarkerAtTime(group.userData.playerId, this.currentTime, maxGap, blockingEvents);
+      const markerState = ghost || sample;
       const latestLifecycle = lifecycleEvents.findLast((event) => event.t <= this.currentTime);
       const isPresent = latestLifecycle?.type !== "leave";
       const life = latestLifeEventBefore(this.trace, group.userData.playerId, this.currentTime, MARKER_LIFE_EVENT_TYPES);
-      if (sample && this.currentTime - sample.t <= maxGap && isPresent && life?.type !== "death" && (this.playerVisibility.get(group.userData.playerId) ?? true)) worldPlayers.push(sample);
+      if (!ghost && sample && this.currentTime - sample.t <= maxGap && isPresent && life?.type !== "death" && (this.playerVisibility.get(group.userData.playerId) ?? true)) worldPlayers.push(sample);
       const segmentMatches =
-        sample && (this.activeSegment === null || !Number.isInteger(sample.segment) || sample.segment === this.activeSegment);
+        markerState && (this.activeSegment === null || !Number.isInteger(markerState.segment) || markerState.segment === this.activeSegment);
       const displayBounds = this.useMap && this.activeSegment !== null ? this.viewBounds() : null;
-      marker.visible = Boolean(this.showMarkers && sample && segmentMatches && isPresent && pointInBounds(sample.pos, displayBounds));
+      marker.visible = Boolean(this.showMarkers && markerState && segmentMatches && isPresent && pointInBounds(markerState.pos, displayBounds));
       marker.userData.replayVisible = marker.visible;
-      marker.userData.followable = Boolean(sample && segmentMatches && isPresent && life?.type !== "death"
-        && this.currentTime - sample.t <= maxGap && pointInBounds(sample.pos, displayBounds));
-      if (sample) {
+      marker.userData.ghost = Boolean(ghost);
+      marker.userData.nativeGhostVisible = ghost?.nativeVisible ?? null;
+      marker.userData.followable = Boolean(markerState && segmentMatches && isPresent
+        && (ghost || life?.type !== "death" && this.currentTime - sample.t <= maxGap) && pointInBounds(markerState.pos, displayBounds));
+      if (markerState) {
         marker.position.set(
-          sample.pos[0] - this.origin.x,
-          sample.pos[1] - this.origin.y,
-          sample.pos[2] - this.origin.z,
+          markerState.pos[0] - this.origin.x,
+          markerState.pos[1] - this.origin.y,
+          markerState.pos[2] - this.origin.z,
         );
-        marker.rotation.y = THREE.MathUtils.degToRad(sample.yaw || 0);
+        if (ghost?.rotation) marker.quaternion.fromArray(ghost.rotation).normalize();
+        else marker.rotation.set(0, THREE.MathUtils.degToRad(markerState.yaw || 0), 0);
       }
       group.visible = this.playerVisibility.get(group.userData.playerId) ?? true;
     }

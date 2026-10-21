@@ -20,7 +20,7 @@ internal sealed class LivePayload
     });
     private const string Common = "type t playerId activeSegment";
     private const string Stamina = "telemetryReady authority capacityReady baseMaxStamina baseMaxExtraStamina stamina maxStamina stamina01 extraStamina maxExtraStamina extraStamina01 totalStamina";
-    private const string Appearance = "ready authority skinIndex eyesIndex mouthIndex accessoryIndex outfitIndex hatIndex effectiveHatIndex sashIndex medalIndex skinColor outfitName hatName formReady form formAuthority formMeshName formMaterialNames formRendererActive";
+    private const string Appearance = "ready authority skinIndex eyesIndex mouthIndex accessoryIndex outfitIndex hatIndex effectiveHatIndex sashIndex medalIndex skinColor outfitName hatName formReady form formAuthority formMeshName formMaterialNames formRendererActive ghostReady ghostActive ghostVisible ghostPosition ghostRotation petrificationReady petrificationActive petrificationTriggered petrificationProgress petrificationAmount blindnessReady blindnessActive";
     private const string Status = "ready complete authority source gameSource dead statusSum baseMaxStamina maxStamina baseMaxExtraStamina maxExtraStamina effectsReady effectsAuthority";
     private const string Item = "id itemId name displayName prefabName nameKey slot count";
     private static readonly HashSet<string> Types = new(StringComparer.Ordinal)

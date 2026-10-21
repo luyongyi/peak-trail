@@ -1,6 +1,6 @@
 # PeakTrailRecorder
 
-Read-only BepInEx recorder for PEAK (0.8.4 is built against Steam build 25739797). It samples every human character returned by
+Read-only BepInEx recorder for PEAK (0.8.5 is built against Steam build 25739797). It samples every human character returned by
 `PlayerHandler.GetAllPlayerCharacters()` and writes a local, crash-recoverable trace for the
 PeakTrail 2.5D viewer. The same DLL also captures the currently loaded map for the viewer;
 there is no second end-user map-exporter mod.
@@ -191,6 +191,21 @@ build ID is captured so the viewer can refuse to overlay a trace on geometry fro
   preview is explicitly current-only and must never be inserted into historical
   trails. Static game meshes, materials, icons and outfit references are exported
   by `PeakTrailPlatform/tools/game-assets`, and selected by exact Steam build.
+- Since **0.8.5**, each appearance snapshot also observes independent native
+  ghost, petrification and blindness evidence. `ghostReady` / `ghostActive`
+  require an actual `PlayerGhost` instance linked to this exact character;
+  death alone does not prove that a ghost exists. Ghost position and quaternion
+  stay inside the appearance record, separate from body samples and durable
+  living routes. `ghostVisible` describes the recording observer's renderer,
+  including the game's deliberate local first-person hiding; the web viewer
+  can show the native ghost in its own third-person view.
+  `petrificationReady` / `petrificationActive` track the native stone layer,
+  with `petrificationTriggered`, `petrificationProgress` and the actual shared
+  material `_Petrify` value. `blindnessReady` / `blindnessActive` observe the
+  native Blind Card. Each readiness flag is independent of cosmetic readiness.
+  Unknown observations and explicit inactive snapshots clear previous visual
+  state on the viewer; they never retain a stale ghost or blindfold. This is
+  read-only observation and does not instantiate materials or change the game.
 - Maximum frequency: 5 Hz by default.
 - **Automatic path streaming (0.8.0):** new installations stream every playable run
   by default. Open the game's **Settings → General → Live path sharing** to turn

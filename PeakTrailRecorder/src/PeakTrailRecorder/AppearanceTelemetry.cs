@@ -28,6 +28,20 @@ internal sealed class AppearanceTelemetry
     [JsonProperty("formMeshName")] public string? FormMeshName { get; set; }
     [JsonProperty("formMaterialNames")] public string[] FormMaterialNames { get; set; } = Array.Empty<string>();
     [JsonProperty("formRendererActive")] public bool? FormRendererActive { get; set; }
+    // Independent visual evidence: unknown is not an inactive renderer. Ghost
+    // transforms are presentation data, never substituted into route samples.
+    [JsonProperty("ghostReady")] public bool GhostReady { get; set; }
+    [JsonProperty("ghostActive")] public bool? GhostActive { get; set; }
+    [JsonProperty("ghostVisible")] public bool? GhostVisible { get; set; }
+    [JsonProperty("ghostPosition")] public float[]? GhostPosition { get; set; }
+    [JsonProperty("ghostRotation")] public float[]? GhostRotation { get; set; }
+    [JsonProperty("petrificationReady")] public bool PetrificationReady { get; set; }
+    [JsonProperty("petrificationActive")] public bool? PetrificationActive { get; set; }
+    [JsonProperty("petrificationTriggered")] public bool? PetrificationTriggered { get; set; }
+    [JsonProperty("petrificationProgress")] public float? PetrificationProgress { get; set; }
+    [JsonProperty("petrificationAmount")] public float? PetrificationAmount { get; set; }
+    [JsonProperty("blindnessReady")] public bool BlindnessReady { get; set; }
+    [JsonProperty("blindnessActive")] public bool? BlindnessActive { get; set; }
     public string Fingerprint() => JsonConvert.SerializeObject(this);
 }
 

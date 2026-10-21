@@ -102,8 +102,8 @@
               "description": "Runtime form readiness is independent of cosmetic ready. Missing or false is unknown, not a normal human."
             },
             "form": {
-              "enum": ["unknown", "normal", "skeleton", "mushroom", "chicken"],
-              "description": "Read-only CharacterData/active replacement mesh observation; never inferred from a held item or inventory."
+              "enum": ["unknown", "normal", "skeleton", "mushroom", "chicken", "ghost"],
+              "description": "Read-only CharacterData/active replacement mesh observation, or an active PlayerGhost whose m_owner is this character; never inferred from death, status values or held items."
             },
             "formAuthority": { "type": "string", "minLength": 1 },
             "formMeshName": {
@@ -115,6 +115,23 @@
               "type": ["boolean", "null"],
               "description": "Observed renderer.enabled and activeInHierarchy; null means its render state was unavailable."
             },
+            "ghostReady": { "type": "boolean", "description": "Independent native PlayerGhost observation readiness. Missing/false is unknown; never a known-inactive ghost." },
+            "ghostActive": { "type": ["boolean", "null"], "description": "Owner-matched PlayerGhost game object is active; never inferred from dead." },
+            "ghostVisible": { "type": ["boolean", "null"], "description": "Observed native ghost renderer visibility, independent of active ghost existence (local ghost can be invisible)." },
+            "ghostPosition": { "type": ["array", "null"], "minItems": 3, "maxItems": 3,
+              "items": { "type": "number", "minimum": -1000000, "maximum": 1000000 },
+              "description": "Native ghost position in Unity world meters when ready and active. Separate from character samples and never a route or heatmap point." },
+            "ghostRotation": { "type": ["array", "null"], "minItems": 4, "maxItems": 4,
+              "items": { "type": "number", "minimum": -1, "maximum": 1 }, "description": "Native ghost quaternion [x,y,z,w], when ready and active." },
+            "petrificationReady": { "type": "boolean", "description": "Actual petrification renderer/material observation is available; independent of status telemetry." },
+            "petrificationActive": { "type": ["boolean", "null"], "description": "Native petrification visual is active, not a deduction from an affliction amount." },
+            "petrificationAmount": { "type": ["number", "null"], "minimum": -1000, "maximum": 1000,
+              "description": "Observed shared material _Petrify shader value; omitted/null when unavailable or inactive, never extrapolated from progress." },
+            "petrificationTriggered": { "type": ["boolean", "null"], "description": "Observed native shouldPetrify flag; separate from actual shader visibility." },
+            "petrificationProgress": { "type": ["number", "null"], "minimum": 0, "maximum": 1,
+              "description": "Observed native passOutValue, independent of the material _Petrify curve output." },
+            "blindnessReady": { "type": "boolean", "description": "Native blindness card renderer observation is available." },
+            "blindnessActive": { "type": ["boolean", "null"], "description": "Actual blindness card is active; never inferred from status values." },
             "source": {
               "type": "string",
               "description": "recorded is historical; local-current must be labelled non-historical by viewers"

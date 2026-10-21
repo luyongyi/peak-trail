@@ -84,8 +84,14 @@ const route = nullable((raw) => object(raw, {
   }), 16),
 }));
 const appearance = nullable((raw) => object(raw, {
-  ...fields("ready formReady formRendererActive", flag),
-  ...fields("authority source outfitName hatName form formAuthority formMeshName", text),
+  ...fields("ready formReady formRendererActive ghostActive ghostVisible petrificationActive petrificationTriggered blindnessActive", flag),
+  ...fields("ghostReady petrificationReady blindnessReady", bool),
+  ...fields("authority source outfitName hatName formAuthority formMeshName", text),
+  form: nullable(value => { if (!["unknown", "normal", "skeleton", "mushroom", "chicken", "ghost"].includes(value)) throw fail("unsupported-appearance-form"); return value; }),
+  ghostPosition: pos,
+  ghostRotation: nullable(array(number(-1, 1), 4, 4)),
+  petrificationAmount: nullable(number(-1_000, 1_000)),
+  petrificationProgress: nullable(number(0, 1)),
   ...fields("skinIndex eyesIndex mouthIndex accessoryIndex outfitIndex hatIndex effectiveHatIndex sashIndex medalIndex", nullable(integer(-1, 100_000))),
   skinColor: nullable(array(number(0, 255), 4, 3)),
   formMaterialNames: array(string(), 16),

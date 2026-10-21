@@ -1,3 +1,5 @@
+import { observedAppearanceVisuals, petrificationCoverage } from "./appearance-visuals.js";
+
 const DEFAULT_INDEX_URL = new URL("../data/game-assets/catalog.json", import.meta.url);
 
 function textKey(value) {
@@ -30,7 +32,9 @@ function safeChildUrl(baseUrl, reference) {
 }
 
 async function fetchJson(url, fetchImpl) {
-  const response = await fetchImpl(url, { cache: "force-cache" });
+  // Catalogs grow when a new exact build or observed state is published. Keep
+  // immutable geometry cached, but revalidate these mutable indexes with ETag.
+  const response = await fetchImpl(url, { cache: "no-cache" });
   if (!response?.ok) throw new Error(`真实游戏素材目录读取失败（${response?.status ?? "network"}）`);
   const value = await response.json();
   if (!value || typeof value !== "object") throw new Error("真实游戏素材目录不是 JSON 对象");
@@ -191,14 +195,31 @@ export function resolveAppearanceForm(pack, appearance) {
   const transformed = !["normal", "unknown"].includes(form);
   // null/absent means legacy telemetry. An explicit failed observation must
   // clear a prior form, not silently claim that the player became human again.
-  const unavailable = appearance?.formReady === false || appearance?.formReady === true && form === "unknown";
-  const entry = transformed && Array.isArray(pack?.customization?.forms)
-    ? pack.customization.forms.find((entry) => entry.form === form) || null : null;
+  const ghost = form === "ghost";
+  const unavailable = appearance?.formReady === false || appearance?.formReady === true && form === "unknown"
+    || ghost && !observedAppearanceVisuals(appearance).ghost.active;
+  const entry = ghost ? pack?.customization?.ghost?.telemetrySupported === true ? pack.customization.ghost : null
+    : transformed && Array.isArray(pack?.customization?.forms)
+      ? pack.customization.forms.find((entry) => entry.form === form) || null : null;
   return {
     form, transformed, unavailable, entry,
-    headModelUrl: resolveGameAssetUrl(pack, entry?.headModel),
-    modelUrl: resolveGameAssetUrl(pack, entry?.model),
+    headModelUrl: unavailable ? null : resolveGameAssetUrl(pack, entry?.headModel),
+    modelUrl: unavailable ? null : resolveGameAssetUrl(pack, entry?.model),
   };
+}
+
+export function resolveAppearanceVisuals(pack, appearance, headOnly = false) {
+  const observed = observedAppearanceVisuals(appearance);
+  // These renderers belong to the living character prefab, not PlayerGhost.
+  if (appearance?.formReady === true && appearance.form === "ghost") return [];
+  return ["petrification", "blindness"].filter(key => observed[key].active).map(key => {
+    const entry = pack?.customization?.stateVisuals?.[key];
+    const reference = key === "petrification" && headOnly ? entry?.headModel : entry?.model;
+    const amount = key === "petrification" ? appearance.petrificationAmount : null;
+    const coverage = key === "petrification" ? petrificationCoverage(amount, entry) : 1;
+    return { state: key, entry, amount, coverage,
+      modelUrl: entry?.telemetrySupported === true && coverage !== null ? resolveGameAssetUrl(pack, reference) : null };
+  });
 }
 
 export function resolveAppearanceAssets(pack, appearance) {

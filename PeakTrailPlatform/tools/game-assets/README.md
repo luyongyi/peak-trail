@@ -97,6 +97,7 @@ $env:PEAK_TRAIL_GAME_DATA = 'local/unpacked/25739797'
 & local/python/.venv/Scripts/python.exe PeakTrailPlatform/tools/game-assets/export-form-assets.py --build 25739797 --output local/avatar-assets-25739797
 & local/python/.venv/Scripts/python.exe PeakTrailPlatform/tools/game-assets/export-ghost-assets.py --build 25739797 --output local/avatar-assets-25739797
 & local/python/.venv/Scripts/python.exe PeakTrailPlatform/tools/game-assets/export-state-assets.py --build 25739797 --output local/avatar-assets-25739797
+& local/python/.venv/Scripts/python.exe PeakTrailPlatform/tools/game-assets/prepare-live-visual-assets.py local/avatar-assets-25739797/25739797
 ```
 
 `--extra-hats-only` adds missing native hat renderers to an existing catalog while
@@ -116,13 +117,18 @@ failure, rather than a silent fallback to another game's artwork. This requires 
 receiver, shared-root permissions or public URL changes.
 
 The independent PlayerGhost body/face layers and the original petrification and
-blindness layers are also archived with source geometry, material properties,
-textures and activation evidence. They are marked `telemetrySupported: false`:
-recorder 0.8.4 cannot select them from actual instance visibility, and a death or
-status amount alone must not be used to invent that visual state. The three
-recorded transformations below remain the supported live forms. Custom Unity
-shaders, animation and shadow-only/first-person proxy renderers are not presented
-as reconstructed third-person characters.
+blindness layers retain source geometry, material properties, textures and
+activation evidence. Recorder 0.8.5 supplies their independent readiness and
+native state observations. `prepare-live-visual-assets.py` adds a stone portrait
+from the original separate `Statue head` renderer and decodes the ghost's own
+third-eye mask offline. It writes new derivative URLs and updates the mutable
+build catalog's telemetry contract; the previously published source-model bytes
+and their export-time metadata remain intact. Ghosts stay separate from ordinary
+`forms[]` and require their true owner's recorded face. A death or ordinary status
+amount alone must not select a visual state. Custom Unity shaders, animation and
+shadow-only/first-person proxy renderers are not presented as reconstructed
+third-person characters. The web's stone coverage is an approximation driven by
+the actual recorded material amount and progress.
 
 ## Private current-local appearance preview
 

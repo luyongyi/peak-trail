@@ -1,4 +1,5 @@
 import { tr } from "./i18n.js";
+import { observedAppearanceVisuals } from "./appearance-visuals.js";
 const number = (value) => typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
 const text = (value) => typeof value === "string" ? value : null;
 
@@ -114,6 +115,25 @@ export function conditionSummary(status) {
 
 export function appearanceFormPresentation(appearance) {
   if (appearance?.formReady !== true || appearance.form === "unknown") return { known: false, transformed: false, label: tr("形态未记录", "Form not recorded") };
-  const names = { normal: tr("普通形态", "Normal form"), skeleton: tr("骷髅形态", "Skeleton form"), mushroom: tr("蘑菇形态", "Mushroom form"), chicken: tr("鸡形态", "Chicken form") };
+  const names = { normal: tr("普通形态", "Normal form"), skeleton: tr("骷髅形态", "Skeleton form"), mushroom: tr("蘑菇形态", "Mushroom form"), chicken: tr("鸡形态", "Chicken form"), ghost: tr("幽灵形态", "Ghost form") };
+  if (appearance.form === "ghost" && !observedAppearanceVisuals(appearance).ghost.active) return { known: false, transformed: false, label: tr("幽灵状态未确认", "Ghost state unconfirmed") };
   return { known: Boolean(names[appearance.form]), transformed: appearance.form !== "normal", label: names[appearance.form] || tr("未知变形", "Unknown transformation") };
+}
+
+export function appearanceVisualPresentation(appearance) {
+  const observed = observedAppearanceVisuals(appearance), labels = [];
+  if (observed.ghost.active) {
+    labels.push({ state: "ghost", label: tr("幽灵", "Ghost"), detail: appearance.ghostVisible === false
+      ? tr("游戏录制视角隐藏此幽灵；观战仍显示实际实体", "Hidden in the recorder's game view; the observed ghost is shown to spectators")
+      : tr("实际所属幽灵实体", "Observed owner-matched ghost") });
+    return labels; // Living character overlays do not belong to PlayerGhost.
+  }
+  if (observed.petrification.active) {
+    const progress = Number.isFinite(appearance.petrificationProgress) ? Math.round(appearance.petrificationProgress * 100) : null;
+    labels.push({ state: "petrification", label: tr("石化", "Petrification") + (progress === null ? "" : ` ${progress}%`),
+      detail: tr("原生石化层已启用；按记录进度显示静态材质近似", "Native stone layer active; a static material approximation follows the recorded progress") });
+  } else if (appearance?.petrificationReady === false) labels.push({ state: "unknown", label: tr("石化画面未确认", "Petrification visual unknown") });
+  if (observed.blindness.active) labels.push({ state: "blindness", label: tr("失明", "Blindness"), detail: tr("原生失明面罩已启用", "Native blindness card active") });
+  else if (appearance?.blindnessReady === false) labels.push({ state: "unknown", label: tr("失明画面未确认", "Blindness visual unknown") });
+  return labels;
 }

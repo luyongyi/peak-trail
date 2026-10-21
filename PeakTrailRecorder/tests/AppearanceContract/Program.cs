@@ -64,3 +64,4 @@ partial.Form = "unknown";
 Assert(JsonConvert.DeserializeObject<AppearanceTelemetry>(partial.Fingerprint())?.Form == "unknown",
     "Lost observation must explicitly clear a previous transformed form, not retain the skull.");
 Console.WriteLine("PeakTrail appearance contract passed.");
+AppearanceStateContract.Run(args);

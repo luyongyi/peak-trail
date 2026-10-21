@@ -350,7 +350,7 @@ internal sealed class RecordingSession : IDisposable
             AppearanceTelemetry? appearance = PlayerAppearanceReader.Read(character, nowMs - player.FirstObservedAtMs);
             if (appearance != null)
             {
-                string appearanceFingerprint = appearance.Fingerprint();
+                string appearanceFingerprint = activeSegment + ":" + appearance.Fingerprint();
                 if (!string.Equals(player.LastAppearanceFingerprint, appearanceFingerprint, StringComparison.Ordinal))
                 {
                     WriteRecord(new Dictionary<string, object?>
@@ -358,6 +358,7 @@ internal sealed class RecordingSession : IDisposable
                         ["type"] = "appearance",
                         ["t"] = nowMs,
                         ["playerId"] = player.Identity.PlayerId,
+                        ["activeSegment"] = activeSegment,
                         ["appearance"] = appearance,
                     });
                     player.LastAppearanceFingerprint = appearanceFingerprint;
@@ -538,7 +539,7 @@ internal sealed class RecordingSession : IDisposable
                 WriteLiveOnly(new Dictionary<string, object?>
                 {
                     ["type"] = "appearance", ["t"] = nowMs,
-                    ["playerId"] = playerId, ["appearance"] = appearance,
+                    ["playerId"] = playerId, ["activeSegment"] = GetActiveSegment(), ["appearance"] = appearance,
                 });
             }
             // A fresh publisher needs complete change-driven state even if nothing changed.
@@ -689,6 +690,13 @@ internal sealed class RecordingSession : IDisposable
     {
         if (_tracked.TryGetValue(actorNumber, out TrackedPlayer? tracked))
         {
+            // Clear visual evidence before leave so reconnect snapshots cannot
+            // preserve a departed player's last ghost/stone/blind renderer.
+            WriteRecord(new Dictionary<string, object?>
+            {
+                ["type"] = "appearance", ["t"] = ElapsedMilliseconds,
+                ["playerId"] = tracked.Identity.PlayerId, ["activeSegment"] = GetActiveSegment(), ["appearance"] = new AppearanceTelemetry(),
+            });
             WritePlayerEvent("leave", tracked, source);
             DetachCharacterCallbacks(tracked);
             _tracked.Remove(actorNumber);

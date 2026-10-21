@@ -305,6 +305,87 @@ test("independent latest state survives history eviction and initial hello has o
   assert.equal(next.event, "record"); assert.equal(next.body.seq, 8);
 });
 
+test("visual appearance fields have a closed typed HTTP contract without source identities", async t => {
+  const f = await fixture(t), session = (await f.create()).body;
+  const appearance = { ready: true, formReady: true, form: "ghost", ghostReady: true, ghostActive: true,
+    ghostVisible: false, ghostPosition: [10, 20, -30], ghostRotation: [0, 0, 0, 1],
+    petrificationReady: true, petrificationActive: true, petrificationAmount: .625,
+    petrificationTriggered: true, petrificationProgress: .5, blindnessReady: true, blindnessActive: true };
+  const record = value => ({ type: "appearance", t: 0, playerId: "p1", appearance: value });
+  for (const invalid of [{ ownerId: "private" }, { ghostOwner: "private" }, { ghostReady: null }, { ghostReady: "true" },
+    { ghostActive: 1 }, { ghostVisible: "false" }, { ghostPosition: [1, 2] }, { ghostPosition: [1_000_001, 0, 0] },
+    { ghostPosition: ["1", 0, 0] }, { ghostRotation: [0, 0, 1] }, { ghostRotation: [0, 0, 0, 1.01] },
+    { petrificationReady: null }, { petrificationAmount: 1001 }, { petrificationAmount: "0.5" },
+    { petrificationProgress: -.1 }, { petrificationProgress: 1.1 }, { petrificationTriggered: "true" },
+    { blindnessReady: 1 }, { blindnessActive: "true" }, { form: "guessed-from-death" }]) {
+    const result = await f.send(session, [wrap(record({ ...appearance, ...invalid }), 1)]);
+    assert.equal(result.status, 400, JSON.stringify(invalid));
+    assert.equal(f.live.liveV2.sessions.get(session.sessionId).lastSeq, 0);
+  }
+  assert.equal((await f.send(session, [wrap(record(appearance), 1)])).body.accepted, 1);
+  assert.equal((await f.send(session, [wrap(record({ ...appearance, petrificationAmount: -1.25 }), 2)])).body.accepted, 1,
+    "native shader values are bounded but not clamped to a normalized progress range");
+  const unknown = { ready: false, formReady: false, form: "unknown", ghostReady: false, ghostActive: null, ghostVisible: null,
+    petrificationReady: false, petrificationActive: null, petrificationAmount: null,
+    petrificationTriggered: null, petrificationProgress: null, blindnessReady: false, blindnessActive: null };
+  assert.equal((await f.send(session, [wrap(record(unknown), 3)])).body.accepted, 1);
+});
+
+test("native visual updates survive latest snapshots and SSE retry while producer takeover clears the old epoch", async t => {
+  const f = await fixture(t, { limits: { historyRecords: 2 } }), session = (await f.create()).body;
+  const active = { ready: true, formReady: true, form: "ghost", ghostReady: true, ghostActive: true,
+    ghostVisible: false, ghostPosition: [100, 50, -20], ghostRotation: [0, 0, 0, 1],
+    petrificationReady: true, petrificationActive: true, petrificationAmount: .625,
+    petrificationTriggered: true, petrificationProgress: .5, blindnessReady: true, blindnessActive: true };
+  const clear = { ready: true, formReady: true, form: "normal", ghostReady: true, ghostActive: false, ghostVisible: false,
+    petrificationReady: true, petrificationActive: false, petrificationTriggered: false, blindnessReady: true, blindnessActive: false };
+  const unknown = { ready: false, formReady: false, form: "unknown", ghostReady: false, ghostActive: null,
+    petrificationReady: false, petrificationActive: null, blindnessReady: false, blindnessActive: null };
+  const appearanceRecord = (t, appearance) => ({ type: "appearance", t, playerId: "p1", appearance });
+  const initial = [wrap(sample(0), 1), wrap(appearanceRecord(100, active), 2), wrap(sample(200), 3), wrap(sample(300), 4)];
+  assert.equal((await f.send(session, initial)).body.accepted, 4);
+  const view = await f.stream(session), hello = await view.next();
+  assert.equal(hello.event, "hello");
+  assert.deepEqual(hello.body.snapshot.records.find(entry => entry.record.type === "appearance").record.appearance, active);
+  assert.equal(hello.body.snapshot.records.find(entry => entry.record.type === "appearance").seq, 2,
+    "independent latest appearance is retained after its history entry is evicted");
+  const trace = createLiveTrace(hello.body.manifest);
+  for (const entry of hello.body.snapshot.records) appendLiveRecord(trace, entry.record);
+  finalizeLiveFlush(trace);
+  assert.equal(tracePlayerStateAtTime(trace, "p1", .3).appearance.ghostActive, true);
+  assert.notDeepEqual(trace.tracks.get("p1").at(-1).pos, active.ghostPosition);
+
+  const cleared = wrap(appearanceRecord(400, clear), 5);
+  assert.equal((await f.send(session, [cleared])).body.accepted, 1);
+  const frame = await view.next(); assert.equal(frame.event, "record"); assert.equal(frame.id, "5");
+  assert.deepEqual(frame.body.record.appearance, clear); appendLiveRecord(trace, frame.body.record); finalizeLiveFlush(trace);
+  const state = tracePlayerStateAtTime(trace, "p1", .4).appearance;
+  assert.equal(state.ghostActive, false); assert.equal(state.ghostPosition, null); assert.equal(state.petrificationAmount, null);
+  assert.equal(state.blindnessActive, false);
+  const retry = await f.send(session, [cleared]); assert.equal(retry.body.accepted, 0); assert.equal(retry.body.duplicates, 1);
+  const repeated = (await f.create()).body;
+  assert.equal(repeated.epoch, session.epoch); assert.equal(repeated.lastProducerSeq, 5);
+  const resumed = await f.stream(session, `?after=4&epoch=${session.epoch}`);
+  assert.equal((await resumed.next()).event, "resumed");
+  assert.deepEqual((await resumed.next()).body.record.appearance, clear); await resumed.close();
+  const late = await f.stream(session);
+  assert.deepEqual((await late.next()).body.snapshot.records.filter(entry => entry.record.type === "appearance").at(-1).record.appearance, clear);
+  await late.close();
+
+  await f.send(session, [wrap(appearanceRecord(500, unknown), 6)]);
+  assert.deepEqual((await view.next()).body.record.appearance, unknown);
+  f.advance(15_001); assert.equal((await view.next()).body.status, "reconnecting");
+  const next = (await f.create({ clientId: "c".repeat(32) })).body;
+  assert.equal(next.epoch, session.epoch + 1); assert.equal(next.watchId, session.watchId);
+  const reset = await view.next(); assert.equal(reset.event, "hello"); assert.deepEqual(reset.body.snapshot.records, []);
+  assert.equal((await f.send(session, [wrap(appearanceRecord(600, active), 7)])).status, 401);
+  await f.send(next, [wrap(appearanceRecord(0, unknown), 1)]);
+  const newFrame = await view.next(); assert.equal(newFrame.body.epoch, next.epoch); assert.equal(newFrame.body.seq, 1);
+  const newTrace = createLiveTrace(reset.body.manifest); appendLiveRecord(newTrace, newFrame.body.record); finalizeLiveFlush(newTrace);
+  assert.equal(tracePlayerStateAtTime(newTrace, "p1", 0).appearance.ghostActive, null);
+  assert.equal(tracePlayerStateAtTime(newTrace, "p1", 0).appearance.blindnessActive, null);
+});
+
 test("a late viewer preserves presence, life and consciousness after their events leave the history window", async (t) => {
   const f = await fixture(t, { limits: { historyRecords: 2 } }), session = (await f.create()).body;
   const records = [

@@ -306,6 +306,8 @@ test("rejoining never revives a dead member, but living reconnects and explicit 
     player.events = events([{ tMs: 100, kind: "dead" }, { tMs: 200, kind: "leave" }, { tMs: 300, kind: "join" }]);
     assert.equal(playerSummitCompleted(raw, player), false);
     assert.equal(extractStageRoutes(raw, player, stage).completion, "partial");
+    assert.deepEqual(aggregateHeatmap(extractStageRoutes(raw, player, stage).routes.map(route => route.points)), [],
+      "ghost movement and a team stage/finish cannot contribute any heatmap cells");
     assert.deepEqual(extractInspectionStage(raw, player, stage).points, [], "reconnected ghost positions stay excluded");
     const revived = structuredClone(player);
     revived.events = events([{ tMs: 100, kind: "dead" }, { tMs: 200, kind: "leave" }, { tMs: 300, kind: "join" }, { tMs: 700, kind: "revive" }]);

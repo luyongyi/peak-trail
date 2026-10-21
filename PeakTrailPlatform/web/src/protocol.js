@@ -408,6 +408,10 @@ function normalizeAppearance(record) {
   const ready = typeof raw.ready === "boolean"
     ? raw.ready
     : typeof record.appearanceReady === "boolean" ? record.appearanceReady : null;
+  const observedFlag = value => typeof value === "boolean" ? value : null;
+  const observedNumber = (value, min, max) => typeof value === "number" && Number.isFinite(value) && value >= min && value <= max ? value : null;
+  const observedVector = (value, length, bound) => Array.isArray(value) && value.length === length
+    && value.every(part => typeof part === "number" && Number.isFinite(part) && Math.abs(part) <= bound) ? [...value] : null;
   const appearance = {
     ready,
     authority: asId(raw.authority ?? record.authority),
@@ -425,12 +429,26 @@ function normalizeAppearance(record) {
     hatName: asId(raw.hatName),
     skinColor: appearanceColor(raw.skinColor ?? raw.color),
     formReady: typeof raw.formReady === "boolean" ? raw.formReady : null,
-    form: raw.formReady === true && ["normal", "skeleton", "mushroom", "chicken"].includes(raw.form) ? raw.form : "unknown",
+    form: raw.formReady === true && ["normal", "skeleton", "mushroom", "chicken", "ghost"].includes(raw.form) ? raw.form : "unknown",
     formAuthority: asId(raw.formAuthority),
     formMeshName: asId(raw.formMeshName),
     formMaterialNames: Array.isArray(raw.formMaterialNames)
       ? raw.formMaterialNames.filter((value) => typeof value === "string").slice(0, 16) : [],
     formRendererActive: typeof raw.formRendererActive === "boolean" ? raw.formRendererActive : null,
+    // These are independent native visual observations, never deductions from
+    // death, status amounts, inventory or a previous appearance snapshot.
+    ghostReady: observedFlag(raw.ghostReady),
+    ghostActive: raw.ghostReady === true ? observedFlag(raw.ghostActive) : null,
+    ghostVisible: raw.ghostReady === true ? observedFlag(raw.ghostVisible) : null,
+    ghostPosition: raw.ghostReady === true && raw.ghostActive === true ? observedVector(raw.ghostPosition, 3, 1_000_000) : null,
+    ghostRotation: raw.ghostReady === true && raw.ghostActive === true ? observedVector(raw.ghostRotation, 4, 1) : null,
+    petrificationReady: observedFlag(raw.petrificationReady),
+    petrificationActive: raw.petrificationReady === true ? observedFlag(raw.petrificationActive) : null,
+    petrificationAmount: raw.petrificationReady === true && raw.petrificationActive === true ? observedNumber(raw.petrificationAmount, -1_000, 1_000) : null,
+    petrificationTriggered: raw.petrificationReady === true ? observedFlag(raw.petrificationTriggered) : null,
+    petrificationProgress: raw.petrificationReady === true ? observedNumber(raw.petrificationProgress, 0, 1) : null,
+    blindnessReady: observedFlag(raw.blindnessReady),
+    blindnessActive: raw.blindnessReady === true ? observedFlag(raw.blindnessActive) : null,
   };
   appearance.captured = Boolean(
     nested
@@ -439,6 +457,7 @@ function normalizeAppearance(record) {
     || appearance.source
     || appearance.skinColor
     || appearance.formReady !== null
+    || appearance.ghostReady !== null || appearance.petrificationReady !== null || appearance.blindnessReady !== null
     || [
       appearance.skinIndex,
       appearance.eyesIndex,
@@ -699,7 +718,7 @@ async function loadSingleTrace(bundle, manifestMatch, streamFiles, parsedStreams
         }
         const appearance = normalizeAppearance(record);
         if (!appearanceTracks.has(playerId)) appearanceTracks.set(playerId, []);
-        appearanceTracks.get(playerId).push({ t, rawT: rawTime, appearance });
+        appearanceTracks.get(playerId).push({ t, rawT: rawTime, activeSegment: asActiveSegment(record.activeSegment, null), appearance });
         if (appearance.captured) appearanceSamples += 1;
         continue;
       }
@@ -1305,7 +1324,7 @@ export function appendLiveRecord(trace, record) {
     liveEnsureParticipant(trace, record);
     const appearance = normalizeAppearance(record);
     if (!trace.appearanceTracks.has(playerId)) trace.appearanceTracks.set(playerId, []);
-    trace.appearanceTracks.get(playerId).push({ t, rawT: rawTime, appearance });
+    trace.appearanceTracks.get(playerId).push({ t, rawT: rawTime, activeSegment: asActiveSegment(record.activeSegment, null), appearance });
     trace.telemetry.hasAppearance ||= appearance.captured;
     return true;
   }
@@ -1495,6 +1514,7 @@ export function tracePlayerStateAtTime(trace, playerId, seconds) {
     telemetryTime,
     inventoryTime: inventoryEntry?.t ?? null,
     appearanceTime: appearanceEntry?.t ?? null,
+    appearanceActiveSegment: appearanceEntry?.activeSegment ?? null,
   };
 }
 

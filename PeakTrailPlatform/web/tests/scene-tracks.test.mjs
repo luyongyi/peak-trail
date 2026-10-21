@@ -49,11 +49,53 @@ function defaultSamples() {
   ];
 }
 const player = (scene) => scene.playerObjects.get("synthetic-player");
+const ghostEntry = (t, pos, extra = {}) => ({ t, activeSegment: 1, appearance: {
+  ghostReady: true, ghostActive: true, ghostVisible: false, ghostPosition: pos, ghostRotation: [0, 0, 0, 1], ...extra } });
 function vec3(attribute, index) { return [attribute.getX(index), attribute.getY(index), attribute.getZ(index)]; }
 function close(actual, expected, tolerance = 1e-5) {
   assert.equal(actual.length, expected.length);
   actual.forEach((value, i) => assert.ok(Math.abs(value - expected[i]) <= tolerance, `${value} != ${expected[i]} at ${i}`));
 }
+
+test("observed ghost uses its independent interpolated position and quaternion without changing corpse tracks", () => {
+  const scene = fixture({ events: [{ type: "death", playerId: "synthetic-player", t: .2 }] });
+  const appearances = [ghostEntry(.4, [110, 220, 330]), ghostEntry(.8, [114, 224, 334], { ghostRotation: [0, 1, 0, 0] })];
+  scene.trace.appearanceTracks = new Map([["synthetic-player", appearances]]);
+  const original = structuredClone(scene.trace.tracks), recorded = structuredClone(appearances);
+  scene.buildTracks(); scene.setTime(.6);
+  const marker = player(scene).marker;
+  close(marker.position.toArray(), [12, 22, 32]);
+  close(marker.quaternion.toArray(), [0, Math.SQRT1_2, 0, Math.SQRT1_2]);
+  assert.equal(marker.visible, true); assert.equal(marker.userData.followable, true);
+  assert.equal(marker.userData.nativeGhostVisible, false, "the local first-person hide does not hide the spectator's real ghost");
+  assert.deepEqual(scene.trace.tracks, original); assert.deepEqual(appearances, recorded);
+  appearances.push(ghostEntry(1, null, { ghostReady: false, ghostActive: null }));
+  scene.setTime(1); assert.equal(marker.userData.ghost, false); assert.equal(marker.userData.followable, false);
+  assert.notDeepEqual(marker.position.toArray(), [14, 24, 34], "unknown clears the old flying location");
+});
+
+test("ghost interpolation never bridges unknown, inactive, different stages, gaps or lifecycle discontinuities", () => {
+  for (const change of [next => { next.appearance.ghostReady = false; }, next => { next.appearance.ghostActive = false; },
+    next => { next.activeSegment = 2; }, next => { next.activeSegment = null; }, next => { next.t = 10; }]) {
+    const scene = fixture(), next = ghostEntry(.8, [120, 230, 340]); change(next);
+    scene.trace.appearanceTracks = new Map([["synthetic-player", [ghostEntry(.4, [110, 220, 330]), next]]]);
+    close(scene.ghostMarkerAtTime("synthetic-player", .6, 1.5).pos, [110, 220, 330]);
+  }
+  const scene = fixture();
+  scene.trace.appearanceTracks = new Map([["synthetic-player", [ghostEntry(.4, [110, 220, 330]), ghostEntry(.8, [120, 230, 340])]]]);
+  close(scene.ghostMarkerAtTime("synthetic-player", .6, 1.5, [{ type: "leave", t: .7 }]).pos, [110, 220, 330]);
+  close(scene.ghostMarkerAtTime("synthetic-player", 3, 1.5).pos, [120, 230, 340]);
+});
+
+test("appearance-only ghosts create a bounded marker without manufacturing any route samples", () => {
+  const scene = fixture({ samples: [] });
+  scene.trace.appearanceTracks = new Map([["synthetic-player", [ghostEntry(0, [110, 220, 330])]]]);
+  scene.buildTracks(); scene.setTime(0);
+  assert.equal(player(scene).marker.visible, true); assert.equal(player(scene).line.geometry.instanceCount, 0);
+  assert.equal(scene.trace.tracks.get("synthetic-player").length, 0);
+  scene.trace.appearanceTracks.get("synthetic-player").push(ghostEntry(1, null, { ghostActive: false }));
+  scene.setTime(1); assert.equal(player(scene).marker.visible, false);
+});
 
 test("trail depth passes are complementary, transparent and do not write depth", () => {
   const scene = fixture(); scene.buildTracks();

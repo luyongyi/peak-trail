@@ -56,6 +56,9 @@ internal static class AppearanceFormReader
             result.FormMeshName = null;
             result.FormMaterialNames = Array.Empty<string>();
         }
+        // State visuals have their own readiness. An actual ghost must survive
+        // the ordinary body's spawn grace period or temporarily missing refs.
+        AppearanceStateReader.Read(character, result);
         return result;
     }
 

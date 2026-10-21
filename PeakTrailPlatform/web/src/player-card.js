@@ -1,6 +1,6 @@
 import { renderHeadPreview, headAppearanceFingerprint } from "./avatar-renderer.js";
 import { getLocale, tr, gameItemName } from "./i18n.js";
-import { staminaLayout, conditionPresentation, conditionSummary, appearanceFormPresentation, effectPresentation } from "./player-conditions.js";
+import { staminaLayout, conditionPresentation, conditionSummary, appearanceFormPresentation, appearanceVisualPresentation, effectPresentation } from "./player-conditions.js";
 import {
   gameAssetFingerprint,
   resolveAppearanceAssets,
@@ -552,6 +552,12 @@ function updateAppearance(row, playerState, context) {
   context.onPortrait?.(null);
   panel.classList.remove("is-ready", "is-partial", "is-syncing", "is-unknown", "is-local-current");
   features.replaceChildren();
+  for (const visual of appearanceVisualPresentation(appearance)) {
+    const chip = element("span", "appearance-feature appearance-visual-state", visual.label);
+    chip.dataset.visualState = visual.state;
+    if (visual.detail) chip.title = visual.detail;
+    features.append(chip);
+  }
   imageSource(avatar, null, "", panel);
   avatar.hidden = true;
   placeholder.hidden = false;
@@ -611,13 +617,14 @@ function updateAppearance(row, playerState, context) {
     ["sash", tr("肩带", "Sash"), assets?.components.sash],
     ["medal", tr("徽章", "Medal"), assets?.components.medal],
   ]) {
-    if (form.transformed && key !== "hat") continue;
+    if (appearance.form === "ghost" && !["eyes", "mouth", "accessory"].includes(key)) continue;
+    if (form.transformed && appearance.form !== "ghost" && key !== "hat") continue;
     if (appearance.form === "mushroom" && key === "hat") continue;
     const chip = featureChip(label, component);
     if (chip) features.append(chip);
   }
   const skinChip = featureChip(tr("肤色", "Skin"), assets?.components.skin, skin);
-  if (skinChip && !form.transformed) features.prepend(skinChip);
+  if (skinChip && (!form.transformed || appearance.form === "ghost")) features.prepend(skinChip);
 
   fallbackAppearancePreview(panel, avatar, placeholder, title, meta, badge, assets, appearance);
   if (isLocalCurrent) badge.textContent = tr("本地当前 · 非历史", "Current local outfit · Not historical");
@@ -643,7 +650,9 @@ function updateAppearance(row, playerState, context) {
     title.textContent = form.transformed ? form.label : appearance.outfitName || assets?.components.fit?.entry?.name || tr("本局游戏头像", "Portrait from this run");
     meta.textContent = [
       rendered.portraitScope === "whole-form-no-head" ? tr("此形态无头部 · 使用游戏原模型图标", "This form has no head · Showing the game model icon")
+        : rendered.portraitScope === "whole-form-no-separate-head" ? tr("原生幽灵模型 · 使用实际所属玩家的脸部装扮", "Original ghost model with its owner's recorded face")
         : form.transformed ? tr("游戏原生变形头部", "Game transformation head") : form.known ? tr("原始头部、眼睛与嘴型", "Original head, eyes and mouth") : tr("装扮已记录；旧日志未记录途中变形", "Outfit recorded. This older log has no transformation history"),
+      ...(rendered.visualStates?.includes("petrification") ? [tr("石化材质为静态近似", "Petrification uses a static material approximation")] : []),
       rendered.hatName,
     ].filter(Boolean).join(" · ");
   }).catch(() => {
