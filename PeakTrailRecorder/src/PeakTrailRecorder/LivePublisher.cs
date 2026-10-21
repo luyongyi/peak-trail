@@ -39,6 +39,7 @@ internal sealed class LivePublisher : IDisposable
     private string? _sessionId;
     private string? _publishToken;
     private string? _watchUrl;
+    private string? _watchCode;
     private long _epoch = -1;
     private long _sequence;
     private long _epochOrigin;
@@ -68,7 +69,8 @@ internal sealed class LivePublisher : IDisposable
     }
 
     public LivePublisherStatus Status => Volatile.Read(ref _disposed) != 0 ? LivePublisherStatus.Stopped : _status;
-    public string? WatchUrl => Volatile.Read(ref _watchUrl);
+    public string? WatchUrl => Volatile.Read(ref _disposed) != 0 ? null : Volatile.Read(ref _watchUrl);
+    public string? WatchCode => Volatile.Read(ref _disposed) != 0 ? null : Volatile.Read(ref _watchCode);
 
     /// <summary>The legacy producer argument is intentionally never transmitted.</summary>
     public void Configure(TraceManifest manifest, string? producer)
@@ -202,7 +204,7 @@ internal sealed class LivePublisher : IDisposable
         JObject body = ReadObject(response);
         if ((int)response.StatusCode == 409 && (string?)body["error"] == "publisher-active")
         {
-            SetWatchUrl((string?)body["watchId"]);
+            SetWatchDetails((string?)body["watchId"], (string?)body["watchCode"]);
             _status = LivePublisherStatus.Standby;
             _nextRegistrationAt = _clock.ElapsedMilliseconds + Math.Clamp((int?)body["retryAfterMs"] ?? 5000, 1000, 30_000);
             return;
@@ -225,7 +227,7 @@ internal sealed class LivePublisher : IDisposable
         _sessionId = sessionId;
         _publishToken = token;
         _epoch = epoch;
-        SetWatchUrl(watchId);
+        SetWatchDetails(watchId, (string?)body["watchCode"]);
         _heartbeatMs = Math.Clamp((int?)body["heartbeatMs"] ?? 5000, 1000, 5000);
         _nextHeartbeatAt = _clock.ElapsedMilliseconds + _heartbeatMs;
         if (newEpoch)
@@ -291,6 +293,7 @@ internal sealed class LivePublisher : IDisposable
         // capability cannot be renewed: register a fresh session/watch instead.
         if (status != 401 && status != 404 && status != 409 && status != 410) return false;
         _publishToken = null;
+        if (status == 404 || status == 410) ClearWatchDetails();
         _status = LivePublisherStatus.Reconnecting;
         _nextRegistrationAt = _clock.ElapsedMilliseconds + 500;
         return true;
@@ -304,11 +307,25 @@ internal sealed class LivePublisher : IDisposable
         catch (JsonException) { return new JObject(); }
     }
 
-    private void SetWatchUrl(string? watchId)
+    private void SetWatchDetails(string? watchId, string? watchCode)
     {
-        if (string.IsNullOrEmpty(watchId) || watchId.Length > 128) return;
+        if (Volatile.Read(ref _disposed) != 0) return;
+        bool validId = !string.IsNullOrEmpty(watchId) && watchId.Length <= 128;
+        bool validCode = validId && watchCode?.Length == 4;
+        if (validCode)
+            foreach (char letter in watchCode!) validCode &= letter >= 'A' && letter <= 'Z';
         // Never navigate to a URL supplied by the relay response.
-        Volatile.Write(ref _watchUrl, _serverUrl + "/?watch=" + Uri.EscapeDataString(watchId));
+        Volatile.Write(ref _watchUrl, validId ? _serverUrl + "/?watch=" + Uri.EscapeDataString(watchId!) : null);
+        // Codes are assigned to the shared session by the relay, including standby clients.
+        // A missing/invalid code never disables a legacy viewing link or retains an old code.
+        Volatile.Write(ref _watchCode, validCode ? watchCode : null);
+        if (Volatile.Read(ref _disposed) != 0) ClearWatchDetails();
+    }
+
+    private void ClearWatchDetails()
+    {
+        Volatile.Write(ref _watchUrl, null);
+        Volatile.Write(ref _watchCode, null);
     }
 
     private static int RetryDelay(HttpResponseMessage response, int fallback)
@@ -353,6 +370,7 @@ internal sealed class LivePublisher : IDisposable
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
         _status = LivePublisherStatus.Stopped;
+        ClearWatchDetails();
         _cancellation.Cancel();
     }
 }

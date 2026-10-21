@@ -29,10 +29,12 @@ static Dictionary<string, object?> Record(string type, long time, params (string
 }
 static HttpResponseMessage Json(HttpStatusCode status, object value)
     => new(status) { Content = new StringContent(JsonConvert.SerializeObject(value)) };
-static HttpResponseMessage Registered(int epoch = 1, long acknowledged = 0, char identity = 'a')
-    => Json(HttpStatusCode.Created, new
+static HttpResponseMessage Registered(int epoch = 1, long acknowledged = 0, char identity = 'a',
+    string? watchCode = "ABCD", HttpStatusCode status = HttpStatusCode.Created)
+    => Json(status, new
     {
         sessionId = new string(identity, 32), watchId = new string(identity == 'a' ? 'b' : 'd', 32), publishToken = "test-publish-token",
+        watchCode = identity == 'a' ? watchCode : "WXYZ",
         epoch, lastProducerSeq = acknowledged, heartbeatMs = 1000, leaseMs = 15000,
     });
 static IEnumerable<JObject> Envelopes(Captured request)
@@ -98,6 +100,7 @@ using (var live = new LivePublisher("https://relay.invalid", new ManualLogSource
     Check(first.Authorization == "Bearer test-publish-token" && !first.Path.Contains("producer"), "Publishing capability must be private header-only.");
     Check((string?)Envelopes(first).First()["record"]!["type"] == "participant", "Pre-registration participant was lost.");
     Check(live.WatchUrl == "https://relay.invalid/?watch=" + new string('b', 32), "Watch URL must never contain the publishing token.");
+    Check(live.WatchCode == "ABCD", "Registration must expose the relay-assigned live code.");
     await Until(() => handler.Requests.Any(request => request.Path.EndsWith("/heartbeat")), "idle publisher failed to renew lease");
 }
 
@@ -151,6 +154,7 @@ using (var live = new LivePublisher("https://relay.invalid", new ManualLogSource
     JObject[] records = Envelopes(upload).ToArray();
     Check((int)records[0]["producerSeq"]! == 1 && records.All(record => (int)record["record"]!["t"]! == 0), "New epoch must restart sequence and rebase full snapshot.");
     Check(records.Any(record => (string?)record["record"]!["type"] == "participant"), "Reacquisition lost participant.");
+    Check(live.WatchCode == "ABCD", "Lease recovery must preserve the shared session's live code.");
 }
 
 // Ended sessions return 410 for both upload and heartbeat. Renewing their old
@@ -172,6 +176,7 @@ foreach (string expiresAt in new[] { "records", "heartbeat" })
     await Until(() => handler.Requests.Any(request => request.Path.Contains(new string('c', 32)) && request.Path.EndsWith("/records")),
         "410 " + expiresAt + " failed to start a new session");
     Check(live.WatchUrl == "https://relay.invalid/?watch=" + new string('d', 32), "Ended-session recovery must replace the old watch link.");
+    Check(live.WatchCode == "WXYZ", "A new session must replace the ended session's live code.");
     JObject first = Envelopes(handler.Requests.First(request => request.Path.Contains(new string('c', 32)) && request.Path.EndsWith("/records"))).First();
     Check((long)first["producerSeq"]! == 1 && (long)first["record"]!["t"]! == 0
         && (string?)first["record"]!["type"] == "participant", "New session must reset sequence and send its participant snapshot.");
@@ -203,7 +208,7 @@ int standbyCreates = 0;
 using (var handler = new FakeHandler((request, _) =>
 {
     if (request.Path.EndsWith("/sessions") && Interlocked.Increment(ref standbyCreates) == 1)
-        return Task.FromResult(Json(HttpStatusCode.Conflict, new { error = "publisher-active", retryAfterMs = 1000, watchId = new string('b', 32) }));
+        return Task.FromResult(Json(HttpStatusCode.Conflict, new { error = "publisher-active", retryAfterMs = 1000, watchId = new string('b', 32), watchCode = "ABCD" }));
     return Task.FromResult(request.Path.EndsWith("/sessions") ? Registered(2) : Json(HttpStatusCode.OK, new { }));
 }))
 using (var live = new LivePublisher("https://relay.invalid", new ManualLogSource(), handler))
@@ -212,8 +217,46 @@ using (var live = new LivePublisher("https://relay.invalid", new ManualLogSource
     live.Publish(Record("participant", 1, ("playerId", rawPlayer), ("nickname", "Player")), 0);
     await Until(() => live.Status == LivePublisherStatus.Standby, "publisher did not enter standby");
     Check(!handler.Requests.Any(request => request.Path.EndsWith("/records")) && live.WatchUrl != null, "Standby must expose viewing but never upload without a token.");
+    Check(live.WatchCode == "ABCD", "Standby teammates must expose the same relay-assigned live code.");
     live.Publish(Record("sample", 6000, ("playerId", rawPlayer), ("pos", new[] { 8, 2, 3 }), ("yaw", 0)), 0);
     await Until(() => handler.Requests.Any(request => request.Path.EndsWith("/records")), "standby never took over");
+    Check(live.WatchCode == "ABCD", "Taking over a shared session must not replace its live code.");
+}
+
+// Both success statuses and standby accept only the four ASCII capitals supplied by the relay.
+// Missing codes from an older relay must not break existing watch links or publishing.
+foreach (HttpStatusCode status in new[] { HttpStatusCode.Created, HttpStatusCode.OK, HttpStatusCode.Conflict })
+foreach (string? code in new string?[] { "PEAK", null, "", "abcD", "ABC", "ABCDE", "AB1D", "ABCD\n", "ＡBCD" })
+{
+    using var handler = new FakeHandler((request, _) => Task.FromResult(!request.Path.EndsWith("/sessions")
+        ? Json(HttpStatusCode.OK, new { })
+        : status == HttpStatusCode.Conflict
+            ? Json(status, new { error = "publisher-active", retryAfterMs = 30_000, watchId = new string('b', 32), watchCode = code })
+            : Registered(watchCode: code, status: status)));
+    using var live = new LivePublisher("https://relay.invalid", new ManualLogSource(), handler);
+    live.Configure(new TraceManifest { RunId = runId }, null);
+    await Until(() => live.Status == (status == HttpStatusCode.Conflict ? LivePublisherStatus.Standby : LivePublisherStatus.Live),
+        "Registration with optional watch code did not finish");
+    Check(live.WatchCode == (code == "PEAK" ? code : null), "Invalid watch code was exposed: " + code);
+    Check(live.WatchUrl == "https://relay.invalid/?watch=" + new string('b', 32), "Optional watch code broke the compatible watch URL.");
+    live.Dispose();
+    Check(live.WatchCode == null && live.WatchUrl == null, "Stopping active or standby publishing must immediately clear viewing details.");
+}
+
+// Do not keep a previous code if re-registration no longer supplies one.
+int codeCreates = 0;
+using (var handler = new FakeHandler((request, _) => Task.FromResult(request.Path.EndsWith("/sessions")
+    ? Registered(watchCode: Interlocked.Increment(ref codeCreates) == 1 ? "ABCD" : null)
+    : request.Path.EndsWith("/records") && Volatile.Read(ref codeCreates) == 1
+        ? Json(HttpStatusCode.Unauthorized, new { error = "lease-expired" })
+        : Json(HttpStatusCode.OK, new { }))))
+using (var live = new LivePublisher("https://relay.invalid", new ManualLogSource(), handler))
+{
+    live.Configure(new TraceManifest { RunId = runId }, null);
+    await Until(() => live.WatchCode == "ABCD", "Initial live code missing");
+    live.Publish(Record("participant", 1, ("playerId", rawPlayer)), 0);
+    await Until(() => Volatile.Read(ref codeCreates) >= 2 && live.Status == LivePublisherStatus.Live, "Code-less recovery did not finish");
+    Check(live.WatchCode == null && live.WatchUrl != null, "Code-less recovery retained a stale code or lost its viewing link.");
 }
 
 // Dispose must cancel in-flight HTTP immediately and never wait for an end request.
@@ -238,10 +281,11 @@ using (var handler = new FakeHandler(async (request, cancellation) =>
     var elapsed = Stopwatch.StartNew();
     live.Dispose();
     Check(elapsed.ElapsedMilliseconds < 100 && live.Status == LivePublisherStatus.Stopped, "Dispose blocked the caller.");
+    Check(live.WatchCode == null && live.WatchUrl == null, "Dispose retained viewing details while HTTP was in flight.");
     await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(1));
     await Until(() => handler.Requests.Any(request => request.Path.EndsWith("/end")), "best-effort end missing");
 }
-Console.WriteLine("PeakTrail live publisher contract passed: privacy, snapshot/coalescing, fixed cadence, retry, lease, standby, heartbeat, cancellation.");
+Console.WriteLine("PeakTrail live publisher contract passed: privacy, snapshot/coalescing, fixed cadence, retry, lease, standby, live codes, legacy links, heartbeat, cancellation.");
 
 internal sealed record Captured(string Path, string Body, string? Authorization, long AtMs);
 internal sealed class FakeHandler(Func<Captured, CancellationToken, Task<HttpResponseMessage>> respond) : HttpMessageHandler

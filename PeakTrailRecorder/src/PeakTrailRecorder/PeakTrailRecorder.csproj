@@ -3,7 +3,7 @@
     <TargetFramework>netstandard2.1</TargetFramework>
     <AssemblyName>PeakTrailRecorder</AssemblyName>
     <AssemblyTitle>PeakTrailRecorder</AssemblyTitle>
-    <Version>0.8.0</Version>
+    <Version>0.8.1</Version>
     <IsThunderstorePackable>false</IsThunderstorePackable>
   </PropertyGroup>
 

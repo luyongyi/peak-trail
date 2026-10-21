@@ -485,6 +485,8 @@ internal sealed class RecordingSession : IDisposable
 
     public string? LiveWatchUrl => _live?.WatchUrl;
 
+    public string? LiveWatchCode => _live?.WatchCode;
+
     public string? LiveStatus => _live?.Status.ToString();
 
     /// <summary>Changes live publishing without ending or restarting the local recording.</summary>

@@ -15,7 +15,7 @@ namespace PeakTrailRecorder;
 [BepInAutoPlugin]
 public partial class Plugin : BaseUnityPlugin
 {
-    internal const string RecorderVersion = "0.8.0";
+    internal const string RecorderVersion = "0.8.1";
 
     internal static ManualLogSource Log { get; private set; } = null!;
 
@@ -73,7 +73,8 @@ public partial class Plugin : BaseUnityPlugin
             LiveRelayConnection.DefaultServerUrl,
             "Base HTTP(S) URL of the PeakTrail live relay, without user information, query or fragment. Publishing credentials and the single active publisher are managed automatically.");
 
-        NativeLiveSettings.Install(_liveEnabled, () => _session?.LiveWatchUrl, () => _session?.LiveStatus, Log);
+        NativeLiveSettings.Install(_liveEnabled, () => _session?.LiveWatchCode, () => _session?.LiveWatchUrl,
+            () => _session?.LiveStatus, Log);
 
         _mapExportKey = Config.Bind(
             "MapCapture",

@@ -145,22 +145,28 @@ build ID is captured so the viewer can refuse to overlay a trace on geometry fro
   by default. Open the game's **Settings → General → Live path sharing** to turn
   streaming off or on immediately; the preference is saved across runs and restarts.
   The main menu and pause menu use the game's original setting cells, on/off control,
-  fonts, sounds and controller navigation. The adjacent **Live viewing link** button
-  copies a read-only link after the relay confirms the session. No browser setup or
+  fonts, sounds and controller navigation. **Live code (0.8.1)** shows four uppercase
+  letters, for example **ABCD · Copy**. Click to copy only those four letters, then
+  enter them on the website to watch. Teammates in the same session see the same code,
+  including standby publishers; automatic takeover keeps that code. Turning sharing
+  off immediately hides the code and disables copying. The adjacent **Live viewing link**
+  button remains available, and previously shared viewing links still work. No browser setup or
   account is needed. Saved older `[Live] Enabled` preferences are respected.
 - One installation captures the whole synchronized team. If several teammates have
   the DLL, the relay automatically leases one publisher and the others stand by.
   Streaming uses temporary per-session player IDs and a separate publisher credential;
   real platform IDs and the original local recording are not uploaded. New streams use
-  `/api/live/v2`; the old four-character-code upload protocol is disabled by default.
+  `/api/live/v2`; live viewing codes do not enable the old `/api/runs` upload protocol,
+  which remains disabled by default. Codes grant viewing only and are not upload credentials.
   Position sampling is independent of local file sampling, and network requests run
   on a background thread. Local recording can be disabled while streaming continues.
   The relay keeps a bounded recent viewing window; streaming is not a recording archive.
 - The relay origin remains `[Live] ServerUrl = https://peak.mylus.cn`. Existing saved
   origins are respected. HTTP(S) origins cannot contain credentials, paths, queries or
-  fragments, and redirects are not followed. Viewing links grant read access to their
+  fragments, and redirects are not followed. Viewing codes and links grant read access to their
   holders; they do not grant upload rights or appear in a public room directory.
-  Deploy the matching v2 service and web viewer before distributing this DLL.
+  Deploy the matching v2 service and web viewer before distributing this DLL. A new session
+  after the previous one ends, or after a relay restart, can receive a new code and link.
 - Adaptive thresholds: 0.25 m movement, 5 degrees yaw, or a 1 second stationary heartbeat.
 - A separate `state` record is emitted whenever stamina changes by at least `0.002`, and at
   least once per second even if the player does not move. It contains `stamina`, `maxStamina`,
