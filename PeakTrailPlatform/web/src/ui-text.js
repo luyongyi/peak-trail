@@ -1,6 +1,10 @@
 // Website UI copy. Game names (PEAK/NADIR) and BACK retain the exact runtime
 // terms from SerializedTermsData; map, sharing, and replay explanations are ours.
 export const UI_TEXT_PAIRS = Object.freeze([
+  ["全屏", "Fullscreen"],
+  ["进入全屏", "Enter fullscreen"],
+  ["退出全屏", "Exit fullscreen"],
+  ["重试常亮", "Retry keep-awake"],
   ["道具事件", "Item events"],
   ["关闭", "Close"],
   ["道具生成", "Item spawned"],

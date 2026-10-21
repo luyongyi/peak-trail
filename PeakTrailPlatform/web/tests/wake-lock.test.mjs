@@ -116,13 +116,13 @@ test("wake lock reports state changes through onChange", async () => {
   const lock = createWakeLock({
     navigatorRef,
     documentRef: fakeDocument(),
-    onChange: () => changes.push(lock.held),
+    onChange: () => changes.push(lock.status),
   });
   lock.setDesired(true);
   await tick();
   lock.setDesired(false);
   await tick();
-  assert.deepEqual(changes, [true, false]);
+  assert.deepEqual(changes, ["pending", "held", "idle"]);
 });
 
 test("wake lock tolerates denied requests and retries on the next desire bump", async () => {
@@ -139,4 +139,44 @@ test("wake lock tolerates denied requests and retries on the next desire bump", 
   lock.setDesired(true);
   await tick();
   assert.equal(lock.held, true);
+});
+
+test('fullscreen and playback updates do not duplicate a pending request', async () => {
+  let resolve, requests = 0;
+  const sentinel = { release: async () => {}, addEventListener() {} };
+  const navigatorRef = { wakeLock: { request() { requests++; return new Promise(done => { resolve = done; }); } } };
+  const lock = createWakeLock({ navigatorRef, documentRef: fakeDocument() });
+  lock.setDesired(true); lock.setDesired(true); lock.retry(); lock.handleVisibilityChange();
+  assert.equal(requests, 1); assert.equal(lock.status, 'pending');
+  resolve(sentinel); await tick(); assert.equal(lock.held, true);
+});
+
+test('hidden pages release explicitly and delayed release events cannot erase a newer lock', async () => {
+  const releases = [], listeners = [];
+  const navigatorRef = { wakeLock: { async request() {
+    const index = listeners.length;
+    return { release: async () => releases.push(index), addEventListener: (_, callback) => listeners.push(callback) };
+  } } };
+  const documentRef = fakeDocument(), lock = createWakeLock({ navigatorRef, documentRef });
+  lock.setDesired(true); await tick();
+  documentRef.visibilityState = 'hidden'; lock.handleVisibilityChange();
+  assert.equal(lock.status, 'suspended'); assert.equal(lock.held, false); assert.deepEqual(releases, [0]);
+  documentRef.visibilityState = 'visible'; lock.handleVisibilityChange(); await tick();
+  assert.equal(lock.held, true);
+  listeners[0](); assert.equal(lock.held, true, 'old sentinel event must not clear current sentinel');
+  listeners[1](); assert.equal(lock.held, false); assert.equal(lock.status, 'released');
+});
+
+test('late requests are released after visibility loss and user retry reports denial then success', async () => {
+  const doc = fakeDocument(); let finish, released = false;
+  const nav = { wakeLock: { request: () => new Promise(resolve => { finish = resolve; }) } };
+  const lock = createWakeLock({ navigatorRef: nav, documentRef: doc });
+  lock.setDesired(true); doc.visibilityState = 'hidden'; lock.handleVisibilityChange();
+  finish({ release: async () => { released = true; } }); await tick();
+  assert.equal(released, true); assert.equal(lock.held, false);
+  nav.wakeLock.request = async () => { throw new Error('low power'); };
+  doc.visibilityState = 'visible'; lock.handleVisibilityChange(); await tick();
+  assert.equal(lock.status, 'denied');
+  nav.wakeLock.request = async () => ({ release: async () => {}, addEventListener() {} });
+  lock.retry(); await tick(); assert.equal(lock.status, 'held');
 });

@@ -3416,6 +3416,38 @@ body.gate-open .app-shell { visibility: hidden; }
 .app-shell[data-workspace-mode="watch"].watch-empty #watchNotice { top: 50%; }
 .watch-status[data-status="waiting"] strong { color: var(--accent-strong); }
 
+/* Keep fullscreen and wake feedback outside the viewport hidden by airport waiting. */
+.top-actions { position: relative; }
+.screen-controls { display: flex; align-items: center; flex: 0 0 auto; }
+#fullscreenButton { white-space: nowrap; }
+#fullscreenButton[aria-pressed="true"] { border-color: var(--accent); color: var(--accent-strong); }
+.screen-feedback {
+  position: absolute; z-index: 60; top: calc(100% + 8px); right: 0;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  width: max-content; max-width: min(320px, calc(100vw - 24px));
+  padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 9px;
+  background: #101b1cf5; box-shadow: 0 5px 20px #0005; font-size: 11px; line-height: 1.5;
+}
+.screen-feedback .wake-chip { padding: 0; border: 0; font-size: 11px; letter-spacing: 0; white-space: normal; }
+.screen-feedback .button { min-height: 40px; font-size: 11px; }
+.screen-feedback[hidden], #fullscreenMessage[hidden], #wakeLockRetry[hidden], #fullscreenHomeExit { display: none; }
+body.gate-open #fullscreenHomeExit:not([hidden]) {
+  display: inline-flex; position: fixed; z-index: 1000;
+  right: max(16px, env(safe-area-inset-right, 0px)); bottom: max(16px, env(safe-area-inset-bottom, 0px)); min-height: 44px;
+}
+@media (max-width: 743px) {
+  .topbar .brand { grid-column: 1 / -1; grid-row: 1; justify-self: center; }
+  .topbar .top-actions { grid-column: 1 / -1; grid-row: 2; justify-self: stretch; justify-content: center; flex-wrap: wrap; }
+  .topbar .daily-card { grid-row: 3; }
+  .app-shell[data-workspace-mode="watch"] { grid-template-rows: min-content minmax(0, 1fr) calc(128px + env(safe-area-inset-bottom, 0px)); }
+  .app-shell[data-workspace-mode="watch"] .topbar { grid-template-rows: 40px auto 32px; }
+  .app-shell[data-workspace-mode="watch"] .brand { grid-column: 1 / -1; }
+  .app-shell[data-workspace-mode="watch"] .top-actions { grid-column: 1 / -1; grid-row: 2; }
+  .app-shell[data-workspace-mode="watch"] .watch-status { grid-row: 3; }
+  .app-shell[data-workspace-mode="watch"].watch-empty { grid-template-rows: min-content minmax(0, 1fr); }
+  .screen-feedback .button { min-height: 44px; }
+}
+
 .home-watch-entry { position: relative; }
 .item-event-status { position: absolute; left: 18px; bottom: 68px; z-index: 5; max-width: calc(100% - 36px); padding: 5px 9px; border-radius: 6px; background: #14201fdf; color: #cfdbc9; font-size: 11px; pointer-events: none; }
 .item-event-card { position: absolute; left: 18px; bottom: 105px; z-index: 18; width: min(330px, calc(100% - 36px)); padding: 16px; border: 1px solid #c3a86880; border-radius: 12px; background: #14201ff5; color: #edf0df; box-shadow: 0 10px 35px #0006; }

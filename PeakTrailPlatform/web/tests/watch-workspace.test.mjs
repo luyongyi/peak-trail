@@ -128,11 +128,19 @@ test('waiting UI explains airport preparation without showing a map, replay wind
 
 test('waiting does not request a wake lock, while activated live playback retains the existing policy', () => {
   const desired = [], state = { watch: { active: true, status: 'waiting', awaitingRun: true, trace: null }, live: {}, playing: false };
-  const api = functions(['syncWakeLock'], { state, wakeLock: { setDesired: value => desired.push(value) }, syncWakeLockChip() {} });
+  const fullscreen = { active: false };
+  const api = functions(['syncWakeLock'], { state, fullscreen, wakeLock: { setDesired: value => desired.push(value) }, syncWakeLockChip() {} });
   api.syncWakeLock();
   Object.assign(state.watch, { status: 'live', trace: makeTrace(), awaitingRun: false }); api.syncWakeLock();
   state.watch.status = 'ended'; api.syncWakeLock();
   assert.deepEqual(desired, [false, true, false]);
+  Object.assign(state.watch, { status: 'waiting', trace: null, awaitingRun: true });
+  fullscreen.active = true; api.syncWakeLock();
+  fullscreen.active = false; api.syncWakeLock();
+  assert.deepEqual(desired.slice(-2), [true, false], 'fullscreen waiting requests awake; leaving it restores the waiting policy');
+  state.playing = true; fullscreen.active = true; api.syncWakeLock();
+  fullscreen.active = false; api.syncWakeLock();
+  assert.deepEqual(desired.slice(-2), [true, true], 'leaving fullscreen must not release active playback');
 });
 
 test('empty waiting renders clear the old scene without mounting or requesting a cached daily map', async () => {

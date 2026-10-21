@@ -22,6 +22,7 @@ import { classifyRouteSegment, resolveReplayRoute, routeSegmentName } from "./ma
 import { worldTelemetryNote } from "./world-timeline.js";
 import { createTrailEstimator, liveChaseTarget, LIVE_TRAIL_S } from "./live-follow.js";
 import { createWakeLock } from "./wake-lock.js";
+import { createFullscreen } from "./fullscreen.js";
 import { HomePage } from "./home-page.js";
 import { buildHomeDailyView } from "./home-daily.js";
 import { defaultLiveRelay } from "./live-endpoint.js";
@@ -61,6 +62,11 @@ const elements = {
   liveStateRow: $("liveStateRow"),
   liveStatus: $("liveStatus"),
   wakeLockChip: $("wakeLockChip"),
+  fullscreenButton: $("fullscreenButton"),
+  fullscreenHomeExit: $("fullscreenHomeExit"),
+  fullscreenMessage: $("fullscreenMessage"),
+  screenFeedback: $("screenFeedback"),
+  wakeLockRetry: $("wakeLockRetry"),
   liveFollow: $("liveFollow"),
   modeReplay: $("modeReplay"),
   modeLive: $("modeLive"),
@@ -913,32 +919,53 @@ function renderGateRuns() {
   }
 }
 
-// ============ 屏幕常亮：直播会话或回放播放期间防止熄屏 ============
+// ============ 全屏与屏幕常亮 ============
+const fullscreen = createFullscreen({ onChange: () => syncWakeLock() });
 const wakeLock = createWakeLock({ onChange: syncWakeLockChip });
 document.addEventListener("visibilitychange", () => wakeLock.handleVisibilityChange());
+elements.fullscreenButton.addEventListener("click", () => void fullscreen.toggle());
+elements.fullscreenHomeExit.addEventListener("click", () => void fullscreen.toggle());
+elements.wakeLockRetry.addEventListener("click", () => wakeLock.retry());
+syncWakeLockChip();
 
-/** 直播会话存在（SSE 或演示定时器）或回放播放中 → 请求屏幕常亮；暂停/断开即允许熄屏。 */
+/** Fullscreen includes airport waiting; leaving it restores the existing playback policy. */
 function syncWakeLock() {
-  wakeLock.setDesired(Boolean((state.watch?.active && state.watch.trace && !state.watch.awaitingRun && state.watch.status !== "ended") || state.live?.es || state.live?.demoTimer || state.playing));
+  wakeLock.setDesired(Boolean(fullscreen.active || (state.watch?.active && state.watch.trace && !state.watch.awaitingRun && state.watch.status !== "ended") || state.live?.es || state.live?.demoTimer || state.playing));
   syncWakeLockChip();
 }
 
 function syncWakeLockChip() {
+  const button = elements.fullscreenButton;
+  const active = fullscreen.active;
+  button.textContent = active ? tr("退出全屏", "Exit fullscreen") : tr("全屏", "Fullscreen");
+  button.setAttribute("aria-label", active ? tr("退出全屏", "Exit fullscreen") : tr("进入全屏", "Enter fullscreen"));
+  button.setAttribute("aria-pressed", String(active));
+  button.disabled = fullscreen.pending;
+  elements.fullscreenHomeExit.textContent = tr("退出全屏", "Exit fullscreen");
+  elements.fullscreenHomeExit.setAttribute("aria-label", tr("退出全屏", "Exit fullscreen"));
+  elements.fullscreenHomeExit.hidden = !active;
+  elements.fullscreenHomeExit.disabled = fullscreen.pending;
+  const message = elements.fullscreenMessage;
+  message.textContent = fullscreen.error === "unsupported" ? tr("当前浏览器不支持网页全屏", "Page fullscreen is unavailable in this browser")
+    : fullscreen.error === "request-denied" ? tr("未能进入全屏，请再次点击重试", "Could not enter fullscreen. Click again to retry.")
+    : fullscreen.error === "exit-denied" ? tr("未能退出全屏，请重试或按 Esc", "Could not exit fullscreen. Retry or press Esc.") : "";
+  message.hidden = !message.textContent;
   const chip = elements.wakeLockChip;
-  if (!chip) return;
-  const liveActive = Boolean(state.live?.es || state.live?.demoTimer);
+  chip.hidden = !wakeLock.desired;
+  chip.classList.toggle("is-unavailable", wakeLock.desired && !wakeLock.held);
   if (wakeLock.held) {
-    chip.textContent = tr("常亮", "Keep awake");
-    chip.hidden = false;
-    chip.classList.remove("is-unavailable");
-  } else if (liveActive && !wakeLock.supported()) {
-    // 局域网 HTTP 或老浏览器拿不到 Wake Lock API：明说，而不是默默失效。
+    chip.textContent = tr("屏幕常亮已开启", "Screen kept awake");
+  } else if (wakeLock.desired && !wakeLock.supported()) {
     chip.textContent = window.isSecureContext ? tr("当前浏览器不支持防熄屏", "Keep-awake is unavailable in this browser") : tr("需 HTTPS 才能防熄屏", "HTTPS is required to keep the screen awake");
-    chip.hidden = false;
-    chip.classList.add("is-unavailable");
   } else {
-    chip.hidden = true;
+    chip.textContent = wakeLock.status === "pending" ? tr("正在申请屏幕常亮", "Requesting keep-awake")
+      : wakeLock.status === "suspended" ? tr("页面在后台，常亮已暂停", "Keep-awake paused while this page is hidden")
+      : wakeLock.status === "released" ? tr("系统已暂停常亮，屏幕可能熄灭", "Keep-awake was released; the screen may sleep")
+      : tr("未能保持常亮，屏幕可能熄灭", "Keep-awake was denied; the screen may sleep");
   }
+  elements.wakeLockRetry.textContent = tr("重试常亮", "Retry keep-awake");
+  elements.wakeLockRetry.hidden = !wakeLock.desired || !wakeLock.supported() || !["denied", "released"].includes(wakeLock.status);
+  elements.screenFeedback.hidden = message.hidden && chip.hidden;
 }
 
 function enterLive(code) {

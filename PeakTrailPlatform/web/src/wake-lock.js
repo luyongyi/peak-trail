@@ -1,7 +1,4 @@
-/** Screen Wake Lock：直播观看 / 回放播放期间防止屏幕熄屏。
- * 支持 Chrome 84+ / Safari 16.4+（iOS 与 macOS）/ Firefox 126+，且仅安全上下文
- * （HTTPS 或 localhost）可用——局域网 HTTP 下 navigator.wakeLock 不存在。
- * 页面切后台时浏览器会自动释放锁，回前台需重新申请（visibilitychange）。 */
+/** Screen Wake Lock is best effort: visibility, browser support and power policy apply. */
 export function createWakeLock({
   navigatorRef = typeof navigator === "undefined" ? null : navigator,
   documentRef = typeof document === "undefined" ? null : document,
@@ -9,75 +6,60 @@ export function createWakeLock({
 } = {}) {
   let sentinel = null;
   let desired = false;
-  let acquireSequence = 0;
-  let reportedHeld = null;
-
-  const supported = () => Boolean(navigatorRef?.wakeLock);
-
-  // 手动 release 与 sentinel 的 release 事件会在同一次变更里各来一次，
-  // 只在持锁状态真正变化时才通知 UI。
-  function report() {
-    const held = sentinel != null;
-    if (held === reportedHeld) return;
-    reportedHeld = held;
-    onChange();
+  let pending = null;
+  let status = "idle";
+  let reported = null;
+  const supported = () => typeof navigatorRef?.wakeLock?.request === "function";
+  const visible = () => !documentRef || documentRef.visibilityState === "visible";
+  function report(next) {
+    status = next;
+    if (status === reported) return;
+    reported = status; onChange();
   }
-
+  function releaseSentinel(value) {
+    try { Promise.resolve(value?.release?.()).catch(() => {}); } catch { /* already released */ }
+  }
+  function release(next) {
+    pending = null; // Invalidate a non-cancellable native request.
+    const previous = sentinel; sentinel = null;
+    releaseSentinel(previous); report(next);
+  }
   async function acquire() {
-    if (!desired || !supported() || sentinel) return;
-    if (documentRef && documentRef.visibilityState !== "visible") return;
-    const sequence = ++acquireSequence;
+    if (!desired || sentinel || pending) return;
+    if (!supported()) { report("unavailable"); return; }
+    if (!visible()) { report("suspended"); return; }
+    const request = {}; pending = request; report("pending");
     try {
       const next = await navigatorRef.wakeLock.request("screen");
-      // 申请期间用户（或 release）已改变意愿：这次申请作废，立即交还。
-      if (sequence !== acquireSequence) {
-        try { void next.release?.(); } catch { /* 系统已释放 */ }
-        return;
-      }
+      if (pending !== request || !desired || !visible()) { releaseSentinel(next); return; }
+      pending = null;
+      if (next.released) { report("released"); return; }
       sentinel = next;
-      sentinel.addEventListener?.("release", () => {
-        // 系统释放（切后台 / 省电模式）。不自动重试，等 visibilitychange。
-        sentinel = null;
-        report();
+      next.addEventListener?.("release", () => {
+        // A delayed event from an old lock must never erase its replacement.
+        if (sentinel !== next) return;
+        sentinel = null; report(desired ? visible() ? "released" : "suspended" : "idle");
       });
-      report();
+      report("held");
     } catch {
-      // 省电模式等场景会拒绝申请；留待下次 setDesired/可见性变化时重试。
-      report();
+      if (pending !== request) return;
+      pending = null; report("denied");
     }
   }
-
-  function release() {
-    desired = false;
-    acquireSequence += 1; // 让在途的申请作废
-    const current = sentinel;
-    sentinel = null;
-    try { void current?.release?.(); } catch { /* 已被系统释放 */ }
-    report();
-  }
-
   return {
     supported,
     get desired() { return desired; },
     get held() { return sentinel != null; },
-    /** 想要常亮传 true，允许熄屏传 false；重复调用安全。 */
+    get status() { return status; },
     setDesired(next) {
-      next = Boolean(next);
-      if (next === desired) {
-        // 之前申请失败（如省电模式）时再试一次；已有锁则无事发生。
-        if (next) void acquire();
-        return;
-      }
-      if (next) {
-        desired = true;
-        void acquire();
-      } else {
-        release();
-      }
+      desired = Boolean(next);
+      if (desired) void acquire();
+      else if (sentinel || pending || status !== "idle") release("idle");
     },
-    /** 页面回到前台：若锁被系统释放，按需重新申请。 */
+    retry() { if (desired) void acquire(); },
     handleVisibilityChange() {
-      if (desired && !sentinel) void acquire();
+      if (!visible()) release(desired ? "suspended" : "idle");
+      else if (desired) void acquire();
     },
   };
 }

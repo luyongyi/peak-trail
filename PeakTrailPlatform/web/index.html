@@ -165,6 +165,14 @@
         </div>
 
         <div class="top-actions">
+          <div class="screen-controls">
+            <button class="button button-ghost" id="fullscreenButton" type="button" aria-label="进入全屏" aria-pressed="false">全屏</button>
+            <div class="screen-feedback" id="screenFeedback" hidden>
+              <span id="fullscreenMessage" role="status" hidden></span>
+              <span id="wakeLockChip" class="wake-chip" role="status" hidden></span>
+              <button class="button button-ghost" id="wakeLockRetry" type="button" hidden>重试常亮</button>
+            </div>
+          </div>
           <button class="button button-ghost" id="watchShare" type="button" hidden>复制观战链接</button>
           <button class="button button-ghost watch-share-link" id="watchShareLink" type="button" hidden>复制链接</button>
           <input
@@ -458,7 +466,6 @@
                 <div class="live-state-row" id="liveStateRow" hidden>
                   <span class="live-dot" aria-hidden="true"></span>
                   <small id="liveStatus">未连接</small>
-                  <span id="wakeLockChip" class="wake-chip" hidden></span>
                   <label class="live-follow"><input id="liveFollow" type="checkbox" checked />跟随</label>
                   <button id="liveDisconnect" type="button">断开</button>
                 </div>
@@ -543,6 +550,8 @@
         <button class="phone-panel-button" id="phonePanelButton" type="button" aria-label="跳到玩家状态与回放设置">玩家 ↓</button>
       </footer>
     </div>
+
+    <button class="button button-secondary" id="fullscreenHomeExit" type="button" aria-label="退出全屏" hidden>退出全屏</button>
 
     <div class="error-banner" id="errorBanner" role="alert">
       <div>
