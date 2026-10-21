@@ -383,8 +383,7 @@ function segmentStatusKey(segment) {
 }
 
 function overviewSegmentOptions() {
-  const mountain = state.segmentOptions.filter((option) => !option.isVoid && !state.routeView?.hiddenSegments.has(option.segment));
-  return mountain.length ? mountain : state.segmentOptions;
+  return state.segmentOptions.filter((option) => !state.routeView?.hiddenSegments.has(option.segment));
 }
 
 function adjacentSegment(options, selected, direction) {
@@ -392,7 +391,7 @@ function adjacentSegment(options, selected, direction) {
   const ordered = [...chapters, ...options.filter((option) => option.isVoid)];
   const index = ordered.findIndex((option) => option.segment === selected);
   // Overview returns to the mountain. From its final chapter the next control
-  // opens Nadir, which remains outside the chapter count and mountain overview.
+  // opens Nadir, which remains outside the five-chapter count.
   if (index < 0) return direction < 0 ? chapters.at(-1) || ordered.at(-1) : ordered[0];
   return ordered[index + (direction < 0 ? -1 : 1)];
 }
@@ -459,9 +458,11 @@ function renderSegmentNavigation() {
   const isOverview = state.selectedSegment === null;
   elements.routeSummary.textContent = [state.historicalRoute?.title, state.routeView?.message || tr("关卡分支未确认", "Route unconfirmed")].filter(Boolean).join(" · ");
   elements.segmentOrdinal.textContent = isOverview
-    ? tr(`共 ${chapters.length} 关`, `${formatNumber(chapters.length)} stages`)
+    ? overviewSegmentOptions().some(option => option.isVoid)
+      ? tr(`${chapters.length} 关＋天底`, `${formatNumber(chapters.length)} stages + NADIR`)
+      : tr(`共 ${chapters.length} 关`, `${formatNumber(chapters.length)} stages`)
     : active?.isVoid ? tr("额外区域 · 天底", "Extra area · NADIR") : tr(`第 ${activeIndex + 1} / ${chapters.length} 关`, `Stage ${formatNumber(activeIndex + 1)} / ${formatNumber(chapters.length)}`);
-  elements.segmentName.textContent = isOverview ? tr("所有关概览", "Mountain overview") : segmentDisplayName(active);
+  elements.segmentName.textContent = isOverview ? tr("所有关概览", "All chapters") : segmentDisplayName(active);
   elements.segmentOriginalName.textContent = isOverview
     ? tr("仅在手动选择时加载", "Loads when selected")
     : `${active?.name || tr("未知", "Unknown")} · Segment ${active?.segment ?? "?"}`;
@@ -525,7 +526,7 @@ function populateSegmentControls() {
   elements.layerSelect.replaceChildren();
   const allOption = document.createElement("option");
   allOption.value = "all";
-  allOption.textContent = tr("所有关概览（手动）", "Mountain overview (manual)");
+  allOption.textContent = tr("所有关概览", "All chapters");
   elements.layerSelect.append(allOption);
   let chapterOrdinal = 0;
   state.segmentOptions.forEach((option) => {
@@ -2581,6 +2582,10 @@ async function syncDailyMap(daily, refreshCatalog = false) {
 }
 
 function updateDailyCard() {
+  const mapLabel = scene => {
+    const number = /^Level_(\d+)$/.exec(scene || "")?.[1];
+    return number !== undefined ? tr(`地图 ${number}`, `Map ${number}`) : tr("地图", "Map");
+  };
   const history = state.historicalRoute;
   if (history) {
     const formatter = new Intl.DateTimeFormat(getLocale(), { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" });
@@ -2589,14 +2594,16 @@ function updateDailyCard() {
       .map(value => formatter.format(new Date(value))))];
     const rotation = Number.isInteger(history.group.map.levelIndex) ? tr(`轮换 ${history.group.map.levelIndex}`, `Rotation ${formatNumber(history.group.map.levelIndex)}`) : "";
     elements.dailyCard?.setAttribute("title", tr("历史录制地图", "Recorded map"));
-    elements.dailyScene.textContent = tr(`历史 ${history.group.map.scene}`, `Archive ${history.group.map.scene}`);
+    elements.dailyScene.textContent = tr(`历史${mapLabel(history.group.map.scene)}`, `Recorded ${mapLabel(history.group.map.scene)}`);
+    elements.dailyCountdown.hidden = false;
     elements.dailyCountdown.textContent = [dates.join(" – "), rotation].filter(Boolean).join(" · ") || tr("历史录制地图", "Recorded map");
     return true;
   }
   elements.dailyCard?.setAttribute("title", tr("今日轮换", "Current rotation"));
   elements.dailyScene.textContent = state.daily
-    ? state.daily.sceneName || `Level ${state.daily.mapSlot ?? state.daily.levelIndex ?? "?"}` : tr("正在获取…", "Loading…");
-  if (!state.daily?.nextChangeAtUtc) elements.dailyCountdown.textContent = tr("未同步轮换", "Rotation not synchronized");
+    ? mapLabel(state.daily.sceneName || `Level_${state.daily.mapSlot ?? ""}`) : tr("正在获取…", "Loading…");
+  elements.dailyCountdown.hidden = true;
+  elements.dailyCountdown.textContent = "";
   return false;
 }
 
@@ -2614,9 +2621,6 @@ function updateDailyCountdown() {
     void expireDailyStatus(state.daily);
     return;
   }
-  const hours = Math.floor(remaining / 3_600_000);
-  const minutes = Math.floor((remaining % 3_600_000) / 60_000);
-  elements.dailyCountdown.textContent = `${hours}h ${String(minutes).padStart(2, "0")}m`;
 }
 
 async function expireDailyStatus(daily) {
@@ -3257,7 +3261,7 @@ function refreshLocaleUi() {
   state.routeView = resolveReplayRoute(state.usingCompatibleMap ? state.mapPack : null, state.trace, state.currentTime);
   let ordinal = 0;
   for (const option of Array.from(elements.layerSelect.options || elements.layerSelect.children)) {
-    if (option.value === "all") { option.textContent = tr("所有关概览（手动）", "Mountain overview (manual)"); continue; }
+    if (option.value === "all") { option.textContent = tr("所有关概览", "All chapters"); continue; }
     const segment = state.segmentOptions.find(entry => String(entry.segment) === option.value);
     if (!segment) continue;
     const chapter = segment.isVoid ? null : ++ordinal;

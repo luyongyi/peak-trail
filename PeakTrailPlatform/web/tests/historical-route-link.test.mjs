@@ -266,12 +266,12 @@ test("historical daily card stays on the recorded scene and date while today's s
   const f = await historicalDailyFixture();
   f.api.updateDailyCountdown();
   assert.equal(f.elements.dailyCard.attributes.title, "历史录制地图");
-  assert.equal(f.elements.dailyScene.textContent, "历史 Level_18");
+  assert.equal(f.elements.dailyScene.textContent, "历史地图 18");
   assert.equal(f.elements.dailyCountdown.textContent, `${new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date("2026-10-08T14:00:00Z"))} · 轮换 480`);
   await f.api.applyDailyStatus();
   assert.equal(f.state.daily, f.today); assert.deepEqual(f.calls.homeUpdates, [f.today]);
   assert.equal(f.state.historicalRoute, f.history); assert.equal(f.state.mapPack, f.original);
-  assert.equal(f.elements.dailyScene.textContent, "历史 Level_18"); assert.equal(f.elements.dailyCountdown.textContent, `${new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date("2026-10-08T14:00:00Z"))} · 轮换 480`);
+  assert.equal(f.elements.dailyScene.textContent, "历史地图 18"); assert.equal(f.elements.dailyCountdown.textContent, `${new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date("2026-10-08T14:00:00Z"))} · 轮换 480`);
   f.api.updateDailyCountdown(); assert.equal(f.elements.dailyCountdown.textContent, `${new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date("2026-10-08T14:00:00Z"))} · 轮换 480`);
 });
 
@@ -280,8 +280,8 @@ test("returning home clears history and restores today's current card without mo
   await f.api.applyDailyStatus();
   f.back();
   assert.equal(f.state.historicalRoute, null); assert.equal(f.state.workspaceMode, "home");
-  assert.equal(f.elements.dailyCard.attributes.title, "今日轮换"); assert.equal(f.elements.dailyScene.textContent, "Level_19");
-  assert.equal(f.elements.dailyCountdown.textContent, "15h 00m");
+  assert.equal(f.elements.dailyCard.attributes.title, "今日轮换"); assert.equal(f.elements.dailyScene.textContent, "地图 19");
+  assert.equal(f.elements.dailyCountdown.textContent, ""); assert.equal(f.elements.dailyCountdown.hidden, true);
   assert.equal(f.state.daily, f.today); assert.equal(f.calls.home, 1); assert.equal(f.calls.urlClears, 1); assert.equal(f.elements.importMenu.open, false);
 });
 
@@ -290,7 +290,7 @@ test("missing, failed or stale daily observations cannot turn the historical car
     const f = await historicalDailyFixture(); f.incoming = incoming;
     f.api.updateDailyCountdown(); await f.api.applyDailyStatus();
     assert.equal(f.elements.dailyCard.attributes.title, "历史录制地图");
-    assert.equal(f.elements.dailyScene.textContent, "历史 Level_18"); assert.equal(f.elements.dailyCountdown.textContent, `${new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date("2026-10-08T14:00:00Z"))} · 轮换 480`);
+    assert.equal(f.elements.dailyScene.textContent, "历史地图 18"); assert.equal(f.elements.dailyCountdown.textContent, `${new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date("2026-10-08T14:00:00Z"))} · 轮换 480`);
     assert.equal(f.state.mapPack, f.original);
   }
 });

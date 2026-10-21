@@ -347,8 +347,9 @@ export class TrailScene {
     const firstMountain = mapPack?.layers?.find((layer) => String(layer.biome).toLowerCase() !== "void");
     this.activeSegment = activeSegment === null ? null
       : Number.isInteger(activeSegment) ? activeSegment : firstMountain?.segment ?? null;
-    // The Void's 5 km collision floor is real, but is not the daily mountain's
-    // overview extent. It is available only through explicit layer selection.
+    // Keep the mountain origin/grid and source clipping bounds stable. Overview
+    // framing includes the actual Nadir subject after geometry loads, excluding
+    // only its audited 5 km water plane from the camera's subject points.
     const mountainLayers = mapPack?.layers?.filter((layer) => String(layer.biome).toLowerCase() !== "void") || [];
     const mountainBounds = mountainLayers.length ? {
       min: [Math.min(...mountainLayers.map((l) => l.minX)), Math.min(...mountainLayers.map((l) => l.minY)), Math.min(...mountainLayers.map((l) => l.minZ))],
@@ -582,9 +583,8 @@ export class TrailScene {
   }
 
   isGeometryLayerRequested(layer) {
-    return this.useMap && this.mapPack?.identityVersion === 3 && (this.activeSegment === null
-      ? String(layer.biome).toLowerCase() !== "void"
-      : layer.segment === this.activeSegment);
+    return this.useMap && this.mapPack?.identityVersion === 3
+      && (this.activeSegment === null || layer.segment === this.activeSegment);
   }
 
   async loadChapterGeometry(layer, signal, gameBuildId) {
@@ -661,6 +661,8 @@ export class TrailScene {
           delete group.userData.cameraSubjectParts;
           delete group.userData.nadirCameraBounds;
           delete group.userData.nadirCameraParts;
+          delete group.userData.nadirSourceParts;
+          delete group.userData.nadirOverviewHidden;
           this.geometryLoads.delete(group.userData.mapLayer.id);
         }
       }
@@ -1595,10 +1597,13 @@ export class TrailScene {
     this.followTerrainDirty = true;
     this.sourceWater?.setSegment(this.activeSegment);
     for (const mesh of this.terrainRoot.children) {
-      const isVoid = String(mesh.userData.mapLayer?.biome).toLowerCase() === "void";
-      mesh.visible = this.activeSegment === null
-        ? !isVoid
-        : mesh.userData.segment === this.activeSegment;
+      mesh.visible = this.activeSegment === null || mesh.userData.segment === this.activeSegment;
+      if (mesh.visible && mesh.userData.loaded && String(mesh.userData.mapLayer?.biome).toLowerCase() === "void") {
+        this.prepareNadirSubject(mesh);
+      }
+      for (const entry of mesh.userData.nadirOverviewHidden || []) {
+        entry.mesh.visible = this.activeSegment === null ? false : entry.visible;
+      }
     }
     // Rebuild only on geometry/selection changes; no per-frame scene traversal.
     this.waterDepthEntries = collectWaterDepthEntries(this.terrainRoot, this.heightScale);
@@ -1620,6 +1625,34 @@ export class TrailScene {
 
   selectedLayer() { return this.mapPack?.layers.find((entry) => entry.segment === this.activeSegment) || null; }
 
+  prepareNadirSubject(group) {
+    if (group.userData.nadirSourceParts) return;
+    // Collect while original visibility is intact. Camera fitting must retain
+    // the source water evidence even after overview hides its huge opaque plane.
+    const meshes = new Map();
+    const parts = collectCameraParts(THREE, group, this.origin, { onPart: (part, mesh) => {
+      if (!meshes.has(mesh)) meshes.set(mesh, []);
+      meshes.get(mesh).push(part);
+    } });
+    const layer = group.userData.mapLayer;
+    const retained = nadirCameraParts(layer, this.mapPack.gameBuildId, parts);
+    group.userData.nadirSourceParts = parts;
+    group.userData.nadirCameraParts = retained;
+    group.userData.nadirCameraBounds = nadirCameraBounds(layer, this.mapPack.gameBuildId, parts);
+    group.userData.nadirOverviewHidden = [];
+    if (!retained) return;
+    const kept = new Set(retained);
+    for (const [mesh, entries] of meshes) {
+      // Hide only entire batches proven to contain excluded source parts. A
+      // mixed instanced batch is retained rather than hiding unrelated objects.
+      if (entries.length !== (mesh.isInstancedMesh ? mesh.count : 1) || entries.some(part => kept.has(part))) continue;
+      // Fog visibility is owned by the existing fog replacement layer. The
+      // filtered camera cache already excludes its submerged source geometry.
+      if (entries.some(part => part.materials.some(material => material.shader === 'GD/FogSurface'))) continue;
+      group.userData.nadirOverviewHidden.push({ mesh, visible: mesh.visible });
+    }
+  }
+
   summitCameraBounds() {
     const peak = this.mapPack?.mapPeak;
     return this.useMap && this.viewIntent === "summit" && peak?.segment === this.activeSegment
@@ -1635,9 +1668,7 @@ export class TrailScene {
     // Undo display origin, height scaling and Z reflection before collecting
     // source-world extents. Camera fitting must not alter viewBounds, which
     // also governs player visibility and trail clipping.
-    const parts = collectCameraParts(THREE, group, this.origin);
-    group.userData.nadirCameraParts = nadirCameraParts(layer, this.mapPack.gameBuildId, parts);
-    group.userData.nadirCameraBounds = nadirCameraBounds(layer, this.mapPack.gameBuildId, parts);
+    this.prepareNadirSubject(group);
     return group.userData.nadirCameraBounds;
   }
 
@@ -1664,12 +1695,14 @@ export class TrailScene {
     if (!groups.length || groups.some((group) => !group.userData.loaded)) return null;
     return groups.flatMap((group) => {
       if (!group.userData.cameraSubjectParts) {
-        const parts = collectCameraParts(THREE, group, this.origin);
+        const layer = group.userData.mapLayer;
+        if (String(layer.biome).toLowerCase() === "void") this.prepareNadirSubject(group);
+        const parts = group.userData.nadirSourceParts || collectCameraParts(THREE, group, this.origin);
         // Each chapter keeps its own subject, even in the mountain overview.
         // Interior shells stay connected to their subject; only isolated tiny
         // fragments far outside that subject may stop controlling the camera.
-        const layer = group.userData.mapLayer;
-        group.userData.cameraSubjectParts = String(layer.biome).toLowerCase() === "void" ? parts
+        group.userData.cameraSubjectParts = String(layer.biome).toLowerCase() === "void"
+          ? group.userData.nadirCameraParts || parts
           : selectCameraSubjectParts(parts, { interior: isInteriorLayer(layer, this.mapPack.route) });
       }
       return group.userData.cameraSubjectParts;

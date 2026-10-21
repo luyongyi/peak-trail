@@ -89,7 +89,7 @@ test("recorded route uses its recording build, independently of the loaded map b
   assert.equal(f.elements.segmentName.textContent, "城塞 · 含顶峰");
 });
 
-test("Nadir can be selected and navigated back from while staying outside the mountain overview", () => {
+test("Nadir is available in the overview while remaining outside the five-chapter count", () => {
   const f = fixture();
   f.api.chooseSegment(5, "manual");
   assert.deepEqual(f.selected, [5]);
@@ -99,8 +99,13 @@ test("Nadir can be selected and navigated back from while staying outside the mo
   assert.equal(f.elements.nextSegmentButton.disabled, true);
   assert.equal(f.api.adjacentSegment(f.state.segmentOptions, 5, -1).segment, 4);
   assert.equal(f.api.adjacentSegment(f.state.segmentOptions, 5, 1), undefined);
-  assert.deepEqual(f.api.overviewSegmentOptions().map((entry) => entry.segment), [0, 1, 2, 3, 4]);
+  assert.deepEqual(f.api.overviewSegmentOptions().map((entry) => entry.segment), [0, 1, 2, 3, 4, 5]);
   assert.match(f.elements.layerSelect.children.find((option) => option.value === "5").textContent, /^额外区域 · 天底/);
+  f.api.chooseSegment(null, "manual");
+  assert.equal(f.elements.segmentOrdinal.textContent, "5 关＋天底");
+  assert.equal(f.elements.segmentName.textContent, "所有关概览");
+  f.state.routeView.hiddenSegments.add(5);
+  assert.deepEqual(f.api.overviewSegmentOptions().map((entry) => entry.segment), [0, 1, 2, 3, 4]);
 });
 
 test("automatic selection follows recorded Nadir data and does not infer arrival from the route", () => {
