@@ -2,7 +2,7 @@ import { tr, onLocaleChange } from './i18n.js';
 import { loadGameAssetPack, resolveItemAsset } from './game-assets.js';
 import { itemEventKind, itemEventName, itemEventTime, loadTeamItemEvents, relatedUseEvent, MAX_ITEM_MARKERS } from './item-events.js';
 
-const INDEX_URL = new URL('../data/item-event-assets/catalog.json', import.meta.url);
+const INDEX_URL = new URL('../data/game-assets/item-events/catalog.json', import.meta.url);
 export function createItemEventPanel({ getContext, getScene, root = document, fetchImpl, loadAssets = loadGameAssetPack } = {}) {
   const $ = id => root.getElementById(id);
   const button = $('itemEventsToggle'), card = $('itemEventCard'), status = $('itemEventStatus');

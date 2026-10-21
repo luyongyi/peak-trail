@@ -165,7 +165,10 @@ items, surviving/cull-randomized zombies or triggered mines from 0.5 logs.
 ## Item event reference assets (recorder 0.8.3+)
 
 `export-item-event-assets.py` builds the small, version-specific public pack in
-`data/item-event-assets/`. It exports source item icons and the real generated
+`data/item-event-assets/`. Staging publishes it under
+`data/game-assets/item-events/`, within the receiver's existing immutable asset
+namespace, using its own index without changing the main game-asset catalog.
+It exports source item icons and the real generated
 prefabs for pitons, mushrooms, rope anchors and construction items. Particle-only
 prefabs retain their icon without an invented solid model. The web uses this
 pack only for a matching recorded game build; no older model is substituted.

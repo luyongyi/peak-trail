@@ -254,7 +254,7 @@ for (const reference of gameAssets.files) {
   else await assetWriter.stageImmutable(resolve(gameAssetsDirectory, reference), destination);
 }
 for (const reference of itemEventAssets?.files ?? []) {
-  const destination = resolve(outputDirectory, "data", "item-event-assets", reference);
+    const destination = resolve(outputDirectory, "data", "game-assets", "item-events", reference);
   await mkdir(dirname(destination), { recursive: true });
   if (reference === "catalog.json" || /^\d+\/catalog\.json$/.test(reference)) await cp(resolve(itemEventAssetsDirectory, reference), destination);
   else await assetWriter.stageImmutable(resolve(itemEventAssetsDirectory, reference), destination);

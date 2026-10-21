@@ -249,8 +249,8 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
   const options = { env: { ...process.env, PEAK_TRAIL_ASSET_ROOT: assets, PEAK_TRAIL_DOWNLOAD_PRODUCT: "recorder", PEAK_TRAIL_RECORDER_DLL: recorderPath } };
   await execFileAsync(process.execPath, [resolve(tools, "stage-site.mjs")], options);
   const staged = resolve(platform, "site-dist");
-  assert.deepEqual(await readFile(resolve(staged, "data/item-event-assets/123/spawn.json")), modelJson);
-  assert.deepEqual((await readdir(resolve(staged, "data/item-event-assets/123"))).sort(), ["catalog.json", "spawn.json"]);
+  assert.deepEqual(await readFile(resolve(staged, "data/game-assets/item-events/123/spawn.json")), modelJson);
+  assert.deepEqual((await readdir(resolve(staged, "data/game-assets/item-events/123"))).sort(), ["catalog.json", "spawn.json"]);
   const publicLootSource = { kind: "canonical-map-geometry-survey", itemCoverage: "Audited reference points" };
   const stagedLootIndex = JSON.parse(await readFile(resolve(staged, "data", "maps", "loot.123.json"), "utf8"));
   assert.deepEqual(stagedLootIndex, { schemaVersion: 1, kind: "map-loot-index", gameBuildId: "123", source: publicLootSource,
@@ -372,13 +372,13 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
     for (const id of [packId, secondPackId]) assert.equal((await stat(resolve(staged, 'data', 'maps', 'packs', id, reference))).ino, old.ino);
   }
   for (const reference of [`data/home-art/${HOME_ART_FILES[0]}`, `data/maps/enclosures/${enclosureFilename}`, 'data/game-assets/123/icons/item.png',
-    'data/game-assets/123/item-model.json', 'data/item-event-assets/123/spawn.json', recorderRelease.downloadPath])
+    'data/game-assets/123/item-model.json', 'data/game-assets/item-events/123/spawn.json', recorderRelease.downloadPath])
     assert.equal((await stat(resolve(priorRelease, reference))).ino, (await stat(resolve(staged, reference))).ino);
   assert.deepEqual(await readFile(resolve(staged, recorderRelease.downloadPath)), recorderBytes);
   assert.deepEqual(await readFile(resolve(staged, 'data/game-assets/123/item-model.json')), modelJson);
   assert.deepEqual(await readFile(resolve(staged, `data/maps/packs/${packId}/shore.geometry.json`)), geometryJson);
   for (const reference of [`data/maps/packs/${packId}/map-pack.json`, 'data/game-assets/catalog.json', 'data/game-assets/123/catalog.json',
-    'data/item-event-assets/catalog.json', 'data/item-event-assets/123/catalog.json', 'data/recorder/release.json'])
+    'data/game-assets/item-events/catalog.json', 'data/game-assets/item-events/123/catalog.json', 'data/recorder/release.json'])
     assert.notEqual((await stat(resolve(priorRelease, reference))).ino, (await stat(resolve(staged, reference))).ino);
   const oldMetadataPath = resolve(priorRelease, 'data', 'maps', 'packs', packId, 'map-pack.json');
   assert.equal(JSON.parse(await readFile(oldMetadataPath, 'utf8')).route.segments[0].displayName, undefined);

@@ -290,10 +290,12 @@ test("pinned DLL and static model JSON pool links survive current and rollbacks 
   const memories = await blob(root, "MZ verified memories assembly");
   const recorder = await blob(root, "MZ verified recorder assembly");
   const model = await blob(root, JSON.stringify({ vertices: [0, 0, 0], triangles: [0, 0, 0] }));
+  const itemModel = await blob(root, JSON.stringify({ parts: [], coordinateSpace: "unity-prefab-local-meters" }));
   const items = [];
   for (let index = 1; index <= 5; index++) {
     const item = await release(root, index);
-    for (const [relative, source] of [["downloads/memories/0.8.35/PeakReplayLab.dll", memories], ["downloads/recorder/1.2.3/PeakTrailRecorder.dll", recorder], ["data/game-assets/25306743/models/player.json", model]]) {
+    for (const [relative, source] of [["downloads/memories/0.8.35/PeakReplayLab.dll", memories], ["downloads/recorder/1.2.3/PeakTrailRecorder.dll", recorder],
+      ["data/game-assets/25306743/models/player.json", model], ["data/game-assets/item-events/25739797/models/anchor.json", itemModel]]) {
       const path = join(item.site, relative);
       await mkdir(dirname(path), { recursive: true });
       await link(source, path);
@@ -313,6 +315,7 @@ test("pinned DLL and static model JSON pool links survive current and rollbacks 
   assert.equal((await lstat(memories)).nlink, 5);
   assert.equal((await lstat(recorder)).nlink, 5);
   assert.equal((await lstat(model)).nlink, 5);
+  assert.equal((await lstat(itemModel)).nlink, 5);
 });
 
 test("other download paths and mutable release metadata cannot masquerade as approved DLL pool links", linux, async t => {
