@@ -144,6 +144,10 @@ internal static class NativeLiveSettings
         }
         if (string.IsNullOrEmpty(status) || status == nameof(LivePublisherStatus.WaitingForRun))
             return Chinese ? "等待进入对局" : "Waiting for a run";
+        if (status == nameof(LivePublisherStatus.WaitingForRoom))
+            return Chinese ? "进入机场后获取" : "Join the airport first";
+        if (status == nameof(LivePublisherStatus.WaitingInAirport))
+            return Chinese ? "机场预约中…" : "Reserving in airport…";
         if (copiesCode && (status == nameof(LivePublisherStatus.Live) || status == nameof(LivePublisherStatus.Standby)))
             return Chinese ? "直播码暂不可用" : "Code unavailable";
         return Chinese ? "正在连接…" : "Connecting…";

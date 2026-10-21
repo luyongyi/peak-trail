@@ -33,6 +33,15 @@ internal sealed class LivePayload
         return string.Concat(hash.Select(value => value.ToString("x2", CultureInfo.InvariantCulture)));
     }
 
+    public static string ReservationKey(string region, string gameVersion, string roomName)
+    {
+        using SHA256 sha = SHA256.Create();
+        // Length-prefix parts to avoid ambiguous separators in custom room names.
+        string input = "peaktrail-live-lobby-v1:" + region.Length + ":" + region
+            + gameVersion.Length + ":" + gameVersion + roomName.Length + ":" + roomName;
+        return string.Concat(sha.ComputeHash(Encoding.UTF8.GetBytes(input)).Select(value => value.ToString("x2", CultureInfo.InvariantCulture)));
+    }
+
     public static JObject Manifest(TraceManifest manifest)
     {
         // Explicit access never serializes raw RunId/Participants into an intermediate tree.

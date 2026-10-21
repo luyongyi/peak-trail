@@ -1,6 +1,6 @@
 # PeakTrailRecorder
 
-Read-only BepInEx recorder for PEAK (0.8.3 is built against Steam build 25739797). It samples every human character returned by
+Read-only BepInEx recorder for PEAK (0.8.4 is built against Steam build 25739797). It samples every human character returned by
 `PlayerHandler.GetAllPlayerCharacters()` and writes a local, crash-recoverable trace for the
 PeakTrail 2.5D viewer. The same DLL also captures the currently loaded map for the viewer;
 there is no second end-user map-exporter mod.
@@ -203,11 +203,33 @@ build ID is captured so the viewer can refuse to overlay a trace on geometry fro
   off immediately hides the code and disables copying. The adjacent **Live viewing link**
   button remains available, and previously shared viewing links still work. No browser setup or
   account is needed. Saved older `[Live] Enabled` preferences are respected.
+- **Airport reservation (0.8.4):** joining the airport now reserves the real four-letter
+  code before the climb. Open **Settings → General → Live code**, click to copy it, and
+  send it to a viewer. The website shows a waiting page until the run starts. The code and
+  viewing link are retained through loading and activation; every installed teammate in
+  that Photon room sees the same reservation, with one publishing lease and standby peers.
+  Main-menu settings remain visible but ask you to join the airport before obtaining a code.
+  Airport positions, participants and an invented run manifest are never uploaded.
+  Only a namespaced hash of the Photon region/version/room is sent to `/api/live/v2/reservations`;
+  the raw room name is not sent. Local offline rooms use a fresh local scope.
+  After entering a playable map and receiving the real RunId, the lease owner activates
+  that reservation with the real manifest. A late RunId buffers the run snapshot; it does
+  not create another code. Airport waiting time is excluded from the live run clock.
+- The room publisher is independent of the optional full-file `RecordingSession`. Changing
+  `[Recording] Enabled` retains the live code and monotonically increasing live time.
+  Disabling sharing, leaving the Photon room or exiting clears the code immediately and
+  releases the owned lease in the background; standby clients cannot end another owner's
+  reservation. Finishing a run or returning to the airport ends the old run and permits a
+  new reservation. If an old end request was lost, an explicitly confirmed airport stay
+  hides the stale live code and retires it before reserving again. A loading gap or an
+  unknown RunId is never treated as proof that the player returned to the airport.
+  Owner-only `runRoomKey` verification prevents a new run from writing into an old manifest.
 - One installation captures the whole synchronized team. If several teammates have
   the DLL, the relay automatically leases one publisher and the others stand by.
   Streaming uses temporary per-session player IDs and a separate publisher credential;
   real platform IDs and the original local recording are not uploaded. New streams use
-  `/api/live/v2`; live viewing codes do not enable the old `/api/runs` upload protocol,
+  `/api/live/v2`; new clients reserve first and then call `/sessions/:id/activate`.
+  Live viewing codes do not enable the old `/api/runs` upload protocol,
   which remains disabled by default. Codes grant viewing only and are not upload credentials.
   Position sampling is independent of local file sampling, and network requests run
   on a background thread. Local recording can be disabled while streaming continues.

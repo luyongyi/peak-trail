@@ -489,13 +489,11 @@ internal sealed class RecordingSession : IDisposable
 
     public string? LiveStatus => _live?.Status.ToString();
 
-    /// <summary>Changes live publishing without ending or restarting the local recording.</summary>
+    /// <summary>Borrows a room publisher owned by Plugin; detaching never releases its reservation.</summary>
     public void SetLivePublisher(LivePublisher? publisher)
     {
         if (_disposed || ReferenceEquals(publisher, _live)) return;
-        LivePublisher? previous = _live;
         _live = null;
-        previous?.Dispose();
         if (publisher == null) return;
         try
         {
@@ -506,7 +504,6 @@ internal sealed class RecordingSession : IDisposable
         catch
         {
             _live = null;
-            publisher.Dispose();
             throw;
         }
     }
@@ -1068,7 +1065,7 @@ internal sealed class RecordingSession : IDisposable
             _writer.Flush();
             if (_stream is FileStream fileStream) fileStream.Flush(flushToDisk: true);
             else _stream.Flush();
-            _live?.Dispose();
+            _live = null;
         }
         catch (Exception exception)
         {

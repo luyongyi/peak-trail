@@ -30,13 +30,20 @@ static Dictionary<string, object?> Record(string type, long time, params (string
 static HttpResponseMessage Json(HttpStatusCode status, object value)
     => new(status) { Content = new StringContent(JsonConvert.SerializeObject(value)) };
 static HttpResponseMessage Registered(int epoch = 1, long acknowledged = 0, char identity = 'a',
-    string? watchCode = "ABCD", HttpStatusCode status = HttpStatusCode.Created)
+    string? watchCode = "ABCD", HttpStatusCode status = HttpStatusCode.Created, string? runKey = "default")
     => Json(status, new
     {
         sessionId = new string(identity, 32), watchId = new string(identity == 'a' ? 'b' : 'd', 32), publishToken = "test-publish-token",
         watchCode = identity == 'a' ? watchCode : "WXYZ",
-        epoch, lastProducerSeq = acknowledged, heartbeatMs = 1000, leaseMs = 15000,
+        epoch, lastProducerSeq = acknowledged, heartbeatMs = 1000, leaseMs = 15000, status = epoch == 0 ? "waiting" : "live",
+        runRoomKey = epoch == 0 ? null : runKey == "default" ? LivePayload.RoomKey("9bf6aaa3-0712-49e2-83d0-6e54930c3d90","Level_0") : runKey,
     });
+static LivePublisher CreateLive(HttpMessageHandler handler)
+{
+    var live = new LivePublisher("https://relay.invalid", new ManualLogSource(), handler);
+    live.Reserve(LivePayload.ReservationKey("test-region", "test-version", "synthetic-private-airport-room"));
+    return live;
+}
 static IEnumerable<JObject> Envelopes(Captured request)
     => request.Body.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(JObject.Parse);
 
@@ -87,34 +94,139 @@ List<JObject> snapshot = buffer.Take(40, 128 * 1024);
 Check(snapshot.Count == 2 && (string?)snapshot[0]["type"] == "participant", "Initial participant must survive registration and precede latest sample.");
 Check((int)snapshot[1]["pos"]![0]! == 4999 && (long)snapshot[0]["t"]! == 4999, "Outage positions should coalesce to the latest snapshot.");
 
-// A missing RunId must not register; the original manifest may acquire it later.
-using (var handler = new FakeHandler((request, _) => Task.FromResult(request.Path.EndsWith("/sessions") ? Registered() : Json(HttpStatusCode.OK, new { }))))
-using (var live = new LivePublisher("https://relay.invalid", new ManualLogSource(), handler))
+// Airport reservation precedes the run. No manifest or positions leave the game
+// until a real RunId exists and activation succeeds; the code does not change.
+using (var handler = new FakeHandler((request, _) => Task.FromResult(request.Path.EndsWith("/reservations") ? Registered(0)
+    : request.Path.EndsWith("/activate") ? Registered(status:HttpStatusCode.OK) : Json(HttpStatusCode.OK, new { }))))
+using (var live = CreateLive(handler))
 {
+    live.SetAirportPresence(true);
+    await Until(() => live.Status == LivePublisherStatus.WaitingInAirport, "airport did not reserve a code");
+    Check(live.WatchCode == "ABCD", "airport must display its real reserved code before any run exists");
+    live.Publish(Record("sample",999999,("pos",new[]{999,999,999})),0);
+    await Until(() => handler.Requests.Any(request => request.Path.EndsWith("/heartbeat")), "airport lease did not renew");
+    Check(!handler.Requests.Any(request => request.Path.EndsWith("/activate") || request.Path.EndsWith("/records")), "airport uploaded run data");
     var delayed = new TraceManifest();
+    live.SetAirportPresence(false); // native loading starts before real RunId is available
     live.Configure(delayed, rawPlayer);
     live.Publish(Record("participant", 10, ("playerId", rawPlayer), ("nickname", "Player")), 999);
     await Task.Delay(250);
-    Check(handler.Requests.IsEmpty, "Empty RunId should not produce a registration request.");
+    Check(!handler.Requests.Any(request => request.Path.EndsWith("/activate") || request.Path.EndsWith("/records")), "Empty RunId activated or uploaded a session.");
+    live.Publish(Record("sample",0,("playerId",rawPlayer),("pos",new[]{1,2,3})),0);
     delayed.RunId = runId;
     live.RefreshManifest();
     await Until(() => handler.Requests.Any(request => request.Path.EndsWith("/records")), "initial snapshot not uploaded");
-    Captured registration = handler.Requests.First(request => request.Path.EndsWith("/sessions"));
+    Captured registration = handler.Requests.First(request => request.Path.EndsWith("/reservations"));
     Check(!registration.Body.Contains(runId) && !registration.Body.Contains(rawPlayer), "Registration leaked raw identifiers.");
-    Check(registration.Authorization == null && (string?)JObject.Parse(registration.Body)["roomKey"] == LivePayload.RoomKey(runId, "Level_0"), "Registration contract mismatch.");
+    Check(registration.Authorization == null && (string?)JObject.Parse(registration.Body)["roomKey"] == LivePayload.ReservationKey("test-region","test-version","synthetic-private-airport-room"), "Reservation contract mismatch.");
+    Check(!registration.Body.Contains("manifest") && !registration.Body.Contains("synthetic-private-airport-room"), "Airport reservation leaked a raw room or invented run manifest.");
+    Captured activation = handler.Requests.Single(request => request.Path.EndsWith("/activate"));
+    Check(activation.Authorization == "Bearer test-publish-token" && (string?)JObject.Parse(activation.Body)["roomKey"] == LivePayload.RoomKey(runId,"Level_0"), "Activation contract mismatch.");
     Captured first = handler.Requests.First(request => request.Path.EndsWith("/records"));
     Check(first.Authorization == "Bearer test-publish-token" && !first.Path.Contains("producer"), "Publishing capability must be private header-only.");
     Check((string?)Envelopes(first).First()["record"]!["type"] == "participant", "Pre-registration participant was lost.");
+    Check(Envelopes(first).Max(e=>(long)e["record"]!["t"]!) is >= 200 and < 1000, "Airport time leaked into run clock or activation clamped all early run points to zero.");
     Check(live.WatchUrl == "https://relay.invalid/?watch=" + new string('b', 32), "Watch URL must never contain the publishing token.");
     Check(live.WatchCode == "ABCD", "Registration must expose the relay-assigned live code.");
-    await Until(() => handler.Requests.Any(request => request.Path.EndsWith("/heartbeat")), "idle publisher failed to renew lease");
+    long before = Envelopes(first).Max(e=>(long)e["record"]!["t"]!);
+    await Task.Delay(150);
+    live.Configure(new TraceManifest { RunId=runId },rawPlayer); // rebuilt offline session
+    live.Publish(Record("sample",0,("playerId",rawPlayer),("pos",new[]{4,5,6})),0);
+    await Until(() => handler.Requests.Count(request=>request.Path.EndsWith("/records")) >= 2,"rebuilt file session did not stream");
+    Check(Envelopes(handler.Requests.Last(request=>request.Path.EndsWith("/records"))).Max(e=>(long)e["record"]!["t"]!) > before,"new RecordingSession reset live time");
+    Check(live.WatchCode=="ABCD" && handler.Requests.Count(request=>request.Path.EndsWith("/activate"))==1,"local recording restart replaced airport reservation");
+}
+
+// Lost activation ACK: preserve the reservation, token and byte-identical request.
+int activations=0;
+using(var handler=new FakeHandler((request,_)=>
+{
+    if(request.Path.EndsWith("/reservations")) return Task.FromResult(Registered(0));
+    if(request.Path.EndsWith("/activate"))
+    {
+        if(Interlocked.Increment(ref activations)==1) throw new HttpRequestException("Synthetic lost activation response");
+        return Task.FromResult(Registered(status:HttpStatusCode.OK));
+    }
+    return Task.FromResult(Json(HttpStatusCode.OK,new{}));
+}))
+using(var live=CreateLive(handler))
+{
+    live.Configure(new TraceManifest{RunId=runId},null);
+    live.Publish(Record("participant",0,("playerId",rawPlayer)),0);
+    await Until(()=>handler.Requests.Any(r=>r.Path.EndsWith("/records")),"activation ACK loss never recovered");
+    var calls=handler.Requests.Where(r=>r.Path.EndsWith("/activate")).ToArray();
+    Check(calls.Length==2 && calls[0].Body==calls[1].Body,"activation retry changed payload or reservation");
+    Check(handler.Requests.Count(r=>r.Path.EndsWith("/reservations"))==1 && live.WatchCode=="ABCD","activation retry replaced the airport code");
+}
+
+// A standby that enters the run first must keep the airport alias. It cannot
+// create another session before the waiting owner's lease expires.
+int waitingReservations=0;
+using(var handler=new FakeHandler((request,_)=>
+{
+    if(request.Path.EndsWith("/reservations")) return Task.FromResult(Interlocked.Increment(ref waitingReservations)==1
+        ? Json(HttpStatusCode.Conflict,new{error="publisher-active",status="waiting",retryAfterMs=1000,watchId=new string('b',32),watchCode="ABCD"}) : Registered(0));
+    return Task.FromResult(request.Path.EndsWith("/activate") ? Registered(status:HttpStatusCode.OK) : Json(HttpStatusCode.OK,new{}));
+}))
+using(var live=CreateLive(handler))
+{
+    live.Configure(new TraceManifest{RunId=runId},null);live.Publish(Record("participant",0,("playerId",rawPlayer)),0);
+    await Until(()=>live.Status==LivePublisherStatus.Standby,"waiting reservation did not standby");
+    Check(live.WatchCode=="ABCD" && !handler.Requests.Any(r=>r.Path.EndsWith("/activate")||r.Path.EndsWith("/records")),"standby activated without its lease");
+    await Until(()=>handler.Requests.Any(r=>r.Path.EndsWith("/records")),"waiting takeover failed to activate");
+    Check(live.WatchCode=="ABCD" && !handler.Requests.Any(r=>r.Path=="/api/live/v2/sessions"),"early loading client bypassed airport reservation");
+}
+
+// An unacknowledged previous /end must not keep the next airport visit attached
+// to the old run. Conversely, loading with late RunId must not retire that run.
+foreach(bool airport in new[]{true,false})
+{
+    int reservations=0;
+    using var handler=new FakeHandler((request,_)=>Task.FromResult(request.Path.EndsWith("/reservations")
+        ? Interlocked.Increment(ref reservations)==1 ? Registered(runKey:new string('e',64)) : Registered(0,identity:'c')
+        : request.Path.EndsWith("/activate") ? Registered(identity:'c',status:HttpStatusCode.OK) : Json(HttpStatusCode.OK,new{})));
+    using var live=CreateLive(handler); live.SetAirportPresence(airport);
+    await Until(()=>Volatile.Read(ref reservations)>=1,"old alias registration missing");
+    if(airport)
+    {
+        await Until(()=>live.Status==LivePublisherStatus.WaitingInAirport && live.WatchCode=="WXYZ","airport did not retire old live alias and reserve new code");
+        Check(handler.Requests.Any(r=>r.Path.EndsWith("/end")) && !handler.Requests.Any(r=>r.Path.EndsWith("/records")),"airport sent records or kept stale live session");
+    }
+    else
+    {
+        live.Configure(new TraceManifest(),null);
+        await Task.Delay(250);
+        Check(!handler.Requests.Any(r=>r.Path.EndsWith("/end")||r.Path.EndsWith("/records")),"missing RunId was mistaken for returning to airport");
+    }
+    live.SetAirportPresence(false);
+    live.Configure(new TraceManifest{RunId=runId},null);live.Publish(Record("participant",0,("playerId",rawPlayer)),0);
+    await Until(()=>handler.Requests.Any(r=>r.Path.EndsWith("/records")),"fresh run did not publish after retiring stale alias");
+    Check(handler.Requests.Where(r=>r.Path.EndsWith("/records")).All(r=>r.Path.Contains(new string('c',32))),"new run records polluted old manifest");
+}
+
+// The owner-only run key is required even when a relay labels a reservation live.
+int verifiedRegistrations=0;
+using(var handler=new FakeHandler((request,_)=>Task.FromResult(request.Path.EndsWith("/reservations")
+    ? Registered(runKey:Interlocked.Increment(ref verifiedRegistrations)==1 ? null : "default") : Json(HttpStatusCode.OK,new{}))))
+using(var live=CreateLive(handler))
+{
+    live.Configure(new TraceManifest{RunId=runId},null);live.Publish(Record("participant",0,("playerId",rawPlayer)),0);
+    await Until(()=>handler.Requests.Any(r=>r.Path.EndsWith("/records")),"missing run verification could not recover");
+    Check(verifiedRegistrations>=2,"records were sent without verified runRoomKey");
+}
+
+using(var handler=new FakeHandler((request,_)=>Task.FromResult(Json(HttpStatusCode.Conflict,new{error="publisher-active",status="waiting",retryAfterMs=30000,watchId=new string('b',32),watchCode="ABCD"}))))
+{
+    var standby=CreateLive(handler);await Until(()=>standby.Status==LivePublisherStatus.Standby,"airport standby missing");
+    standby.Dispose();await Task.Delay(150);
+    Check(standby.WatchCode==null && !handler.Requests.Any(r=>r.Path.EndsWith("/end")),"standby release ended another publisher's reservation");
 }
 
 // 429 and a lost HTTP response both retry byte-for-byte, then deliver fresh state.
 int attempts = 0;
 using (var handler = new FakeHandler((request, _) =>
 {
-    if (request.Path.EndsWith("/sessions")) return Task.FromResult(Registered());
+    if (request.Path.EndsWith("/reservations")) return Task.FromResult(Registered());
     if (request.Path.EndsWith("/records"))
     {
         int attempt = Interlocked.Increment(ref attempts);
@@ -123,7 +235,7 @@ using (var handler = new FakeHandler((request, _) =>
     }
     return Task.FromResult(Json(HttpStatusCode.OK, new { }));
 }))
-using (var live = new LivePublisher("https://relay.invalid", new ManualLogSource(), handler))
+using (var live = CreateLive(handler))
 {
     live.Configure(new TraceManifest { RunId = runId }, rawPlayer);
     live.Publish(Record("participant", 1, ("playerId", rawPlayer), ("nickname", "Player")), 0);
@@ -145,12 +257,12 @@ using (var live = new LivePublisher("https://relay.invalid", new ManualLogSource
 int registrations = 0, recordCalls = 0;
 using (var handler = new FakeHandler((request, _) =>
 {
-    if (request.Path.EndsWith("/sessions")) return Task.FromResult(Registered(Interlocked.Increment(ref registrations)));
+    if (request.Path.EndsWith("/reservations")) return Task.FromResult(Registered(Interlocked.Increment(ref registrations)));
     if (request.Path.EndsWith("/records") && Interlocked.Increment(ref recordCalls) == 1)
         return Task.FromResult(Json(HttpStatusCode.Unauthorized, new { error = "lease-expired" }));
     return Task.FromResult(Json(HttpStatusCode.OK, new { }));
 }))
-using (var live = new LivePublisher("https://relay.invalid", new ManualLogSource(), handler))
+using (var live = CreateLive(handler))
 {
     live.Configure(new TraceManifest { RunId = runId }, null);
     live.Publish(Record("participant", 9000, ("playerId", rawPlayer), ("nickname", "Player")), 0);
@@ -170,13 +282,13 @@ foreach (string expiresAt in new[] { "records", "heartbeat" })
     int creates = 0, expired = 0;
     using var handler = new FakeHandler((request, _) =>
     {
-        if (request.Path.EndsWith("/sessions"))
+        if (request.Path.EndsWith("/reservations"))
             return Task.FromResult(Registered(identity: Interlocked.Increment(ref creates) == 1 ? 'a' : 'c'));
         if (request.Path.EndsWith("/" + expiresAt) && Interlocked.Increment(ref expired) == 1)
             return Task.FromResult(Json(HttpStatusCode.Gone, new { error = "session-ended" }));
         return Task.FromResult(Json(HttpStatusCode.OK, new { }));
     });
-    using var live = new LivePublisher("https://relay.invalid", new ManualLogSource(), handler);
+    using var live = CreateLive(handler);
     live.Configure(new TraceManifest { RunId = runId }, null);
     live.Publish(Record("participant", 5000, ("playerId", rawPlayer), ("nickname", "Player")), 0);
     await Until(() => handler.Requests.Any(request => request.Path.Contains(new string('c', 32)) && request.Path.EndsWith("/records")),
@@ -192,13 +304,13 @@ foreach (string expiresAt in new[] { "records", "heartbeat" })
 int sameEpochRegistrations = 0, sameEpochUploads = 0;
 using (var handler = new FakeHandler((request, _) =>
 {
-    if (request.Path.EndsWith("/sessions"))
+    if (request.Path.EndsWith("/reservations"))
         return Task.FromResult(Registered(1, Interlocked.Increment(ref sameEpochRegistrations) == 1 ? 0 : 1));
     if (request.Path.EndsWith("/records") && Interlocked.Increment(ref sameEpochUploads) == 1)
         return Task.FromResult(Json(HttpStatusCode.Conflict, new { error = "producer-sequence-gap" }));
     return Task.FromResult(Json(HttpStatusCode.OK, new { }));
 }))
-using (var live = new LivePublisher("https://relay.invalid", new ManualLogSource(), handler))
+using (var live = CreateLive(handler))
 {
     live.Configure(new TraceManifest { RunId = runId }, null);
     live.Publish(Record("participant", 100, ("playerId", rawPlayer), ("nickname", "Player")), 0);
@@ -213,11 +325,11 @@ using (var live = new LivePublisher("https://relay.invalid", new ManualLogSource
 int standbyCreates = 0;
 using (var handler = new FakeHandler((request, _) =>
 {
-    if (request.Path.EndsWith("/sessions") && Interlocked.Increment(ref standbyCreates) == 1)
+    if (request.Path.EndsWith("/reservations") && Interlocked.Increment(ref standbyCreates) == 1)
         return Task.FromResult(Json(HttpStatusCode.Conflict, new { error = "publisher-active", retryAfterMs = 1000, watchId = new string('b', 32), watchCode = "ABCD" }));
-    return Task.FromResult(request.Path.EndsWith("/sessions") ? Registered(2) : Json(HttpStatusCode.OK, new { }));
+    return Task.FromResult(request.Path.EndsWith("/reservations") ? Registered(2) : Json(HttpStatusCode.OK, new { }));
 }))
-using (var live = new LivePublisher("https://relay.invalid", new ManualLogSource(), handler))
+using (var live = CreateLive(handler))
 {
     live.Configure(new TraceManifest { RunId = runId }, null);
     live.Publish(Record("participant", 1, ("playerId", rawPlayer), ("nickname", "Player")), 0);
@@ -234,12 +346,12 @@ using (var live = new LivePublisher("https://relay.invalid", new ManualLogSource
 foreach (HttpStatusCode status in new[] { HttpStatusCode.Created, HttpStatusCode.OK, HttpStatusCode.Conflict })
 foreach (string? code in new string?[] { "PEAK", null, "", "abcD", "ABC", "ABCDE", "AB1D", "ABCD\n", "ＡBCD" })
 {
-    using var handler = new FakeHandler((request, _) => Task.FromResult(!request.Path.EndsWith("/sessions")
+    using var handler = new FakeHandler((request, _) => Task.FromResult(!request.Path.EndsWith("/reservations")
         ? Json(HttpStatusCode.OK, new { })
         : status == HttpStatusCode.Conflict
             ? Json(status, new { error = "publisher-active", retryAfterMs = 30_000, watchId = new string('b', 32), watchCode = code })
             : Registered(watchCode: code, status: status)));
-    using var live = new LivePublisher("https://relay.invalid", new ManualLogSource(), handler);
+    using var live = CreateLive(handler);
     live.Configure(new TraceManifest { RunId = runId }, null);
     await Until(() => live.Status == (status == HttpStatusCode.Conflict ? LivePublisherStatus.Standby : LivePublisherStatus.Live),
         "Registration with optional watch code did not finish");
@@ -251,12 +363,12 @@ foreach (string? code in new string?[] { "PEAK", null, "", "abcD", "ABC", "ABCDE
 
 // Do not keep a previous code if re-registration no longer supplies one.
 int codeCreates = 0;
-using (var handler = new FakeHandler((request, _) => Task.FromResult(request.Path.EndsWith("/sessions")
+using (var handler = new FakeHandler((request, _) => Task.FromResult(request.Path.EndsWith("/reservations")
     ? Registered(watchCode: Interlocked.Increment(ref codeCreates) == 1 ? "ABCD" : null)
     : request.Path.EndsWith("/records") && Volatile.Read(ref codeCreates) == 1
         ? Json(HttpStatusCode.Unauthorized, new { error = "lease-expired" })
         : Json(HttpStatusCode.OK, new { }))))
-using (var live = new LivePublisher("https://relay.invalid", new ManualLogSource(), handler))
+using (var live = CreateLive(handler))
 {
     live.Configure(new TraceManifest { RunId = runId }, null);
     await Until(() => live.WatchCode == "ABCD", "Initial live code missing");
@@ -270,7 +382,7 @@ var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsync
 var cancelled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 using (var handler = new FakeHandler(async (request, cancellation) =>
 {
-    if (request.Path.EndsWith("/sessions")) return Registered();
+    if (request.Path.EndsWith("/reservations")) return Registered();
     if (request.Path.EndsWith("/records"))
     {
         started.TrySetResult();
@@ -280,7 +392,7 @@ using (var handler = new FakeHandler(async (request, cancellation) =>
     return Json(HttpStatusCode.OK, new { });
 }))
 {
-    var live = new LivePublisher("https://relay.invalid", new ManualLogSource(), handler);
+    var live = CreateLive(handler);
     live.Configure(new TraceManifest { RunId = runId }, null);
     live.Publish(Record("participant", 1, ("playerId", rawPlayer), ("nickname", "Player")), 0);
     await started.Task.WaitAsync(TimeSpan.FromSeconds(3));
@@ -291,7 +403,7 @@ using (var handler = new FakeHandler(async (request, cancellation) =>
     await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(1));
     await Until(() => handler.Requests.Any(request => request.Path.EndsWith("/end")), "best-effort end missing");
 }
-Console.WriteLine("PeakTrail live publisher contract passed: privacy, snapshot/coalescing, fixed cadence, retry, lease, standby, live codes, legacy links, heartbeat, cancellation.");
+Console.WriteLine("PeakTrail live publisher contract passed: airport reservation/activation, late RunId, stable code/clock, stale-run isolation, privacy, snapshot/coalescing, fixed cadence, retry, lease, standby, links, heartbeat, cancellation.");
 
 internal sealed record Captured(string Path, string Body, string? Authorization, long AtMs);
 internal sealed class FakeHandler(Func<Captured, CancellationToken, Task<HttpResponseMessage>> respond) : HttpMessageHandler

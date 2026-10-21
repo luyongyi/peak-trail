@@ -6,6 +6,7 @@ using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using PeakTrail.MapExporter;
+using Photon.Pun;
 using PhotonPlayer = Photon.Realtime.Player;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -15,7 +16,7 @@ namespace PeakTrailRecorder;
 [BepInAutoPlugin]
 public partial class Plugin : BaseUnityPlugin
 {
-    internal const string RecorderVersion = "0.8.3";
+    internal const string RecorderVersion = "0.8.4";
 
     internal static ManualLogSource Log { get; private set; } = null!;
 
@@ -48,6 +49,13 @@ public partial class Plugin : BaseUnityPlugin
     private int _lastFinalizedRunManagerInstanceId;
     private bool _applicationQuitting;
     private float _nextLiveStartAttemptAt;
+    private LivePublisher? _publisher;
+    private string? _publisherRoom;
+    private string? _publisherServer;
+    private string? _offlineRoomScope;
+    private bool _publisherHadRun;
+    private int _liveEndedRun;
+    private int _publisherRunManager;
     private RouteArchiveOutbox? _routeOutbox;
     private NativeRouteArchive? _routeArchive;
     private int _lastArchivedRun;
@@ -77,8 +85,8 @@ public partial class Plugin : BaseUnityPlugin
             LiveRelayConnection.DefaultServerUrl,
             "Base HTTP(S) URL of the PeakTrail live relay, without user information, query or fragment. Publishing credentials and the single active publisher are managed automatically.");
 
-        NativeLiveSettings.Install(_liveEnabled, () => _session?.LiveWatchCode, () => _session?.LiveWatchUrl,
-            () => _session?.LiveStatus, Log);
+        NativeLiveSettings.Install(_liveEnabled, () => _publisher?.WatchCode, () => _publisher?.WatchUrl,
+            () => _publisher?.Status.ToString() ?? nameof(LivePublisherStatus.WaitingForRoom), Log);
 
         _mapExportKey = Config.Bind(
             "MapCapture",
@@ -145,7 +153,7 @@ public partial class Plugin : BaseUnityPlugin
         PlayerStatusReader.ClearOutsideRoom();
         TryStartMapExport();
         NativeLiveSettings.EnsureRegistered();
-        if (!_liveEnabled.Value) _session?.SetLivePublisher(null);
+        SynchronizeRoomPublisher();
         SynchronizeRouteArchive();
 
         if (Time.realtimeSinceStartup >= _nextSubscriptionRefreshAt)
@@ -168,6 +176,7 @@ public partial class Plugin : BaseUnityPlugin
 
         if (_session != null && _session.RecordsLocally != _enabled.Value)
         {
+            _session.SetLivePublisher(null); // the room stream continues while only the file session changes
             FinalizeSession("local_recording_setting_changed");
             _lastFinalizedRunManagerInstanceId = 0;
         }
@@ -219,23 +228,66 @@ public partial class Plugin : BaseUnityPlugin
     private void SynchronizeLiveSetting()
     {
         if (_session == null) return;
-        if (!_liveEnabled.Value)
-        {
-            _session.SetLivePublisher(null);
-            _nextLiveStartAttemptAt = 0f;
-            return;
-        }
-        if (_session.LiveEnabled || Time.realtimeSinceStartup < _nextLiveStartAttemptAt) return;
+        if (!_liveEnabled.Value || _publisher == null) { _session.SetLivePublisher(null); return; }
+        if (_session.LiveEnabled) return;
         try
         {
-            _session.SetLivePublisher(new LivePublisher(_liveServerUrl.Value.Trim(), Log));
+            _session.SetLivePublisher(_publisher);
+            _publisherHadRun = true;
+            _publisherRunManager = _session.RunManagerInstanceId;
             _nextLiveSampleAt = 0f;
         }
         catch (Exception exception)
         {
-            _nextLiveStartAttemptAt = Time.realtimeSinceStartup + 10f;
             Log.LogWarning($"Live connection unavailable ({exception.GetType().Name}); local recording continues.");
         }
+    }
+
+    private void SynchronizeRoomPublisher()
+    {
+        var room = PhotonNetwork.CurrentRoom;
+        if (!_liveEnabled.Value || !PhotonNetwork.InRoom || room == null)
+        {
+            StopRoomPublisher();
+            _offlineRoomScope = null;
+            _nextLiveStartAttemptAt = 0;
+            return;
+        }
+        bool airport = SceneManager.GetActiveScene().name == "Airport";
+        // Loading can keep the old Airport scene/character alive temporarily.
+        // Do not mistake that transition (or a missing RunId) for a new airport stay.
+        bool confirmedAirport = airport && !LoadingScreenHandler.loading;
+        _publisher?.SetAirportPresence(confirmedAirport);
+        if (confirmedAirport) _liveEndedRun = 0;
+        if (confirmedAirport && _publisherHadRun) StopRoomPublisher();
+        if (!confirmedAirport && _liveEndedRun != 0 && (!RunManager.Instance || RunManager.Instance.GetInstanceID() == _liveEndedRun)) return;
+        if (_publisher == null && airport && !confirmedAirport) return;
+        if (_publisherHadRun && IsPlayableRunReady() && RunManager.Instance.GetInstanceID() != _publisherRunManager) StopRoomPublisher();
+        // Photon offline rooms share a generic name, so isolate them per local
+        // joined session. Real teammates hash the same region/version/room name.
+        string name = PhotonNetwork.OfflineMode ? _offlineRoomScope ??= Guid.NewGuid().ToString("N") : room.Name;
+        if (string.IsNullOrEmpty(name)) return;
+        string key = LivePayload.ReservationKey(PhotonNetwork.CloudRegion ?? "", PhotonNetwork.GameVersion ?? "", name);
+        string server = _liveServerUrl.Value.Trim();
+        if (_publisher != null && (_publisherRoom != key || _publisherServer != server)) StopRoomPublisher();
+        if (_publisher != null || Time.realtimeSinceStartup < _nextLiveStartAttemptAt) return;
+        try
+        {
+            var publisher = new LivePublisher(server, Log);
+            publisher.SetAirportPresence(confirmedAirport);
+            publisher.Reserve(key);
+            _publisher = publisher; _publisherRoom = key; _publisherServer = server;
+        }
+        catch (Exception e)
+        { _nextLiveStartAttemptAt = Time.realtimeSinceStartup + 10; Log.LogWarning("Live room reservation unavailable (" + e.GetType().Name + "); retrying."); }
+    }
+
+    private void StopRoomPublisher()
+    {
+        _session?.SetLivePublisher(null);
+        var publisher = _publisher; _publisher = null;
+        _publisherRoom = null; _publisherServer = null; _publisherHadRun = false; _publisherRunManager = 0;
+        publisher?.Dispose();
     }
 
     private void SynchronizeRouteArchive()
@@ -454,6 +506,8 @@ public partial class Plugin : BaseUnityPlugin
         CaptureRouteBoundary(true, "run-end", true);
         CloseRouteArchive();
         FinalizeSession("game_run_end");
+        _liveEndedRun = RunManager.Instance ? RunManager.Instance.GetInstanceID() : 0;
+        StopRoomPublisher();
     }
 
     private void OnSoulFreed(int phase)
@@ -489,6 +543,7 @@ public partial class Plugin : BaseUnityPlugin
         _applicationQuitting = true;
         CloseRouteArchive();
         FinalizeSession("application_quit");
+        StopRoomPublisher();
     }
 
     private void OnDestroy()
@@ -506,5 +561,6 @@ public partial class Plugin : BaseUnityPlugin
         {
             FinalizeSession("plugin_destroyed");
         }
+        StopRoomPublisher();
     }
 }

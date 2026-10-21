@@ -11,7 +11,7 @@ using Newtonsoft.Json.Linq;
 
 namespace PeakTrailRecorder;
 
-internal enum LivePublisherStatus { WaitingForRun, Connecting, Standby, Live, Reconnecting, Stopped }
+internal enum LivePublisherStatus { WaitingForRoom, WaitingForRun, WaitingInAirport, Connecting, Standby, Live, Reconnecting, Stopped }
 
 /// <summary>
 /// Account-free, leased v2 publishing. All game objects are projected on the caller
@@ -34,22 +34,30 @@ internal sealed class LivePublisher : IDisposable
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private TraceManifest? _sourceManifest; // only Configure/Publish on the game thread access this
     private JObject? _manifest;
+    private string? _reservationKey;
     private string? _roomKey;
     private string? _configuredRunId;
     private string? _sessionId;
     private string? _publishToken;
     private string? _watchUrl;
     private string? _watchCode;
+    private string? _assignedWatchId;
+    private string? _assignedWatchCode;
     private long _epoch = -1;
     private long _sequence;
     private long _epochOrigin;
     private long _nextRegistrationAt;
+    private long _nextActivationAt;
     private long _nextHeartbeatAt;
     private long _nextUploadAt;
     private int _heartbeatMs = 5000;
     private int _retryMs = 500;
     private string? _pendingBody;
-    private volatile LivePublisherStatus _status = LivePublisherStatus.WaitingForRun;
+    private volatile LivePublisherStatus _status = LivePublisherStatus.WaitingForRoom;
+    private volatile bool _serverLive;
+    private volatile bool _confirmedAirport;
+    private string? _activeRunRoomKey;
+    private long _runClockOrigin = -1;
     private int _disposed;
     private long _lastWarningAt = -60_000;
 
@@ -72,9 +80,31 @@ internal sealed class LivePublisher : IDisposable
     public string? WatchUrl => Volatile.Read(ref _disposed) != 0 ? null : Volatile.Read(ref _watchUrl);
     public string? WatchCode => Volatile.Read(ref _disposed) != 0 ? null : Volatile.Read(ref _watchCode);
 
+    /// <summary>Main-thread scene evidence, never inferred from a late RunId.</summary>
+    public void SetAirportPresence(bool confirmedAirport)
+    {
+        _confirmedAirport = confirmedAirport;
+        if (confirmedAirport && _serverLive) ClearWatchDetails();
+    }
+
+    /// <summary>Called once after joining a Photon room, even before a run exists.</summary>
+    public void Reserve(string reservationKey)
+    {
+        if (reservationKey == null || reservationKey.Length != 64) throw new ArgumentException("A hashed room key is required.", nameof(reservationKey));
+        foreach (char c in reservationKey) if (!(c >= '0' && c <= '9' || c >= 'a' && c <= 'f')) throw new ArgumentException("Invalid hashed room key.", nameof(reservationKey));
+        lock (_configurationLock)
+        {
+            if (_reservationKey != null && _reservationKey != reservationKey) throw new InvalidOperationException("A publisher belongs to one room.");
+            _reservationKey = reservationKey;
+        }
+    }
+
     /// <summary>The legacy producer argument is intentionally never transmitted.</summary>
     public void Configure(TraceManifest manifest, string? producer)
     {
+        // The publisher outlives RecordingSession. Airport waiting must not count
+        // as run time, and a local file-setting toggle must not reset live time.
+        Interlocked.CompareExchange(ref _runClockOrigin, _clock.ElapsedMilliseconds, -1);
         _sourceManifest = manifest;
         RefreshManifest();
     }
@@ -98,12 +128,16 @@ internal sealed class LivePublisher : IDisposable
     /// <summary>No sockets, waits, or Unity access. Incoming POCOs are detached and anonymized.</summary>
     public void Publish(Dictionary<string, object?> record, int roomTimestamp)
     {
-        if (Volatile.Read(ref _disposed) != 0 || record == null) return;
+        if (Volatile.Read(ref _disposed) != 0 || record == null || _sourceManifest == null) return;
         try
         {
             RefreshManifest();
             JObject? safe = _payload.Record(record);
-            if (safe != null) _records.Add(safe);
+            if (safe != null)
+            {
+                safe["t"] = Math.Max(0, _clock.ElapsedMilliseconds - Interlocked.Read(ref _runClockOrigin));
+                _records.Add(safe);
+            }
         }
         catch (Exception exception) { WarnThrottled("Live record skipped: " + exception.GetType().Name); }
     }
@@ -158,7 +192,29 @@ internal sealed class LivePublisher : IDisposable
             }
             _nextHeartbeatAt = _clock.ElapsedMilliseconds + _heartbeatMs;
         }
+        if (_serverLive && _confirmedAirport)
+        {
+            if (_clock.ElapsedMilliseconds >= _nextUploadAt) RetireMismatchedRun();
+            return;
+        }
+        if (!_serverLive)
+        {
+            if (_clock.ElapsedMilliseconds >= _nextActivationAt) TryActivate();
+            return;
+        }
+        if (Interlocked.Read(ref _runClockOrigin) < 0) return; // no airport records
         if (_clock.ElapsedMilliseconds < _nextUploadAt) return;
+        string? configuredRun;
+        lock (_configurationLock) configuredRun = _roomKey;
+        if (configuredRun == null) return; // host has not assigned the real RunId yet
+        if (configuredRun != _activeRunRoomKey)
+        {
+            // An earlier /end can be lost. Never append the next game's points
+            // to the still-active airport alias and its old manifest.
+            RetireMismatchedRun();
+            return;
+        }
+        if (WatchUrl == null) SetWatchDetails(_assignedWatchId, _assignedWatchCode);
         if (_pendingBody == null) _pendingBody = BuildBatch();
         if (_pendingBody == null) { _status = LivePublisherStatus.Live; return; }
         using HttpResponseMessage response = Post("records", _pendingBody, "application/x-ndjson");
@@ -186,17 +242,12 @@ internal sealed class LivePublisher : IDisposable
 
     private void TryRegister()
     {
-        JObject? manifest;
         string? roomKey;
-        lock (_configurationLock)
-        {
-            manifest = _manifest == null ? null : (JObject)_manifest.DeepClone();
-            roomKey = _roomKey;
-        }
-        if (manifest == null || roomKey == null) { _status = LivePublisherStatus.WaitingForRun; return; }
+        lock (_configurationLock) roomKey = _reservationKey;
+        if (roomKey == null) { _status = LivePublisherStatus.WaitingForRoom; return; }
         _status = _epoch < 0 ? LivePublisherStatus.Connecting : LivePublisherStatus.Reconnecting;
-        var requestBody = new JObject { ["roomKey"] = roomKey, ["clientId"] = _clientId, ["manifest"] = manifest };
-        using var request = new HttpRequestMessage(HttpMethod.Post, _serverUrl + "/api/live/v2/sessions")
+        var requestBody = new JObject { ["roomKey"] = roomKey, ["clientId"] = _clientId };
+        using var request = new HttpRequestMessage(HttpMethod.Post, _serverUrl + "/api/live/v2/reservations")
         {
             Content = new StringContent(requestBody.ToString(Formatting.None), Encoding.UTF8, "application/json"),
         };
@@ -204,8 +255,11 @@ internal sealed class LivePublisher : IDisposable
         JObject body = ReadObject(response);
         if ((int)response.StatusCode == 409 && (string?)body["error"] == "publisher-active")
         {
-            SetWatchDetails((string?)body["watchId"], (string?)body["watchCode"]);
-            _status = LivePublisherStatus.Standby;
+            _serverLive = (string?)body["status"] == "live";
+            bool oldAirportRun = _confirmedAirport && _serverLive;
+            if (oldAirportRun) ClearWatchDetails();
+            else SetWatchDetails((string?)body["watchId"], (string?)body["watchCode"]);
+            _status = oldAirportRun ? LivePublisherStatus.Reconnecting : LivePublisherStatus.Standby;
             _nextRegistrationAt = _clock.ElapsedMilliseconds + Math.Clamp((int?)body["retryAfterMs"] ?? 5000, 1000, 30_000);
             return;
         }
@@ -217,25 +271,65 @@ internal sealed class LivePublisher : IDisposable
             WarnThrottled("Live registration rejected (HTTP " + (int)response.StatusCode + ").");
             return;
         }
+        AcceptRegistration(body, initialActivation: false);
+    }
+
+    private void TryActivate()
+    {
+        JObject? manifest;
+        string? roomKey;
+        lock (_configurationLock)
+        {
+            manifest = _manifest == null ? null : (JObject)_manifest.DeepClone();
+            roomKey = _roomKey;
+        }
+        if (manifest == null || roomKey == null) { _status = LivePublisherStatus.WaitingInAirport; return; }
+        _status = LivePublisherStatus.Connecting;
+        var request = new JObject { ["roomKey"] = roomKey, ["manifest"] = manifest };
+        using HttpResponseMessage response = Post("activate", request.ToString(Formatting.None), "application/json");
+        // A run-room conflict does not revoke this reservation's lease/code.
+        int status = (int)response.StatusCode;
+        if (status == 401 || status == 404 || status == 410) { LeaseLost(response); return; }
+        if (!response.IsSuccessStatusCode)
+        {
+            _status = LivePublisherStatus.Reconnecting;
+            _nextActivationAt = _clock.ElapsedMilliseconds + RetryDelay(response, _retryMs);
+            _retryMs = Math.Min(_retryMs * 2, 8000);
+            WarnThrottled("Live activation pending (HTTP " + status + ").");
+            return;
+        }
+        AcceptRegistration(ReadObject(response), initialActivation: true);
+    }
+
+    private void AcceptRegistration(JObject body, bool initialActivation)
+    {
         string? sessionId = (string?)body["sessionId"];
         string? token = (string?)body["publishToken"];
         string? watchId = (string?)body["watchId"];
         long epoch = (long?)body["epoch"] ?? -1;
+        string? status = (string?)body["status"];
+        string? runRoomKey = (string?)body["runRoomKey"];
         if (string.IsNullOrEmpty(sessionId) || string.IsNullOrEmpty(token) || string.IsNullOrEmpty(watchId) || epoch < 0)
             throw new InvalidOperationException("Incomplete live registration response.");
+        if (status != "waiting" && status != "live" || status == "live" && !IsHash(runRoomKey))
+            throw new InvalidOperationException("Missing live run verification.");
         bool newEpoch = epoch != _epoch || !string.Equals(sessionId, _sessionId, StringComparison.Ordinal);
         _sessionId = sessionId;
         _publishToken = token;
         _epoch = epoch;
-        SetWatchDetails(watchId, (string?)body["watchCode"]);
+        _serverLive = status == "live";
+        _activeRunRoomKey = runRoomKey;
+        _assignedWatchId = watchId; _assignedWatchCode = (string?)body["watchCode"];
+        if (_serverLive && _confirmedAirport) ClearWatchDetails();
+        else SetWatchDetails(watchId, (string?)body["watchCode"]);
         _heartbeatMs = Math.Clamp((int?)body["heartbeatMs"] ?? 5000, 1000, 5000);
         _nextHeartbeatAt = _clock.ElapsedMilliseconds + _heartbeatMs;
         if (newEpoch)
         {
             _sequence = 0;
-            _epochOrigin = _records.LatestTime;
+            _epochOrigin = initialActivation ? 0 : _records.LatestTime;
             _pendingBody = null;
-            _records.ReplaySnapshot(includeRecentEvents: true);
+            if (_serverLive) _records.ReplaySnapshot(includeRecentEvents: true);
         }
         else if (body["lastProducerSeq"] != null)
         {
@@ -243,11 +337,32 @@ internal sealed class LivePublisher : IDisposable
             RestoreUnacknowledgedEvents(acknowledged);
             _sequence = acknowledged;
             _pendingBody = null;
-            _records.ReplaySnapshot(includeRecentEvents: false);
+            if (_serverLive) _records.ReplaySnapshot(includeRecentEvents: false);
         }
         _retryMs = 500;
         _nextUploadAt = _clock.ElapsedMilliseconds + FlushIntervalMs;
-        _status = LivePublisherStatus.Live;
+        _nextActivationAt = 0;
+        _status = _serverLive ? (_confirmedAirport ? LivePublisherStatus.Reconnecting : LivePublisherStatus.Live) : LivePublisherStatus.WaitingInAirport;
+    }
+
+    private static bool IsHash(string? value)
+    {
+        if (value?.Length != 64) return false;
+        foreach (char c in value) if (!(c >= '0' && c <= '9' || c >= 'a' && c <= 'f')) return false;
+        return true;
+    }
+
+    private void RetireMismatchedRun()
+    {
+        _status = LivePublisherStatus.Reconnecting;
+        using HttpResponseMessage response = Post("end", "{\"reason\":\"run-changed\"}", "application/json");
+        int status = (int)response.StatusCode;
+        if (!response.IsSuccessStatusCode && status != 401 && status != 404 && status != 410)
+            throw new HttpRequestException("Previous live run could not be released.");
+        _publishToken = null; _sessionId = null; _epoch = -1; _sequence = 0;
+        _serverLive = false; _activeRunRoomKey = null; _pendingBody = null;
+        ClearWatchDetails();
+        _nextRegistrationAt = _clock.ElapsedMilliseconds + FlushIntervalMs;
     }
 
     private string? BuildBatch()
@@ -310,6 +425,7 @@ internal sealed class LivePublisher : IDisposable
     private void SetWatchDetails(string? watchId, string? watchCode)
     {
         if (Volatile.Read(ref _disposed) != 0) return;
+        if (_confirmedAirport && _serverLive) { ClearWatchDetails(); return; }
         bool validId = !string.IsNullOrEmpty(watchId) && watchId.Length <= 128;
         bool validCode = validId && watchCode?.Length == 4;
         if (validCode)
@@ -337,7 +453,7 @@ internal sealed class LivePublisher : IDisposable
 
     private void Backoff()
     {
-        _nextUploadAt = _nextRegistrationAt = _clock.ElapsedMilliseconds + _retryMs;
+        _nextActivationAt = _nextUploadAt = _nextRegistrationAt = _clock.ElapsedMilliseconds + _retryMs;
         _nextHeartbeatAt = Math.Max(_nextHeartbeatAt, _nextUploadAt);
         _retryMs = Math.Min(_retryMs * 2, 8000);
     }
