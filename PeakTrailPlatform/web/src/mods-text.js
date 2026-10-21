@@ -18,7 +18,7 @@ const pairs = [
   ["无需登录", "No login"],
   ["输入直播码即可观看，跟随玩家，也能回看近期路径；原有观战链接仍可使用。", "Enter a live code to watch, follow players, and replay recent paths. Existing watch links still work."],
   ["下载直播 MOD", "Download Live Trail MOD"],
-  ["下载直播 MOD 0.8.4", "Download Live Trail MOD 0.8.4"],
+  ["下载直播 MOD 0.8.5", "Download Live Trail MOD 0.8.5"],
   ["自动留下路线", "Save routes automatically"],
   ["切关与结束自动归档，断网后可补传；完整路线进入热力图，无需登录。", "Routes archive at chapter changes and run end, with uploads retried after an outage. Complete paths contribute to heatmaps. No login needed."],
   ["· Windows 游戏电脑", "· Windows gaming PC"],
