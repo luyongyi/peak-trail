@@ -98,6 +98,8 @@ export function communityPlayers(routes, hidden = new Set()) {
     const player = players.get(key);
     player.pointCount += route.points?.length || 0;
     player.hasPoints = player.pointCount > 0;
+    player.summitCompleted ||= route.summitCompleted === true;
+    player.nadirCompleted ||= route.nadirCompleted === true;
   }
   return [...players.values()];
 }
@@ -114,10 +116,17 @@ export function normalizeCommunityTeams(value) {
     ids.add(team.id);
     const members = new Map();
     for (const member of team.members) {
-      if (!HASH.test(member?.playerKey || "") || typeof member.name !== "string") throw communityRouteError("队员身份无效。", "Invalid member identity.");
-      members.set(member.playerKey, { playerKey: member.playerKey, name: member.name || tr("登山者", "Climber"), ...(!member.name ? { nameMissing: true } : {}) });
+      if (!HASH.test(member?.playerKey || "") || typeof member.name !== "string"
+        || member.summitCompleted !== undefined && typeof member.summitCompleted !== "boolean"
+        || member.nadirCompleted !== undefined && typeof member.nadirCompleted !== "boolean") throw communityRouteError("队员身份无效。", "Invalid member identity.");
+      members.set(member.playerKey, { playerKey: member.playerKey,
+        ...(member.summitCompleted !== undefined ? { summitCompleted: member.summitCompleted } : {}),
+        ...(member.nadirCompleted !== undefined ? { nadirCompleted: member.nadirCompleted } : {}),
+        name: member.name || tr("登山者", "Climber"), ...(!member.name ? { nameMissing: true } : {}) });
     }
-    if (team.summitCompleted !== undefined && typeof team.summitCompleted !== "boolean"
+    if (team.nadirCompleted !== undefined && typeof team.nadirCompleted !== "boolean"
+      || team.nadirFinisherKeys !== undefined && (!Array.isArray(team.nadirFinisherKeys) || team.nadirFinisherKeys.some(key => !HASH.test(key) || !members.has(key)))
+      || team.summitCompleted !== undefined && typeof team.summitCompleted !== "boolean"
       || team.finisherKeys !== undefined && (!Array.isArray(team.finisherKeys) || team.finisherKeys.some(key => !HASH.test(key) || !members.has(key)))) throw communityRouteError("队伍登顶状态无效。", "Invalid team summit status.");
     return { ...team, members: [...members.values()] };
   }), truncated: Boolean(value.truncated) };
@@ -133,13 +142,17 @@ export function normalizeCommunityTeamStage(value, group, mapPack, stageIndex, t
   const response = normalizeRoutes(value, { maximumPoints });
   if (response.routes.some(route => !HASH.test(route.playerKey || "") || typeof route.completed !== "boolean"
     || ![true, false, null, undefined].includes(route.gameCompleted)
+    || route.nadirCompleted !== undefined && typeof route.nadirCompleted !== "boolean"
     || route.summitCompleted !== undefined && typeof route.summitCompleted !== "boolean")) throw communityRouteError("队员路线格式无效。", "Invalid member route.");
-  if (value.summitCompleted !== undefined && typeof value.summitCompleted !== "boolean"
+  if (value.nadirCompleted !== undefined && typeof value.nadirCompleted !== "boolean"
+    || value.nadirFinisherKeys !== undefined && (!Array.isArray(value.nadirFinisherKeys) || value.nadirFinisherKeys.some(key => !HASH.test(key)))
+    || value.summitCompleted !== undefined && typeof value.summitCompleted !== "boolean"
     || value.stageCompleted !== undefined && typeof value.stageCompleted !== "boolean"
     || value.teamRevision !== undefined && !HASH.test(value.teamRevision)
     || !Number.isSafeInteger(value.totalRouteCount) || value.totalRouteCount < 0
     || value.finisherKeys !== undefined && (!Array.isArray(value.finisherKeys) || value.finisherKeys.some(key => !HASH.test(key)))) throw communityRouteError("队伍登顶状态无效。", "Invalid team summit status.");
   return { routes: response.routes, heatmap: null, totalRouteCount: response.totalRouteCount, truncated: Boolean(response.truncated),
+    nadirCompleted: value.nadirCompleted === true, nadirFinisherKeys: value.nadirFinisherKeys || [],
     summitCompleted: value.summitCompleted === true, stageCompleted: value.stageCompleted === true || response.routes.some(route => route.gameCompleted === true), finisherKeys: value.finisherKeys || [],
     teamLoaded: true, heightBands: heightBands(response.routes, null) };
 }
@@ -147,7 +160,7 @@ export function normalizeCommunityTeamStage(value, group, mapPack, stageIndex, t
 export function communityTeamLabel(team) {
   const date = new Date(team.startedUtc).toLocaleString(getLocale(), { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
   const difficulty = getLocale() === "zh-CN" && (typeof team.difficulty === "string" ? team.difficulty : team.difficulty?.label) || difficultyLabel(team.difficulty);
-  return `${date} · ${team.map.scene} · ${difficulty}${team.summitCompleted ? tr(" · 本队已登顶", " · Team reached the summit") : ""} · ${team.members.map(member => member.nameMissing ? tr("登山者", "Climber") : member.name).join(tr("、", ", "))}`;
+  return `${date} · ${team.map.scene} · ${difficulty}${team.summitCompleted ? tr(" · 本队已登顶", " · Team reached the summit") : ""}${team.nadirCompleted ? tr(" · 本队天底已通关", " · Team completed Nadir") : ""} · ${team.members.map(member => member.nameMissing ? tr("登山者", "Climber") : member.name).join(tr("、", ", "))}`;
 }
 
 export function communityGroupLabel(group, index = 0) {

@@ -71,3 +71,31 @@ test("live time-follow is separate from paused replay and does not depend on the
   state.watch.following = true; state.watch.status = "ended"; assert.equal(api.isLiveFollowing(), false);
   state.watch.status = "live"; state.watch.initializing = true; assert.equal(api.isLiveFollowing(), false);
 });
+
+test('ended watch snapshots expose retained Nadir facts while only confirmed durable sessions claim automatic saving', async () => {
+  const { watchProgressLabel } = await import('../src/watch-window.js');
+  const trace = makeTrace();
+  appendLiveRecord(trace, { type: 'event', event: 'segment_change', t: 1000, activeSegment: 5 });
+  appendLiveRecord(trace, { type: 'event', event: 'nadir-wall', t: 1000, playerId: 'p1', activeSegment: 5 });
+  appendLiveRecord(trace, { type: 'event', event: 'nadir-chase', t: 1000, playerId: 'p1', activeSegment: 5 });
+  appendLiveRecord(trace, { type: 'event', event: 'nadir', t: 2000, playerId: 'p1', activeSegment: 5 });
+  appendLiveRecord(trace, { type: 'event', event: 'run_end', t: 3000, activeSegment: 5 });
+  appendLiveRecord(trace, { type: 'sample', t: 200000, playerId: 'p1', pos: [1, 2, 3], activeSegment: 5 });
+  finalizeLiveFlush(trace); trimWatchTrace(trace);
+  trace.manifest.recorderVersion = '0.8.2';
+  const state = { currentTime: trace.duration, trace,
+    watch: { active: true, trace, status: 'ended', connection: 'connected', following: true } };
+  const nodes = new Map(), $ = id => { if (!nodes.has(id)) nodes.set(id, { dataset: {} }); return nodes.get(id); };
+  const api = functions(['updateWatchStatus'], { state, $, watchProgressLabel, updateWatchShareUI() {},
+    elements: { playButton: { classList: { toggle() {} }, setAttribute() {} } } });
+  api.updateWatchStatus();
+  assert.match($('watchStatusText').textContent, /直播已结束.*天底通关/);
+  assert.doesNotMatch($('watchStatusText').textContent, /登顶/);
+  assert.doesNotMatch($('watchTimeStatus').textContent, /自动保存/, 'recorder version alone is not persistence evidence');
+  state.watch.persistence = 'memory'; api.updateWatchStatus();
+  assert.doesNotMatch($('watchTimeStatus').textContent, /自动保存/);
+  state.watch.persistence = 'durable'; api.updateWatchStatus();
+  assert.match($('watchTimeStatus').textContent, /自动保存/);
+  assert.deepEqual(trace.milestones.map(e => e.type), ['segment_change', 'nadir_wall', 'nadir_chase', 'nadir', 'run_end']);
+  assert.equal(watchProgressLabel({ milestones: [{ type: 'run_end', t: 3 }] }), '攀登结束');
+});

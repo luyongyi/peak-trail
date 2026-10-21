@@ -26,6 +26,7 @@ const eventStateFamilies = new Map([
   ["death", "life"], ["revive", "life"],
   ["passed_out", "consciousness"], ["recovered", "consciousness"],
 ]);
+const milestones = new Set(["summit", "nadir", "nadir-ready", "nadir-entry", "nadir-wall", "nadir-chase", "native-checkpoint", "run_end"]);
 const fail = (error, status = 400, extra = {}) => Object.assign(new Error(error), { status, extra });
 const bytes = (value) => Buffer.byteLength(typeof value === "string" ? value : JSON.stringify(value));
 const nullable = (validate) => (value) => value === null ? null : validate(value);
@@ -145,10 +146,35 @@ export function validateLiveManifest(raw) {
 }
 
 export function createLiveV2Api({ now = Date.now, limits: overrides = {}, trustedProxy = false,
-  sweepIntervalMs = 1_000, pingIntervalMs = 15_000, watchCodeGenerator = randomWatchCode } = {}) {
+  sweepIntervalMs = 1_000, pingIntervalMs = 15_000, watchCodeGenerator = randomWatchCode, archive = null, memoryOnly = false } = {}) {
   const limits = { ...LIVE_V2_LIMITS, ...overrides };
   const sessions = new Map(), rooms = new Map(), watches = new Map(), codes = new Map(), rates = new Map();
-  let residentBytes = 0, viewerCount = 0, activeBodies = 0, closed = false;
+  let residentBytes = 0, reservedBytes = 0, viewerCount = 0, activeBodies = 0, closed = false, closing, sweeping;
+  const gates = new Map(); let queuedMutations = 0;
+  function exclusive(key, action) {
+    if (queuedMutations >= 64) throw fail("live-service-busy", 503);
+    queuedMutations += 1;
+    const operation = (gates.get(key) ?? Promise.resolve()).catch(() => {}).then(() => {
+      if (closed) throw fail("live-service-stopped", 503);
+      return action();
+    });
+    gates.set(key, operation);
+    return operation.finally(() => {
+      queuedMutations -= 1;
+      if (gates.get(key) === operation) gates.delete(key);
+    });
+  }
+  async function persist(operation, ...args) {
+    if (memoryOnly) return;
+    if (!archive) throw fail("live-archive-unconfigured", 503);
+    await archive[operation](...args);
+  }
+  function reserve(nextBytes, previousBytes) {
+    const growth = Math.max(0, nextBytes - previousBytes);
+    if (residentBytes + reservedBytes + growth > limits.globalBytes) throw fail("live-service-capacity", 503);
+    reservedBytes += growth;
+    return () => { reservedBytes -= growth; };
+  }
   const headers = {
     "content-type": "application/json; charset=utf-8", "cache-control": "no-store",
     "x-content-type-options": "nosniff", "referrer-policy": "no-referrer",
@@ -175,6 +201,7 @@ export function createLiveV2Api({ now = Date.now, limits: overrides = {}, truste
     return {
       sessionId: session.sessionId, watchId: session.watchId, epoch: session.epoch,
       watchCode: session.status === "ended" ? null : session.watchCode,
+      persistence: session.archived ? "durable" : "memory",
       manifest: session.manifest, status: session.status, lastSeq: session.lastSeq,
       createdAt: session.createdAt, lastRecordAt: session.lastRecordAt,
       leaseExpiresAt: session.leaseExpiresAt, endedAt: session.endedAt, reason: session.reason,
@@ -201,14 +228,15 @@ export function createLiveV2Api({ now = Date.now, limits: overrides = {}, truste
     const { status, lastRecordAt, leaseExpiresAt, endedAt, reason, epoch } = session;
     for (const viewer of session.viewers) write(session, viewer, "state", { status, lastRecordAt, leaseExpiresAt, endedAt, reason, epoch });
   }
-  function end(session, reason) {
+  async function end(session, reason) {
     if (session.status === "ended") return;
+    await persist("end", session, reason, now());
     session.status = "ended"; session.endedAt = now(); session.reason = reason;
     if (rooms.get(session.roomKey) === session) rooms.delete(session.roomKey);
     broadcastState(session);
     for (const viewer of [...session.viewers]) { detach(session, viewer); viewer.res.end(); }
   }
-  function updateStatus(session) {
+  async function updateStatus(session) {
     if (session.status === "ended") return;
     const time = now();
     if (time - session.createdAt >= limits.ttlMs) return end(session, "maximum-duration");
@@ -224,12 +252,17 @@ export function createLiveV2Api({ now = Date.now, limits: overrides = {}, truste
     if (rooms.get(session.roomKey) === session) rooms.delete(session.roomKey);
   }
   function sweep() {
-    const time = now();
-    for (const session of sessions.values()) {
-      updateStatus(session);
-      if (session.status === "ended" && time - session.endedAt >= limits.endedRetentionMs) remove(session);
-    }
-    for (const [key, rate] of rates) if (time - rate.since >= 60_000) rates.delete(key);
+    if (sweeping) return sweeping;
+    sweeping = (async () => {
+      const time = now();
+      for (const session of sessions.values()) {
+        if (session.status !== "ended" && (time - session.createdAt >= limits.ttlMs || time - session.lastSeenAt >= limits.endedAfterMs
+            || session.status === "live" && time >= session.leaseExpiresAt)) await exclusive(session, () => updateStatus(session));
+        if (session.status === "ended" && time - session.endedAt >= limits.endedRetentionMs) remove(session);
+      }
+      for (const [key, rate] of rates) if (time - rate.since >= 60_000) rates.delete(key);
+    })().finally(() => { sweeping = null; });
+    return sweeping;
   }
   function snapshot(session) {
     const selected = new Map([...session.latest.values()].map((entry) => [entry.seq, entry]));
@@ -273,16 +306,21 @@ export function createLiveV2Api({ now = Date.now, limits: overrides = {}, truste
     if (record) session.lastRecordAt = now();
     if (changed) broadcastState(session);
   }
-  function startEpoch(session, clientId, manifest) {
+  async function startEpoch(session, clientId, manifest) {
     const nextManifest = { ...manifest, sessionId: session.sessionId };
     const size = bytes(nextManifest);
-    if (residentBytes - session.bytes + size > limits.globalBytes) throw fail("live-service-capacity", 503);
+    const release = reserve(size, session.bytes);
+    try {
+      if (session.epoch === 0) await persist("open", { ...session, manifest: nextManifest });
+      else await persist("epoch", session, nextManifest, now());
+    } finally { release(); }
     residentBytes -= session.bytes;
     Object.assign(session, {
       clientId, manifest: nextManifest, token: randomBytes(32).toString("hex"), epoch: session.epoch + 1,
       lastSeq: 0, lastProducerSeq: 0, latest: new Map(), history: [], players: new Set(),
       historyBytes: 0, stateBytes: 0, bytes: size, lastRecordAt: null,
       status: "live", endedAt: null, reason: null, budget: { since: now(), count: 0, bytes: 0 },
+      archived: !memoryOnly,
     });
     residentBytes += size; touch(session);
     for (const viewer of session.viewers) hello(session, viewer);
@@ -310,15 +348,15 @@ export function createLiveV2Api({ now = Date.now, limits: overrides = {}, truste
     const source = await readBody(req, limit);
     try { return JSON.parse(source); } catch { throw fail("invalid-json"); }
   }
-  function authorize(req, session) {
+  async function authorize(req, session) {
     if (!session) throw fail("unknown-session", 404);
     const token = String(req.headers.authorization ?? "").match(/^Bearer ([a-f0-9]{64})$/)?.[1];
     if (!token || !timingSafeEqual(Buffer.from(token), Buffer.from(session.token))) throw fail("invalid-publish-token", 401);
-    updateStatus(session);
+    await updateStatus(session);
     if (session.status === "ended") throw fail("session-ended", 410);
     if (now() >= session.leaseExpiresAt) throw fail("publisher-lease-expired", 409, { retryAfterMs: 0 });
   }
-  function append(session, envelopes) {
+  async function append(session, envelopes) {
     // Validate the complete batch before changing state, including retry sequence gaps.
     const pending = [], players = new Set(session.players);
     let expected = session.lastProducerSeq + 1, duplicates = 0;
@@ -346,6 +384,7 @@ export function createLiveV2Api({ now = Date.now, limits: overrides = {}, truste
         // viewer must not resurrect a departed/dead player after path eviction.
         key = `event:${eventStateFamilies.get(record.event)}:${record.playerId}`;
       }
+      else if (record.type === "event" && milestones.has(record.event)) key = `milestone:${record.event}:${record.playerId ?? ""}:${record.activeSegment ?? ""}`;
       if (key) { stateBytes -= latest.get(key)?.bytes ?? 0; latest.set(key, entry); stateBytes += entry.bytes; }
       history.push(entry); historyBytes += entry.bytes;
     }
@@ -354,7 +393,9 @@ export function createLiveV2Api({ now = Date.now, limits: overrides = {}, truste
       historyBytes -= history.shift().bytes;
     }
     const nextBytes = bytes(session.manifest) + stateBytes + historyBytes;
-    if (residentBytes - session.bytes + nextBytes > limits.globalBytes) throw fail("live-service-capacity", 503);
+    const release = reserve(nextBytes, session.bytes);
+    try { if (pending.length) await persist("batch", session, pending, entries, now()); }
+    finally { release(); }
     residentBytes += nextBytes - session.bytes;
     Object.assign(session, { latest, history, stateBytes, historyBytes, players, bytes: nextBytes, lastSeq, lastProducerSeq: expected - 1 });
     touch(session, pending.length > 0);
@@ -390,7 +431,7 @@ export function createLiveV2Api({ now = Date.now, limits: overrides = {}, truste
     if (req.method === "OPTIONS") { res.writeHead(204, headers).end(); return true; }
     try {
       if (closed) throw fail("live-service-stopped", 503);
-      sweep();
+      await sweep();
       if (path === `${PREFIX}/sessions` && req.method === "POST") {
         if (limited(req, "create", limits.createsPerMinute)) throw fail("rate-limited", 429, { retryAfterMs: 5_000 });
         const body = object(await readJson(req, limits.manifestBytes), {
@@ -398,50 +439,57 @@ export function createLiveV2Api({ now = Date.now, limits: overrides = {}, truste
           clientId: (value) => { if (typeof value !== "string" || !ID.test(value)) throw fail("client-id-required"); return value; },
           manifest: validateLiveManifest,
         }, ["roomKey", "clientId", "manifest"]);
-        let session = rooms.get(body.roomKey);
-        if (session && now() < session.leaseExpiresAt) {
-          if (session.clientId !== body.clientId) throw fail("publisher-active", 409, {
-            retryAfterMs: 5_000, sessionId: session.sessionId, watchId: session.watchId,
-            watchCode: session.watchCode,
+        await exclusive("registration", async () => {
+          let session = rooms.get(body.roomKey);
+          await exclusive(session ?? "new-session", async () => {
+            if (session) { await updateStatus(session); if (session.status === "ended") session = null; }
+            if (session && now() < session.leaseExpiresAt) {
+              if (session.clientId !== body.clientId) throw fail("publisher-active", 409, {
+                retryAfterMs: 5_000, sessionId: session.sessionId, watchId: session.watchId, watchCode: session.watchCode,
+              });
+              touch(session);
+            } else if (!session) {
+              if (sessions.size >= limits.sessions) throw fail("too-many-sessions", 503);
+              session = { roomKey: body.roomKey, sessionId: randomBytes(16).toString("hex"),
+                watchId: randomBytes(16).toString("hex"), watchCode: allocateWatchCode(), createdAt: now(), epoch: 0, bytes: 0, viewers: new Set() };
+              await startEpoch(session, body.clientId, body.manifest);
+              sessions.set(session.sessionId, session); watches.set(session.watchId, session); rooms.set(body.roomKey, session);
+              codes.set(session.watchCode, session);
+            } else await startEpoch(session, body.clientId, body.manifest);
+            json(res, 201, registration(session));
           });
-          touch(session);
-          json(res, 201, registration(session));
-        } else {
-          if (!session) {
-            if (sessions.size >= limits.sessions) throw fail("too-many-sessions", 503);
-            session = { roomKey: body.roomKey, sessionId: randomBytes(16).toString("hex"),
-              watchId: randomBytes(16).toString("hex"), watchCode: allocateWatchCode(), createdAt: now(), epoch: 0, bytes: 0, viewers: new Set() };
-            startEpoch(session, body.clientId, body.manifest);
-            sessions.set(session.sessionId, session); watches.set(session.watchId, session); rooms.set(body.roomKey, session);
-            codes.set(session.watchCode, session);
-          } else startEpoch(session, body.clientId, body.manifest);
-          json(res, 201, registration(session));
-        }
+        });
         return true;
       }
       const writer = path.match(/^\/api\/live\/v2\/sessions\/([a-f0-9]{32})\/(records|heartbeat|end)$/);
       if (writer && req.method === "POST") {
         const session = sessions.get(writer[1]);
-        authorize(req, session);
-        if (now() - session.budget.since >= 60_000) session.budget = { since: now(), count: 0, bytes: 0 };
-        if (++session.budget.count > limits.requestsPerMinute) throw fail("rate-limited", 429, { retryAfterMs: 1_000 });
+        await exclusive(session, async () => {
+          await authorize(req, session);
+          if (now() - session.budget.since >= 60_000) session.budget = { since: now(), count: 0, bytes: 0 };
+          if (++session.budget.count > limits.requestsPerMinute) throw fail("rate-limited", 429, { retryAfterMs: 1_000 });
+        });
         if (writer[2] === "records") {
           const source = await readBody(req, limits.bodyBytes);
-          authorize(req, session); // A pending body cannot outlive its lease or takeover.
-          if (session.budget.bytes + bytes(source) > limits.bytesPerMinute) throw fail("rate-limited", 429, { retryAfterMs: 1_000 });
-          session.budget.bytes += bytes(source);
           const lines = source.split(/\r?\n/u).filter((line) => line.trim());
           if (!lines.length) throw fail("empty-body");
           if (lines.length > limits.batchLines) throw fail("too-many-lines", 413);
           let envelopes;
           try { envelopes = lines.map((line) => JSON.parse(line)); } catch { throw fail("invalid-json"); }
-          json(res, 200, append(session, envelopes));
+          await exclusive(session, async () => {
+            await authorize(req, session); // A pending body cannot outlive its lease or takeover.
+            if (session.budget.bytes + bytes(source) > limits.bytesPerMinute) throw fail("rate-limited", 429, { retryAfterMs: 1_000 });
+            session.budget.bytes += bytes(source);
+            json(res, 200, await append(session, envelopes));
+          });
         } else {
           const body = object(await readJson(req, 1_024), writer[2] === "end" ? { reason: string(100) } : {});
-          authorize(req, session);
-          if (writer[2] === "end") end(session, body.reason || "publisher-stopped");
-          else touch(session);
-          json(res, 200, { status: session.status, epoch: session.epoch, leaseExpiresAt: session.leaseExpiresAt });
+          await exclusive(session, async () => {
+            await authorize(req, session);
+            if (writer[2] === "end") await end(session, body.reason || "publisher-stopped");
+            else touch(session);
+            json(res, 200, { status: session.status, epoch: session.epoch, leaseExpiresAt: session.leaseExpiresAt });
+          });
         }
         return true;
       }
@@ -472,18 +520,32 @@ export function createLiveV2Api({ now = Date.now, limits: overrides = {}, truste
     }
     return true;
   }
-  const sweeper = setInterval(sweep, sweepIntervalMs);
+  const sweeper = setInterval(() => { sweep().catch(() => {}); }, sweepIntervalMs);
   sweeper.unref?.();
   const pinger = setInterval(() => {
-    sweep();
-    for (const session of sessions.values()) for (const viewer of session.viewers) {
-      write(session, viewer, "ping", { epoch: session.epoch, status: session.status, lastRecordAt: session.lastRecordAt });
-    }
+    sweep().then(() => {
+      for (const session of sessions.values()) for (const viewer of session.viewers)
+        write(session, viewer, "ping", { epoch: session.epoch, status: session.status, lastRecordAt: session.lastRecordAt });
+    }).catch(() => {});
   }, pingIntervalMs);
   pinger.unref?.();
   return {
     handle, sweep, sessions,
     stats: () => ({ sessions: sessions.size, residentBytes, viewers: viewerCount, activeBodies }),
-    close: () => { closed = true; clearInterval(sweeper); clearInterval(pinger); for (const session of [...sessions.values()]) remove(session); rates.clear(); },
+    close: () => {
+      if (closing) return closing;
+      closed = true; clearInterval(sweeper); clearInterval(pinger);
+      closing = (async () => {
+        try {
+          await Promise.allSettled([...gates.values(), ...(sweeping ? [sweeping] : [])]);
+          for (const session of sessions.values()) if (session.status !== "ended") await end(session, "server-stopped");
+        } finally {
+          await archive?.close();
+          for (const session of [...sessions.values()]) remove(session);
+          rates.clear();
+        }
+      })();
+      return closing;
+    },
   };
 }

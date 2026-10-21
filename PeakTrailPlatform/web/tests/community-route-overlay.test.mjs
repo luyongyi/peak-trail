@@ -242,3 +242,34 @@ test("member route color agrees with the legend and does not change when route o
   assert.ok(overlay.players.get("route-a").group.children[1].material.color.equals(color));
   overlay.dispose();
 });
+
+test('milestone markers use only supplied aligned coordinates in both team and member views', () => {
+  for (const mode of ['team', 'routes']) {
+    const input = dto({ mode, routes: [{ id: 'one', playerKey: 'p1', points: [], breaks: [], milestones: [
+      { tMs: 100, kind: 'nadir-entry', stageIndex: 1 },
+      { tMs: 200, kind: 'nadir-wall', stageIndex: 1, positionCm: [10100, 20200, 30300] },
+      { tMs: 200, kind: 'nadir-chase', stageIndex: 1, positionCm: [10200, 20300, 30400] },
+    ] }] });
+    const overlay = new CommunityRouteOverlay(); overlay.setData(input, origin());
+    const entry = overlay.players.get('milestones:one');
+    assert.ok(entry);
+    const points = entry.group.children[0];
+    assert.equal(points.geometry.attributes.position.count, 2, 'no guessed marker for the coordinate-free entry');
+    assert.deepEqual(position(points.geometry.attributes.position, 0), [1, 2, 3]);
+    assert.deepEqual(position(points.geometry.attributes.position, 1), [2, 3, 4]);
+    assert.deepEqual(points.userData.milestones.map(m => m.kind), ['nadir-wall', 'nadir-chase']);
+    overlay.setVisiblePlayers(new Set()); assert.equal(entry.group.visible, false);
+    overlay.dispose();
+  }
+});
+
+test('long milestone histories keep only the latest 1024 map markers without dropping the route data', () => {
+  const milestones = Array.from({ length: 1025 }, (_, tMs) => ({ tMs, kind: 'nadir-wall', stageIndex: 1, positionCm: [10100, 20200, 30300] }));
+  const input = dto({ routes: [{ id: 'one', playerKey: 'p1', points: [], milestones }] });
+  const overlay = new CommunityRouteOverlay(); overlay.setData(input, origin());
+  const points = overlay.players.get('milestones:one').group.children[0];
+  assert.equal(points.geometry.attributes.position.count, 1024);
+  assert.equal(points.userData.milestones[0].tMs, 1);
+  assert.equal(input.routes[0].milestones.length, 1025);
+  overlay.dispose();
+});

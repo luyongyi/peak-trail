@@ -33,6 +33,10 @@ export async function prepareTrajectoryStorage(sourcePath, destinationPath) {
   const parent = await realpath(resolve(requested, "..")), destination = join(parent, basename(requested));
   if (nested(source, destination) || nested(destination, source)
     || source.replaceAll("\\", "/").replace(/\/$/, "") === "/var/lib/peak-trail-routes") throw new Error("use an offline source copy and a separate new destination");
+  const livePath = join(source, "live-archive"), liveInfo = await lstat(livePath).catch(error => { if (error.code === "ENOENT") return null; throw error; });
+  if (liveInfo && (!liveInfo.isDirectory() || liveInfo.isSymbolicLink())) throw new Error("live archive backup requires an ordinary private directory");
+  const liveArchives = liveInfo ? await readdir(livePath) : [];
+  if (liveArchives.length) throw new Error("live archives require a complete separate backup; this trajectory-only preparation cannot migrate them");
   const before = await fileInventory(source);
   const indexes = before.files.filter(file => /^index\/[a-f0-9]{64}\.json$/.test(file.path));
   await mkdir(destination, { mode: 0o700 });

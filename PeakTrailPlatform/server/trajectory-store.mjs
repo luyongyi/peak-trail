@@ -5,7 +5,8 @@ import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { setTimeout as pause } from "node:timers/promises";
 import { LIMITS, problem, digest, validHash, validateTrajectory, difficultyInfo, groupId,
-  extractStageRoutes, extractInspectionStage, playerSummitCompleted, routeDedupeKey, dedupeRoutes, aggregateHeatmap } from "./trajectory-contract.mjs";
+  extractStageRoutes, extractInspectionStage, playerSummitCompleted, playerNadirCompleted, playerMilestones, routeDedupeKey, dedupeRoutes, aggregateHeatmap } from "./trajectory-contract.mjs";
+import { syncDirectory, writeDurable } from "./durable-file.mjs";
 import { fitMapAlignment, alignedRoutePoints, validateMapAlignment } from "./map-alignment.mjs";
 import { TEAM_LIMITS, makeTeamMetadata, inspectTeamStage, teamIdentity, collectTeams, teamDescriptor, memberMatches, sourceOrder } from "./team-index.mjs";
 import { planTrajectoryStorage, missingPointBlockBytes, writePointBlocks, readStoredTrajectory, routeSource, sourceRoute, createReferencedRouteReader, makeInspectionSources } from "./trajectory-storage.mjs";
@@ -13,16 +14,24 @@ import { MAX_EXPANDED_POINTS } from "./trajectory-point-runs.mjs";
 
 async function setup(root) { for (const child of ["index", "uploads", "routes"]) await mkdir(join(root, child), { recursive: true, mode: 0o700 }); }
 async function readJson(path) { return JSON.parse(await readFile(path, "utf8")); }
+async function syncReceipt(root, path) {
+  const file = await open(path, process.platform === "win32" ? "r+" : "r");
+  try { await file.sync(); } finally { await file.close(); }
+  for (const child of ["index", "uploads", "point-blocks", "point-bases"]) {
+    try { await syncDirectory(join(root, child)); } catch (error) { if (error.code !== "ENOENT") throw error; }
+  }
+  await syncDirectory(root);
+}
 async function atomicJson(path, value, exclusive = false) {
   const temporary = `${path}.${randomUUID()}.part`;
-  await writeFile(temporary, `${JSON.stringify(value)}\n`, { flag: "wx", mode: 0o600 });
-  try { if (exclusive) await link(temporary, path); else await rename(temporary, path); }
+  await writeDurable(temporary, `${JSON.stringify(value)}\n`);
+  try { if (exclusive) await link(temporary, path); else await rename(temporary, path); await syncDirectory(dirname(path)); }
   finally { await unlink(temporary).catch(() => {}); }
 }
 async function atomicBytes(path, value) {
   const temporary = `${path}.${randomUUID()}.part`;
-  await writeFile(temporary, value, { flag: "wx", mode: 0o600 });
-  try { await link(temporary, path); return true; }
+  await writeDurable(temporary, value);
+  try { await link(temporary, path); await syncDirectory(dirname(path)); return true; }
   catch (error) { if (error.code === "EEXIST") return false; throw error; }
   finally { await unlink(temporary).catch(() => {}); }
 }
@@ -152,9 +161,13 @@ export async function ingestUpload(root, compressed, catalogPath, { minimalRecei
   const { trajectory, totalPoints } = validateTrajectory(raw);
   const canonical = JSON.stringify(trajectory), id = digest(canonical), path = join(root, "index", `${id}.json`);
   await setup(root);
-  try { const existing = await readJson(path); return uploadReceipt(existing, true, catalogPath, minimalReceipt); } catch (error) { if (error.code !== "ENOENT") throw problem("existing upload index is damaged", 503); }
+  try { const existing = await readJson(path); await syncReceipt(root, path); return uploadReceipt(existing, true, catalogPath, minimalReceipt); } catch (error) { if (error.code !== "ENOENT") throw problem("existing upload index is unavailable", 503); }
   if (totalPoints > MAX_EXPANDED_POINTS) throw problem("trajectory expanded point capacity exceeded", 413);
   const index = await loadIndex(root);
+  // Sealed prefixes from one recording must respect an existing administrator
+  // hold. A later automatic snapshot cannot make a withdrawn recording public.
+  const held = index.filter(entry => entry.recordingId === trajectory.recordingId && entry.moderationStatus !== "approved")
+    .sort((a, b) => ["rejected", "hidden", "pending"].indexOf(a.moderationStatus) - ["rejected", "hidden", "pending"].indexOf(b.moderationStatus))[0];
   const occupiedBytes = await physicalBytes(root);
   if (index.length >= LIMITS.uploads || occupiedBytes >= LIMITS.storedBytes) throw problem("route storage capacity reached", 503);
   const storage = planTrajectoryStorage(trajectory), stored = storage.stored;
@@ -167,6 +180,7 @@ export async function ingestUpload(root, compressed, catalogPath, { minimalRecei
     map: trajectory.map, difficulty: difficultyInfo(trajectory.difficulty), durationMs: trajectory.durationMs,
     playerCount: trajectory.players.length, pointCount: totalPoints, players: [], routes: [], storedBytes: 0,
     team: makeTeamMetadata(trajectory) };
+  if (held) { entry.moderationStatus = held.moderationStatus; entry.reviewMethod = "recording-hold"; }
   for (let playerIndex = 0; playerIndex < trajectory.players.length; playerIndex += 1) {
     const player = trajectory.players[playerIndex], stages = [];
     for (const stage of trajectory.map.stages) {
@@ -199,8 +213,9 @@ export async function ingestUpload(root, compressed, catalogPath, { minimalRecei
     const uploadPath = join(root, "uploads", `${id}.json.gz`);
     if (await atomicBytes(uploadPath, stored)) created.push(uploadPath);
     await atomicJson(path, entry, true);
+    await syncDirectory(root);
   } catch (error) {
-    if (error.code === "EEXIST") return uploadReceipt(await readJson(path), true, catalogPath, minimalReceipt);
+    if (error.code === "EEXIST") { await syncReceipt(root, path); return uploadReceipt(await readJson(path), true, catalogPath, minimalReceipt); }
     let committed = false; try { committed = (await readJson(path)).id === id; } catch { /* no committed index */ }
     if (!committed) for (const file of created) await unlink(file).catch(() => {});
     throw error;
@@ -250,7 +265,7 @@ async function validatePendingEntry(root, entry) {
     players.push({ key: player.key, name: player.name, owner: player.owner, evidence: player.evidence, stages });
   }
   if (!isDeepStrictEqual(entry.players, players) || !isDeepStrictEqual(entry.routes, routes)) throw problem("stored route metadata disagrees with complete individual attempts");
-  if (entry.team !== undefined && (![1, 2].includes(entry.team.version)
+  if (entry.team !== undefined && (![1, 2, 3].includes(entry.team.version)
     || !isDeepStrictEqual(entry.team, makeTeamMetadata(trajectory, { version: entry.team.version })))) throw problem("stored team metadata disagrees with its trajectory");
   return trajectory.startedUtc;
 }
@@ -445,7 +460,7 @@ async function readInspectionTrajectory(root, entry) {
 }
 
 async function hydrateLegacyTeam(root, team) {
-  const legacy = team.entries.filter(entry => entry.team?.version !== 2).sort((a, b) => b.pointCount - a.pointCount || a.id.localeCompare(b.id));
+  const legacy = team.entries.filter(entry => ![2, 3].includes(entry.team?.version)).sort((a, b) => b.pointCount - a.pointCount || a.id.localeCompare(b.id));
   // This is restricted to one explicitly selected team. Search never opens raw
   // blobs, and old indexes are not rewritten or migrated across unrelated teams.
   for (const entry of legacy) {
@@ -467,6 +482,7 @@ export async function queryTeamRoutes(root, catalogPath, teamId, stage, { cursor
   const base = { teamId, groupId: team.groupId, stageIndex: stage, timeBasis: "recording-ms",
     teamRevision: digest(team.entries.map(entry => entry.id).sort()),
     summitCompleted: descriptor.summitCompleted, finisherKeys: descriptor.finisherKeys,
+    nadirCompleted: descriptor.nadirCompleted, nadirFinisherKeys: descriptor.nadirFinisherKeys,
     stageCompleted: descriptor.stageSummaries.find(value => value.index === stage).completed,
     ...(await mapMatch(team.map, catalogPath)) };
   base.coordinateSpace = base.mapAlignment.status === "verified" ? "canonical-map-world-cm" : "recording-world-cm";
@@ -477,7 +493,7 @@ export async function queryTeamRoutes(root, catalogPath, teamId, stage, { cursor
   for (let index = after; index < allMembers.length; index += 1) {
     const [key, sources] = allMembers[index], source = [...sources].sort((a, b) => sourceOrder(a, b, stage))[0];
     const summary = source.metadata?.stages?.find(value => value.index === stage);
-    const points = summary?.pointCount ?? 0, bytes = 1024 + points * 64 + (summary?.breakCount ?? 0) * 12;
+    const points = summary?.pointCount ?? 0, bytes = 1024 + points * 64 + (summary?.breakCount ?? 0) * 12 + (summary?.milestoneBytes ?? 0);
     // Pages contain whole members. The browser follows every cursor, so no late
     // member loses its route because an earlier member used the point budget.
     if (selections.length && (estimatedPoints + points > LIMITS.queryPoints || estimatedBytes + bytes > TEAM_LIMITS.pageBytes)) break;
@@ -509,6 +525,9 @@ export async function queryTeamRoutes(root, catalogPath, teamId, stage, { cursor
         uploadId: entry.id, difficulty: entry.difficulty, completion: extracted.completion,
         completed: extracted.completion === "complete", gameCompleted: extracted.gameCompleted,
         summitCompleted: playerSummitCompleted(trajectory, player),
+        nadirCompleted: playerNadirCompleted(trajectory, player),
+        milestones: playerMilestones(player, stage).map(event => ({ ...event,
+          ...(event.positionCm ? { positionCm: alignedRoutePoints([[event.tMs, ...event.positionCm]], base.mapAlignment)[0].slice(1) } : {}) })),
         timeBasis: "recording-ms", ...(trajectory.runKey === team.scope && trajectory.timeOriginMs !== undefined
           ? { timeOriginMs: trajectory.timeOriginMs } : {}),
         points: alignedRoutePoints(points, base.mapAlignment),
@@ -516,6 +535,7 @@ export async function queryTeamRoutes(root, catalogPath, teamId, stage, { cursor
     }
   }
   routes.sort((a, b) => a.playerKey.localeCompare(b.playerKey));
+  if (Buffer.byteLength(JSON.stringify({ ...base, routes })) > TEAM_LIMITS.pageBytes) throw problem("individual team route response exceeds page capacity", 413);
   return { ...base, routes, totalRouteCount: allMembers.length, pointCount, truncated: false,
     nextCursor: after + selections.length < allMembers.length ? selections.at(-1).key : null };
 }

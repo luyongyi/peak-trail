@@ -3,6 +3,7 @@ import { constants } from "node:fs";
 import { join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { problem, validHash } from "./trajectory-contract.mjs";
+import { syncDirectory } from "./durable-file.mjs";
 
 const INDEX_BYTES = 4 * 1024 * 1024, PACK_BYTES = 48 * 1024 * 1024, RECORD_BYTES = 128 * 1024;
 const hashBytes = bytes => createHash("sha256").update(bytes).digest("hex");
@@ -131,6 +132,7 @@ export async function writePointPacks(root, plan) {
   await mkdir(join(root, "point-blocks"), { recursive: true, mode: 0o700 });
   await mkdir(join(root, "point-bases"), { recursive: true, mode: 0o700 });
   for (const pack of plan.packs) await publishPack(root, pack);
+  await syncDirectory(join(root, "point-blocks"));
   for (const [context, update] of plan.contextUpdates) await withContextWrite(root, context, async () => {
     const current = await readPointContext(root, context), index = { version: 1, context, blocks: { ...current?.index.blocks }, bases: { ...current?.index.bases } };
     for (const [hash, record] of Object.entries(update.references)) if (!index.blocks[hash]) index.blocks[hash] = record;
@@ -141,4 +143,6 @@ export async function writePointPacks(root, plan) {
     try { await file.writeFile(bytes); await file.sync(); } finally { await file.close(); }
     try { await rename(temporary, path); } finally { await unlink(temporary).catch(() => {}); }
   });
+  await syncDirectory(join(root, "point-bases"));
+  await syncDirectory(root);
 }

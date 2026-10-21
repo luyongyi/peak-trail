@@ -12,7 +12,19 @@
 
 短码只便于输入观战，不能发布，也不提供长随机链接同等的防猜测能力。结束即停止短码解析，码仍保留至会话清理以免立即指向另一场；原 `/?watch=<watchId>` 长链接及结束快照照常保留。观战元数据与 SSE `hello` 带 `watchCode`，结束后为 `null`。没有公开房间列表或短码列表接口。
 
-租约为 15 秒，建议每 5 秒心跳；失联 60 秒或持续 24 小时结束，结束后保留 15 分钟供观看，观众不延长生命周期。过期租约接管保留观战链接、更新 epoch 并作废旧凭证；SSE 用 epoch 与 seq 续传，过旧游标重置为有界的最新状态及近期路径快照。v2 默认只存内存、无磁盘持久化，服务重启即清空；`--dir` 不影响 v2。生产 nginx 的通用 `/api/` 转发和关闭 SSE 缓冲即可沿用。
+租约为 15 秒，建议每 5 秒心跳；失联 60 秒或持续 24 小时结束，结束后保留 15 分钟供观看，观众不延长生命周期。过期租约接管保留观战链接、更新 epoch 并作废旧凭证；SSE 用 epoch 与 seq 续传，过旧游标重置为有界的最新状态及近期路径快照。`summit`、各 `nadir-*`、`nadir`、`native-checkpoint` 和 `run_end` 另按事件、玩家和关卡保留最新里程碑，路径窗口淘汰不会使新观众漏掉这些状态；这不改变个人通关的证据要求。生产 nginx 的通用 `/api/` 转发和关闭 SSE 缓冲即可沿用。
+
+### 直播路径持久化
+
+生产 v2 必须配置 `--routes-dir`（或 `PEAK_TRAJECTORY_DIR`）。服务在其私有 `live-archive/<sessionId>.wal` 追加路径事务：注册、epoch 接管、接收记录和结束先写入并完成文件 fsync，再返回成功或广播 SSE；新文件还同步父目录。元数据和 `hello` 的 `persistence:"durable"` 明确表示此模式。没有私有目录时注册返回 `503 live-archive-unconfigured`，不悄悄降级；只有程序化测试可显式设 `liveV2.memoryOnly:true`，读接口会标明 `persistence:"memory"`。`--dir` 仍仅影响旧 v1。
+
+WAL 保留匿名参与者、坐标/朝向/关卡、原生路线、生死和事件的白名单投影，省略背包、外观、体力、物品明细；不保存 roomKey、clientId 或 publishToken。每个事务记录 session/epoch、连续的服务端 seq 和 producerSeq 范围，即使该批只有被省略的内容也保存空投影事务。同一 session 的写入、接管和结束串行；已接受的 producerSeq 重传不追加第二份。不同 epoch 的 p1 不作为同一人拼接，WAL 不从全队 activeSegment、直播断开或 `run_end` 猜测个人通关。
+
+启动后第一次写入先流式校验已有 WAL 的 SHA256、事务和序号连续性，仅截去未以换行结束的半条尾事务；完整但损坏的事务、非普通文件和不安全路径均阻止新写入。写入或 fsync 出错后本进程继续拒绝写入，需管理员排查并重启恢复；可能完整写入但未确认的事务仍留在私有档案。重启不恢复旧 token 或直播会话，旧 session/watch 查询返回 404，客户端新建会话；旧路径档案保留。正常 SIGTERM/SIGINT 会等待进行中的持久化并追加结束事务。
+
+Linux 目录/文件权限为 0700/0600；数据不放进静态站点、Git 或公共下载。WAL 独立限额为总计 2 GiB、单档 128 MiB、10,000 个文件、单事务 512 KiB，待写队列最多 16 操作/4 MiB；孤立文件也计入配额。达到限额返回 503，已确认前缀保留，不自动清理档案。直播内存会话的 15 分钟清理不会删除 WAL。`--routes-dir/.migration-maintenance` 存在时阻止 WAL 写入和尾部修复；迁移前仍须停止/排空已进入的请求，该标记不是跨进程锁。同一私有根只允许一个服务写入。Windows 本地测试执行文件 fsync；生产 Linux 额外执行目录 fsync。
+
+WAL 是私有兜底，不直接生成公开路线或热力。Recorder 同时在本地持久记录原生 10 Hz 精简轨迹，在切关、个人 checkpoint 和结束封存累计前缀，补交 `/api/route-uploads`。正式历史管线使用可靠的 run/player 作用域、共享时钟、地图对齐及个人状态证据；按原审核规则提供完整路线/热力或部分预览。网络失败时客户端保留本地待上传包，服务端不把近期 SSE 窗口当作全程档案。两条通道的区别、Nadir 和审核规则见 [历史轨迹协议](trajectory-README.md)。
 
 ## 运行
 
@@ -59,10 +71,10 @@ node PeakTrailPlatform/server/live-server.mjs --port 8787 --routes-dir <回忆�
 ## 测试
 
 ```powershell
-node --test PeakTrailPlatform/tools/tests/live-server.test.mjs PeakTrailPlatform/tools/tests/live-v2-api.test.mjs
+node --test PeakTrailPlatform/tools/tests/live-server.test.mjs PeakTrailPlatform/tools/tests/live-v2-api.test.mjs PeakTrailPlatform/tools/tests/live-wal.test.mjs
 ```
 
-覆盖：码校验/合并/撞码回退、跨生产者去重（含缺 roomTs 退化）、坏行隔离、快照、SSE 回放+实时。
+覆盖：旧协议兼容、匿名权限与短码、序号重传/接管、快照淘汰和慢观众预算；真实临时私有目录验证 fsync 前不确认/广播、持久化投影、重启和半尾恢复、损坏拒写、维护标记、配额、重试去重与关闭排空。
 
 ## 保留的旧主查看器接入说明
 
@@ -80,7 +92,7 @@ node --test PeakTrailPlatform/tools/tests/live-server.test.mjs PeakTrailPlatform
 - 服务保持 `--host 127.0.0.1 --port 8787`，由 nginx 转发 `/api/`；SSE 配置同时服务新直播 v2。
 - Recorder 0.7.1 的 `Live.ServerUrl` 默认改为 `https://peak.mylus.cn`。已有 BepInEx 配置不会被默认值覆盖，需要手动更新这一项；`Live.Enabled` 仍由用户控制。
 - 当前部署不启用旧直播；以下四位码边界只适用于显式恢复该功能后。
-- 当前模式不读取或写入旧直播存储。本地历史足迹和录像不会自动上传。
+- 当前模式不读取或写入旧直播存储。新 v2 使用上述私有 WAL；Recorder 的新原生路线通道按封存前缀自动补交精简轨迹，不上传 `.peakrun` 原始录像。
 
 ### 原有边界与可选加固
 

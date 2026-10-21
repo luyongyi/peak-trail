@@ -2,6 +2,7 @@ import { tr } from "./i18n.js";
 import { UI_TEXT } from "./ui-text.js";
 
 const pairs = [
+  [" · 轨迹自动保存", " · Paths saved automatically"],
   ["PEAK 每日地图与玩家线路。下载路线 MOD，分享实时登山路线，或在游戏内录制与回放。", "PEAK daily maps and player routes. Download Route MODs to share live climbing paths, or record and replay in game."],
   ["玩家", "Players"],
   ["观看直播", "Watch live"],
@@ -39,7 +40,7 @@ const pairs = [
   ["回到实时", "Go live"],
   ["暂停观看", "Pause viewing"],
   ["播放回看", "Play replay"],
-  ["直播仅保留最近约 2 分钟的路径；玩家身份只在本次会话内有效。", "Live viewing retains about 2 minutes of paths. Player identities apply only to this session."],
+  ["观战页面可回看最近约 2 分钟的路径；玩家身份只在本次会话内有效。", "The watch page can replay about the last 2 minutes of paths. Player identities apply only to this session."],
   ["分享链接", "Share link"],
   ["已复制链接", "Link copied"],
   ["请复制地址栏链接", "Copy the link from the address bar"],

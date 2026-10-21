@@ -186,6 +186,21 @@ test("inspection snapshots distinguish game completion from continuous route cov
   }
 });
 
+test("long milestone histories have a bounded list and explain that older facts remain in the full record", async () => {
+  const milestones = Array.from({ length: 1025 }, (_, tMs) => ({ tMs: tMs * 1000, kind: "nadir-wall", stageIndex: 3 }));
+  const f = fixture({ stageIndex: 3, inspectionRouteStates: [{ milestones, nadirCompleted: true }] });
+  try {
+    f.context = { ...f.context, routeGroupId: group().id, inspectionId: hash("d") };
+    await f.panel.openHistorical();
+    const details = f.elements.communityPlayers.children.find(child => child.tagName === "details");
+    assert.equal(details.children[0].textContent, "关键节点（1025）");
+    assert.equal(details.children[1].children.length, 1024);
+    assert.match(details.children[1].children[0].children[0].textContent, /^0:01 ·/);
+    assert.equal(details.children[2].textContent, "其余关键节点已保存在完整轨迹中");
+    assert.equal(f.scene.overlays.at(-1).routes[0].milestones.length, 1025);
+  } finally { f.panel.dispose(); }
+});
+
 test("default map exploration stays closed and makes no group or stage requests until the topbar toggle is opened", async () => {
   const f = fixture(); f.panel.sync(); await settle();
   assert.equal(f.calls.length, 0); assert.equal(f.elements.communityPanel.hidden, true); assert.equal(f.elements.communityLayerControl.hidden, true);

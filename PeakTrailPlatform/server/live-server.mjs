@@ -22,6 +22,7 @@ import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { createTrajectoryApi } from "./trajectory-api.mjs";
 import { createLiveV2Api } from "./live-v2-api.mjs";
+import { createLiveWal } from "./live-wal.mjs";
 import { appendFileSync, mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { deriveRunCode, isValidRunCode, normalizeRunId, runCodeMatches } from "./run-code.mjs";
@@ -49,7 +50,8 @@ function htmlEscape(value) {
 
 export function createLiveServer(options = {}) {
   const legacyLiveEnabled = options.legacyLiveEnabled === true;
-  const liveV2 = createLiveV2Api({ ...options.liveV2, trustedProxy: options.trustedProxy });
+  const liveArchive = options.liveV2?.memoryOnly === true ? null : createLiveWal({ ...options.liveWal, root: options.trajectoryDir });
+  const liveV2 = createLiveV2Api({ ...options.liveV2, archive: liveArchive, trustedProxy: options.trustedProxy });
   const trajectories = createTrajectoryApi({ root: options.trajectoryDir, catalogPath: options.catalogPath, trustedProxy: options.trustedProxy });
   const persistenceDir = legacyLiveEnabled && options.persistenceDir ? resolve(options.persistenceDir) : null;
   if (persistenceDir) mkdirSync(persistenceDir, { recursive: true });
@@ -551,7 +553,7 @@ function upsert(playerId, player) {
   });
   server.once("close", () => { if (sweeper) clearInterval(sweeper); });
   server.once("close", trajectories.close);
-  server.once("close", liveV2.close);
+  server.once("close", () => { liveV2.close().catch(() => {}); });
   return { server, runs, codeByRunId, startDailyPrewarm, liveV2 };
 }
 
@@ -565,7 +567,7 @@ export function startCli(argv = process.argv.slice(2)) {
   const dir = flag("dir", null);
   const trajectoryDir = flag("routes-dir", process.env.PEAK_TRAJECTORY_DIR ?? null);
   const legacyLiveEnabled = argv.includes("--legacy-live");
-  const { server, startDailyPrewarm } = createLiveServer({ persistenceDir: dir, trajectoryDir, legacyLiveEnabled, trustedProxy: argv.includes("--trusted-proxy") });
+  const { server, startDailyPrewarm, liveV2, runs } = createLiveServer({ persistenceDir: dir, trajectoryDir, legacyLiveEnabled, trustedProxy: argv.includes("--trusted-proxy") });
   startDailyPrewarm();
   server.listen(port, host, () => {
     console.log(`PeakTrail memoir and live v2 service on http://${host}:${port}/ (legacy live ${legacyLiveEnabled ? "enabled" : "disabled"})`);
@@ -573,7 +575,19 @@ export function startCli(argv = process.argv.slice(2)) {
       console.log("WARNING: bound beyond loopback — anyone who guesses the 4-character code can read live positions. Put access control in front (reverse proxy) until token auth lands.");
     }
   });
-  process.on("SIGINT", () => server.close(() => process.exit(0)));
+  let stopping = false;
+  const stop = async () => {
+    if (stopping) return;
+    stopping = true;
+    const stopped = new Promise(done => server.close(done));
+    for (const run of runs.values()) for (const viewer of run.viewers) viewer.res.end();
+    let failed = false;
+    try { await liveV2.close(); } catch { failed = true; }
+    await stopped;
+    process.exit(failed ? 1 : 0);
+  };
+  process.once("SIGINT", stop);
+  process.once("SIGTERM", stop);
 }
 
 if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replaceAll("\\", "/").split("/").pop())) {

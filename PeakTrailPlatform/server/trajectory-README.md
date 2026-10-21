@@ -1,6 +1,6 @@
 # 历史轨迹收集（trajectory-v1）
 
-本模块接收回忆录 Mod 在本地重新提取的小包。它不接收 `.peakrun`、录像资源、库存、状态条、音频或世界物件。旧足迹直播接口默认关闭，回忆录上传、路线与热力查询保持正常。通过白名单协议验证的新投稿自动 `approved`；公开路线与热力仍只使用完整的个人关卡尝试，并要求原生地图对齐证明。
+本模块接收回忆录 Mod 重新提取的小包，以及 Recorder 本地持久记录后封存的原生轨迹累计前缀。它不接收 `.peakrun`、录像资源、库存、状态条、音频或世界物件。旧足迹直播接口默认关闭，回忆录上传、路线与热力查询保持正常。通过白名单协议验证的新投稿自动 `approved`，已有人工撤回状态除外；公开路线与热力仍只使用完整的个人关卡尝试，并要求原生地图对齐证明。
 
 ## 队伍搜索与查看
 
@@ -12,11 +12,13 @@
 
 队内预览以整个成员为单位分页，单页最多 200,000 个点并受约 12 MiB 响应预算约束；不截短成员坐标、不丢弃后面的成员。`nextCursor` 非空时，以 `?cursor=<nextCursor>` 顺序读取剩余页；游标是上一页最后一个成员的 `playerKey`。每页 `totalRouteCount` 都是全队人数，`pointCount` 是本页点数，`truncated:false`；网页会自动读取全部页。响应还包含全队一致的 `summitCompleted/finisherKeys/stageCompleted`，以及绑定当前已批准来源集合的 `teamRevision`；翻页期间来源发生变化时，网页拒绝混合两次修订的结果。大型队伍仍受请求字节、存储容量、worker 内存与时限保护，不承诺无限载荷。
 
-新上传在私有小型索引保存版本 2 的队伍及分关摘要；普通搜索只读索引，不全站解压轨迹。查看一支旧队伍时，顺序核验其全部旧来源，在响应中恢复实际分关、生死及登顶摘要，不写回索引、不改变队伍身份。旧录像缺少关卡门限和原生时间线时仍接受，无法分关的成员返回 `unknown` 空路线，不猜测其坐标属于哪关。
+新上传在私有小型索引保存版本 3 的队伍及分关摘要，读取兼容版本 1/2；普通搜索只读索引，不全站解压轨迹。查看一支旧队伍时，顺序核验其全部旧来源，在响应中恢复实际分关、生死及终局摘要，不写回索引、不改变队伍身份。旧录像缺少关卡门限和原生时间线时仍接受，无法分关的成员返回 `unknown` 空路线，不猜测其坐标属于哪关。
 
 至少一名原生状态证明仍存活的成员触发明确的 `summit` 事件，整个队伍即为 `summitCompleted:true`，`finisherKeys` 标识实际完成者。旧 `finish` 同时曾用于几何出口，不能据此宣布全队登顶；到达熔炉或最后关也不等于登顶。团队完成标记不会把死亡队员的部分线路伪造成完整线路，也不替他们增加热力。每位队员的坐标只保留存活区间，死亡当刻的真实采样保留，后续幽灵坐标丢弃；确实复活后恢复记录并在生死边界断开连接。连接状态与生死状态独立：`join` 只恢复在场，不会把死亡者变为存活；只有明确 `revive` 清除死亡状态，离线者还必须重新加入。
 
 已批准但只有部分线路的地图组也可查询和打开；它们不贡献公开完整路线或热力。所有队伍接口按每次请求的当前审核状态生成，隐藏、拒绝或保留投稿立即撤销对应来源。
+
+Nadir 与登顶独立：队伍摘要/关卡响应增加 `nadirCompleted/nadirFinisherKeys`，成员与关卡路线增加各自的 `nadirCompleted`；不把其中一种结局冒充另一种，也不替其他队员补个人赢。关卡路线的 `milestones` 保留原生切关、checkpoint、summit 和 Nadir 阶段事件；其可选 `positionCm` 与路线点使用同一已验证的地图变换，`tMs` 保持录制时间。部分轨迹仍可显示真实阶段和完成状态，但 `completed`、`gameCompleted`、`summitCompleted` 和 `nadirCompleted` 含义分开。
 
 公开 `routes` 与 `heatmap` 端点可带 `team=<teamId>`，仍同时受当前地图组、关卡和难度约束。热力增加 `countBy=team|player`（默认 `player`）：同队在同一 2 米三维格只计一次，按成员则同队同成员只计一次；不同队伍/对局独立累加。`routeCount` 仍为完整个人尝试数量，另返回 `countBy/teamCount`。部分、死亡、断点和未知证据的预览不会混入热力；高度分层保持独立。团队简图仅由网页展示层生成，不修改这些个人原始坐标或通关判定。
 
@@ -59,7 +61,7 @@ players:
   [{key: 按 runKey/recordingId 作用域散列的玩家身份,
     name, owner: bool, evidence: native-state | legacy-unknown,
     points: [[tMs,xCm,yCm,zCm]],
-    events: [{tMs,kind: join|leave|dead|revive|break|warp|finish|summit|game-stage|checkpoint,stageIndex?}]}]
+    events: [{tMs,kind: join|leave|dead|revive|break|warp|finish|summit|game-stage|checkpoint|native-checkpoint|nadir-ready|nadir-entry|nadir-wall|nadir-chase|nadir,stageIndex?,positionCm?:[xCm,yCm,zCm]}]}]
 ```
 
 不设独立玩家人数上限，所有成员均按白名单协议接收；每人每 100 ms 桶最多一个真实点，不插值补点；整数厘米保留 XYZ。单次上传仍须满足下述字节和时长预算，不能通过增加人数绕过资源保护。`stages` 必须连续编号且名字与 `route` 一致。原生关卡门限必须成对且 `exitZCm > enterZCm`；旧录像可以同时缺失。昵称仅在玩家头信息中写一次，同名玩家凭哈希 key 区分。`summit` 只允许 `native-state`，必须带最后一个非 Void 关卡编号；它表示原生个人完成状态，不能由 Z 门限推算。
@@ -82,6 +84,18 @@ players:
 
 原版点燃篝火可在下一关标题平面之前推进关卡，因此个人 checkpoint 可以成为完整线路的真实终点；不修改地图原生 Z 门限或布局哈希。服务器仍要求该玩家亲自录到入口、连续存活、无断点地走到 checkpoint。本人上一关 checkpoint 可证明下一关的原生入口；首次半途观察到 game-stage 只用于分关。关卡变化位于两个 10 Hz 点之间时保留相邻的真实采样点，不插值或跨不连续区间补点。已上传旧包没有时间线时完全沿用原 Z 门限规则，需从完整录像重新导出才能恢复缺失的篝火证据。
 
+`native-checkpoint` 是本机 `MountainProgressHandler.SetSegmentComplete` 的独立证据：只接受 `owner:true`、`native-state` 和普通非 Void 关，`segment-1` 指向完成的关卡；本人须在场存活且同刻没有 warp/死亡/离开。它可以触发累计前缀封存，不要求全队同时切关。`game-stage` 只描述全队所在场景区间，不等于每个人通关；原有 `checkpoint` 的相邻切关合同保持不变。
+
+五种 Nadir 事件为 `nadir-ready/nadir-entry/nadir-wall/nadir-chase/nadir`，均要求原生个人状态和 `stageIndex`；除准备事件外必须属于 Void。`positionCm` 为可选的整数厘米锚点，仅接受三个有限范围整数，不接受任意附加对象。`summit` 和 `nadir` 分别表示原生个人赢，结束直播或普通 `finish` 不证明任何一种结局。Void 没有递增 Z 门限；只有同一 `game-stage` 区间内具有 `nadir-entry` 和本人有效 `nadir`、持续存活在场且采样无缺口/异常位移/warp/断点的真实 10 Hz 轨迹才进入完整路线与热力。入口/终点附近及相邻采样沿用最多 1.5 秒容差，不补造缺失点。其余轨迹持久保留为部分或未知预览。
+
+## 直播双通道保存
+
+`live-archive/<sessionId>.wal` 保存直播确认过的路径投影，独立于此处的投稿索引；具体 fsync、恢复、隐私与容量合同见 [直播服务](README.md#直播路径持久化)。WAL 按 session/epoch 保留身份和时钟边界，不把不同发布者的 p1 拼成一个人，不自动变成已审批投稿。元数据 `persistence:"durable"` 表示服务端路径事务已启用持久化，不承诺每条直播都已通过历史地图对齐或形成完整热力。
+
+Recorder 的另一通道在本地保存带原生布局/地标/门限、难度、共享对局与玩家散列、共享时钟的 10 Hz 轨迹；本地至少每秒同步、关键事件立即同步，切关、本人 checkpoint 和结束封存累计前缀后补交现有上传 API。后续前缀仍用同一 recordingId 和成员身份，不把临时增量片段误当成完整路线；网络失败保留待上传包。共享 runKey/playerKey/timeOriginMs 与回忆录算法一致时，现有管线去重两种 Mod 的重叠观察；缺少可靠身份或共享时间时保持隔离。WAL 与本地前缀均保留原始边界，不用有限的网页路径窗口反推全程。
+
+切关累计前缀可自动投稿，但同一 `recordingId` 已有隐藏、拒绝或人工 pending 时，后续新前缀继承该撤回/保留状态，不能绕过管理员决定重新公开；重复内容仍返回原 receipt。正式历史接口继续只对 approved 来源提供预览，并只对个人完整关卡聚合热力。
+
 ## 私有存储与审核
 
 ```text
@@ -92,7 +106,7 @@ PRIVATE_DIR/point-bases/context-<sha256>.json  逻辑块 SHA 到 pack 范围和 
 PRIVATE_DIR/routes/<uploadId>-pN-sN-aN.json.gz  旧完整尝试仍可读；新投稿不再重复写坐标
 ```
 
-坐标块和 manifest 先落盘，索引以原子创建提交；服务重启重新读索引。公开状态只来源于提交的索引，损坏条目不会重新获得审批。失败时清理本次独占的上传文件，共享块保留，避免误删其他已提交投稿的引用；所有孤立文件及基块索引仍计入容量。总存储按实际私有目录字节限制 2 GiB，最多 10,000 投稿、100,000 条路线；达到上限返回 503，由管理员决定清理策略，不自动删除用户历史。
+坐标 pack、引用索引和 manifest 先写入并 fsync，再以原子创建提交投稿索引，并同步相关父目录后才确认上传；重复包也确认已有 receipt 的同步状态。服务重启重新读索引。公开状态只来源于提交的索引，损坏条目不会重新获得审批。失败时清理本次独占的上传文件，共享块保留，避免误删其他已提交投稿的引用；所有孤立文件及基块索引仍计入容量。历史投稿存储按其五类私有子目录实际字节限制 2 GiB，最多 10,000 投稿、100,000 条路线；WAL 另有独立 2 GiB 限额，两者合计须纳入备份和磁盘容量规划。达到上限返回 503，由管理员决定清理策略，不自动删除用户历史。
 
 新存储以证明共享的 run/clock、地图、难度和玩家身份隔离，按绝对 60 秒时窗分块。同内容直接共享；同身份、时窗和点数的不同观测可对一个 plain 基块进行 int32 XOR 无损差分，仅当含元信息的压缩文件确实更小时采用。差分最多一层，读时验证身份、时窗、长度及重建逻辑 SHA。名字、owner、必要事件、原始时间和互补观测独立保留，不会因为近似重叠而删除。静止点区间保留原采样时间和全部厘米坐标。新写入展开上限为 932,067 点，manifest 不超过原有 64 MiB decoded / 12 MiB compressed；旧 v1 数据读路径不追加展开点数上限。
 
@@ -101,6 +115,8 @@ PRIVATE_DIR/routes/<uploadId>-pN-sN-aN.json.gz  旧完整尝试仍可读；新�
 完整路线和关卡查看都只引用源坐标范围，不保存另一份坐标。关卡索引另外保存精确 spans、原断点、完成证据及逻辑 SHA，并绑定 manifest SHA；查看只展开所需玩家和关卡块。关卡引用元信息最多 4 MiB，完整新索引最多 12 MiB。每次请求最多缓存 24,000 个已解码点、4 MiB manifest 和 4 MiB pack 引用索引，不跨请求缓存审核状态。
 
 离线准备工具 `node tools/prepare-trajectory-storage.mjs --prepare OFFLINE_SOURCE_COPY NEW_DESTINATION` 只读取旧库副本，在不存在的独立目的目录生成新布局。它验证原 upload/route/team 身份、审核字段、全部坐标/事件/尝试和前后文件 SHA，生成 `migration-verification.json`；原副本不变，不切换服务、不删除任何旧文件。辅助或孤立源文件在报告中保留记录，不自动复制为公开投稿。生产私有库不自动做存储迁移。
+
+此旧离线工具不转换 WAL；发现非空 `live-archive` 时在创建目的目录前拒绝，避免把遗漏直播档案的副本称为完整迁移。含直播档案的私有根应先停服并整体备份，不得仅复制上述历史子目录后删除源库。维护标记也阻止 WAL 新写入和恢复修复；需先排空进行中的请求，不能用标记代替停服锁。
 
 新投稿记录真实 `startedUtc`、`reviewedUtc` 与 `reviewMethod=automatic-contract-v1`。服务实例首次处理真实轨迹 worker 请求时，迁移以前未审核的 `pending` 投稿：先重新验证原精简 gzip 的完整白名单协议与内容 SHA，再核对索引身份、玩家、个人关卡判定及全部派生路线的实际坐标/断点；通过后原子改为 `approved`，从轨迹包恢复录制时间。损坏数据保留 `pending`；有 `reviewedUtc` 的人工保留、隐藏或拒绝均不自动改变。迁移每个服务实例只运行一次，后续普通查询不反复解压未通过的历史包。
 

@@ -1,4 +1,4 @@
-import { digest, validHash, extractInspectionStage, playerSummitCompleted } from "./trajectory-contract.mjs";
+import { digest, validHash, extractInspectionStage, playerSummitCompleted, playerNadirCompleted, playerMilestones } from "./trajectory-contract.mjs";
 
 export const TEAM_LIMITS = Object.freeze({ results: 100, pageBytes: 12 * 1024 * 1024 });
 
@@ -17,7 +17,7 @@ export function inspectTeamStage(trajectory, player, stage, options) {
 // A nickname is searchable display text, never an identity or a team key.
 export function teamIdentity(entry) {
   let scope = `recording:${entry.recordingId}`;
-  if ([1, 2].includes(entry.team?.version) && validHash(entry.team.scope)) scope = entry.team.scope;
+  if ([1, 2, 3].includes(entry.team?.version) && validHash(entry.team.scope)) scope = entry.team.scope;
   else {
     // Old complete routes already encode whether a shared clock was proven.
     const scopes = new Set((entry.routes ?? []).map(route => route.dedupe?.scope));
@@ -26,16 +26,19 @@ export function teamIdentity(entry) {
   return { id: digest({ groupId: entry.groupId, difficulty: entry.difficulty.key, scope }), scope };
 }
 
-export function makeTeamMetadata(trajectory, { version = 2 } = {}) {
+export function makeTeamMetadata(trajectory, { version = 3 } = {}) {
   const shared = Boolean(trajectory.runKey && Number.isSafeInteger(trajectory.timeOriginMs));
   return { version, scope: shared ? trajectory.runKey : `recording:${trajectory.recordingId}`,
     ...(shared ? { timeOriginMs: trajectory.timeOriginMs } : {}),
     members: trajectory.players.map(player => ({ key: player.key, pointCount: player.points.length,
       ...(version >= 2 ? { summitCompleted: playerSummitCompleted(trajectory, player) } : {}),
+      ...(version >= 3 ? { nadirCompleted: playerNadirCompleted(trajectory, player) } : {}),
       nativeProgress: player.events.some(event => event.kind === "game-stage"),
       stages: trajectory.map.stages.map(stage => {
         const extracted = inspectTeamStage(trajectory, player, stage, { includeInactive: version === 1 });
         return { index: stage.index, pointCount: extracted.points.length, completion: extracted.completion,
+          ...(version >= 3 ? { milestoneCount: playerMilestones(player, stage.index).length,
+            milestoneBytes: Buffer.byteLength(JSON.stringify(playerMilestones(player, stage.index))) } : {}),
           gameCompleted: extracted.gameCompleted, breakCount: extracted.breaks.length };
       }) })) };
 }
@@ -69,7 +72,12 @@ export function sourceOrder(a, b, stage) {
   return Number(points(b) > 0) - Number(points(a) > 0)
     || Number(b.player.owner) - Number(a.player.owner)
     || Number(b.metadata?.nativeProgress === true) - Number(a.metadata?.nativeProgress === true)
-    || points(b) - points(a) || a.entry.id.localeCompare(b.entry.id);
+    || points(b) - points(a)
+    // A forced terminal observation can share the last 100 ms sample bucket.
+    // Its sealed prefix must win even when it added markers but no new point.
+    || Number(summary(b)?.gameCompleted === true) - Number(summary(a)?.gameCompleted === true)
+    || (summary(b)?.milestoneCount ?? 0) - (summary(a)?.milestoneCount ?? 0)
+    || b.entry.durationMs - a.entry.durationMs || a.entry.id.localeCompare(b.entry.id);
 }
 
 export function teamDescriptor(team) {
@@ -78,7 +86,8 @@ export function teamDescriptor(team) {
     const selected = [...sources].sort((a, b) => Number(b.player.owner) - Number(a.player.owner)
       || Date.parse(b.entry.startedUtc) - Date.parse(a.entry.startedUtc) || a.entry.id.localeCompare(b.entry.id))[0];
     return { playerKey, name: selected.player.name,
-      summitCompleted: sources.some(source => source.metadata?.summitCompleted === true) };
+      summitCompleted: sources.some(source => source.metadata?.summitCompleted === true),
+      nadirCompleted: sources.some(source => source.metadata?.nadirCompleted === true) };
   });
   const times = [...team.times].sort((a, b) => Date.parse(a) - Date.parse(b));
   return { id: team.id, groupId: team.groupId, startedUtc: times[0] ?? null, lastStartedUtc: times.at(-1) ?? null,
@@ -86,6 +95,8 @@ export function teamDescriptor(team) {
       ...(team.map.levelIndex !== undefined ? { levelIndex: team.map.levelIndex } : {}) }, members,
     summitCompleted: members.some(member => member.summitCompleted),
     finisherKeys: members.filter(member => member.summitCompleted).map(member => member.playerKey),
+    nadirCompleted: members.some(member => member.nadirCompleted),
+    nadirFinisherKeys: members.filter(member => member.nadirCompleted).map(member => member.playerKey),
     stageSummaries: team.map.stages.map(stage => {
       let memberCount = 0, completedCount = 0;
       for (const [, sources] of allMembers) {

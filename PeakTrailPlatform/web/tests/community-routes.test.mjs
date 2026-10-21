@@ -584,3 +584,21 @@ test("team busy retries remain bounded while bad requests fail immediately and n
   await controller.enterMap(map(), { stageIndex: 0 }); await controller.setMode("routes");
   assert.equal(controller.getSnapshot().status, "error"); controller.dispose();
 });
+
+test('team and member Nadir completion remains distinct from summit completion through normalization', async () => {
+  const nadirTeam = team({ nadirCompleted: true, nadirFinisherKeys: [hash('1')],
+    members: team().members.map(member => ({ ...member, nadirCompleted: member.playerKey === hash('1') })) });
+  const normalized = normalizeCommunityTeams({ teams: [nadirTeam] }).teams[0];
+  assert.equal(normalized.nadirCompleted, true);
+  assert.equal(normalized.members.find(member => member.playerKey === hash('1')).nadirCompleted, true);
+  assert.match(communityTeamLabel(normalized), /天底已通关/);
+  assert.doesNotMatch(communityTeamLabel(normalized), /本队已登顶/);
+  const body = teamStage(0, { nadirCompleted: true, nadirFinisherKeys: [hash('1')],
+    routes: teamStage().routes.map(route => ({ ...route, nadirCompleted: route.playerKey === hash('1'),
+      milestones: [{ tMs: 100, kind: 'game-stage', stageIndex: 0 }] })) });
+  const result = normalizeCommunityTeamStage(body, group(), map(), 0, team().id);
+  assert.equal(result.nadirCompleted, true); assert.equal(result.summitCompleted, false);
+  assert.equal(result.routes[0].milestones[0].kind, 'game-stage');
+  assert.throws(() => normalizeCommunityTeams({ teams: [{ ...nadirTeam, nadirFinisherKeys: [hash('f')] }] }));
+  assert.throws(() => normalizeCommunityTeamStage({ ...body, nadirCompleted: 'true' }, group(), map(), 0, team().id));
+});

@@ -12,7 +12,7 @@ const wrap = (record, producerSeq) => ({ producerSeq, record });
 
 async function fixture(t, options = {}) {
   let time = 100_000;
-  const live = createLiveServer({ liveV2: { now: () => time, ...options } });
+  const live = createLiveServer({ liveV2: { memoryOnly: true, now: () => time, ...options } });
   await new Promise((done) => live.server.listen(0, "127.0.0.1", done));
   const base = `http://127.0.0.1:${live.server.address().port}`;
   const readers = new Set();
@@ -20,6 +20,7 @@ async function fixture(t, options = {}) {
     for (const reader of readers) await reader.cancel().catch(() => {});
     live.server.closeAllConnections();
     await new Promise((done) => live.server.close(done));
+    await live.liveV2.close();
   });
   async function request(path, body, token) {
     const response = await fetch(`${base}${path}`, body === undefined ? {} : {
@@ -347,6 +348,19 @@ test("a late viewer preserves presence, life and consciousness after their event
   assert.equal(tracePlayerStateAtTime(second, "p1", 5).life, "absent");
 });
 
+test("late hello retains native milestones independently of the recent path window in original sequence order", async (t) => {
+  const f = await fixture(t, { limits: { historyRecords: 1 } }), session = (await f.create()).body;
+  const names = ["native-checkpoint", "summit", "nadir-ready", "nadir-entry", "nadir-wall", "nadir-chase", "nadir", "run_end"];
+  const records = names.map((event, index) => wrap({ type: "event", t: index, playerId: "p1", activeSegment: 5,
+    event, source: "native-state", pos: [index, 2, 3] }, index + 1));
+  await f.send(session, records);
+  await f.send(session, [wrap(sample(10), 9), wrap(sample(11), 10)]);
+  const view = await f.stream(session), hello = await view.next();
+  assert.equal(hello.body.snapshotSeq, 10);
+  assert.deepEqual(hello.body.snapshot.records.map(entry => entry.seq), [1, 2, 3, 4, 5, 6, 7, 8, 10]);
+  assert.deepEqual(hello.body.snapshot.records.filter(entry => entry.record.type === "event").map(entry => entry.record.event), names);
+});
+
 test("SSE resumes every retained record and resets with a snapshot for an evicted cursor or old epoch", async (t) => {
   const f = await fixture(t, { limits: { historyRecords: 4 } }), session = (await f.create()).body;
   await f.send(session, Array.from({ length: 6 }, (_, i) => wrap(sample(i), i + 1)));
@@ -468,8 +482,8 @@ test("viewer admission and byte rates have independent bounded budgets", async (
   assert.equal(f.live.liveV2.stats().viewers, 0);
 });
 
-test("closing the API releases all sessions and timers", () => {
+test("closing the API releases all sessions and timers", async () => {
   const api = createLiveV2Api();
-  api.close();
+  await api.close();
   assert.deepEqual(api.stats(), { sessions: 0, residentBytes: 0, viewers: 0, activeBodies: 0 });
 });

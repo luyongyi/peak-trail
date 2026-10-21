@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "version": "0.8.1",
+  "version": "0.8.2",
   "filename": "PeakTrailRecorder.dll",
-  "sourceRevision": "fcf84bbf315bd0e99df72e85d2005f3f9e61dc00",
-  "sha256": "4ff689fae4e3cbc62cae15cf83d82ea6040ef51da48c672ac05d00e3c7eafe35",
-  "size": 240640,
-  "artifactUrl": "https://github.com/luyongyi/peak-trail/releases/download/recorder-v0.8.1/PeakTrailRecorder.dll",
-  "downloadPath": "downloads/recorder/0.8.1/PeakTrailRecorder.dll"
+  "sourceRevision": "27c4cba210cb985a860a08dcc25780d0ed6e2fee",
+  "sha256": "442db58fc303955bf03cd375e010158de5babc60d6da7a2b0476d874af0df512",
+  "size": 279552,
+  "artifactUrl": "https://github.com/luyongyi/peak-trail/releases/download/recorder-v0.8.2/PeakTrailRecorder.dll",
+  "downloadPath": "downloads/recorder/0.8.2/PeakTrailRecorder.dll"
 }

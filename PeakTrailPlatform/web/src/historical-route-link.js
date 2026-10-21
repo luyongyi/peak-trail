@@ -1,3 +1,4 @@
+import { runOutcomeLabel } from "./route-milestones.js";
 import { getLocale, tr } from "./i18n.js";
 import { communityRouteError, matchesCommunityGroup, normalizeCommunityTeams, pendingCommunityMessage } from "./community-route-model.js";
 import { heightBands, normalizeRouteGroups, normalizeRoutes } from "./route-collection-model.js";
@@ -112,6 +113,8 @@ export function normalizeHistoricalInspection(raw, group, mapPack, stageIndex, i
 // Native game progress and a continuous recorded path are independent facts.
 // Missing evidence must never be presented as a player failing the chapter.
 export function historicalInspectionRouteStatus(route) {
+  const outcome = runOutcomeLabel(route);
+  if (outcome) return outcome + " · " + (route.completed ? tr("完整线路", "Complete path") : tr("线路有断点", "Path has gaps"));
   if (route.gameCompleted === true) return route.completed ? tr("已完成本关 · 完整线路", "Chapter completed · Complete path") : tr("已完成本关 · 线路有断点", "Chapter completed · Path has gaps");
   if (route.gameCompleted === false) return tr("本关尚未完成", "Chapter not yet completed");
   return tr(`${route.completed ? "完整线路" : "线路未完整"}（缺少原生切关证据）`, `${route.completed ? "Complete path" : "Partial path"} (native chapter-transition evidence missing)`);

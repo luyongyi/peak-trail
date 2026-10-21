@@ -1,4 +1,5 @@
 import { biomeName, gameText, tr } from "./i18n.js";
+import { normalizeMilestones } from "./route-milestones.js";
 
 const MAX_POINTS = 200_000;
 const MAX_CELLS = 200_000;
@@ -43,7 +44,7 @@ export function normalizeRoutes(value, { maximumPoints = MAX_POINTS } = {}) {
     if (breaks.some(t => !finiteInteger(t) || t < 0)) throw new Error(tr("轨迹断点无效", "Invalid path breaks"));
     const nameMissing = typeof route.name !== "string" || !route.name.trim();
     return { ...route, name: nameMissing ? tr("登山者", "Climber") : route.name, nameMissing, points,
-      breaks: [...breaks].sort((a, b) => a - b) };
+      breaks: [...breaks].sort((a, b) => a - b), milestones: normalizeMilestones(route.milestones, value.stageIndex ?? null) };
   });
   return { ...value, routes, totalRouteCount: finiteInteger(value.totalRouteCount) ? value.totalRouteCount : routes.length };
 }

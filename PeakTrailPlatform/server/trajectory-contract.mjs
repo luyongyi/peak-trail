@@ -6,7 +6,9 @@ export const LIMITS = Object.freeze({ compressedBytes: 12 * 1024 * 1024, decoded
   durationMs: 4 * 60 * 60 * 1000, stages: 16, gapMs: 1500, uploads: 10_000,
   storedBytes: 2 * 1024 * 1024 * 1024, queryPoints: 200_000, heatCells: 250_000 });
 const HASH = /^[a-f0-9]{64}$/;
-const KINDS = new Set(["join", "leave", "dead", "revive", "break", "warp", "finish", "summit", "game-stage", "checkpoint"]);
+const NADIR_KINDS = new Set(["nadir-ready", "nadir-entry", "nadir-wall", "nadir-chase", "nadir"]);
+const MILESTONES = new Set(["game-stage", "checkpoint", "native-checkpoint", "summit", ...NADIR_KINDS]);
+const KINDS = new Set(["join", "leave", "dead", "revive", "break", "warp", "finish", ...MILESTONES]);
 const INTERRUPTIONS = new Set(["join", "leave", "dead", "revive", "break", "warp"]);
 export function problem(message, statusCode = 400) { return Object.assign(new Error(message), { statusCode }); }
 export function digest(value) { return createHash("sha256").update(typeof value === "string" ? value : JSON.stringify(value)).digest("hex"); }
@@ -95,10 +97,17 @@ export function validateTrajectory(raw) {
     });
     let eventTime = -1;
     const events = array(player.events, Math.min(100_000, Math.ceil(result.durationMs / 100) + 100), "events").map((event) => {
-      object(event, ["tMs", "kind", "stageIndex"], ["tMs", "kind"], "event");
+      object(event, ["tMs", "kind", "stageIndex", "positionCm"], ["tMs", "kind"], "event");
       const value = { tMs: integer(event.tMs, 0, result.durationMs, "event time"), kind: event.kind };
       if (!KINDS.has(event.kind) || value.tMs < eventTime) throw problem("events must be ordered with supported kind"); eventTime = value.tMs;
       if (Object.hasOwn(event, "stageIndex")) { value.stageIndex = integer(event.stageIndex, 0, LIMITS.stages - 1, "event stage"); if (!indices.has(value.stageIndex)) throw problem("event references absent stage"); }
+      if (Object.hasOwn(event, "positionCm")) {
+        value.positionCm = array(event.positionCm, 3, "event position", 3).map(part => integer(part, -100_000_000, 100_000_000, "event position cm"));
+      }
+      if (NADIR_KINDS.has(value.kind) && (player.evidence !== "native-state" || value.stageIndex === undefined
+        || (value.kind !== "nadir-ready" && result.map.stages[value.stageIndex]?.name !== "Void"))) throw problem("nadir event requires native stage evidence");
+      if (value.kind === "native-checkpoint" && (player.evidence !== "native-state" || !player.owner
+        || value.stageIndex === undefined || result.map.stages[value.stageIndex]?.name === "Void")) throw problem("native checkpoint requires local ordinary-stage evidence");
       if (["game-stage", "checkpoint"].includes(value.kind) && value.stageIndex === undefined) throw problem("native stage event requires stageIndex");
       if (value.kind === "summit" && (player.evidence !== "native-state"
         || value.stageIndex !== result.map.stages.filter(stage => stage.name !== "Void").at(-1)?.index)) {
@@ -144,9 +153,22 @@ function applyLifeEvent(state, event) {
   if (event.kind === "join") state.present = true;
 }
 function living(state) { return state.present && !state.dead; }
-export function playerSummitCompleted(trajectory, player) {
+function nativeCheckpoints(player, stageIndex) {
+  if (player.evidence !== "native-state" || !player.owner) return [];
+  const life = { dead: false, present: true }, checkpoints = [];
+  for (let index = 0; index < player.events.length;) {
+    const time = player.events[index].tMs, matching = []; let interrupted = false;
+    while (index < player.events.length && player.events[index].tMs === time) {
+      const event = player.events[index++]; applyLifeEvent(life, event);
+      interrupted ||= ["dead", "leave", "warp"].includes(event.kind);
+      if (event.kind === "native-checkpoint" && event.stageIndex === stageIndex) matching.push(event);
+    }
+    if (living(life) && !interrupted) checkpoints.push(...matching);
+  }
+  return checkpoints;
+}
+function playerEndingCompleted(trajectory, player, kind, final) {
   if (player.evidence !== "native-state") return false;
-  const final = trajectory.map.stages.filter(stage => stage.name !== "Void").at(-1)?.index;
   const life = { dead: false, present: true };
   for (let index = 0; index < player.events.length;) {
     const time = player.events[index].tMs; let summit = false, interrupted = false;
@@ -154,11 +176,20 @@ export function playerSummitCompleted(trajectory, player) {
       const event = player.events[index++];
       applyLifeEvent(life, event);
       if (["dead", "leave"].includes(event.kind)) interrupted = true;
-      if (event.kind === "summit" && event.stageIndex === final) summit = true;
+      if (event.kind === kind && event.stageIndex === final) summit = true;
     }
     if (summit && living(life) && !interrupted) return true;
   }
   return false;
+}
+export function playerSummitCompleted(trajectory, player) {
+  return playerEndingCompleted(trajectory, player, "summit", trajectory.map.stages.filter(stage => stage.name !== "Void").at(-1)?.index);
+}
+export function playerNadirCompleted(trajectory, player) {
+  return playerEndingCompleted(trajectory, player, "nadir", trajectory.map.stages.find(stage => stage.name === "Void")?.index);
+}
+export function playerMilestones(player, stageIndex) {
+  return player.events.filter(event => MILESTONES.has(event.kind) && event.stageIndex === stageIndex);
 }
 export function groupId(map) { return digest({ buildId: map.buildId, scene: map.scene, layoutKey: map.layoutKey ?? null, route: map.route, stages: map.stages,
   ...(map.alignment ? { alignment: map.alignment } : {}) }); }
@@ -196,6 +227,24 @@ function nativeIntervals(trajectory, player) {
         entryCheckpoint: completed, exitCheckpoint: false, lifeBeforeStart: lifeBefore, startEventIndex: begin });
     }
   }
+  const checkpointsByStage = new Map();
+  for (let index = 0; index < intervals.length; index++) {
+    const interval = intervals[index], next = intervals[index + 1];
+    if (!next || trajectory.map.stages[interval.stageIndex]?.name === "Void"
+      || next.stageIndex !== interval.stageIndex + 1 || trajectory.map.stages[next.stageIndex]?.name === "Void") continue;
+    // The native local progress callback follows ShowTitleText by about 500 ms.
+    // Retain its actual timestamp; do not forge a same-tick team checkpoint.
+    if (!checkpointsByStage.has(interval.stageIndex)) checkpointsByStage.set(interval.stageIndex, nativeCheckpoints(player, interval.stageIndex));
+    const candidates = checkpointsByStage.get(interval.stageIndex), through = Math.min(interval.end + LIMITS.gapMs, next.end - 1);
+    let checkpoint = null;
+    for (let at = lowerEvent(candidates, interval.start); at < candidates.length && candidates[at].tMs <= through; at++) {
+      if (!disruptedBetween(player, Math.min(interval.end, candidates[at].tMs), candidates[at].tMs)) { checkpoint = candidates[at]; break; }
+    }
+    if (checkpoint) {
+      interval.exitCheckpoint = true;
+      if (next) next.entryCheckpoint = true;
+    }
+  }
   return intervals.length ? intervals : null;
 }
 function lowerPoint(points, time) {
@@ -215,6 +264,8 @@ function intervalIndices(player, interval) {
   return { begin, end };
 }
 function gameCompletion(trajectory, player, stage, intervals, complete) {
+  if (stage.name === "Void" && playerNadirCompleted(trajectory, player)) return true;
+  if (stage.name !== "Void" && nativeCheckpoints(player, stage.index).length) return true;
   const final = trajectory.map.stages.filter(value => value.name !== "Void").at(-1);
   if (stage.index === final?.index && playerSummitCompleted(trajectory, player)) return true;
   if (!intervals || player.evidence !== "native-state") return null;
@@ -264,6 +315,7 @@ function extractNativeStageRoutes(trajectory, player, stage, intervals) {
   return { completion: routes.length ? "complete" : "partial", routes };
 }
 export function extractStageRoutes(trajectory, player, stage) {
+  if (stage.name === "Void" && player.evidence === "native-state") return extractNadirRoutes(trajectory, player, stage);
   if (player.evidence !== "native-state" || !Number.isFinite(stage.enterZCm) || !Number.isFinite(stage.exitZCm)) return { completion: "unknown", routes: [] };
   const intervals = nativeIntervals(trajectory, player);
   if (intervals) return extractNativeStageRoutes(trajectory, player, stage, intervals);
@@ -293,6 +345,30 @@ export function extractStageRoutes(trajectory, player, stage) {
       start = -1;
     }
     previous = point;
+  }
+  return { completion: routes.length ? "complete" : "partial", routes };
+}
+
+// Void has no increasing Z gates. An observed native entry and a real individual
+// Nadir win bound an attempt; missing ticks, death, leave or later warps keep it
+// inspectable but never contribute a fabricated continuous heatmap route.
+function extractNadirRoutes(trajectory, player, stage) {
+  const intervals = nativeIntervals(trajectory, player), routes = [];
+  if (!intervals) return { completion: "unknown", routes };
+  const entries = player.events.filter(event => event.kind === "nadir-entry" && event.stageIndex === stage.index);
+  const finishes = player.events.filter(event => event.kind === "nadir" && event.stageIndex === stage.index);
+  const won = playerNadirCompleted(trajectory, player);
+  for (const interval of intervals.filter(value => value.stageIndex === stage.index)) {
+    const entry = entries[lowerEvent(entries, interval.start)], finish = entry && finishes[lowerEvent(finishes, entry.tMs)];
+    if (!entry || entry.tMs >= interval.end || !finish || finish.tMs >= interval.end || !won || disruptedBetween(player, entry.tMs, finish.tMs)) continue;
+    const first = lowerPoint(player.points, entry.tMs), after = lowerPoint(player.points, finish.tMs + 1);
+    const points = player.points.slice(first, after);
+    if (points.length < 2 || points[0][0] - entry.tMs > LIMITS.gapMs || finish.tMs - points.at(-1)[0] > LIMITS.gapMs
+      || points.some((point, index) => index > 0 && discontinuity(points[index - 1], point))) continue;
+    const life = { dead: false, present: true };
+    for (const event of player.events) { if (event.tMs > entry.tMs) break; applyLifeEvent(life, event); }
+    if (!living(life)) continue;
+    routes.push({ points, startMs: points[0][0], endMs: points.at(-1)[0], breaks: [] });
   }
   return { completion: routes.length ? "complete" : "partial", routes };
 }

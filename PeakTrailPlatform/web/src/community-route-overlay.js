@@ -84,6 +84,27 @@ export class CommunityRouteOverlay {
     return group;
   }
 
+  addMilestones(input, origin, band) {
+    const routes = normalizeRoutes({ routes: input.routes || [], stageIndex: input.stageIndex }, { maximumPoints: Infinity }).routes;
+    for (const route of routes) {
+      const milestones = route.milestones.filter(entry => entry.positionCm
+        && (band === null || Math.floor(entry.positionCm[1] / (input.heatmap?.heightBandCm || 200)) === band)).slice(-1024);
+      if (!milestones.length) continue;
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute("position", new THREE.Float32BufferAttribute(milestones.flatMap(entry => [
+        entry.positionCm[0] / 100 - origin.x, entry.positionCm[1] / 100 - origin.y, entry.positionCm[2] / 100 - origin.z]), 3));
+      const colors = milestones.flatMap(entry => new THREE.Color(entry.kind.startsWith("nadir") ? "#a8baf0" : "#edc977").toArray());
+      geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+      const group = new THREE.Group(); group.name = "community-milestones";
+      const points = new THREE.Points(geometry, new THREE.PointsMaterial({ size: 9, sizeAttenuation: false,
+        vertexColors: true, depthTest: false, depthWrite: false, toneMapped: false }));
+      points.renderOrder = 24;
+      points.userData = { milestones, routeId: route.id, playerKey: route.playerKey, stageIndex: input.stageIndex };
+      group.add(points); this.root.add(group);
+      this.players.set("milestones:" + route.id, { group, playerKey: route.playerKey || route.id });
+    }
+  }
+
   setData(input, origin, heightScale = 1) {
     if (!input || input.mode === "off" || !Number.isInteger(input.stageIndex)) { this.clear(); return; }
     const band = input.heightBand === null || input.heightBand === undefined ? null : input.heightBand;
@@ -172,6 +193,7 @@ export class CommunityRouteOverlay {
         this.root.add(mesh);
       }
     }
+    if (["routes", "team"].includes(input.mode)) this.addMilestones(input, origin, band);
     this.mode = input.mode;
     this.source = { mode: input.mode, routes: input.routes, heatmap: input.heatmap, stageIndex: input.stageIndex,
       band, origin: origin.toArray(), memberSelection, referencePlayerKey };

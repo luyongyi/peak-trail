@@ -48,3 +48,18 @@ test("dense event and sample bursts have hard caps as well as a time window", ()
   assert.equal(trace.tracks.get("p1").length, 6000);
   assert.equal(trace.events.length, 2000);
 });
+
+test('the rolling window retains chapter, end and separate same-frame Nadir phases without retaining old path samples', () => {
+  const trace = createLiveTrace(manifest);
+  for (const event of ['segment_change', 'native-checkpoint', 'nadir-ready', 'nadir-entry', 'nadir-wall', 'nadir-chase', 'nadir', 'run_end']) {
+    appendLiveRecord(trace, { type: 'event', event, t: 1000, activeSegment: 5, playerId: 'p1', source: 'native-state' });
+  }
+  for (let i = 0; i <= 1000; i++) appendLiveRecord(trace, { type: 'sample', t: i * 1000, playerId: 'p1', pos: [0, 0, 0], activeSegment: 5 });
+  finalizeLiveFlush(trace); trimWatchTrace(trace);
+  assert.equal(trace.windowStart, 880);
+  assert.ok(trace.tracks.get('p1').length < 125);
+  assert.deepEqual(trace.milestones.map(event => event.type), ['segment_change', 'native_checkpoint', 'nadir_ready', 'nadir_entry', 'nadir_wall', 'nadir_chase', 'nadir', 'run_end']);
+  assert.ok(trace.events.some(event => event.type === 'run_end'));
+  trimWatchTrace(trace);
+  assert.equal(trace.milestones.length, 8, 'repeated pruning does not duplicate retained facts');
+});

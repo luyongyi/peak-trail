@@ -34,7 +34,7 @@ import { historicalRouteTitle, historicalRouteUrl, loadHistoricalRouteLink, pars
 import { getLocale, tr, onLocaleChange, biomeName, gameItemName, formatNumber } from "./i18n.js";
 import { initLanguageControls } from "./i18n-dom.js";
 import { WatchClient, parseWatchId, parseWatchCode, normalizeWatchInput, resolveWatchInput, watchSharePayload, watchCodeFromState } from "./watch-client.js";
-import { trimWatchTrace } from "./watch-window.js";
+import { trimWatchTrace, isWatchMilestone, watchProgressLabel } from "./watch-window.js";
 import { watchText } from "./watch-text.js";
 
 initLanguageControls();
@@ -1499,7 +1499,7 @@ function updateWatchStatus() {
     : watch.status === "ended" ? labels.ended
     : watch.connection === "reconnecting" ? watchText("观看连接重连中")
     : watch.connection === "connecting" ? watchText("正在连接直播") : labels[watch.status] || watchText("等待游戏数据");
-  $("watchStatusText").textContent = text;
+  $("watchStatusText").textContent = [text, watchProgressLabel(watch.trace)].filter(Boolean).join(" · ");
   $("watchStatus").dataset.status = watch.status === "ended" ? "ended" : watch.connection === "error" ? "error" : watch.status;
   const age = Number.isFinite(watch.lastRecordAt) ? Math.max(0, Math.floor((Date.now() - watch.lastRecordAt) / 1000)) : null;
   $("watchFreshness").textContent = `${state.trace?.manifest?.sceneName || watch.sceneName || watchText("等待地图")} · ${age === null ? watchText("等待游戏数据") : age === 0 ? watchText("刚刚更新") : tr(`${age} 秒前更新`, `Updated ${age}s ago`)}`;
@@ -1513,6 +1513,7 @@ function updateWatchStatus() {
   $("watchTimeStatus").textContent = watch.status === "ended"
     ? watchText("直播已结束 · 可回看保留的路径")
     : watch.following ? watchText("实时 · 最近 2 分钟可回看") : tr(`正在回看 · 落后 ${Math.round(behind)} 秒`, `Replaying · ${Math.round(behind)}s behind`);
+  if (watch.persistence === "durable") $("watchTimeStatus").textContent += watchText(" · 轨迹自动保存");
   $("watchGoLive").textContent = watch.status === "ended" ? watchText("回到最后") : watchText("回到实时");
   $("watchGoLive").disabled = !watch.trace || (watch.following && watch.status !== "ended");
   const running = state.playing || watch.following && watch.status !== "ended";
@@ -1527,7 +1528,7 @@ async function applyWatchSnapshot(snapshot, trace) {
   finalizeLiveFlush(trace);
   trimWatchTrace(trace);
   finalizeLiveFlush(trace);
-  trace.warnings = [watchText("直播仅保留最近约 2 分钟的路径；玩家身份只在本次会话内有效。")];
+  trace.warnings = [watchText("观战页面可回看最近约 2 分钟的路径；玩家身份只在本次会话内有效。")];
   watch.trace = trace;
   watch.epoch = snapshot.epoch;
   watch.initializing = true;
@@ -1597,7 +1598,7 @@ async function startWatch(id, { replaceUrl = true, watchCode = null } = {}) {
   const watch = state.watch;
   Object.assign(watch, { active: true, id, trace: null, status: "connecting", connection: "connecting",
     lastRecordAt: null, following: true, dirty: false, records: 0, playerKey: "", epoch: null,
-    initializing: false, message: "", sceneName: null, code: parseWatchCode(watchCode), copiedUntil: 0, copiedKind: null });
+    initializing: false, message: "", sceneName: null, persistence: null, code: parseWatchCode(watchCode), copiedUntil: 0, copiedKind: null });
   state.trace = null;
   state.historicalRoute = null;
   state.traceCollection = null;
@@ -1647,6 +1648,7 @@ async function startWatch(id, { replaceUrl = true, watchCode = null } = {}) {
     onState: data => {
       if (!watch.active || state.watch.client !== client) return;
       if (data.status) watch.status = data.status;
+      if (data.persistence) watch.persistence = data.persistence;
       watch.code = watchCodeFromState(watch.code, data);
       if (data.manifest?.sceneName) watch.sceneName = data.manifest.sceneName;
       const time = typeof data.lastRecordAt === "number" ? data.lastRecordAt : Date.parse(data.lastRecordAt);
@@ -1978,6 +1980,8 @@ function eventTitle(event) {
     fog_enabled: "Drowsy fog appeared", fog_disabled: "Drowsy fog cleared", zombie_state: "Zombie state changed",
     join: "Joined the climb", leave: "Left the climb", passed_out: "Passed out", recovered: "Regained consciousness",
     death: "Death", revive: "Revived", warp: "Warped", segment_change: "Entered a new area", run_end: "Climb ended",
+    summit: "Summit reached", checkpoint: "Chapter completed", native_checkpoint: "Chapter completed", nadir_ready: "Nadir items ready", nadir_entry: "Entered Nadir",
+    nadir_wall: "Nadir barrier changed", nadir_chase: "Nadir chase changed", nadir: "Nadir completed",
     item_pickup: "Picked up item", item_drop: "Dropped item", item_use: "Used item", item_acquired: "Acquired item",
     item_lost: "Lost item", item_moved: "Moved item", item_state_changed: "Item state changed", item_consumed: "Consumed item",
     item_thrown: "Threw item", item_equipped: "Equipped item", item_unequipped: "Stowed item", equip: "Equipped item",
@@ -2067,6 +2071,10 @@ function createEventButton(event) {
   button.className = "event-button";
   button.style.setProperty("--event-color", presentation.color);
   button.title = [event.source, event.confidence].filter(Boolean).join(" · ");
+  if (state.watch?.active && event.t < (state.trace?.windowStart || 0)) {
+    button.disabled = true;
+    button.title = tr("关键节点已保留，位置已超出近期回看窗口", "Milestone retained; its position is outside the recent replay window");
+  }
   button.addEventListener("click", () => {
     if (state.watch?.active) state.watch.following = false;
     setPlaying(false);
@@ -2102,7 +2110,7 @@ function createEventButton(event) {
  * session carries thousands of item events; keeping them all in the DOM made every
  * layout pass — and therefore every replay frame — an order of magnitude slower. */
 function renderEventWindow() {
-  const events = (state.trace?.events || []).filter(event => !state.watch?.active || event.t >= (state.trace.windowStart || 0));
+  const events = (state.trace?.events || []).filter(event => !state.watch?.active || (event.t >= (state.trace.windowStart || 0) || isWatchMilestone(event)));
   const list = elements.eventList;
   if (!events.length) return;
   const viewport = list.clientHeight || 400;
@@ -2136,7 +2144,7 @@ function updateEvents() {
   state.eventRows.clear();
   elements.timelineMarkers.replaceChildren();
   elements.eventList.scrollTop = 0;
-  const events = (state.trace?.events || []).filter(event => !state.watch?.active || event.t >= (state.trace.windowStart || 0));
+  const events = (state.trace?.events || []).filter(event => !state.watch?.active || (event.t >= (state.trace.windowStart || 0) || isWatchMilestone(event)));
   elements.eventCount.textContent = formatNumber(events.length);
   if (!events.length) {
     const empty = document.createElement("p");
@@ -2161,6 +2169,7 @@ function updateEvents() {
   // nodes instead of tens of thousands, whose layout cost dominated every frame.
   const markers = new Map();
   for (const event of events) {
+    if (event.t < windowStart) continue;
     const percent = Math.min(100, Math.max(0, ((event.t - windowStart) / duration) * 100));
     const bucket = Math.round(percent / TIMELINE_MARKER_STEP);
     // The latest event in a bucket wins, so tick colors stay chronological.

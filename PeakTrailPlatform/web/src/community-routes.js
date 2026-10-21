@@ -28,7 +28,7 @@ export function createCommunityRoutes({ fetchImpl = globalThis.fetch?.bind(globa
       stageIndex: null, difficulty: "", difficulties: [],
       routes: [], heatmap: null, players: [], heightBands: [], heightBand: null, mode: "off",
       teamId: null, teamLoaded: false, teams: [], teamSearchStatus: "idle", teamSearchMessage: "", searchMember: "", searchAllMaps: false,
-      countBy: "team", referencePlayerKey: null, summitCompleted: false, stageCompleted: false, finisherKeys: [],
+      countBy: "team", referencePlayerKey: null, summitCompleted: false, stageCompleted: false, finisherKeys: [], nadirCompleted: false, nadirFinisherKeys: [],
       totalRouteCount: 0, truncated: false, unavailableCount: 0, message: "" };
   }
   function getSnapshot() { return { ...state, message: displayMessage(state.message), teamSearchMessage: displayMessage(state.teamSearchMessage), mapPackId: mapPack?.mapPackId || null, players: communityPlayers(state.routes, hidden) }; }
@@ -37,7 +37,7 @@ export function createCommunityRoutes({ fetchImpl = globalThis.fetch?.bind(globa
   function invalidate() { request?.abort(); request = null; requestKind = null; revision++; }
   function begin(kind) { invalidate(); request = new AbortController(); requestKind = kind; return { revision, signal: request.signal }; }
   function clearData() {
-    Object.assign(state, { routes: [], heatmap: null, players: [], heightBands: [], heightBand: null, totalRouteCount: 0, truncated: false, inspectionLoaded: false, teamLoaded: false, summitCompleted: false, stageCompleted: false, finisherKeys: [] });
+    Object.assign(state, { routes: [], heatmap: null, players: [], heightBands: [], heightBand: null, totalRouteCount: 0, truncated: false, inspectionLoaded: false, teamLoaded: false, summitCompleted: false, stageCompleted: false, finisherKeys: [], nadirCompleted: false, nadirFinisherKeys: [] });
   }
   function active(token) { return !disposed && token.revision === revision && mapPack !== null; }
   async function readApi(path, signal, { retryRate = false } = {}) {
@@ -81,6 +81,7 @@ export function createCommunityRoutes({ fetchImpl = globalThis.fetch?.bind(globa
       state.message = () => recorded.length ? tr(`本队 ${members.length} 位队员 · ${recorded.length} 位有本关轨迹 · ${historicalInspectionStatus(state.routes.filter(route => route.points.length))} · 不完整线路不计入热力。`, `Team: ${members.length} members · ${recorded.length} with paths in this chapter · ${historicalInspectionStatus(state.routes.filter(route => route.points.length))} · Partial paths are excluded from heatmaps.`)
         : tr(`本队 ${members.length} 位队员 · 本关暂无录制轨迹。`, `Team: ${members.length} members · No recorded paths in this chapter.`);
       if (state.summitCompleted) appendMessage(() => tr(" 本队已登顶（任一队员完成即全队完成）。", " The team reached the summit (one finisher completes it for the team)."));
+      if (state.nadirCompleted) appendMessage(() => tr(" 本队天底已通关。", " The team completed Nadir."));
       if (state.truncated) appendMessage(() => tr(" 已达到显示上限，部分成员或轨迹尚未显示。", " Display limit reached. Some members or paths are not shown."));
       return;
     }
@@ -100,6 +101,7 @@ export function createCommunityRoutes({ fetchImpl = globalThis.fetch?.bind(globa
       normalizeCommunityTeamStage(body, group, mapPack, stage, state.teamId);
       if (!first) first = body;
       else if (body.teamRevision !== first.teamRevision || body.totalRouteCount !== first.totalRouteCount || body.summitCompleted !== first.summitCompleted || body.stageCompleted !== first.stageCompleted
+        || body.nadirCompleted !== first.nadirCompleted || JSON.stringify(body.nadirFinisherKeys || []) !== JSON.stringify(first.nadirFinisherKeys || [])
         || JSON.stringify(body.finisherKeys || []) !== JSON.stringify(first.finisherKeys || [])) throw communityRouteError("队伍记录已更新，请刷新后重新读取。", "Team records changed. Refresh to load them again.");
       for (const route of body.routes) {
         if (ids.has(route.id)) throw communityRouteError("队员路线分页重复，请刷新后重新读取。", "Duplicate team route pages. Please refresh.");

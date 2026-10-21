@@ -3,6 +3,7 @@ import { difficultyLabel } from "./route-collection-model.js";
 import { createCommunityRoutes } from "./community-routes.js";
 import { communityGroupLabel, communityTeamLabel } from "./community-route-model.js";
 import { historicalInspectionRouteStatus } from "./historical-route-link.js";
+import { milestoneText, runOutcomeLabel } from "./route-milestones.js";
 
 // The same map/camera remains in place while a small history layer is selected.
 // This panel never enters replay, opens sockets, or creates a render loop.
@@ -117,7 +118,27 @@ export function createCommunityMapPanel({ getContext, getScene, root = document,
       const name = root.createElement("span");
       const recordedRoute = snapshot.inspectionId || snapshot.teamId ? snapshot.routes.find(route => (route.playerKey || route.id) === player.id) : null;
       name.textContent = `${player.name}${!player.hasPoints ? tr("（本关无记录）", " (no chapter record)") : recordedRoute ? tr(`（${historicalInspectionRouteStatus(recordedRoute)}）`, ` (${historicalInspectionRouteStatus(recordedRoute)})`) : ""}`;
+      if ((!recordedRoute || !player.hasPoints) && runOutcomeLabel(player)) name.textContent += " · " + runOutcomeLabel(player);
       label.append(check, dot, name); elements.communityPlayers.append(label);
+      const milestones = snapshot.routes.filter(route => (route.playerKey || route.id) === player.id)
+        .flatMap(route => route.milestones || []).sort((a, b) => a.tMs - b.tMs);
+      if (milestones.length) {
+        const details = root.createElement("details");
+        const summary = root.createElement("summary");
+        summary.textContent = tr(`关键节点（${milestones.length}）`, `Milestones (${milestones.length})`);
+        const list = root.createElement("ol");
+        for (const milestone of milestones.slice(-1024)) {
+          const row = root.createElement("li"), text = root.createElement("small");
+          text.textContent = milestoneText(milestone); row.append(text); list.append(row);
+        }
+        details.append(summary, list);
+        if (milestones.length > 1024) {
+          const note = root.createElement("small");
+          note.textContent = tr("其余关键节点已保存在完整轨迹中", "Other milestones are retained in the full path record");
+          details.append(note);
+        }
+        elements.communityPlayers.append(details);
+      }
     }
     applyOverlay(snapshot);
   }
