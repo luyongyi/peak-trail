@@ -17,7 +17,7 @@ export function createItemEventPanel({ getContext, getScene, root = document, fe
     button.hidden = !context.enabled; button.textContent = tr('道具事件', 'Item events'); button.setAttribute('aria-pressed', String(enabled));
     const event = active && events.find(value => value.id === selectedId);
     card.hidden = !event;
-    status.hidden = !active;
+    status.hidden = !active || (context.live && !loading && !failed);
     status.textContent = loading ? tr('读取道具事件…', 'Loading item events…') : failed ? tr('道具事件暂时无法读取，切换开关可重试。', 'Item events unavailable. Toggle this layer to retry.')
       : context.stageIndex == null && !context.live ? tr('选择关卡查看道具事件。', 'Choose a chapter to view item events.')
       : events.length ? (truncated || events.length > MAX_ITEM_MARKERS ? (!context.live || context.persistence === 'durable' ? tr('道具事件 · 显示有限标记，更多事件保存在轨迹中', 'Item events · Markers limited; more events remain in the recording') : tr('道具事件 · 仅显示有限的近期标记', 'Item events · Showing a limited set of recent markers')) : tr('道具事件 · 点击标记查看记录位置', 'Item events · Tap a marker for its recorded location'))

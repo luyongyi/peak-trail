@@ -124,16 +124,17 @@ test('resolved code enters the existing watch flow and resets the join UI', asyn
 });
 
 test('leaving a watch session clears its code and copy confirmation before another session starts', () => {
-  let stops = 0;
+  let stops = 0, chromeResets = 0;
   const nodes = new Map();
   const state = { traceSelectionRevision: 1, watch: { active: true, code: 'ABCD', copiedUntil: 99999,
     client: { stop() { stops++; } }, trace: {}, timer: 7 } };
-  const ports = { state, setPlaying() {}, clearInterval() {}, syncWakeLock() {},
+  const ports = { state, setPlaying() {}, clearInterval() {}, syncWakeLock() {}, watchChrome: { reset() { chromeResets++; } },
     elements: { timeline: {}, appShell: { classList: { remove() {} } } },
     $: id => { if (!nodes.has(id)) nodes.set(id, {}); return nodes.get(id); } };
   const source = app.match(/^function stopWatch\([^]*?^\}/m)[0];
   new Function(...Object.keys(ports), source + '\nstopWatch();')(...Object.values(ports));
   assert.equal(stops, 1);
+  assert.equal(chromeResets, 1);
   assert.equal(state.watch.code, null);
   assert.equal(state.watch.copiedUntil, 0);
   assert.equal(state.watch.active, false);

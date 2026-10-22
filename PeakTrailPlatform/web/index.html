@@ -165,6 +165,15 @@
         </div>
 
         <div class="top-actions">
+          <details class="watch-menu" id="watchMenu" hidden>
+            <summary class="button button-ghost">菜单</summary>
+            <div class="watch-menu-panel" id="watchMenuPanel" aria-label="观看菜单">
+              <div class="watch-menu-group" id="watchMenuCamera"></div>
+              <div class="watch-menu-group" id="watchMenuLayers"></div>
+              <div class="watch-menu-group" id="watchMenuSharing"></div>
+              <div class="watch-menu-group" id="watchMenuSystem"></div>
+            </div>
+          </details>
           <div class="screen-controls">
             <button class="button button-ghost" id="fullscreenButton" type="button" aria-label="进入全屏" aria-pressed="false">全屏</button>
             <div class="screen-feedback" id="screenFeedback" hidden>
@@ -231,6 +240,7 @@
             <button id="watchAllPlayers" type="button">全队视角</button>
             <button id="watchNextPlayer" type="button">跟随下一位</button>
             <button id="watchPlayers" type="button" aria-expanded="false" aria-controls="watchInspector">玩家</button>
+            <button id="watchReplay" type="button" aria-expanded="false" aria-controls="watchTimeline">回看</button>
           </div>
 
           <div class="viewport-toolbar">
@@ -387,7 +397,7 @@
         </section>
 
         <aside class="inspector" id="watchInspector" aria-label="地图路线与热力筛选">
-          <button id="watchClosePlayers" class="watch-close-players" type="button">收起玩家面板 ↓</button>
+          <button id="watchClosePlayers" class="watch-close-players" type="button">收起玩家面板</button>
           <section class="inspector-section community-section" id="communityPanel" aria-label="大家的路线与热力设置" hidden>
             <div class="section-heading compact"><div><span class="eyebrow">走过这张地图的人</span><h2>大家的路线</h2></div><div class="community-heading-actions"><button type="button" class="community-refresh" id="communityRefresh">刷新</button><button type="button" class="community-refresh" id="communityCollapse" aria-label="收起路线设置，保留地图与路线">收起</button></div></div>
             <form id="communitySearchForm" class="community-team-search" aria-label="按成员搜索队伍">
@@ -519,10 +529,11 @@
         </aside>
       </main>
 
-      <footer class="timeline-panel">
+      <footer class="timeline-panel" id="watchTimeline">
         <div class="watch-timebar" id="watchTimebar" hidden>
           <span id="watchTimeStatus">实时 · 最近 2 分钟可回看</span>
           <button id="watchGoLive" type="button">回到实时</button>
+          <button id="watchCloseReplay" type="button">收起回看</button>
         </div>
         <button class="play-button" id="playButton" type="button" disabled aria-label="播放">
           <svg class="play-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 11 7-11 7V5Z" /></svg>

@@ -103,6 +103,7 @@ function fixture({ liveVisible = true, legacyReplayVisible = true } = {}) {
     setInterval: () => 901, setTimeout: () => 902,
     syncWakeLock() {}, defaultRelayUrl: () => "https://relay.invalid",
     syncCommunityContext() {},
+    watchChrome: { setActive() {} },
     refreshLiveRuns: () => { calls.liveRefreshes++; },
     dismissGate: () => { calls.dismissed++; },
     syncGameAssetsForTrace: (selected, revision) => calls.assets.push({ trace: selected, revision }),

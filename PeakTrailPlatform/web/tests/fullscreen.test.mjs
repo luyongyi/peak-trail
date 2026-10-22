@@ -65,11 +65,12 @@ function renderFixture() {
     .map(key => [key, { hidden: false, classList: { toggle() {} }, setAttribute(key, value) { this[key] = value; } }]));
   const fullscreen = { active: false, pending: false, error: null };
   const wakeLock = { desired: true, held: false, status: 'denied', supported: () => true };
+  const state = { watch: { active: false } };
   let english = false;
   const source = app.match(/^function syncWakeLockChip\([^]*?^\}/m)[0];
-  const render = new Function('elements', 'fullscreen', 'wakeLock', 'tr', 'window', `${source}; return syncWakeLockChip;`)(
-    elements, fullscreen, wakeLock, (zh, en) => english ? en : zh, { isSecureContext: true });
-  return { elements, fullscreen, wakeLock, render, english() { english = true; } };
+  const render = new Function('elements', 'fullscreen', 'wakeLock', 'tr', 'window', 'state', `${source}; return syncWakeLockChip;`)(
+    elements, fullscreen, wakeLock, (zh, en) => english ? en : zh, { isSecureContext: true }, state);
+  return { elements, fullscreen, wakeLock, state, render, english() { english = true; } };
 }
 
 test('fullscreen and wake UI exposes actual success, denial and retry in both languages', () => {
@@ -87,6 +88,20 @@ test('fullscreen and wake UI exposes actual success, denial and retry in both la
   f.wakeLock.supported = () => false; f.render();
   assert.match(f.elements.fullscreenMessage.textContent, /unavailable/); assert.match(f.elements.wakeLockChip.textContent, /unavailable/);
   assert.equal(f.elements.wakeLockRetry.hidden, true); assert.equal(f.elements.fullscreenHomeExit.hidden, true);
+});
+
+test('watch hides successful keep-awake feedback without hiding failures or changing the lock', () => {
+  const f = renderFixture();
+  f.state.watch.active = true; f.wakeLock.held = true; f.wakeLock.status = 'held';
+  f.render();
+  assert.equal(f.elements.screenFeedback.hidden, true);
+  assert.equal(f.wakeLock.held, true); assert.equal(f.wakeLock.desired, true);
+  f.fullscreen.error = 'request-denied'; f.render();
+  assert.equal(f.elements.screenFeedback.hidden, false);
+  assert.equal(f.elements.fullscreenMessage.hidden, false);
+  f.fullscreen.error = null; f.wakeLock.held = false; f.wakeLock.status = 'denied'; f.render();
+  assert.equal(f.elements.screenFeedback.hidden, false);
+  assert.equal(f.elements.wakeLockRetry.hidden, false);
 });
 
 test('waiting leaves screen controls in the header and homepage has an exit outside the inert workspace', () => {

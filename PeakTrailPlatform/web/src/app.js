@@ -38,6 +38,7 @@ import { initLanguageControls } from "./i18n-dom.js";
 import { WatchClient, parseWatchId, parseWatchCode, normalizeWatchInput, resolveWatchInput, watchSharePayload, watchCodeFromState } from "./watch-client.js";
 import { trimWatchTrace, isWatchMilestone, watchProgressLabel } from "./watch-window.js";
 import { watchText } from "./watch-text.js";
+import { createWatchChrome } from "./watch-chrome.js";
 
 initLanguageControls();
 
@@ -617,6 +618,16 @@ function syncGameAssetsForTrace(trace, selectionRevision) {
 
 let viewer;
 let itemEventPanel, communitySnapshot = null;
+const watchChrome = createWatchChrome({
+  shell: elements.appShell, menu: $("watchMenu"),
+  groups: [
+    { slot: $("watchMenuCamera"), controls: [$("followHud"), $("watchCamera")] },
+    { slot: $("watchMenuLayers"), controls: [document.querySelector(".viewport-layer-actions"), $("itemEventsToggle")] },
+    { slot: $("watchMenuSharing"), controls: [$("watchShare"), $("watchShareLink")] },
+    { slot: $("watchMenuSystem"), controls: [document.querySelector(".top-actions > [data-language-toggle]"), $("backToGate")] },
+  ],
+  onClosePanel: kind => kind === "players" ? toggleWatchPlayers(false) : toggleWatchReplay(false),
+});
 const communityMapPanel = createCommunityMapPanel({
   getContext: () => ({ enabled: state.workspaceMode === "explore", mapPack: state.mapPack, stageIndex: state.selectedSegment,
     routeGroupId: state.historicalRoute?.group.id || null, inspectionId: state.historicalRoute?.inspectionId || null,
@@ -965,7 +976,7 @@ function syncWakeLockChip() {
   }
   elements.wakeLockRetry.textContent = tr("重试常亮", "Retry keep-awake");
   elements.wakeLockRetry.hidden = !wakeLock.desired || !wakeLock.supported() || !["denied", "released"].includes(wakeLock.status);
-  elements.screenFeedback.hidden = message.hidden && chip.hidden;
+  elements.screenFeedback.hidden = message.hidden && (chip.hidden || state.watch?.active && wakeLock.held);
 }
 
 function enterLive(code) {
@@ -1527,11 +1538,12 @@ function stopWatch() {
   watch.awaitingRun = false;
   watch.code = null;
   watch.copiedUntil = 0;
+  watchChrome.reset();
   ++state.traceSelectionRevision;
   elements.appShell.classList.remove("watch-players-open");
   elements.appShell.classList.remove("watch-loading");
   elements.appShell.classList.remove("watch-empty");
-  for (const id of ["watchStatus", "watchShare", "watchShareLink", "watchCamera", "watchTimebar", "watchNotice"]) $(id).hidden = true;
+  for (const id of ["watchStatus", "watchShare", "watchShareLink", "watchCamera", "watchTimebar", "watchNotice", "watchMenu"]) $(id).hidden = true;
   elements.timeline.min = "0";
   syncWakeLock();
 }
@@ -1544,12 +1556,16 @@ function updateWatchStatus() {
   elements.appShell?.classList.toggle("watch-empty", empty);
   $("watchCamera").hidden = empty;
   $("watchTimebar").hidden = empty;
+  $("watchMenuLayers").hidden = empty;
+  $("watchReplay").disabled = empty;
+  $("watchPlayers").disabled = empty;
   const labels = { waiting: watchText("等待主播入图"), live: watchText("直播中"), reconnecting: watchText("主播重连中"),
     ended: watch.awaitingRun ? watchText("等待已结束") : watchText("直播已结束") };
   const text = watch.connection === "error" ? watchText("无法打开直播")
     : watch.status === "ended" ? labels.ended
     : watch.connection === "reconnecting" ? watchText("观看连接重连中")
-    : watch.connection === "connecting" ? watchText("正在连接直播") : labels[watch.status] || watchText("等待游戏数据");
+    : watch.connection === "connecting" ? watchText("正在连接直播")
+    : watch.trace && !watch.following ? tr("回看中", "Replaying") : labels[watch.status] || watchText("等待游戏数据");
   $("watchStatusText").textContent = [text, watchProgressLabel(watch.trace)].filter(Boolean).join(" · ");
   $("watchStatus").dataset.status = watch.status === "ended" ? "ended" : watch.connection === "error" ? "error" : watch.status;
   const age = Number.isFinite(watch.lastRecordAt) ? Math.max(0, Math.floor((Date.now() - watch.lastRecordAt) / 1000)) : null;
@@ -1590,6 +1606,9 @@ async function applyEmptyWatchSnapshot(snapshot) {
   viewer?.setFollowTarget(null);
   elements.appShell.classList.add("watch-loading");
   elements.appShell.classList.remove("watch-players-open");
+  elements.appShell.classList.remove("watch-replay-open");
+  $("watchPlayers").setAttribute("aria-expanded", "false");
+  $("watchReplay").setAttribute("aria-expanded", "false");
   updateWatchStatus();
   syncWakeLock();
   await renderData();
@@ -1979,6 +1998,7 @@ function syncWorkspaceState() {
   shell.classList.toggle("is-empty-replay", replayEmpty);
   shell.classList.toggle("has-trace", Boolean(state.trace));
   shell.dataset.workspaceMode = state.workspaceMode;
+  watchChrome.setActive(state.workspaceMode === "watch");
   shell.dataset.replayState = replayEmpty ? "empty" : state.trace ? "ready" : "explore";
   if (state.workspaceMode === "explore") elements.modeChip.textContent = state.historicalRoute
     ? state.historicalRoute.inspectionId ? tr("验收预览", "Review preview") : state.historicalRoute.teamId ? tr("团队路线", "Team route") : tr("历史路线", "Historical route") : tr("地图", "Map");
@@ -2178,7 +2198,7 @@ function createEventButton(event) {
     button.title = tr("关键节点已保留，位置已超出近期回看窗口", "Milestone retained; its position is outside the recent replay window");
   }
   button.addEventListener("click", () => {
-    if (state.watch?.active) state.watch.following = false;
+    if (state.watch?.active) { state.watch.following = false; toggleWatchReplay(true); }
     setPlaying(false);
     updatePlaybackTime(event.t, true);
     showEventToast(event);
@@ -2807,7 +2827,8 @@ function syncFollowHud(detail) {
     const auto = detail?.autoRotate ?? viewer?.followAutoRotate ?? false;
     const viewMode = detail?.viewMode ?? viewer?.followViewMode;
     const name = detail?.name ?? (viewer?.followTargetId != null ? participantName(viewer.followTargetId) : "");
-    elements.followHudText.textContent = tr(`${viewMode === "interior" ? "关内向外观测" : "外侧观测"} · ${name} · ${auto ? "自动轮换 60s" : "已锁定"}`, `${viewMode === "interior" ? "Interior observation" : "Exterior observation"} · ${name} · ${auto ? "Auto cycle · 60s" : "Locked"}`);
+    elements.followHudText.textContent = state.watch?.active ? tr(`跟随 · ${name}`, `Following · ${name}`)
+      : tr(`${viewMode === "interior" ? "关内向外观测" : "外侧观测"} · ${name} · ${auto ? "自动轮换 60s" : "已锁定"}`, `${viewMode === "interior" ? "Interior observation" : "Exterior observation"} · ${name} · ${auto ? "Auto cycle · 60s" : "Locked"}`);
   }
   for (const row of elements.playerList.querySelectorAll(".player-row")) {
     row.querySelector(".player-follow-button")?.classList.toggle(
@@ -2901,6 +2922,12 @@ elements.phonePanelButton.addEventListener("click", () => {
 function toggleWatchPlayers(open = !elements.appShell.classList.contains("watch-players-open")) {
   elements.appShell.classList.toggle("watch-players-open", open);
   $("watchPlayers").setAttribute("aria-expanded", String(open));
+  if (open) { toggleWatchReplay(false); watchChrome.closeMenu(); }
+}
+function toggleWatchReplay(open = !elements.appShell.classList.contains("watch-replay-open")) {
+  elements.appShell.classList.toggle("watch-replay-open", open);
+  $("watchReplay").setAttribute("aria-expanded", String(open));
+  if (open) { toggleWatchPlayers(false); watchChrome.closeMenu(); }
 }
 function updateWatchJoinUI() {
   const join = state.watchJoin;
@@ -2978,10 +3005,12 @@ $("watchGoLive").addEventListener("click", () => {
   updatePlaybackTime(state.watch.status === "ended" ? state.trace.duration : state.trace.duration - LIVE_TRAIL_S, false);
   updateWatchStatus();
 });
-$("watchAllPlayers").addEventListener("click", () => { viewer?.setFollowTarget(null); viewer?.fitView(); });
-$("watchNextPlayer").addEventListener("click", () => viewer?.cycleFollowTarget());
-$("watchPlayers").addEventListener("click", () => toggleWatchPlayers());
-$("watchClosePlayers").addEventListener("click", () => toggleWatchPlayers(false));
+$("watchAllPlayers").addEventListener("click", () => { viewer?.setFollowTarget(null); viewer?.fitView(); watchChrome.closeMenu(true); });
+$("watchNextPlayer").addEventListener("click", () => { viewer?.cycleFollowTarget(); watchChrome.closeMenu(true); });
+$("watchPlayers").addEventListener("click", () => { toggleWatchPlayers(); $("watchClosePlayers").focus(); });
+$("watchClosePlayers").addEventListener("click", () => { toggleWatchPlayers(false); $("watchMenu").querySelector("summary").focus(); });
+$("watchReplay").addEventListener("click", () => { toggleWatchReplay(); $("watchCloseReplay").focus(); });
+$("watchCloseReplay").addEventListener("click", () => { toggleWatchReplay(false); $("watchMenu").querySelector("summary").focus(); });
 function updateWatchShareUI() {
   const watch = state.watch;
   if (!watch.active) return;
@@ -3127,7 +3156,7 @@ elements.timeline.addEventListener("input", () => {
 elements.playButton.addEventListener("click", () => {
   if (!state.trace) return;
   if (state.watch?.active && state.watch.following && state.watch.status !== "ended") {
-    state.watch.following = false; setPlaying(false); updateWatchStatus(); return;
+    state.watch.following = false; setPlaying(false); toggleWatchReplay(true); updateWatchStatus(); return;
   }
   if (!state.playing && state.currentTime >= state.trace.duration) updatePlaybackTime(state.watch?.active ? state.trace.windowStart || 0 : 0, false);
   setPlaying(!state.playing);
@@ -3140,7 +3169,7 @@ document.addEventListener("keydown", (event) => {
   if (gateOpen()) return;
   if (event.code !== "Space" || event.repeat) return;
   const target = event.target;
-  if (target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLButtonElement) return;
+  if (target?.closest?.("input, select, button, summary, textarea, a, [contenteditable]:not([contenteditable='false'])")) return;
   event.preventDefault();
   elements.playButton.click();
 });
