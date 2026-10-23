@@ -1,14 +1,15 @@
 {
   "schemaVersion": 1,
-  "fetchedAtUtc": "2026-10-21T20:35:57.583Z",
-  "nextChangeAtUtc": "2026-10-22T16:59:59.583Z",
-  "source": "https://peaklogin3.azurewebsites.net/api/VersionCheck?version=2.6",
-  "apiVersion": "2.6",
+  "fetchedAtUtc": "2026-10-23T14:27:22.916Z",
+  "nextChangeAtUtc": "2026-10-23T16:59:59.916Z",
+  "source": "https://peaklogin3.azurewebsites.net/api/VersionCheck?version=3.0",
+  "apiVersion": "3.0",
+  "gameBuildId": "26134529",
   "versionOkay": true,
-  "levelIndex": 494,
-  "mapCount": 21,
-  "mapSlot": 11,
-  "sceneName": "Level_11",
-  "secondsRemaining": 73442,
-  "message": "bing bong is a father of two"
+  "levelIndex": 495,
+  "mapCount": 208,
+  "mapSlot": 79,
+  "sceneName": "Level_79",
+  "secondsRemaining": 9157,
+  "message": "PEAK is finally out on consoles (with crossplay!) Have fun, scouts! Let us know if anything breaks!!!"
 }

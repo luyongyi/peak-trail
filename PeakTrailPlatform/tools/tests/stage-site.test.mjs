@@ -64,6 +64,7 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
     copyFile(resolve(platformSource, "tools", "lib", "memories-release.mjs"), resolve(tools, "lib", "memories-release.mjs")),
     copyFile(resolve(platformSource, "tools", "lib", "site-release.mjs"), resolve(tools, "lib", "site-release.mjs")),
     copyFile(resolve(platformSource, "tools", "lib", "public-asset-pool.mjs"), resolve(tools, "lib", "public-asset-pool.mjs")),
+    copyFile(resolve(platformSource, "tools", "lib", "map-loot-source.mjs"), resolve(tools, "lib", "map-loot-source.mjs")),
     copyFile(resolve(platformSource, "web", "src", "map-fog.js"), resolve(platform, "web", "src", "map-fog.js")),
     copyFile(resolve(platformSource, "web", "src", "map-water.js"), resolve(platform, "web", "src", "map-water.js")),
     copyFile(resolve(platformSource, "web", "src", "map-enclosures.js"), resolve(platform, "web", "src", "map-enclosures.js")),

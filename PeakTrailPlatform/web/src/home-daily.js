@@ -122,12 +122,12 @@ function specialDestinations(mapPack, cards) {
   if (peakLayer) {
     Object.assign(summit, { segment: peakLayer.segment, layerId: peakLayer.id || null,
       available: true, actionLabel: tr("查看顶峰地图", "View the PEAK map") });
-  } else if (["25306743", "25739797"].includes(String(mapPack.gameBuildId)) && finale && mapPack.mapPeak?.segment === finale.segment) {
+  } else if (["25306743", "25739797", "26134529"].includes(String(mapPack.gameBuildId)) && finale && mapPack.mapPeak?.segment === finale.segment) {
     Object.assign(summit, { segment: finale.segment, layerId: finale.layerId,
       available: true, sharedLayer: true, viewIntent: "summit",
       description: tr(`${finale.title}上方的顶峰区域；地图视图依据 PeakHandler 碰撞边界定位。`, `The PEAK above ${finale.title}; the view uses the game's PeakHandler collision bounds.`),
       actionLabel: tr("查看顶峰地图", "View the PEAK map") });
-  } else if (["25306743", "25739797"].includes(String(mapPack.gameBuildId)) && finale) {
+  } else if (["25306743", "25739797", "26134529"].includes(String(mapPack.gameBuildId)) && finale) {
     // Verified MapHandler.JumpToSegmentLogic in this build maps enum Peak=5 to
     // array index 4 (the Kiln/Citadel), but the exported GLB does not retain a
     // source-root boundary that safely isolates the summit. Do not open the

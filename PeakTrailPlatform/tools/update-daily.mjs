@@ -31,10 +31,14 @@ const previous = history.observations.at(-1);
 // those confirmations instead of silently erasing an extended map-pool period.
 if (!previous || previous.levelIndex !== current.levelIndex
     || previous.sceneName !== current.sceneName || previous.mapSlot !== current.mapSlot
+    || previous.gameBuildId !== current.gameBuildId || previous.mapCount !== current.mapCount
     || latestDailyBoundary(Date.parse(previous.observedAtUtc)) !== latestDailyBoundary(Date.parse(current.fetchedAtUtc))) {
   history.observations.push({
     observedAtUtc: current.fetchedAtUtc,
     levelIndex: current.levelIndex,
+    apiVersion: current.apiVersion,
+    ...(current.gameBuildId ? { gameBuildId: current.gameBuildId } : {}),
+    mapCount: current.mapCount,
     mapSlot: current.mapSlot,
     sceneName: current.sceneName,
     nextChangeAtUtc: current.nextChangeAtUtc

@@ -1,8 +1,8 @@
 // Matching is limited to exact-build explosive-mushroom geometry. An absent
 // snapshot is not an explosion, and a blast radius is not a mesh-hide radius.
 export function isExplosiveMineMaterial(buildId, name, shader) {
-  // Current-build material identity re-audited in source-effect-materials.25739797.json.
-  return ['25306743', '25739797'].includes(String(buildId)) && name === 'M_SporeShroomExplo' && shader === 'W/Peak_Standard';
+  // Current-build material identity re-audited in source-effect-materials.26134529.json.
+  return ['25306743', '25739797', '26134529'].includes(String(buildId)) && name === 'M_SporeShroomExplo' && shader === 'W/Peak_Standard';
 }
 
 const point = (value) => Array.isArray(value) && value.length === 3 && value.every(Number.isFinite);

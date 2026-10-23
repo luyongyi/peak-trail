@@ -10,7 +10,7 @@ from pathlib import Path
 
 import numpy as np
 from UnityPy.classes import PPtr
-from build_maps import Scene, game_data, game_info, pid, sha
+from build_maps import Scene, game_data, game_info, pid, sha, scene_path as source_scene_path
 from export_meshes import stored_color_to_linear
 
 
@@ -97,7 +97,7 @@ def export_water(game, catalog_path, packs_path, output, slots=None, scene_facto
             continue
         manifest = json.loads((packs_path / entry['mapPackId'] / 'map-pack.json').read_text(encoding='utf8'))
         name = entry['sceneName']
-        path = game_data(game) / f'level{mapping[name]}'
+        path = source_scene_path(game, mapping[name])
         scene_hash = sha(path)
         if manifest['source']['sceneSha256'] != scene_hash:
             raise ValueError(f'{name}: source scene changed; rebuild the geometry first')

@@ -15,7 +15,7 @@ import subprocess
 import tempfile
 
 import numpy as np
-from build_maps import Scene, game_data, game_info, pid, sha
+from build_maps import Scene, game_data, game_info, pid, sha, scene_path as source_scene_path
 from export_meshes import GlbBuilder
 
 
@@ -99,14 +99,28 @@ def source_enclosure(scene):
     return evidence, instances
 
 
+def enclosure_asset_budget(build):
+    # The 208-map 3.0.0 survey contains 97 unique native shells (224,830,963 bytes).
+    # Previous 21-map builds retain their independently bounded allowance.
+    return (256 if str(build) == '26134529' else 64) * 1024 * 1024
+
+
+def check_enclosure_asset_budget(sizes, build, max_asset_bytes=None):
+    budget = enclosure_asset_budget(build) if max_asset_bytes is None else max_asset_bytes
+    if sum(sizes.values()) > budget:
+        raise ValueError(f'Enclosure assets exceed the independent {budget // (1024 * 1024)} MiB build budget; do not remove or simplify other assets')
+
+
 def export_enclosures(game, catalog_path, packs_path, asset_directory, output, slots=None,
-                      audit_only=False, max_asset_bytes=64 * 1024 * 1024, scene_factory=Scene):
+                      audit_only=False, max_asset_bytes=None, scene_factory=Scene):
     mapping, _, build = game_info(game)
+    if max_asset_bytes is None:
+        max_asset_bytes = enclosure_asset_budget(build)
     # 2.6.b keeps both selected branch hierarchies, original mesh identities,
     # disabled parent renderers, enabled splits and vertical model axes. Every
     # scene is still checked by source_enclosure; an unfamiliar build fails.
-    if str(build) not in ('25306743', '25739797'):
-        raise ValueError('Enclosure root selection is audited only for builds 25306743 and 25739797')
+    if str(build) not in ('25306743', '25739797', '26134529'):
+        raise ValueError('Enclosure root selection is audited only for builds 25306743, 25739797 and 26134529')
     catalog = json.loads(catalog_path.read_text(encoding='utf8'))
     result = {'schemaVersion': 1, 'gameBuildId': str(build), 'authority': 'serialized-map-enclosure',
               'note': 'Original active pre-split outer mesh roots and exact source model axes; custom shader effects remain approximated. Existing canonical map packs are unchanged.',
@@ -116,7 +130,7 @@ def export_enclosures(game, catalog_path, packs_path, asset_directory, output, s
         if not entry.get('enabled', True) or str(entry['gameBuildId']) != str(build) or (slots and entry['mapSlot'] not in slots):
             continue
         manifest = json.loads((packs_path / entry['mapPackId'] / 'map-pack.json').read_text(encoding='utf8'))
-        path = game_data(game) / f'level{mapping[entry["sceneName"]]}'
+        path = source_scene_path(game, mapping[entry["sceneName"]])
         scene_hash = sha(path)
         if scene_hash != manifest['source']['sceneSha256']:
             raise ValueError(f'{entry["sceneName"]}: source hash does not match the canonical pack')
@@ -137,8 +151,7 @@ def export_enclosures(game, catalog_path, packs_path, asset_directory, output, s
                 digest = hashlib.sha256(published).hexdigest()
                 filename = f'{digest}.glb.gz'
                 sizes[filename] = len(published)
-                if sum(sizes.values()) > max_asset_bytes:
-                    raise ValueError('Enclosure assets exceed the independent 64 MiB budget; do not remove or simplify other assets')
+                check_enclosure_asset_budget(sizes, build, max_asset_bytes)
                 target = asset_directory / filename
                 if target.exists():
                     if sha(target) != digest:

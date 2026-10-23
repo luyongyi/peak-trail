@@ -32,7 +32,7 @@ jobs:
           # Empty uses the resolver's shared current-game default. Set the repo
           # variable after a verified game update; never hardcode a second default.
           PEAK_API_VERSION: ${{ vars.PEAK_API_VERSION }}
-          PEAK_MAP_COUNT: "21"
+          PEAK_MAP_COUNT: ${{ vars.PEAK_MAP_COUNT }}
       - name: Validate viewer and data
         run: |
           npm --prefix PeakTrailPlatform/web run check

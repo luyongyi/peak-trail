@@ -1,4 +1,5 @@
 import { effects25739797 } from './source-materials.25739797.js';
+import { effects26134529 } from './source-materials.26134529.js';
 
 // PEAK build 25306743, read from sharedassets4.assets; no chosen biome palette.
 // Full raw color/shader evidence: tools/offline-maps/source-effect-materials.25306743.json.
@@ -76,7 +77,8 @@ function linearComponent(value) {
 }
 
 export function getSourceEffectMaterial(buildId, materialName, shader) {
-  const registry = String(buildId) === '25306743' ? effects : String(buildId) === '25739797' ? effects25739797 : null;
+  const registry = String(buildId) === '25306743' ? effects : String(buildId) === '25739797' ? effects25739797
+    : String(buildId) === '26134529' ? effects26134529 : null;
   if (!registry || !Object.hasOwn(registry, materialName)) return null;
   const effect = registry[materialName];
   if (effect.shader !== shader) return null;
@@ -119,8 +121,9 @@ export function getSourceEffectMaterial(buildId, materialName, shader) {
         depth: effect.depth,
         shallowStored: [...effect.waterDepth.shallow], tintStored: [...effect.waterDepth.tint],
         propertyFlags: effect.waterDepth.flags,
-        shaderEvidenceBuildId: 25739797, crossBuildShaderIdentityVerified: false,
-        sameBuildShaderEvidence: String(buildId) === '25739797',
+        shaderEvidenceBuildId: String(buildId) === '26134529' ? 26134529 : 25739797,
+        crossBuildShaderIdentityVerified: String(buildId) === '26134529',
+        sameBuildShaderEvidence: ['25739797', '26134529'].includes(String(buildId)),
         formula: 'smoothstep(0, 1, min(10 * min(abs(sceneEyeDepth - surfaceEyeDepth) / _Depth, 1), 1))',
         approximation: 'Shallow replaces the missing refracted scene colour; primary branch without noise, secondary colour, foam or waves; native alpha is not reconstructed',
       } : null,

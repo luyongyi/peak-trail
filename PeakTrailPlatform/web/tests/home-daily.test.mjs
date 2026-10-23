@@ -295,6 +295,23 @@ test("unconfirmed map identity disables both destinations without hiding their m
   }
 });
 
+test("3.0.0 exposes its verified summit while rejecting daily observations from an older build", () => {
+  const currentBuild = "26134529";
+  const currentCatalog = { ...catalog, activeGameBuildId: currentBuild,
+    mapPacks: [{ ...entry, gameBuildId: currentBuild }] };
+  const currentPack = { ...mapPack(), gameBuildId: currentBuild, mapPeak: { segment: 4 } };
+  const currentDaily = { ...daily, levelIndex: 419, mapCount: 208, gameBuildId: currentBuild };
+  const result = view({ catalog: currentCatalog, mapPack: currentPack, daily: currentDaily });
+  assert.equal(result.mapStatus, "ready");
+  assert.equal(result.destinations[0].available, true);
+  const old = view({ catalog: currentCatalog, mapPack: currentPack,
+    daily: { ...currentDaily, gameBuildId: "25739797" } });
+  assert.equal(old.mapStatus, "missing-build");
+  assert.equal(old.destinations[0].available, false);
+  assert.equal(view({ catalog: currentCatalog, mapPack: currentPack, daily }).mapStatus, "missing-build",
+    "unbound 21-map observations cannot be relabelled as the 208-map build");
+});
+
 test("shared summit mapping is not extended to an unverified future build", () => {
   const futureBuild = "999";
   const futureCatalog = { ...catalog, activeGameBuildId: futureBuild,

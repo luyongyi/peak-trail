@@ -147,12 +147,17 @@ node PeakTrailPlatform/tools/update-daily.mjs
 
 Optional environment variables:
 
-- `PEAK_API_VERSION` (default `2.6`, from installed PEAK `2.6.b`'s native
+- `PEAK_API_VERSION` (default `3.0`, from installed PEAK `3.0.0`'s native
   `BuildVersion.ToMatchmaking()`). After a game update, verify the new native
   major/minor version and update this shared resolver default, or set the
   repository variable of the same name for the scheduled updater.
-- `PEAK_MAP_COUNT` (default `21`)
+- `PEAK_MAP_COUNT` (default `208`, verified against build `26134529`'s
+  `MapBaker.ScenePaths`; recheck the pool size when updating the API version)
 - `PEAK_DAILY_ENDPOINT` (defaults to the official version-check endpoint)
+
+Unset or empty repository variables use these shared defaults. The verified
+`3.0`/`208` combination binds observations to build `26134529`; historical
+version/pool overrides do not authorize selecting that build's maps.
 
 The endpoint is queried by Node/GitHub Actions because it does not expose CORS
 headers for direct browser access.

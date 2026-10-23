@@ -6,16 +6,17 @@ import { getSourceEffectMaterial } from "../src/source-materials.js";
 const evidence = JSON.parse(await readFile(new URL("../../tools/offline-maps/source-effect-materials.25306743.json", import.meta.url), "utf8"));
 const fungalEvidence = JSON.parse(await readFile(new URL("../../tools/offline-maps/source-fungal-colors-evidence.json", import.meta.url), "utf8"));
 const currentEvidence = JSON.parse(await readFile(new URL("../../tools/offline-maps/source-effect-materials.25739797.json", import.meta.url), "utf8"));
+const crossplayEvidence = JSON.parse(await readFile(new URL("../../tools/offline-maps/source-effect-materials.26134529.json", import.meta.url), "utf8"));
 const linear = (v) => v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
 
-test("current-build effect values come from that build's own source and omit legacy fungal corrections", () => {
+for (const exactEvidence of [currentEvidence, crossplayEvidence]) test(`build ${exactEvidence.gameBuildId} effect values use their own source and omit legacy fungal corrections`, () => {
   let checked = 0;
-  for (const source of currentEvidence.materials) {
-    const effect = getSourceEffectMaterial(currentEvidence.gameBuildId, source.name, source.shader);
+  for (const source of exactEvidence.materials) {
+    const effect = getSourceEffectMaterial(exactEvidence.gameBuildId, source.name, source.shader);
     if (!effect) continue;
     checked++;
-    assert.equal(effect.source.buildId, 25739797);
-    assert.equal(effect.source.mapBuildId, 25739797);
+    assert.equal(effect.source.buildId, exactEvidence.gameBuildId);
+    assert.equal(effect.source.mapBuildId, exactEvidence.gameBuildId);
     assert.equal(effect.source.asset, source.sourceFile);
     assert.equal(effect.source.pathId, source.pathId);
     assert.equal(effect.source.pass.zWrite, source.passState.zWrite.val);
@@ -30,13 +31,14 @@ test("current-build effect values come from that build's own source and omit leg
   }
   assert.equal(checked, 15);
   for (const name of ["M_Mushroom_tree", "M_Mushroom_tree_evil", "Glow Shroom"])
-    assert.equal(getSourceEffectMaterial(25739797, name, "W/Peak_Standard"), null);
-  const source = currentEvidence.materials.find(value => value.name === "M_Water_swamp");
-  const water = getSourceEffectMaterial(25739797, source.name, source.shader).source.waterDepth;
+    assert.equal(getSourceEffectMaterial(exactEvidence.gameBuildId, name, "W/Peak_Standard"), null);
+  const source = exactEvidence.materials.find(value => value.name === "M_Water_swamp");
+  const water = getSourceEffectMaterial(exactEvidence.gameBuildId, source.name, source.shader).source.waterDepth;
   assert.deepEqual(water.tintStored, source.colors._WaterTint.rgba);
   assert.deepEqual(water.shallowStored, source.colors._WaterColorShallow.rgba);
   assert.equal(water.depth, source.floats._Depth);
   assert.equal(water.sameBuildShaderEvidence, true);
+  assert.equal(water.shaderEvidenceBuildId, exactEvidence.gameBuildId);
 });
 
 test("all effect lookup entries reproduce their exact-build raw Unity source evidence", () => {

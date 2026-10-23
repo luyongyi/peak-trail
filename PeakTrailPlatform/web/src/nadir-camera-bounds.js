@@ -1,4 +1,4 @@
-// Audited builds 25306743 and 25739797 use M_Void Water / GD/Water-GD.
+// Audited builds 25306743, 25739797 and 26134529 use M_Void Water / GD/Water-GD.
 // Its 5 km square is retained in the scene; only camera fitting omits it.
 // source-materials.js gives this exact water an opaque black color substitute.
 // Fully submerged geometry inside its footprint cannot contribute to the
@@ -6,7 +6,7 @@
 // Keep original entries so their oriented fit points survive the exclusion.
 // A null result leaves the caller's normal camera subject unchanged.
 export function nadirCameraParts(layer, gameBuildId, parts) {
-  if (!["25306743", "25739797"].includes(String(gameBuildId)) || String(layer?.biome).toLowerCase() !== "void") return null;
+  if (!["25306743", "25739797", "26134529"].includes(String(gameBuildId)) || String(layer?.biome).toLowerCase() !== "void") return null;
   const candidates = [], waterPlanes = [];
   for (const part of parts) {
     const bounds = part?.bounds;

@@ -9,7 +9,7 @@ import subprocess
 from urllib.parse import quote
 from pathlib import Path
 import numpy as np
-from build_maps import Scene, game_data, game_info, pid, sha, BIOMES
+from build_maps import Scene, game_data, game_info, pid, sha, BIOMES, scene_path as source_scene_path
 from export_meshes import decompose_exact
 
 STATIC_ROOT_ASSEMBLIES = {
@@ -143,7 +143,7 @@ def export_landmarks(game, catalog_path, packs_path, output, scene_factory=Scene
         if not entry.get('enabled', True) or str(entry['gameBuildId']) != str(build):
             continue
         manifest = json.loads((packs_path / entry['mapPackId'] / 'map-pack.json').read_text(encoding='utf8'))
-        path = game_data(game) / f'level{mapping[entry["sceneName"]]}'
+        path = source_scene_path(game, mapping[entry["sceneName"]])
         digest = sha(path)
         if manifest['source']['sceneSha256'] != digest or manifest['mapPackId'] != entry['mapPackId']:
             raise ValueError('Source scene and canonical map identity disagree; rebuild the map')

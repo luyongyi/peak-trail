@@ -7,6 +7,7 @@ test("only exact-build audited depth decal materials are classified as effect pr
     assert.equal(isSourceProjectionProxy(25306743, name, "Decal"), true);
     assert.equal(isSourceProjectionProxy("25306743", name, "Decal"), true);
     assert.equal(isSourceProjectionProxy("25739797", name, "Decal"), true);
+    assert.equal(isSourceProjectionProxy("26134529", name, "Decal"), true);
     assert.equal(isSourceProjectionProxy("new-build", name, "Decal"), false);
     assert.equal(isSourceProjectionProxy(25306743, name, "W/Peak_Standard"), false);
     assert.equal(isSourceProjectionProxy(25306743, name), false);

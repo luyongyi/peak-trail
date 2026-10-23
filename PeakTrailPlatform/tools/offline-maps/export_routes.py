@@ -9,7 +9,7 @@ import gc
 import json
 from pathlib import Path
 
-from build_maps import Scene, game_data, game_info, sha
+from build_maps import Scene, game_data, game_info, sha, scene_path as source_scene_path
 
 
 def export_routes(game, catalog_path, packs_path, output, scene_factory=Scene):
@@ -29,7 +29,7 @@ def export_routes(game, catalog_path, packs_path, output, scene_factory=Scene):
         manifest = json.loads((packs_path / entry['mapPackId'] / 'map-pack.json').read_text(encoding='utf-8'))
         if manifest['mapPackId'] != entry['mapPackId'] or manifest['sceneName'] != name:
             raise ValueError(f'Catalog and canonical manifest disagree: {name}')
-        scene_path = game_data(game) / f'level{mapping[name]}'
+        scene_path = source_scene_path(game, mapping[name])
         scene_hash = sha(scene_path)
         if manifest['source']['sceneSha256'] != scene_hash:
             raise ValueError(f'{name} installed scene differs from the existing map pack; rebuild instead of assigning new labels.')

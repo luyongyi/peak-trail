@@ -97,7 +97,9 @@ export function siteStagingProfile(argv = [], { preview = false, configuredProfi
 export function checkSiteBudget(totalBytes, { preview = false, profile = "pages" } = {}) {
   if (!Number.isSafeInteger(totalBytes) || totalBytes < 0) throw new Error("Invalid staged site size");
   siteStagingProfile(["--profile", profile], { preview });
-  const limit = profile === "server" ? 2_000_000_000 : 1_000_000_000;
+  // 3.0.0 expands the exact-build archive to 208 maps. Server deployments
+  // share immutable blobs across releases; the Pages budget stays unchanged.
+  const limit = profile === "server" ? 12_000_000_000 : 1_000_000_000;
   if (!preview && totalBytes > limit)
-    throw new Error(`Staged public site is ${totalBytes} bytes, above the ${profile === "server" ? "server 2 GB" : "conservative GitHub Pages 1 GB"} budget. Reduce published pack versions without altering geometry before public staging.`);
+    throw new Error(`Staged public site is ${totalBytes} bytes, above the ${profile === "server" ? "server 12 GB" : "conservative GitHub Pages 1 GB"} budget. Review storage capacity and published resources before public staging.`);
 }

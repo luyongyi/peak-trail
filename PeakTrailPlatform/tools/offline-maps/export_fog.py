@@ -8,7 +8,7 @@ import gc
 import json
 from pathlib import Path
 
-from build_maps import Scene, game_data, game_info, pid, sha
+from build_maps import Scene, game_data, game_info, pid, sha, scene_path as source_scene_path
 
 
 def ancestry(scene, go):
@@ -88,7 +88,7 @@ def export_fog(game, catalog_path, packs_path, routes_path, output, slots=None, 
             continue
         manifest = json.loads((packs_path / entry['mapPackId'] / 'map-pack.json').read_text(encoding='utf8'))
         name = entry['sceneName']
-        scene_path = game_data(game) / f'level{mapping[name]}'
+        scene_path = source_scene_path(game, mapping[name])
         scene_hash = sha(scene_path)
         if manifest['source']['sceneSha256'] != scene_hash:
             raise ValueError(f'{name}: source scene changed; rebuild the geometry first')

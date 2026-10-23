@@ -80,13 +80,15 @@ test('single-chapter Swamp reuses the exact adjacent Citadel exterior without re
 });
 
 test('current source build retains the adjacent native Citadel context with the same strict sidecar identity', () => {
-  const pack = contextualFixture(); pack.gameBuildId = pack.mapEnclosures.gameBuildId = '25739797';
-  const result = chapterEnclosures(pack, pack.layers[0], { includeContext: true });
-  assert.equal(result.length, 1);
-  assert.equal(result[0].sourceRootName, 'Gloom Temple');
-  assert.equal(result[0].segment, 4);
-  pack.mapEnclosures.sourceSceneSha256 = 'd'.repeat(64);
-  assert.deepEqual(chapterEnclosures(pack, pack.layers[0], { includeContext: true }), []);
+  for (const build of ['25739797', '26134529']) {
+    const pack = contextualFixture(); pack.gameBuildId = pack.mapEnclosures.gameBuildId = build;
+    const result = chapterEnclosures(pack, pack.layers[0], { includeContext: true });
+    assert.equal(result.length, 1);
+    assert.equal(result[0].sourceRootName, 'Gloom Temple');
+    assert.equal(result[0].segment, 4);
+    pack.mapEnclosures.sourceSceneSha256 = 'd'.repeat(64);
+    assert.deepEqual(chapterEnclosures(pack, pack.layers[0], { includeContext: true }), []);
+  }
 });
 
 test('overview and the Citadel chapter keep one native shell, with no contextual duplication', () => {

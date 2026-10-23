@@ -1,8 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { gzipSync } from 'node:zlib';
+import { createHash } from 'node:crypto';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { MeshoptDecoder } from '../../vendor/three/0.180.0/examples/jsm/libs/meshopt_decoder.module.js';
-import { geometryMarkers, mergeSceneLoot, multiplyMatrices, parseGlb, readFloatAccessor, transformMatrix, worldBoundsCenter }
+import { exportGeometryLoot, geometryMarkers, mergeSceneLoot, multiplyMatrices, parseGlb, readFloatAccessor, transformMatrix, worldBoundsCenter }
   from '../../tools/offline-maps/export-loot-from-geometry.mjs';
 
 await MeshoptDecoder.ready;
@@ -31,6 +35,44 @@ function appendAccessor(glb, values, type = 'VEC3', componentType = 5126) {
 function boundsAccessor(glb, min, max) {
   return appendAccessor(glb, [min, max]);
 }
+
+test('split surveys authenticate each map chunk and include only its used native types', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'peak-loot-split-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const sha = value => createHash('sha256').update(value).digest('hex');
+  const glb = fixture([{ mesh: 0 }]);
+  const json = Buffer.from(JSON.stringify(glb.json));
+  const text = Buffer.concat([json, Buffer.alloc((-json.length) & 3, 32)]);
+  const header = Buffer.alloc(20);
+  header.write('glTF'); header.writeUInt32LE(2, 4); header.writeUInt32LE(28 + text.length + glb.binary.length, 8);
+  header.writeUInt32LE(text.length, 12); header.writeUInt32LE(0x4e4f534a, 16);
+  const binaryHeader = Buffer.alloc(8);
+  binaryHeader.writeUInt32LE(glb.binary.length); binaryHeader.writeUInt32LE(0x004e4942, 4);
+  const geometry = Buffer.concat([header, text, binaryHeader, glb.binary]);
+  const mapPackId = `sha256-${'b'.repeat(64)}`;
+  const folder = join(root, 'packs', mapPackId);
+  await mkdir(folder, { recursive: true });
+  const entry = { mapPackId, sceneName: 'Level_79', mapSlot: 79, gameBuildId: '26134529' };
+  await writeFile(join(folder, 'map-pack.json'), JSON.stringify({ ...entry,
+    source: { sceneSha256: 'c'.repeat(64) }, layers: [{ ...layer, geometry: 'source.glb', geometrySha256: sha(geometry) }] }));
+  await writeFile(join(folder, 'source.glb'), geometry);
+  await writeFile(join(root, 'catalog.json'), JSON.stringify({ activeGameBuildId: '26134529', mapPacks: [entry] }));
+  await exportGeometryLoot({ catalogPath: join(root, 'catalog.json'), packsPath: join(root, 'packs'),
+    outputPath: join(root, 'loot.26134529.json'), split: true });
+  const index = JSON.parse(await readFile(join(root, 'loot.26134529.json'), 'utf8'));
+  assert.equal(index.kind, 'map-loot-index');
+  assert.equal(index.maps.length, 1);
+  const reference = index.maps[0];
+  const bytes = await readFile(join(root, reference.path));
+  assert.equal(reference.size, bytes.length);
+  assert.equal(reference.sha256, sha(bytes));
+  assert.equal(reference.sourceSceneSha256, 'c'.repeat(64));
+  const chunk = JSON.parse(bytes);
+  assert.equal(chunk.gameBuildId, '26134529');
+  assert.deepEqual(chunk.types.map(type => type.id), ['chest-small']);
+  assert.equal(chunk.maps[0].mapPackId, reference.mapPackId);
+  assert.equal(chunk.maps[0].markers.length, 1);
+});
 
 test('hierarchy, rotation and nonuniform scale preserve Unity XYZ without a second Z reflection', () => {
   const parent = transformMatrix({ translation: [10, 20, 30], rotation: [0, Math.SQRT1_2, 0, Math.SQRT1_2], scale: [2, 3, 4] });

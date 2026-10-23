@@ -127,6 +127,10 @@ test("daily catalog selects only the active build and current scene", () => {
     selectDailyMapPack(catalog, { sceneName: "Level_16", mapSlot: 16 })?.mapPackId,
     activeLevel16,
   );
+  assert.equal(selectDailyMapPack(catalog, { sceneName: "Level_16", mapSlot: 16,
+    gameBuildId: "26134529" }), null, "a newer observation cannot open the old build's reused scene name");
+  assert.equal(selectDailyMapPack(catalog, { sceneName: "Level_16", mapSlot: 16,
+    gameBuildId: "25306743" })?.mapPackId, activeLevel16);
 });
 
 test("daily catalog refuses to guess without an explicitly active build", () => {

@@ -263,3 +263,73 @@ Nginx, systemd or permission change. A future explicit `--legacy-live` restorati
 would expose the original unauthenticated four-character room flow and requires
 a separate decision. Personal local import files and historical recording
 archives are never part of deployment.
+
+## One-shot map derivative import
+
+`import-map-assets.mjs` supplies a reviewed, one-shot import when the shared
+asset directory is administrator-owned. It grants no permissions, changes no
+services, and never removes or replaces existing assets. An ordinary deployment
+account can run the complete read-only preflight; only the final `--install`
+invocation needs an account permitted to create files in the destination.
+
+Prepare an isolated upload directory containing only approved derivatives under
+`assets/maps/packs/sha256-<digest>/` and `assets/maps/enclosures/`. Keep the import
+manifest outside `assets/`. Its format is:
+
+```json
+{
+  "schemaVersion": 1,
+  "gameBuildId": "26134529",
+  "files": [
+    {
+      "path": "maps/packs/sha256-<64 lowercase hex>/map-pack.json",
+      "bytes": 12345,
+      "sha256": "<64 lowercase hex>"
+    }
+  ]
+}
+```
+
+List every pack manifest and its exact texture, height and geometry dependencies;
+the importer rejects missing or extra files inside a pack. Only `map-pack.json`,
+PNG, F32 and GLB (optionally gzip) derivatives are accepted. Shared enclosures
+must use `<their SHA-256>.glb.gz` filenames. Never include raw Unity assets,
+assemblies, decompiled code, private captures or directory-wide archives.
+
+Before upload and installation, total the final manifest's `files[].bytes` and
+check `df -B1` for every involved filesystem. The upload tree, shared source
+assets and immutable public asset pool are separate copies; allow space for all
+three, existing releases and working headroom. Retained transfer archives can
+add a fourth copy. Count only verified identical destination files as already
+present, and account for one in-progress temporary file during import. Do not
+equate the compressed archive size with the final manifest's installed bytes or
+assume deployment hard links eliminate either the upload or shared-source copy.
+
+Transfer the script, pinned manifest and allowlisted assets, then compare the
+script and manifest SHA-256 values against the separately reviewed release
+values. Use the same absolute paths and manifest digest for both invocations:
+
+```sh
+/opt/peak-trail/node/bin/node /home/mylu/map-import/import-map-assets.mjs \
+  --source /home/mylu/map-import/assets \
+  --destination /srv/peak-trail/shared/assets \
+  --manifest /home/mylu/map-import/import-manifest.json \
+  --manifest-sha256 REVIEWED_MANIFEST_SHA256
+
+# Administrator runs this once after reviewing the successful dry-run result.
+sudo /opt/peak-trail/node/bin/node /home/mylu/map-import/import-map-assets.mjs \
+  --source /home/mylu/map-import/assets \
+  --destination /srv/peak-trail/shared/assets \
+  --manifest /home/mylu/map-import/import-manifest.json \
+  --manifest-sha256 REVIEWED_MANIFEST_SHA256 --install
+```
+
+All sources and existing destination files are hashed before any destination
+mutation. Symbolic links and unsupported paths fail closed. Installation also
+requires trusted, non-writable destination ancestors. Files are copied into
+exclusive temporary files, hashed again, synced, set to mode `0644`, and
+published atomically without replacement; new directories use `0755`.
+Existing identical files are retained, so interrupted imports can be rerun.
+If a source changes during installation, already published verified derivatives
+remain; the current incomplete temporary file is removed. There is no recursive
+copy, delete, live-site switch, or sudoers modification in this operation.

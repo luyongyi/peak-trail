@@ -11,17 +11,23 @@ const args = process.argv.slice(2);
 const buildFolder = args[0] && resolve(args[0]);
 const single = args.indexOf("--slot");
 const slot = single < 0 ? null : Number(args[single + 1]);
+const countFlag = args.indexOf("--map-count");
+const mapCount = countFlag < 0 ? 21 : Number(args[countFlag + 1]);
 const replace = args.includes("--replace-build");
-if (!buildFolder || (slot !== null && (!Number.isInteger(slot) || slot < 0 || slot > 20))
+if (!buildFolder || !Number.isInteger(mapCount) || mapCount < 1 || mapCount > 512
+    || (slot !== null && (!Number.isInteger(slot) || slot < 0 || slot >= mapCount))
     || (replace && slot !== null)) {
-  throw new Error("Usage: node tools/finalize-offline-maps.mjs <build-folder> [--slot 16 | --replace-build]");
+  throw new Error("Usage: node tools/finalize-offline-maps.mjs <build-folder> [--map-count 208] [--slot 79 | --replace-build]");
 }
-const slots = slot === null ? Array.from({ length: 21 }, (_, index) => index) : [slot];
+const slots = slot === null ? Array.from({ length: mapCount }, (_, index) => index) : [slot];
 const completed = [];
 // Preflight every source manifest before changing the published catalog.
 for (const current of slots) {
   const folder = resolve(buildFolder, `Level_${current}`);
   const manifest = JSON.parse(await readFile(resolve(folder, "map-pack.json"), "utf8"));
+  if (String(manifest.gameBuildId) === "26134529" && (countFlag < 0 || mapCount !== 208)) {
+    throw new Error("Build 26134529 requires explicit --map-count 208; the legacy 21-map default cannot finalize this build.");
+  }
   if (manifest.identityVersion !== 3 || manifest.sceneName !== `Level_${current}`
       || manifest.mapSlot !== current || manifest.layers?.length !== 6
       || manifest.layers.some((layer) => !["glb-instanced-v1", "glb-instanced-v1+gzip"].includes(layer.geometryFormat))) {

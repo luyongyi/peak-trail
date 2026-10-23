@@ -281,7 +281,7 @@ export function mergeSceneLoot(geometry, sceneLoot) {
   ] })) };
 }
 
-export async function exportGeometryLoot({ catalogPath, packsPath, outputPath, gameBuildId, sceneLoot, sceneLootPath, compact = false }) {
+export async function exportGeometryLoot({ catalogPath, packsPath, outputPath, gameBuildId, sceneLoot, sceneLootPath, compact = false, split = false }) {
   await MeshoptDecoder.ready;
   const catalog = JSON.parse(await readFile(catalogPath, 'utf8'));
   const build = String(gameBuildId ?? catalog.activeGameBuildId), maps = [];
@@ -312,7 +312,25 @@ export async function exportGeometryLoot({ catalogPath, packsPath, outputPath, g
   if (sceneLootPath) sceneLoot = JSON.parse(await readFile(sceneLootPath, 'utf8'));
   if (sceneLoot) result = mergeSceneLoot(result, sceneLoot);
   await mkdir(dirname(outputPath), { recursive: true });
-  await writeFile(outputPath, `${JSON.stringify(result, null, compact ? undefined : 2)}\n`, 'utf8');
+  if (split) {
+    const directory = resolve(dirname(outputPath), 'loot', build);
+    await mkdir(directory, { recursive: true });
+    const index = { schemaVersion: 1, kind: 'map-loot-index', gameBuildId: build, source: result.source, maps: [] };
+    for (const map of result.maps) {
+      const used = new Set(map.markers.map(marker => marker.type));
+      const chunk = { schemaVersion: 1, gameBuildId: build, source: result.source,
+        types: result.types.filter(type => used.has(type.id)), maps: [map] };
+      const bytes = Buffer.from(`${JSON.stringify(chunk)}\n`, 'utf8');
+      const filename = `${map.mapPackId}.json`;
+      await writeFile(resolve(directory, filename), bytes);
+      index.maps.push({ mapPackId: map.mapPackId, sceneName: map.sceneName, mapSlot: map.mapSlot,
+        sourceSceneSha256: map.sourceSceneSha256, path: `loot/${build}/${filename}`,
+        sha256: sha256(bytes), size: bytes.length });
+    }
+    await writeFile(outputPath, `${JSON.stringify(index, null, 2)}\n`, 'utf8');
+  } else {
+    await writeFile(outputPath, `${JSON.stringify(result, null, compact ? undefined : 2)}\n`, 'utf8');
+  }
   return result;
 }
 
@@ -328,6 +346,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     catalogPath, gameBuildId,
     sceneLootPath: option('--scene-loot', null),
     compact: args.includes('--compact'),
+    split: args.includes('--split'),
     packsPath: resolve(option('--packs', resolve(platformRoot, '../local/assets/maps/packs'))),
     outputPath: resolve(option('--output', resolve(platformRoot, `data/maps/loot.${gameBuildId}.json`))),
   });

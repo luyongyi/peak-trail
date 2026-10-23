@@ -84,10 +84,12 @@ node PeakTrailPlatform/tools/serve-site.mjs --open
 
 ## 3. 维护者离线生成与登记地图
 
-`tools/offline-maps/export_meshes.py` 直接读取本机 Unity 的 BuildSettings、Mesh、Transform
-和材质，把该游戏 build 的 `Level_0` 至 `Level_20` 预先生成原始网格 GLB 包。必须以
-BuildSettings 的场景路径映射为准，不能把 `levelN` 文件名当作 `Level_N`：当前 build
-25306743 的 `Level_16` 对应 `level21`，而 `level4` 是另一座岛屿。
+PEAK `3.0.0`（Steam build `26134529`）包含 `Level_0` 至 `Level_207` 共 208 座岛屿。
+`tools/offline-maps/export_build.py` 先核验并私下解包本机 `StreamingAssets/maps` 的地图
+bundle，再调用网格导出器读取 Mesh、Transform 和材质，生成该 build 的原始网格 GLB 包。
+场景身份必须遵循游戏自带的 bundle 清单与 `MapBaker.ScenePaths`，不能沿用旧地图或只靠
+同名 `Level_N` 匹配。历史 build `25306743` 使用 BuildSettings 映射，例如 `Level_16`
+对应 `level21`，而 `level4` 是另一座岛屿。
 
 详见 `tools/offline-maps/MESH-CONTRACT.md`。每包保留场景文件哈希、完整父级世界变换、
 原始三角面、UV、法线和游戏 build 身份；通过实例共享及无损压缩减小体积，不减面。
@@ -98,7 +100,7 @@ BuildSettings 的场景路径映射为准，不能把 `levelN` 文件名当作 `
 生成后登记并核验：
 
 ```powershell
-node PeakTrailPlatform/tools/finalize-offline-maps.mjs "<mesh-v3 的 build 目录>" --replace-build
+node PeakTrailPlatform/tools/finalize-offline-maps.mjs "<mesh-v3 的 26134529 目录>" --map-count 208 --replace-build
 node PeakTrailPlatform/tools/check-trace-alignment.mjs "<真实每局目录>" "<对应地图包目录>"
 node PeakTrailPlatform/tools/validate-data.mjs
 node PeakTrailPlatform/tools/stage-site.mjs --preview --profile pages
@@ -107,10 +109,14 @@ node PeakTrailPlatform/tools/stage-site.mjs --preview --profile pages
 每日轮换只更新关卡索引，不需要每天重新建模。游戏更新后需要为新 build 重新生成，历史
 build 的包保留供旧日志使用；Pages 每次只加载当前所选局次的包。
 
-`finalize-offline-maps.mjs` 将 GLB 额外做无损 gzip、签名并登记；`--slot 16` 可只登记一套。
-`--replace-build` 要求完整 21 套，备份原 catalog 后，只替换同 build 的旧绘制版本，原文件
-仍留在本机。页面逐关解压，三角面、法线、UV 和纹理不损失。打包会检查整站不超过
-保守的 10 亿字节预算，避免超过 [GitHub Pages 容量限制](https://docs.github.com/en/pages/getting-started-with-github-pages/github-pages-limits)。
+`finalize-offline-maps.mjs` 将 GLB 额外做无损 gzip、签名并登记；`--map-count 208 --slot 79`
+可只登记新 build 的一套。build `26134529` 必须显式传入 `--map-count 208`；
+`--replace-build` 要求完整 208 套，备份原 catalog 后，只替换同 build 的旧绘制版本，
+原文件仍留在本机。历史 build 的缺省数量仍是 21。页面逐关解压，三角面、法线、UV 和
+纹理不损失。上面的 `--preview` 用于本地核验；完整 208 地图的正式发布使用 server
+profile，其整站上限为 120 亿字节，并需按 [部署说明](deploy/README.md) 核算服务器实际
+剩余空间。Pages 的正式发布仍保留 10 亿字节预算及
+[GitHub Pages 容量限制](https://docs.github.com/en/pages/getting-started-with-github-pages/github-pages-limits)。
 
 ### 可选：运行时核验捕获
 

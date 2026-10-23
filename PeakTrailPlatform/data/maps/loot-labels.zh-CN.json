@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "locale": "zh-CN",
   "source": {
-    "gameBuildId": "25739797",
+    "gameBuildId": "26134529",
     "assetFile": "resources.assets",
     "textAsset": "SerializedTermsData",
-    "pathId": "1422",
-    "sha256": "13a7a854a997e6445b0b0c2d702748ed65e5f8edcc3e6cc317bfa1d860f0d342",
+    "pathId": "1423",
+    "sha256": "6cc434199ba3d27ce7cc9b9ac1b8daf72ddee05a573ff87f6d47210826f1df67",
     "language": "SimplifiedChinese",
     "languageIndex": 9,
     "lookup": "Item.UIData.itemName -> NAME_ + itemName; Luggage/ClimbHandle use their own GetName keys. Exact runtime dictionary strings, not translations of prefab names."

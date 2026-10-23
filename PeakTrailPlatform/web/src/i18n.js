@@ -1,9 +1,9 @@
 import { GAME_NAME_TERMS, GAME_ITEM_KEYS } from './game-text.js';
 
 // Only terms used by this site are retained from the game's runtime table.
-// resources.assets / TextAsset 1422 / SerializedTermsData, build 25739797.
-export const GAME_TEXT_SOURCE = Object.freeze({ gameBuildId: '25739797', textAsset: 'SerializedTermsData',
-  sha256: '13a7a854a997e6445b0b0c2d702748ed65e5f8edcc3e6cc317bfa1d860f0d342', englishIndex: 0, chineseIndex: 9 });
+// resources.assets / TextAsset 1423 / SerializedTermsData, build 26134529.
+export const GAME_TEXT_SOURCE = Object.freeze({ gameBuildId: '26134529', textAsset: 'SerializedTermsData',
+  sha256: '6cc434199ba3d27ce7cc9b9ac1b8daf72ddee05a573ff87f6d47210826f1df67', englishIndex: 0, chineseIndex: 9 });
 const GAME_TEXT = Object.freeze({
   ...GAME_NAME_TERMS,
   SHORE: ['海岸', 'SHORE'], ROOTS: ['森蕈', 'ROOTS'], TROPICS: ['雨林', 'TROPICS'], ALPINE: ['雪山', 'ALPINE'],

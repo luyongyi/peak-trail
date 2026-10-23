@@ -1,12 +1,19 @@
 # Offline PEAK map baker
 
-地图箱子、固定物件与真实豚豚崽的标记可从规范地图几何重新提取，无需启动游戏：
+当前 Steam build `26134529`（3.0.0）从七个原生地图 bundle 导出 208 张地图。
+完整重建入口为 `export_build.py --slots all --with-sidecars --with-loot`，
+使用已认证的私有输入缓存、逐图 loot 分片，保留旧版规范包。源 bundle、
+原生 MapBaker 场景顺序和逐图摘要见 `data/maps/game-build.26134529.json`。
+命令及并行准备规则见 [网格导出契约](MESH-CONTRACT.md)。
+
+地图箱子、固定物件与真实水豚的几何标记可从规范地图包重新提取，无需启动游戏：
 
 ```powershell
-node PeakTrailPlatform/tools/offline-maps/export-loot-from-geometry.mjs --packs C:/path/to/assets/maps/packs
+node PeakTrailPlatform/tools/offline-maps/export-loot-from-geometry.mjs --packs C:/path/to/assets/maps/packs --output local/checks/map-loot/geometry-only.json --split
 ```
 
-导出器按 catalog 的活动构建生成 `data/maps/loot.<build>.json`，并核验原始几何摘要。
+导出器按 catalog 的活动构建核验原始几何摘要；上述示例输出到私有审查目录。
+此命令只恢复几何点位；完整物品生成点需要同版本的场景组件输入。
 材质鉴别、候选箱体的覆盖限制及各版本数据见 [地图标记说明](../../docs/map-loot-source.md)。
 
 The current preferred 3D path is [original triangle GLB export](MESH-CONTRACT.md).

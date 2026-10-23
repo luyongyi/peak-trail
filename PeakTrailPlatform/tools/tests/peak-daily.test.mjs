@@ -5,7 +5,7 @@ import { mkdtemp, mkdir, copyFile, readFile, writeFile, rm } from "node:fs/promi
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
-import { cachedDailyIsFresh, createDailyCache, DEFAULT_API_VERSION, resolveDaily } from "../../server/peak-daily.mjs";
+import { cachedDailyIsFresh, createDailyCache, DEFAULT_API_VERSION, DEFAULT_GAME_BUILD_ID, DEFAULT_MAP_COUNT, resolveDaily } from "../../server/peak-daily.mjs";
 import { createDailyApi } from "../lib/daily-api.mjs";
 
 const START = Date.parse("2026-10-07T06:10:00Z");
@@ -27,14 +27,31 @@ test("resolver uses the verified native matchmaking version and timestamps the r
       now += 4000;
       return response(payload());
     } });
-  assert.equal(DEFAULT_API_VERSION, "2.6");
-  assert.match(requested, /VersionCheck\?version=2\.6$/);
+  assert.equal(DEFAULT_API_VERSION, "3.0");
+  assert.equal(DEFAULT_MAP_COUNT, 208);
+  assert.equal(daily.gameBuildId, DEFAULT_GAME_BUILD_ID);
+  assert.equal(daily.mapCount, 208);
+  assert.match(requested, /VersionCheck\?version=3\.0$/);
   assert.equal(daily.versionOkay, true);
   assert.equal(daily.levelIndex, 479);
-  assert.equal(daily.mapSlot, 17);
-  assert.equal(daily.sceneName, "Level_17");
+  assert.equal(daily.mapSlot, 63);
+  assert.equal(daily.sceneName, "Level_63");
   assert.equal(Date.parse(daily.fetchedAtUtc), now, "not the clock before an upstream delay");
   assert.equal(Date.parse(daily.nextChangeAtUtc), now + 39000_000);
+});
+
+test("new rotation wraps at 208 while explicit older versions keep their own pool", async () => {
+  for (const [levelIndex, mapSlot] of [[207, 207], [208, 0], [495, 79], [496, 80]]) {
+    const daily = await resolveDaily({ now: () => START,
+      fetchImpl: async () => response(payload({ LevelIndex: levelIndex })) });
+    assert.equal(daily.mapSlot, mapSlot);
+    assert.equal(daily.sceneName, `Level_${mapSlot}`);
+    assert.equal(daily.gameBuildId, "26134529");
+  }
+  const previous = await resolveDaily({ apiVersion: "2.6", mapCount: 21, now: () => START,
+    fetchImpl: async () => response(payload()) });
+  assert.equal(previous.mapSlot, 17);
+  assert.equal(previous.gameBuildId, undefined, "custom/old pools cannot claim the current build");
 });
 
 test("rejected versions and malformed countdowns cannot become valid observations", async () => {
@@ -55,7 +72,7 @@ test("native total-hour countdowns permit extended observations without inventin
     })) });
     assert.equal(daily.secondsRemaining, hours * 3600);
     assert.equal(Date.parse(daily.nextChangeAtUtc), START + hours * 3600_000);
-    assert.equal(daily.sceneName, "Level_17");
+    assert.equal(daily.sceneName, "Level_63");
     assert.equal("lockedUntil" in daily, false, "a countdown does not prove a biome lock");
     assert.equal(cachedDailyIsFresh(daily, START + 86400_000), false,
       "extended countdowns still require another daily official confirmation");
@@ -70,14 +87,14 @@ test("official same-day map replacements and repeated indices are observed, neve
     return resolveDaily({ now: () => now, fetchImpl: async () => response(payload({ LevelIndex: levelIndex,
       HoursUntilLevel: 23, MinutesUntilLevel: 59, SecondsUntilLevel: 59 })) });
   } });
-  assert.equal((await cache.read()).sceneName, "Level_17");
+  assert.equal((await cache.read()).sceneName, "Level_63");
   levelIndex = 470; // Synthetic rollback/replacement, not tomorrow's index.
   now += 600_000;
-  assert.equal((await cache.read()).sceneName, "Level_8");
+  assert.equal((await cache.read()).sceneName, "Level_54");
   now += 86400_000;
   const repeated = await cache.read();
   assert.equal(repeated.levelIndex, 470);
-  assert.equal(repeated.sceneName, "Level_8");
+  assert.equal(repeated.sceneName, "Level_54");
   assert.equal(repeated.fetchedAtUtc, new Date(now).toISOString());
   assert.deepEqual(observed, [479, 470, 470]);
 });
@@ -93,7 +110,7 @@ test("a query crossing Shanghai 01:00 rechecks the rotation instead of relabelli
     } });
   assert.equal(calls, 2);
   assert.deepEqual(waits, [2000]);
-  assert.equal(daily.sceneName, "Level_18");
+  assert.equal(daily.sceneName, "Level_64");
   assert.equal(cachedDailyIsFresh(daily, now), true);
 });
 
@@ -140,7 +157,7 @@ test("preview /api/daily resolves and coalesces independently of a live relay; m
     for (const item of both) {
       assert.equal(item.status, 200);
       assert.equal(item.headers.get("cache-control"), "no-store");
-      assert.equal((await item.json()).sceneName, "Level_17");
+      assert.equal((await item.json()).sceneName, "Level_63");
     }
     assert.equal((await fetch(`${origin}/api/daily`, { method: "POST" })).status, 405);
     assert.equal((await fetch(`${origin}/api/runs`)).status, 404);
@@ -186,18 +203,18 @@ test("scheduled updater shares the resolver version and preserves the old snapsh
     const currentPath = join(directory, "data/daily/current.json");
     const previous = '{"sceneName":"Level_8","fetchedAtUtc":"2026-09-27T20:07:47Z"}\n';
     await writeFile(currentPath, previous);
-    const env = { PEAK_DAILY_ENDPOINT: `${origin}/VersionCheck?version=2.6`, PEAK_API_VERSION: "", PEAK_MAP_COUNT: "21" };
+    const env = { PEAK_DAILY_ENDPOINT: `${origin}/VersionCheck?version=3.0`, PEAK_API_VERSION: "", PEAK_MAP_COUNT: "" };
     const rejected = await runUpdater(join(directory, "tools/update-daily.mjs"), env);
     assert.notEqual(rejected.code, 0);
-    assert.match(rejected.output, /rejected API version 2\.6/);
+    assert.match(rejected.output, /rejected API version 3\.0/);
     assert.equal(await readFile(currentPath, "utf8"), previous);
     okay = true;
     const accepted = await runUpdater(join(directory, "tools/update-daily.mjs"), env);
     assert.equal(accepted.code, 0, accepted.output);
     const current = JSON.parse(await readFile(currentPath, "utf8"));
     assert.equal(current.apiVersion, DEFAULT_API_VERSION);
-    assert.equal(current.sceneName, "Level_17");
-    assert.equal(requestVersion, "2.6");
+    assert.equal(current.sceneName, "Level_63");
+    assert.equal(requestVersion, "3.0");
     const historyPath = join(directory, "data/daily/history.json");
     await writeFile(historyPath, JSON.stringify({ schemaVersion: 1, observations: [{
       observedAtUtc: new Date(Date.now() - 86400_000).toISOString(),

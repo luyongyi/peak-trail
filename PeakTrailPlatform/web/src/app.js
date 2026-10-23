@@ -306,7 +306,7 @@ function segmentChineseBase(option) {
       ? state.trace?.manifest?.gameBuildId : state.mapPack?.gameBuildId;
     // These source-audited builds share the summit with the final regular layer.
     // The label describes an available area, not a recorded summit arrival.
-    return ["25306743", "25739797"].includes(String(routeBuild)) && option?.segment === 4
+    return ["25306743", "25739797", "26134529"].includes(String(routeBuild)) && option?.segment === 4
       && ["volcano-kiln", "swamp-temple"].includes(route?.branch)
       && classifyRouteSegment(route.segments.find((entry) => entry.index === 4)).kind === "chapter"
       ? `${biomeName(option?.segment === 4 ? (route.branch === "swamp-temple" ? "citadel" : "kiln") : option?.biome, routed)} · ${tr("含顶峰", "includes PEAK")}`

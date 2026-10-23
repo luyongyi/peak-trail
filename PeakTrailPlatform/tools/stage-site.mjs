@@ -7,12 +7,12 @@ import { normalizeMapFog } from "../web/src/map-fog.js";
 import { normalizeMapWater } from "../web/src/map-water.js";
 import { normalizeMapEnclosures } from "../web/src/map-enclosures.js";
 import { normalizeMapPeak } from "../web/src/map-peak.js";
-import { normalizeMapLoot } from "../web/src/map-loot.js";
 import { fitMapAlignment, validateMapAlignment } from "../server/map-alignment.mjs";
 import { createHash } from "node:crypto";
 import { HOME_ART_FILES } from "../web/src/home-art.js";
 import { checkSiteBudget, checkSiteDownloadReferences, loadSiteArtifact, optionValue, readSiteRelease, siteReleaseOptions, readSiteStagingProfile } from "./lib/site-release.mjs";
 import { createPublicAssetWriter } from "./lib/public-asset-pool.mjs";
+import { readMapLootSource, publicMapLootChunk } from "./lib/map-loot-source.mjs";
 
 const toolDirectory = dirname(fileURLToPath(import.meta.url));
 const platformDirectory = resolve(toolDirectory, "..");
@@ -147,15 +147,9 @@ for (const entry of catalog.mapPacks) {
 const lootCatalogs = new Map();
 for (const build of new Set(mapPacks.map(pack => String(pack.manifest.gameBuildId)))) {
   if (!/^\d{1,20}$/.test(build)) continue;
-  let raw;
-  try {
-    const path = resolve(mapsDirectory, `loot.${build}.json`), file = await lstat(path);
-    if (!file.isFile() || file.isSymbolicLink()) throw new Error("Map supply survey must be a regular file");
-    if (file.size > 96 * 1024 * 1024) throw new Error("Map supply survey exceeds size limit");
-    const body = await readFile(path);
-    if (body.length > 96 * 1024 * 1024) throw new Error("Map supply survey exceeds size limit");
-    raw = JSON.parse(body.toString("utf8"));
-  } catch (error) { if (error.code === "ENOENT") continue; throw error; }
+  const surveySource = await readMapLootSource(mapsDirectory, build);
+  if (!surveySource) continue;
+  const raw = surveySource.raw;
   const entries = [], chunks = [];
   const source = {};
   for (const key of ["kind", "anchor", "positions", "chestCoverage", "itemCoverage", "animalCoverage", "componentCoverage", "excluded"]) {
@@ -164,21 +158,11 @@ for (const build of new Set(mapPacks.map(pack => String(pack.manifest.gameBuildI
   }
   for (const pack of mapPacks.filter(pack => String(pack.manifest.gameBuildId) === build)) {
     if (!raw.maps?.some(entry => entry.mapPackId === pack.mapPackId)) continue;
-    const normalized = normalizeMapLoot(raw, pack.manifest);
-    if (!normalized) throw new Error(`Map supply survey does not match ${pack.mapPackId}`);
-    const original = raw.maps.find(entry => entry.mapPackId === pack.mapPackId);
-    const entry = { mapPackId: normalized.mapPackId, sceneName: normalized.sceneName, mapSlot: pack.manifest.mapSlot,
-      sourceSceneSha256: normalized.sourceSceneSha256,
-      ...(original.layers ? { layers: original.layers.map(layer => ({ id: layer.id, segment: layer.segment, geometrySha256: layer.geometrySha256 })) } : {}),
-      markers: normalized.markers };
-    const path = `loot/${build}/${pack.mapPackId}.json`;
-    const survey = { schemaVersion: 1, gameBuildId: build, types: normalized.types,
-      ...(Object.keys(source).length ? { source } : {}), maps: [entry] };
-    const body = JSON.stringify(survey) + "\n";
-    if (Buffer.byteLength(body, "utf8") > 24 * 1024 * 1024) throw new Error(`Map supply map payload exceeds size limit: ${pack.mapPackId}`);
-    chunks.push({ path, body });
-    entries.push({ mapPackId: entry.mapPackId, sceneName: entry.sceneName, mapSlot: entry.mapSlot,
-      sourceSceneSha256: entry.sourceSceneSha256, path });
+    const chunk = await publicMapLootChunk(surveySource, pack.manifest);
+    // Keep only identities after preflight; 208 maps must not retain their
+    // full marker JSON strings simultaneously in the deployment process.
+    chunks.push({ path: chunk.path, sha256: chunk.sha256, manifest: pack.manifest, surveySource });
+    entries.push(chunk.entry);
   }
   if (!entries.length) throw new Error(`Map supply survey has no matching maps for build ${build}`);
   lootCatalogs.set(build, { index: { schemaVersion: 1, kind: "map-loot-index", gameBuildId: build,
@@ -192,7 +176,11 @@ await mkdir(resolve(outputDirectory, "data", "maps"), { recursive: true });
 for (const [build, { index, chunks }] of lootCatalogs) {
   await writeFile(resolve(outputDirectory, "data", "maps", `loot.${build}.json`), JSON.stringify(index) + "\n");
   await mkdir(resolve(outputDirectory, "data", "maps", "loot", build), { recursive: true });
-  for (const { path, body } of chunks) await writeFile(resolve(outputDirectory, "data", "maps", path), body);
+  for (const chunk of chunks) {
+    const verified = await publicMapLootChunk(chunk.surveySource, chunk.manifest);
+    if (verified.sha256 !== chunk.sha256) throw new Error(`Supply survey changed during staging: ${chunk.path}`);
+    await writeFile(resolve(outputDirectory, "data", "maps", chunk.path), verified.body);
+  }
 }
 for (const [filename, evidence] of trajectorySidecars) await writeFile(resolve(outputDirectory, "data", "maps", filename), JSON.stringify(evidence, null, 2) + "\n");
 await mkdir(resolve(outputDirectory, "schema"), { recursive: true });

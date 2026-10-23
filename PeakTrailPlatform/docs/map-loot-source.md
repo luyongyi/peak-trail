@@ -1,8 +1,11 @@
 # 箱子、固定资源与水豚的地图标记
 
-`data/maps/loot.25306743.json` 与 `data/maps/loot.25739797.json` 为两版各 21 张、
-合计 42 个规范地图包提供可按类型筛选的静态地图标记，当前活动版本为
-`25739797`。几何点位来自对应地图包本身的原始 Unity 网格及实例变换；
+旧版 `data/maps/loot.25306743.json` 与 `data/maps/loot.25739797.json` 各保留
+21 张地图；3.0.0 活动版本为 `26134529`，原生场景增加到 208 张。
+新版 `loot.26134529.json` 为逐图索引，完整标记分别存于
+`loot/26134529/<mapPackId>.json`，索引绑定每个文件的 SHA-256 和字节数，
+避免把所有地图合并为超过 Git 单文件限制的大文件。
+几何点位来自对应地图包本身的原始 Unity 网格及实例变换；
 当前版另从摘要匹配的原始场景组件恢复物品生成点和植物生长点。不重新
 烘焙地形，也不改变地图包 ID。网页使用有限高度的光柱显示所选类型，
 宝箱与固定物品／设施筛选默认关闭，可按需选择具体类型；水豚标记默认开启。
@@ -10,7 +13,7 @@
 ## 中文显示名称
 
 显示名称统一来自 `data/maps/loot-labels.zh-CN.json`。官方词条读取当前游戏
-`resources.assets` 中 path ID 为 `1422` 的运行时 TextAsset
+`resources.assets` 中 path ID 为 `1423`（旧 25739797 版为 `1422`）的运行时 TextAsset
 `SerializedTermsData`，简体中文使用 `SimplifiedChinese` 列（索引 `9`）。
 物品按游戏原逻辑拼接 `NAME_` 与 `Item.UIData.itemName`，再转为大写查表；
 行李箱按 `Luggage.displayName`，固定攀爬设施按 `ClimbHandle.GetName()` 的
@@ -26,7 +29,7 @@
 `Coconut`、`HealingRoot`、`PoisonDart` 不进入已认证名称清单；导出器拒绝
 未认证别名或按名称前缀推测的译名。这不表示游戏里没有相应类别的道具，
 而是不能跳过真实 prefab 的 `UIData` 链路将内部别名认作官方名称。
-本次名称同步不调整两版点位坐标、地图包和来源身份；旧版仍使用自身几何坐标。
+名称表更新不改写各版点位坐标、地图包和来源身份；旧版仍使用自身几何坐标。
 
 ## 中英语言支持
 
@@ -58,7 +61,8 @@
 
 ## 覆盖范围
 
-下表只统计可从两版规范 GLB 独立认证的几何点位；当前版的场景组件补充另见下节。
+下表保留 `25306743` 与 `25739797` 两个历史版本的规范 GLB 几何统计。
+`26134529` 的 208 张地图分别从新版原生场景导出，完整统计另列于新版验收记录。
 
 | 类型 ID | 显示名称 | 原始网格及必要材质 | 25306743 合计 | 25739797 合计 |
 | --- | --- | --- | ---: | ---: |
@@ -78,12 +82,12 @@
 | `item-amulet-bingbong` | 童军的盛情点 | `Medallion_BingBong` + `Tarnished Gold Medallion` | 21 | 21 |
 | `animal-capybara` | 水豚 | `Cube` + `M_Capybara` 材质 | 53 | 53 |
 
-旧版几何覆盖 3,083 处箱体模型位置、5,406 处资源／设施参考点和 53 只
-水豚；当前版几何覆盖分别为 3,076、5,516、53，场景组件点位在此基础上补充。
-当前版另外恢复 38 类、42,585 处场景组件参考点，其中包括 630 处全局物品点
-和 21 处终局雕像奖励点。合并后当前版共有 **47 类、48,101 处资源／设施点**，
-连同 5 类箱子和水豚，共 **53 类、51,230 个标记**；旧版保持 15 类、
-8,542 个几何标记。两个版本合计 59,772 个标记。
+`25306743` 几何覆盖 3,083 处箱体模型位置、5,406 处资源／设施参考点和
+53 只水豚；`25739797` 几何覆盖分别为 3,076、5,516、53，并另有 38 类、
+42,585 处场景组件参考点，其中包括 630 处全局物品点和 21 处终局雕像奖励点。
+合并后 `25739797` 共有 **47 类、48,101 处资源／设施点**，连同 5 类箱子和
+水豚，共 **53 类、51,230 个标记**；`25306743` 保持 15 类、8,542 个几何标记。
+这两个历史版本合计 59,772 个标记。
 一个物理箱体只产生一个标记；箱盖、提手、卡扣等零件不重复计数。
 岩钉的 `Ring` 是同一设施的配件，不另行标点。旧版另有 250 个
 `Spike` + `M_Rock_ice` 地形变体，未将其误标为岩钉。
@@ -98,7 +102,7 @@
 `placement: "randomized-candidate"`，表示护符交互／生成的参考位置。
 它们不是终局雕像上的护符展示模型，也不保证某局必定出现可拾取护符。
 
-每个版本均有 53 只水豚，逐只标记原始身体模型的位置，覆盖该版本全部
+上述两个历史版本各有 53 只水豚，逐只标记原始身体模型的位置，覆盖各版全部
 21 张地图：11 张雪山（`Alpine`）地图各 3 只，10 张方山（`Mesa`）地图各 2 只，均属于
 第 3 关（segment 2）。
 水豚网格的原名是通用的 `Cube`，因此必须同时匹配精确材质
@@ -132,7 +136,7 @@
 这使当前版能够覆盖浆果、椰树、蘑菇等生长点，以及背包、蜂巢、工具等
 物品生成参考点，而不把所有同名植物或可生成生物当作补给。
 
-当前版组件数据中的代表性覆盖为：
+`25739797` 的历史组件数据中，代表性覆盖为：
 
 | 参考点 | 数量 |
 | --- | ---: |
@@ -170,18 +174,19 @@
 集齐四种护符后可在同一位置替换为童军的荣耀（`ScoutsHonor`）；标记保留初始物品与条件奖励
 的区别。被关闭的终局绳索事件组件不因存在生成代码就加入物品点位。
 
-当前可读取的原始场景属于 `25739797`，其 21 张地图的源场景摘要均与该版
-规范包一致。定向检查 Downloads 下各 Peak 项目、备份和归档及 `.codex`
-非会话目录后，未找到可与 `25306743` 摘要匹配的旧版原始场景。
-旧版 21 张地图因此只提供独立认证的几何点位，不能宣称已补齐组件物品，
-也不会套用当前版的组件坐标。
+`26134529` 的 208 张地图和 `25739797` 的 21 张地图均有与各自规范包摘要
+匹配的原生场景。新版七种物品生成组件的游戏代码已与旧版逐项比对，生成池、
+启用条件与 `ScoutStatue.gemSpot` 的语义保持一致；点位仍从新版场景重新提取。
+未找到可与 `25306743` 摘要匹配的原始场景，因此该历史版本的 21 张地图仅
+提供独立认证的几何点位，不能宣称已补齐组件物品，也不会套用其他版的坐标。
 
 网格用途有歧义时不扩大资源覆盖：`M_Scallop` 贝壳仅有场景网格／碰撞体，
 没有拾取或资源组件；`Cylinder` + `M_ShitStick` 的静态模型属于营火木柴；
 天底（`Void`）的背包模型是石化装饰；通用蘑菇还可能是地形或危险物。
 这些模型不会仅凭外观变成可拾取补给点。
 
-仓库内的完整审查数据保留可追溯来源；网页发布时将每版完整文件拆为精简的
+仓库内的完整审查数据保留可追溯来源；两个历史版本保存为合并文件，
+208 图新版直接保存为索引及完整来源分片。网页发布时统一生成精简的
 单地图运行时分片。`data/maps/loot.<build>.json` 是带有地图身份的索引，
 每张地图的数据位于 `data/maps/loot/<build>/<mapPackId>.json`。
 网页先读取索引，再懒加载当前地图的分片并缓存完整响应，避免一次下载整个版本
@@ -207,8 +212,8 @@
 明确记录的例外。两种来源的 `pos` 始终保存
 Unity 原始 XYZ 米制坐标，网页的 Z 轴转换由场景统一执行。
 
-两版 `25306743`、`25739797` 的全部源场景摘要均不同。导出器分别读取各版
-21 个规范地图包的 126 份几何文件，逐层验证 SHA-256，再计算该版坐标；
+导出器分别读取 `25306743`、`25739797` 各 21 个规范地图包，以及
+`26134529` 的 208 个规范地图包，逐层验证 SHA-256，再计算该版坐标；
 不通过地图槽位或对齐矩阵把某一版坐标复用于另一版。对当前安装游戏的
 只读 prefab 的检查仅帮助确认同名模型的用途与歧义：`BirdNest` 位于具有
 `BerryBush` 的蛋巢下；`pickaxe` 位于具有 `ClimbHandle` 和 `ShittyPiton` 的
@@ -222,8 +227,7 @@ Unity 原始 XYZ 米制坐标，网页的 Z 轴转换由场景统一执行。
 同一身体网格有 1,522 个顶点，包围盒与规范地图中的对应模型一致。
 `MirageOasis` 则具有 `MirageLuggage`，动物外观使用
 `M_Capybara Mirage`，不会进入真实水豚标记。游戏 prefab 提供用途与
-模型身份的交叉验证，两份数据共 106 个动物坐标分别从对应版本的规范 GLB
-独立计算。
+模型身份的交叉验证；各版动物坐标均从对应版本的规范 GLB 独立计算。
 
 ## 重建与验证
 
@@ -232,28 +236,31 @@ Unity 原始 XYZ 米制坐标，网页的 Z 轴转换由场景统一执行。
 
 ```powershell
 $gamePath = 'C:/Program Files (x86)/Steam/steamapps/common/PEAK'
-$packsPath = 'local/assets/maps/packs'
-$nativeData = 'local/native-inputs/25739797/PEAK_Data'
-$sceneLoot = 'local/checks/map-loot/scene-loot.25739797.json'
+$assetRoot = 'local/assets'
+$inputCache = 'local/native-inputs'
 
-& local/python/.venv/Scripts/python.exe PeakTrailPlatform/tools/offline-maps/export_loot_from_scene.py --game $gamePath --data $nativeData --build 25739797 --catalog PeakTrailPlatform/data/maps/catalog.json --packs $packsPath --output $sceneLoot
-node PeakTrailPlatform/tools/offline-maps/export-loot-from-geometry.mjs --build 25306743 --packs $packsPath
-node PeakTrailPlatform/tools/offline-maps/export-loot-from-geometry.mjs --build 25739797 --packs $packsPath --scene-loot $sceneLoot --compact
+# 已完成的规范几何会验证后复用；缺失地图才重新烘焙。
+& local/python/.venv/Scripts/python.exe PeakTrailPlatform/tools/offline-maps/export_build.py --game $gamePath --assets $assetRoot --input-cache $inputCache --slots all --with-sidecars --with-loot
 & local/python/.venv/Scripts/python.exe -m unittest discover -s PeakTrailPlatform/tools/offline-maps -p test_loot.py
 node --test PeakTrailPlatform/web/tests/map-loot-data.test.mjs PeakTrailPlatform/web/tests/loot-geometry-export.test.mjs
 node PeakTrailPlatform/tools/stage-site.mjs
 ```
 
-导出器默认导出目录中的活动版本；`--build` 可显式选择要重建的版本，
+当前 `export_build.py` 根据安装版本选择原生单包或地图分组 bundle，核验输入摘要，
+并逐图合并场景组件和几何标记；内存中只保留一图的完整来源和全版本的小索引。
+`--prepare-only` 可在启动互不重叠的并行地图任务前准备原生输入，具体命令见
+[网格导出契约](../tools/offline-maps/MESH-CONTRACT.md)。
+
+`export-loot-from-geometry.mjs` 默认使用目录活动版本；`--build` 可显式选择版本，
 `--catalog`、`--packs`、`--output` 可指定对应目录和文件，`--scene-loot` 接收
-同版本的场景组件审查产物。省略它会只重建几何点，不能作为当前版的完整发布数据。
-`--compact` 只压缩 JSON 排版，保留仓库内的完整来源字段；发布阶段再生成
-索引和单地图运行时分片。
+同版本的场景组件审查产物。省略它只会重建几何点，不能作为含组件版本的完整
+发布数据。`--split` 写出包含 SHA-256、字节数的来源索引及逐图文件；`--compact`
+只压缩合并 JSON 排版。旧版重建必须持有该版本原生输入，不能仅修改 build 参数。
 几何导出直接使用仓库内 Three.js 附带的 Meshopt 解码器，无需额外 npm 依赖；
 组件导出使用离线地图工具的 Python / UnityPy 环境。仅重建需要本机忽略目录中的
 游戏输入和地图包；CI 的数据验证与合成测试不依赖游戏安装或私有资源。
 
-测试检查两版全部 42 张地图的场景和几何摘要、类型与位置覆盖、重复模型去重、
+测试检查三个版本全部 250 张地图的场景和几何摘要、类型与位置覆盖、重复模型去重、
 章节归属、父节点与非均匀缩放、静态批处理原点、压缩 GPU 实例，以及损坏
 几何数据的拒绝行为；新设施额外覆盖材质变体排除、护符候选语义和共享索引
 包围盒。水豚额外验证精确材质匹配、海市蜃楼排除、混合材质 primitive

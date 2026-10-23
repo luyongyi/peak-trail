@@ -58,13 +58,17 @@ function fixture(branch = "swamp-temple") {
 
 test("both verified branch finales identify their shared summit without creating a new layer", () => {
   for (const [branch, expected] of [["swamp-temple", "城塞 · 含顶峰"], ["volcano-kiln", "熔炉 · 含顶峰"]]) {
-    const f = fixture(branch);
-    assert.equal(f.elements.segmentName.textContent, expected);
-    assert.equal(f.elements.segmentOrdinal.textContent, "第 5 / 5 关");
-    assert.deepEqual(f.state.segmentOptions.map((entry) => entry.segment), [0, 1, 2, 3, 4, 5]);
-    assert.equal(f.elements.nextSegmentButton.disabled, false);
-    assert.equal(f.elements.nextSegmentButton.title, "浏览额外区域：天底（并非固定下一关）");
-    assert.equal(f.api.adjacentSegment(f.state.segmentOptions, 4, 1).segment, 5);
+    for (const build of ["25306743", "25739797", "26134529"]) {
+      const f = fixture(branch);
+      f.state.mapPack.gameBuildId = build;
+      f.api.renderSegmentNavigation();
+      assert.equal(f.elements.segmentName.textContent, expected);
+      assert.equal(f.elements.segmentOrdinal.textContent, "第 5 / 5 关");
+      assert.deepEqual(f.state.segmentOptions.map((entry) => entry.segment), [0, 1, 2, 3, 4, 5]);
+      assert.equal(f.elements.nextSegmentButton.disabled, false);
+      assert.equal(f.elements.nextSegmentButton.title, "浏览额外区域：天底（并非固定下一关）");
+      assert.equal(f.api.adjacentSegment(f.state.segmentOptions, 4, 1).segment, 5);
+    }
   }
 });
 

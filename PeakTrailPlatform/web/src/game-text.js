@@ -1,5 +1,5 @@
 // Official names used by inventory, appearance and item views. No descriptions or full localization table.
-// Build 25739797; resources.assets / TextAsset 1422 / SerializedTermsData.
+// Verified unchanged in build 26134529; resources.assets / TextAsset 1423 / SerializedTermsData.
 export const GAME_NAME_TERMS = Object.freeze({
   "NAME_24 KARAT": [
     "24K 奖章",

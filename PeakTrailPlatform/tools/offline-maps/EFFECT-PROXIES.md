@@ -50,3 +50,15 @@ The pack audit verifies every published geometry digest before inspecting all
 21 packs, then counts excluded material instances and retained crystal bodies.
 It does not open private player logs or execute game code. Browser scene QA is
 separate from these source/asset/loader regression checks.
+
+## Build 26134529 verification
+
+Both materials were re-read from the installed 3.0 build's
+`sharedassets4.assets`: `M_VFX_FireballDecal` path ID 121 and
+`M_VFX_PetrifyDecal` path ID 123. Their `Decal` shader object SHA-256 matches the
+audited 25739797 shader. The native Forward pass still uses source blend 5,
+destination blend 10, zero depth writes and front-face culling (1), with
+Transparent/Unlit tags. The exact source values and serialized-file hashes are
+retained in `source-effect-materials.26134529.json`; this evidence permits the
+same narrowly scoped exclusion for 26134529. Legacy digest-bound shadow-only
+node corrections remain restricted to 25306743.

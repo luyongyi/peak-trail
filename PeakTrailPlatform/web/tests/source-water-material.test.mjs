@@ -30,12 +30,14 @@ test("audited swamp tint replaces the full-strength yellow fallback without chan
 });
 
 test("re-audited current build keeps the swamp tint and shared depth uniforms", () => {
-  const value = effect(); value.source.mapBuildId = 25739797;
-  const material = new THREE.MeshStandardMaterial();
-  assert.equal(applySourceWaterDepth(material, value), true);
-  close(material.color.toArray(), sourceWaterColorAtDepth(parameters));
-  assert.ok(material.userData.peakWaterDepth);
-  material.dispose();
+  for (const build of [25739797, 26134529]) {
+    const value = effect(); value.source.mapBuildId = build;
+    const material = new THREE.MeshStandardMaterial();
+    assert.equal(applySourceWaterDepth(material, value), true);
+    close(material.color.toArray(), sourceWaterColorAtDepth(parameters));
+    assert.ok(material.userData.peakWaterDepth);
+    material.dispose();
+  }
 });
 
 test("native depth remap saturates at one tenth of the source range and shallow tint stays separate", () => {

@@ -1778,6 +1778,11 @@ export function selectDailyMapPack(catalog, daily) {
 
   const activeBuildId = asId(catalog.activeGameBuildId)?.trim();
   if (!/^[1-9]\d*$/.test(activeBuildId || "")) return null;
+  // A new game's daily observation must never open an older build's same slot.
+  if (daily.gameBuildId != null && String(daily.gameBuildId).trim() !== activeBuildId) return null;
+  // Unbound 2.x observations use a 21-map pool; the same index means a
+  // different scene in 3.0. Require the resolver's verified build binding.
+  if (activeBuildId === "26134529" && daily.gameBuildId == null) return null;
 
   const candidates = catalog.mapPacks.filter((entry) => {
     if (!validCatalogEntry(entry)) return false;

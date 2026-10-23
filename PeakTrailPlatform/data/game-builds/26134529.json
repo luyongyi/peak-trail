@@ -1,0 +1,142 @@
+{
+  "schemaVersion": 1,
+  "gameBuildId": "26134529",
+  "nativeGameVersion": "3.0.0--logFile",
+  "versionSource": {
+    "file": "globalgamemanagers",
+    "objectType": "PlayerSettings",
+    "pathId": 1,
+    "field": "bundleVersion",
+    "retainedVerbatim": true
+  },
+  "unityVersion": "6000.3.15f1",
+  "sourceEvidence": {
+    "installedSteamBuildId": "26134529",
+    "assembly": {
+      "file": "Assembly-CSharp.dll",
+      "sha256": "e9a8585abfa566afa7a3ef3e3699bc27369039eeefcdb3caa38d624d56f59e5c"
+    },
+    "packaging": "direct-serialized-files",
+    "serializedInputs": [
+      {
+        "name": "resources.assets",
+        "bytes": 41000620,
+        "sha256": "1557d4c353dc10e499807348ddf4926306046c5c1d25fb56e1771bbde781e152"
+      },
+      {
+        "name": "resources.assets.resS",
+        "bytes": 494299632,
+        "sha256": "217c0cb2277723f2e9c51aa9dfc3d6618923761217981aff2baae883e9045fcb"
+      },
+      {
+        "name": "level3",
+        "bytes": 15158116,
+        "sha256": "6e4fef88c65c45277d4931988dca7555bbd706e7562a27584afadffbd76439e5"
+      },
+      {
+        "name": "sharedassets3.assets",
+        "bytes": 29634392,
+        "sha256": "c4b8daa998478df5aca6a5a4091955dd882c7248beb1e9c2fcbd25519b03e4a0"
+      },
+      {
+        "name": "sharedassets3.assets.resS",
+        "bytes": 262788256,
+        "sha256": "b95e85898233fe0aa7dbcee795ba418ffea6f7beb3c615dc3e4b673c53a7a816"
+      }
+    ],
+    "exporters": [
+      {
+        "file": "export-game-assets.py",
+        "sha256": "d4081ce1fb9f66eadea5a7d6c12146f5cf0af3fc3f0c7cb5dd12df163bd8d469"
+      },
+      {
+        "file": "render-previews.py",
+        "sha256": "4a09a380fb6726d99993e47331f3ed7426828059128ab83b203911460cedc3ea"
+      },
+      {
+        "file": "export-form-assets.py",
+        "sha256": "a1a1feb6161f8ee9556fd37ef41603819732c4485de7dc86b7f45fd34bfe71b9"
+      },
+      {
+        "file": "export-world-assets.py",
+        "sha256": "ac97970a9f5c936d1a41e6a2d4314849710b0073376bc3070690c3c677a81263"
+      },
+      {
+        "file": "export-ghost-assets.py",
+        "sha256": "3108bd97e2888aa006e34d66bcf4fcee37f2d25c7acf32e0b54ad51a64dee5a0"
+      },
+      {
+        "file": "export-state-assets.py",
+        "sha256": "615e58800ae253e961a5904519cded5e132f8773a9693badd99eb405ca223bbc"
+      },
+      {
+        "file": "prepare-live-visual-assets.py",
+        "sha256": "961064baedaa59a202229e9ede605ee559fb890b911f26881c4ac2f130d7c2c4"
+      }
+    ]
+  },
+  "localization": {
+    "assetFile": "resources.assets",
+    "textAsset": "SerializedTermsData",
+    "pathId": 1423,
+    "sha256": "6cc434199ba3d27ce7cc9b9ac1b8daf72ddee05a573ff87f6d47210826f1df67",
+    "englishIndex": 0,
+    "chineseIndex": 9,
+    "nativeTerms": 867,
+    "publishedNameTerms": 206,
+    "verifiedPrefabBindings": 191,
+    "mapLabelTermReferences": 110,
+    "comparisonBuild": "25739797",
+    "addedItemPrefabs": 0,
+    "changedChineseOrEnglishItemNames": 0
+  },
+  "assets": {
+    "avatar-assets": {
+      "catalog": "data/avatar-assets/26134529/catalog.json",
+      "catalogSha256": "3da8d11bd621baa68b8015b8ad9d203b483694e336ef2da4593e5acdc8c2d1cf",
+      "derivativeFiles": 835,
+      "derivativeBytes": 109941829,
+      "items": 194,
+      "nativeIcons": 192,
+      "itemWorldModels": 194,
+      "worldObjectReferences": 5,
+      "worldObjectModels": 3,
+      "customizationCounts": {
+        "skins": 9,
+        "eyes": 18,
+        "mouths": 19,
+        "accessories": 21,
+        "fits": 34,
+        "hats": 47,
+        "sashes": 10,
+        "medals": 2,
+        "forms": 3
+      }
+    },
+    "item-event-assets": {
+      "catalog": "data/item-event-assets/26134529/catalog.json",
+      "catalogSha256": "600492bd99c218828a11cddf693c23a2be21c230a9ba4ded2b3eaaa9ad03bb3d",
+      "derivativeFiles": 36,
+      "derivativeBytes": 5040231,
+      "items": 11,
+      "nativeIcons": 11,
+      "itemWorldModels": 11,
+      "worldObjectReferences": 11,
+      "worldObjectModels": 10
+    }
+  },
+  "materials": {
+    "evidence": "tools/offline-maps/source-effect-materials.26134529.json",
+    "evidenceSha256": "822721512ed4eafdd0dbf012de778db326426b656929506c281944296abd5435",
+    "directSourceMaterials": 20,
+    "mapBundleCount": 7,
+    "verifiedMapMaterialInstances": 136,
+    "consumedMaterialPropertiesAndPassesMatch": true,
+    "standardMapShaderVariantFullEquivalenceClaimed": false
+  },
+  "maps": {
+    "provenance": "data/maps/game-build.26134529.json",
+    "sourceOwnership": "Independent per-map canonical IDs, scene hashes and bundle hashes are recorded in the map provenance manifest."
+  },
+  "scope": "Native source hashes and approved derivative counts only; raw game files, full localization tables, private paths and player data are excluded."
+}

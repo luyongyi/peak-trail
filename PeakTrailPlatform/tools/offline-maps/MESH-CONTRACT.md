@@ -8,26 +8,44 @@ or project an overhead picture onto vertical faces.
 
 ## Build
 
-PEAK 2.6.b/build 25739797 stores serialized scenes in `data.unity3d`. Use the
-repeatable complete-build wrapper for this packaging. It unpacks the bundle
+PEAK 3.0.0/build 26134529 stores 208 generated scenes in seven
+`StreamingAssets/maps/levels*.assetbundle` files. The shipped manifests bind each
+scene to its bundle; native `MapBaker.ScenePaths` orders `Level_0` through
+`Level_207`. BuildSettings no longer contains these maps. The earlier
+2.6.b/build 25739797 stores scenes in `data.unity3d`. Use the repeatable
+complete-build wrapper for either packaging. It unpacks the bundles
 privately with bounded block memory, preserves exact source bytes/hashes, and
 reads managed type metadata from the installed game. It validates an existing
 input cache and completed bake before reuse; it never reassigns an older pack
 to a newer game build.
 
 ```powershell
-& local/python/.venv/Scripts/python.exe PeakTrailPlatform/tools/offline-maps/export_build.py --slots all --with-sidecars
-$env:PEAK_TRAIL_GAME_DATA = (Resolve-Path local/native-inputs/25739797/PEAK_Data).Path
+# Before parallel workers, prepare the private authenticated cache once:
+& local/python/.venv/Scripts/python.exe PeakTrailPlatform/tools/offline-maps/export_build.py --prepare-only
+& local/python/.venv/Scripts/python.exe PeakTrailPlatform/tools/offline-maps/export_build.py --slots all --with-sidecars --with-loot
+$env:PEAK_TRAIL_MAP_CACHE = (Resolve-Path local/native-inputs/26134529/maps).Path
 # After disjoint slot jobs finish, regenerate only the complete source sidecars:
-& local/python/.venv/Scripts/python.exe PeakTrailPlatform/tools/offline-maps/export_build_sidecars.py
+& local/python/.venv/Scripts/python.exe PeakTrailPlatform/tools/offline-maps/export_build_sidecars.py --with-loot
+# --with-loot merges each scene's component and geometry markers separately,
+# writes a per-map chunk and retains only the small final index in memory.
+# For the older single-container build, use PEAK_TRAIL_GAME_DATA pointing to
+# local/native-inputs/25739797/PEAK_Data instead.
 ```
 
 The wrapper keeps the original meshes and source textures at the same delivery
 quality as the individual exporter. Its 256-pixel reference PNG and 256-square
 collision height grid are separate planar aids. They do not reduce or displace
 the 3D mesh. Lossless outer gzip is finalized before canonical registration.
-Disjoint `--slots` lists may run in at most two processes; registration uses the
-catalog lock. Export the complete sidecars only after both jobs finish.
+Disjoint `--slots` lists may run in up to four processes on the audited 32 GiB
+host; keep fewer workers on smaller hosts. Registration uses the catalog lock.
+Private extraction uses an exclusive per-bundle filesystem lock, including on
+a fresh cache; another worker cannot observe an incomplete extraction. An
+abandoned lock fails with an owning-process inspection instruction rather than
+silently overwriting source inputs.
+`--no-register` prepares finalized working packs without changing the catalog.
+Export complete sidecars after all scenes are registered. An explicit
+`--slots` on the sidecar command supports private partial verification; it is
+not evidence of a complete build. Source checksums use bounded-memory streaming.
 
 `landmarks.<build>.json` binds each selected native root and its native progress
 gate to the exact map-pack ID and scene SHA. Positions use Unity world integer
@@ -119,8 +137,9 @@ letting a large distant background mesh shrink the useful view.
   `GD/FoliageGD` / `W/Vine` `_Shape` cutouts use a 256-pixel maximum side with
   Lanczos resampling; their source colour, alpha silhouette, authored cutoff,
   UV transform and cull mode remain embedded in each GLB. This bounded delivery
-  resolution keeps all 21 six-layer packs inside the public site's 1 GB budget
-  without deleting vegetation or changing geometry.
+  resolution originally kept build 25306743's 21 six-layer packs inside its
+  1 GB delivery budget. Later build budgets scale with the authenticated map
+  count; vegetation and geometry are preserved.
 - Many repeated rocks and trees reference the same shared mesh. Non-sheared
   instances use `EXT_mesh_gpu_instancing`. Any affine transform that fails the
   strict reconstruction tolerance remains a regular node with full `matrix`.
@@ -149,8 +168,8 @@ Regular meshes with the same geometry/material can then be batched into
 shear and avoids thousands of draw calls. Keep the component triangles separate;
 do not weld their vertices or create connecting surfaces.
 
-Alpine sections contain mirrored native instances (1,210 across this build's
-21 scenes). Separate positive- and negative-determinant instance batches.
+Alpine sections contain mirrored native instances (1,210 across build
+25306743's 21 scenes). Separate positive- and negative-determinant instance batches.
 Three.js cannot treat mixed-sign InstancedMesh matrices like regular per-object
 draws. A mirrored parent plus compensating local reflection preserves the exact
 world matrix while giving the entire batch one consistent front-face parity.
@@ -292,3 +311,26 @@ unsupported-extension information is supplemented by our meshopt readback.
 The audit accepts an entire parent folder of packs or one canonical pack folder,
 handles both plain and outer-gzipped GLBs, and authenticates stored bytes before
 decompression. `--report <path.json>` writes the full per-layer SHA-256 report.
+
+
+## Build 26134529 full export validation
+
+The 208 current-build maps contain 1,248 chapters. Their canonical geometry,
+planar textures and height references total 6,961,081,651 bytes. Independent
+readback authenticated all 1,248 GLBs and decoded 255,529,482 triangles counted
+once per layer mesh/index binding, with finite attributes and valid indices; all source color metadata remains.
+Mirrored native instances are retained (11,550), using the existing parity-aware
+viewer batching. The largest negative normal-facing area fraction is 0.02646%,
+consistent with native smoothing anomalies rather than an inverted coordinate
+system. Export-time Meshopt checks still compare every accessor byte for byte.
+
+The separate source enclosure survey produces 97 unique files totaling
+224,830,963 bytes. Only build 26134529 uses a 256 MiB enclosure budget; the
+previous 21-map builds retain 64 MiB. Individual shells are 2,167,092–2,874,974
+bytes. The larger full-build allowance reflects 208 independent native scenes;
+no source geometry was simplified to meet it. Both direct enclosure export and
+the shared-scene sidecar exporter enforce the same build-specific budget.
+
+The exact ordered scene, bundle, canonical identity and validation summary is
+tracked in `data/maps/game-build.26134529.json`. Full private source/readback
+receipts remain under `local/checks/game-update-26134529/`.

@@ -4,11 +4,13 @@ const idPattern = /^[a-z][a-z0-9_-]{0,79}$/;
 const hashPattern = /^[a-f0-9]{64}$/;
 const packPattern = /^sha256-[a-f0-9]{64}$/;
 const categories = new Set(["chest", "item", "animal"]);
+// 3.0.0 has 208 native scenes; retain a finite bound for malformed indexes.
+const MAX_SURVEY_MAPS = 512;
 
 /** Scene placements are a build-specific survey; they never describe live loot. */
 export function normalizeMapLoot(raw, mapPack) {
   if (!mapPack || raw?.schemaVersion !== 1 || String(raw.gameBuildId) !== String(mapPack.gameBuildId)
-      || !Array.isArray(raw.maps) || raw.maps.length > 128 || !Array.isArray(raw.types) || raw.types.length > 256) return null;
+      || !Array.isArray(raw.maps) || raw.maps.length > MAX_SURVEY_MAPS || !Array.isArray(raw.types) || raw.types.length > 256) return null;
   const maps = raw.maps.filter(entry => entry?.mapPackId === mapPack.mapPackId);
   if (maps.length !== 1) return null;
   const entry = maps[0];
@@ -111,7 +113,7 @@ export function createMapLootLoader({ fetchImpl = globalThis.fetch, baseUrl = ne
     }
     if (raw.kind === "map-loot-index") {
       if (raw.schemaVersion !== 1 || String(raw.gameBuildId) !== build
-          || !Array.isArray(raw.maps) || raw.maps.length > 128 || !packPattern.test(mapPack.mapPackId || "")) return null;
+          || !Array.isArray(raw.maps) || raw.maps.length > MAX_SURVEY_MAPS || !packPattern.test(mapPack.mapPackId || "")) return null;
       const entries = raw.maps.filter(entry => entry?.mapPackId === mapPack.mapPackId);
       const entry = entries[0], path = `loot/${build}/${mapPack.mapPackId}.json`;
       if (entries.length !== 1 || entry.path !== path || entry.sceneName !== mapPack.sceneName

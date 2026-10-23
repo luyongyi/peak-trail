@@ -11,7 +11,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from build_maps import Scene, bounds_for, game_data, game_info, pid
+from build_maps import Scene, bounds_for, game_data, game_info, pid, scene_path as source_scene_path
 
 
 def sha(path: Path) -> str:
@@ -62,7 +62,7 @@ def export_peak(game: Path, catalog_path: Path, packs_path: Path, output: Path, 
         map_pack_id = catalog_entry["mapPackId"]
         manifest = json.loads((packs_path / map_pack_id / "map-pack.json").read_text(encoding="utf-8"))
         scene_name = manifest["sceneName"]
-        scene_path = game_data(game) / f"level{mapping[scene_name]}"
+        scene_path = source_scene_path(game, mapping[scene_name])
         source_hash = sha(scene_path)
         if source_hash != manifest.get("source", {}).get("sceneSha256"):
             raise ValueError(f"{scene_name}: installed source scene does not match canonical pack")

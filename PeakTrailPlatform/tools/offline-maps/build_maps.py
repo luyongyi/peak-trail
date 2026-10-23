@@ -25,6 +25,39 @@ def game_data(game):
         raise ValueError('PEAK data is bundled; unpack data.unity3d privately with unpack_game_data.py and set PEAK_TRAIL_GAME_DATA to the extracted directory')
     return directory
 
+def bundled_map_sources(game):
+    """Read the shipped scene list, preserving its exact bundle membership."""
+    directory = game / 'PEAK_Data/StreamingAssets/maps'
+    result = {}
+    for manifest in sorted(directory.glob('levels*.assetbundle.manifest')):
+        bundle = manifest.with_suffix('')
+        if not bundle.is_file():
+            raise ValueError(f'Map bundle is missing: {bundle.name}')
+        names = re.findall(r'^- Assets/8_SCENES/Generated/(Level_\d+)\.unity\s*$', manifest.read_text(encoding='utf8'), re.MULTILINE)
+        if not names:
+            raise ValueError(f'Map bundle manifest has no recognized generated scenes: {manifest.name}')
+        for name in names:
+            if name in result:
+                raise ValueError(f'Duplicate map scene in shipped bundles: {name}')
+            result[name] = f'{bundle.stem}/BuildPlayer-{name}'
+    for bundle in directory.glob('levels*.assetbundle'):
+        if not bundle.with_suffix('.assetbundle.manifest').is_file():
+            raise ValueError(f'Map bundle manifest is missing: {bundle.name}')
+    return result
+
+def scene_path(game, source):
+    """Resolve legacy build-index scenes and authenticated extracted bundles."""
+    if isinstance(source, int):
+        return game_data(game) / f'level{source}'
+    cache = os.environ.get('PEAK_TRAIL_MAP_CACHE')
+    if not cache:
+        raise ValueError('Bundled map scenes require PEAK_TRAIL_MAP_CACHE; run export_build.py to prepare exact-build inputs')
+    root = Path(cache).resolve()
+    path = (root / source).resolve()
+    if not path.is_relative_to(root) or not path.is_file():
+        raise ValueError(f'Bundled map scene is missing or unsafe: {source}')
+    return path
+
 def pid(ptr):
     return ptr.get('m_PathID',0)
 
@@ -279,21 +312,30 @@ def render_instances(scene,instances,extent,resolution,color):
     depth[~np.isfinite(depth)]=np.nan
     return depth,rgba,total
 
-def sha(path): return hashlib.sha256(path.read_bytes()).hexdigest()
+def sha(path):
+    with path.open('rb') as stream:
+        return hashlib.file_digest(stream, 'sha256').hexdigest()
 
 def game_info(game):
     env=UnityPy.load(str(game_data(game)/'globalgamemanagers'))
     build=next(o.read_typetree(check_read=False) for o in env.objects if o.type.name=='BuildSettings')
     player=next(o.read_typetree(check_read=False) for o in env.objects if o.type.name=='PlayerSettings')
     scenes={Path(s).stem:i for i,s in enumerate(build['scenes']) if re.fullmatch(r'Level_\d+',Path(s).stem)}
+    bundled = bundled_map_sources(game)
+    if bundled:
+        if scenes:
+            raise ValueError('Both embedded and bundled Level scenes require an explicit source review')
+        scenes = bundled
+    if not scenes:
+        raise ValueError('The installed build has no recognized generated map scenes')
     steam=game.parent.parent/'appmanifest_3527290.acf'
     text=steam.read_text(encoding='utf-8'); build_id=int(re.search(r'"buildid"\s+"(\d+)"',text).group(1))
     return scenes,player['bundleVersion'],build_id
 
 def build_one(game,slot,out,res,hres):
-    started=time.time(); mapping,version,build_id=game_info(game); name=f'Level_{slot}'; scene_file=f'level{mapping[name]}'
-    scene=Scene(game_data(game)/scene_file,game); dest=out/str(build_id)/name; dest.mkdir(parents=True,exist_ok=True)
-    manifest={'schemaVersion':1,'identityVersion':2,'mapPackId':'','generatedAtUtc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'gameVersion':version,'gameBuildId':build_id,'sceneName':name,'mapSlot':slot,'projectionVersion':1,'coordinateSpace':'unity-world-meters','textureUv':'u=(x-minX)/(maxX-minX);v=(z-minZ)/(maxZ-minZ)','imageOrigin':'bottom-left-in-uv;viewer-flips-for-top-left-images','layers':[], 'source':{'kind':'offline-unity-scene','sceneFile':scene_file,'sceneSha256':sha(game_data(game)/scene_file),'unityVersion':scene.file.unity_version,'renderer':'Mesh UV/base texture; terrain _BaseColor/_TopColor with slope; prop _Tint; orthographic albedo survey rasterizer','heightSource':'highest non-trigger MeshCollider/BoxCollider/SphereCollider/CapsuleCollider surface, excluding fog wall roots','transformSource':'full serialized parent-chain TRS; static-batch root when present','limitations':['Custom game shader lighting and material-layer masks are approximated; this is an albedo survey render, not a game screenshot.','Moving props and spawned items are not baked. Sphere/capsule colliders use 16-sided tessellation.','Top-surface height field cannot preserve stacked caves/overhangs.','Void has a very large static collision plane and consequently coarser horizontal sample spacing.']}}
+    started=time.time(); mapping,version,build_id=game_info(game); name=f'Level_{slot}'; source_path=scene_path(game,mapping[name]); scene_file=f'level{mapping[name]}' if isinstance(mapping[name],int) else mapping[name]
+    scene=Scene(source_path,game); dest=out/str(build_id)/name; dest.mkdir(parents=True,exist_ok=True)
+    manifest={'schemaVersion':1,'identityVersion':2,'mapPackId':'','generatedAtUtc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'gameVersion':version,'gameBuildId':build_id,'sceneName':name,'mapSlot':slot,'projectionVersion':1,'coordinateSpace':'unity-world-meters','textureUv':'u=(x-minX)/(maxX-minX);v=(z-minZ)/(maxZ-minZ)','imageOrigin':'bottom-left-in-uv;viewer-flips-for-top-left-images','layers':[], 'source':{'kind':'offline-unity-scene','sceneFile':scene_file,'sceneSha256':sha(source_path),'unityVersion':scene.file.unity_version,'renderer':'Mesh UV/base texture; terrain _BaseColor/_TopColor with slope; prop _Tint; orthographic albedo survey rasterizer','heightSource':'highest non-trigger MeshCollider/BoxCollider/SphereCollider/CapsuleCollider surface, excluding fog wall roots','transformSource':'full serialized parent-chain TRS; static-batch root when present','limitations':['Custom game shader lighting and material-layer masks are approximated; this is an albedo survey render, not a game screenshot.','Moving props and spawned items are not baked. Sphere/capsule colliders use 16-sided tessellation.','Top-surface height field cannot preserve stacked caves/overhangs.','Void has a very large static collision plane and consequently coarser horizontal sample spacing.']}}
     print(name,scene_file,'loaded',flush=True)
     manifest['route']=scene.route()
     for index,segment in scene.layers():

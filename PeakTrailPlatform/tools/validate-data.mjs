@@ -23,6 +23,7 @@ assert(current.schemaVersion === 1, "daily/current.json must use schemaVersion 1
 assert(isIsoDate(current.fetchedAtUtc), "daily/current.json has an invalid fetchedAtUtc");
 assert(isIsoDate(current.nextChangeAtUtc), "daily/current.json has an invalid nextChangeAtUtc");
 assert(current.versionOkay === true, "daily/current.json must have versionOkay=true");
+assert(current.gameBuildId === undefined || /^[1-9]\d*$/.test(current.gameBuildId), "daily/current.json has an invalid gameBuildId");
 assert(Number.isInteger(current.levelIndex), "daily/current.json levelIndex must be an integer");
 assert(Number.isInteger(current.mapCount) && current.mapCount > 0, "daily/current.json mapCount must be positive");
 assert(Number.isInteger(current.mapSlot), "daily/current.json mapSlot must be an integer");

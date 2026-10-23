@@ -85,7 +85,28 @@ re-exporting a build still rewrites that build's derived catalog, so rerun addit
 steps before publishing. Raw Unity files, player captures and extraction caches
 are not part of this bundle.
 
-The bundled current-build pack is 25739797. Its catalog records the installed
+The bundled current-build pack is 26134529; 25739797 remains available for
+historical recordings. The new pack was re-exported from the installed 3.0 build,
+including all 194 canonical items and world models, 192 available native icons,
+34 outfits, 47 native hat renderers, the three transformations, ghost and
+independent state layers. ClimbingChalk and ScoutmasterSoul retain their original
+null-icon result; neither receives an invented image.
+Its `sourceEvidence` records the exact installed assembly and serialized-input
+SHA-256 values. The separate item-event pack includes 11 native item definitions
+and their 11 deployed-object references; the particle-only healing puff retains
+its explicit no-solid-mesh result.
+
+The 26134529 native localization audit found the same 206 `NAME_` terms and 191
+verified prefab bindings as 25739797, with no changed Chinese or English names.
+The runtime `SerializedTermsData` TextAsset is now path ID 1423, SHA-256
+`6cc434199ba3d27ce7cc9b9ac1b8daf72ddee05a573ff87f6d47210826f1df67`.
+The full localization table is private; only site-used terms and provenance are
+published. No translated prefab guesses or invented new items are added.
+The compact build provenance summary is
+`data/game-builds/26134529.json`; the per-map source manifest is kept separately
+at `data/maps/game-build.26134529.json`.
+
+The historical 25739797 catalog records the installed
 assembly and Unity bundle SHA-256, plus the exporter source hashes. For a bundled
 installation, first unpack into an ignored directory and set `PEAK_TRAIL_GAME_DATA`.
 An example isolated export sequence is:

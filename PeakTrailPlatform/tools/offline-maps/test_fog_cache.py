@@ -35,7 +35,7 @@ class FogSceneCacheTests(unittest.TestCase):
                         raise ValueError('native source check failed')
                     return {'segment': 3, 'topY': 1, 'size': [1, 1, 1]}
                 with patch.object(export_fog, 'game_info', return_value=({'Level_17': 22}, '2.6.b', 25739797)), \
-                     patch.object(export_fog, 'game_data', return_value=root), \
+                     patch.object(export_fog, 'source_scene_path', return_value=root / 'level22'), \
                      patch.object(export_fog, 'sha', return_value=digest), \
                      patch.object(export_fog, 'fog_volume', side_effect=volume), contextlib.redirect_stdout(io.StringIO()):
                     if fail:

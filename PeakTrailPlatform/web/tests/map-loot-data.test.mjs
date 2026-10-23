@@ -2,11 +2,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { lootGeometryTypes } from '../../tools/offline-maps/export-loot-from-geometry.mjs';
+import { readMapLootSource } from '../../tools/lib/map-loot-source.mjs';
+import { normalizeMapLoot } from '../src/map-loot.js';
+import { fileURLToPath } from 'node:url';
 
 const readJson = async path => JSON.parse(await readFile(new URL(path, import.meta.url), 'utf8'));
 const catalog = await readJson('../../data/maps/catalog.json');
 const localization = await readJson('../../data/maps/loot-labels.zh-CN.json');
 const builds = ['25306743', '25739797'];
+const currentIndex = await readJson('../../data/maps/loot.26134529.json');
 const surveys = await Promise.all(builds.map(async build => ({
   build,
   survey: await readJson(`../../data/maps/loot.${build}.json`),
@@ -229,17 +233,44 @@ test('current scene components restore the complete audited set of fixed spawn a
 
 test('every catalog map has its own versioned survey without reusing another build identity', () => {
   const enabled = catalog.mapPacks.filter(entry => entry.enabled !== false);
-  const surveyed = surveys.flatMap(({ survey }) => survey.maps);
-  assert.equal(enabled.length, 42);
-  assert.equal(surveyed.length, 42);
+  const surveyed = [...surveys.flatMap(({ survey }) => survey.maps), ...currentIndex.maps];
+  assert.equal(enabled.length, 250);
+  assert.equal(surveyed.length, 250);
   assert.deepEqual(surveyed.map(map => map.mapPackId).sort(), enabled.map(map => map.mapPackId).sort());
-  assert.equal(new Set(surveyed.map(map => map.mapPackId)).size, 42);
-  assert.ok(builds.includes(String(catalog.activeGameBuildId)));
+  assert.equal(new Set(surveyed.map(map => map.mapPackId)).size, 250);
+  assert.equal(String(catalog.activeGameBuildId), '26134529');
   const [older, current] = surveys.map(({ survey }) => survey);
   for (const map of current.maps) {
     const oldMap = older.maps.find(old => old.sceneName === map.sceneName);
     assert.notEqual(map.sourceSceneSha256, oldMap.sourceSceneSha256);
     assert.notDeepEqual(map.markers.filter(marker => marker.category === 'animal').map(marker => marker.pos),
       oldMap.markers.filter(marker => marker.category === 'animal').map(marker => marker.pos));
+  }
+});
+
+test('all 208 new scene surveys authenticate their own coordinates, labels and source components', async () => {
+  const build = '26134529';
+  const expected = catalog.mapPacks.filter(entry => entry.enabled !== false && String(entry.gameBuildId) === build);
+  assert.equal(expected.length, 208);
+  assert.equal(currentIndex.kind, 'map-loot-index');
+  assert.equal(currentIndex.maps.length, 208);
+  assert.deepEqual(expected.map(entry => entry.mapSlot).sort((a, b) => a - b), Array.from({ length: 208 }, (_, i) => i));
+  const source = await readMapLootSource(fileURLToPath(new URL('../../data/maps/', import.meta.url)), build);
+  const routes = await readJson('../../data/maps/routes.26134529.json');
+  for (const entry of expected) {
+    const raw = await source.readMap(entry.mapPackId);
+    const map = raw.maps[0];
+    const route = routes.maps.find(item => item.mapPackId === entry.mapPackId);
+    assert.equal(map.sceneName, entry.sceneName);
+    assert.equal(map.mapSlot, entry.mapSlot);
+    assert.equal(map.sourceSceneSha256, route?.sourceSceneSha256);
+    const normalized = normalizeMapLoot(raw, { ...entry, source: { sceneSha256: map.sourceSceneSha256 }, layers: map.layers });
+    assert.ok(normalized, `${entry.sceneName}: source and geometry identities`);
+    assert.ok(normalized.markers.some(marker => marker.category === 'chest'), entry.sceneName);
+    assert.ok(normalized.markers.some(marker => marker.source?.sourceKind === 'serialized-scene-component'), entry.sceneName);
+    for (const type of normalized.types) {
+      assert.equal(type.name, localization.labels[type.id]?.name);
+      assert.equal(type.nameEn, localization.labels[type.id]?.nameEn);
+    }
   }
 });

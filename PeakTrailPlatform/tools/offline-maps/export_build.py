@@ -1,11 +1,12 @@
 """Repeatable current-build export, including privately unpacked UnityFS input.
 
-Use disjoint --slots lists in at most two processes. Canonical registration is
+Use disjoint --slots lists in bounded processes (four on the audited 32 GiB host). Canonical registration is
 serialized by the existing lock. A rerun verifies completed artifacts and skips
 their expensive bake; it never relabels older geometry as a newer game build.
 """
 from __future__ import annotations
 import argparse
+from contextlib import contextmanager
 import gc
 import gzip
 import json
@@ -17,35 +18,84 @@ import subprocess
 import time
 from types import SimpleNamespace
 
-from build_maps import build_one, game_data, game_info, sha
+from build_maps import build_one, game_data, game_info, sha, scene_path as source_scene_path
 from export_meshes import export_one
 from unpack_game_data import unpack
 
 
+@contextmanager
+def input_cache_lock(destination, timeout=1800):
+    """Serialize first extraction and validation of one private bundle cache."""
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    lock = destination.parent / f'.{destination.name}.prepare.lock'
+    started = time.monotonic()
+    while True:
+        try:
+            handle = lock.open('x', encoding='utf8')
+            break
+        except FileExistsError:
+            if time.monotonic() - started >= timeout:
+                raise TimeoutError(f'Private input cache is locked; inspect the owning process before removing {lock}')
+            time.sleep(.25)
+    try:
+        with handle:
+            handle.write(f'{os.getpid()} {time.time()}\n')
+        yield
+    finally:
+        lock.unlink()
+
+
 def prepare_input(game, cache):
     native = game / 'PEAK_Data'
+    bundles = sorted((native / 'StreamingAssets/maps').glob('levels*.assetbundle'))
+    if bundles:
+        build = re.search(r'"buildid"\s+"(\d+)"', (game.parent.parent / 'appmanifest_3527290.acf').read_text(encoding='utf8')).group(1)
+        maps = cache / build / 'maps'
+        for bundle in bundles:
+            destination = maps / bundle.stem
+            with input_cache_lock(destination):
+                evidence_path = destination / 'extraction-evidence.json'
+                if evidence_path.exists():
+                    evidence = json.loads(evidence_path.read_text(encoding='utf8'))
+                    if evidence['sourceBundleSha256'] != sha(bundle):
+                        raise ValueError('Cached map bundle differs from installed source')
+                    for item in evidence['files']:
+                        path = (destination / item['name']).resolve()
+                        if not path.is_relative_to(destination.resolve()) or path.stat().st_size != item['bytes'] or sha(path) != item['sha256']:
+                            raise ValueError('Private map-bundle input cache is corrupt')
+                else:
+                    unpack(bundle, destination)
+                # Unity's built-in material resources are referenced by basename.
+                target = destination / 'unity default resources'
+                source = native / 'Resources/unity default resources'
+                if not target.exists():
+                    shutil.copy2(source, target)
+                elif sha(target) != sha(source):
+                    raise ValueError('Bundled map Unity default resources differ')
+        os.environ['PEAK_TRAIL_MAP_CACHE'] = str(maps.resolve())
     if (native / 'globalgamemanagers').is_file():
         return native
     bundle = native / 'data.unity3d'
     build = re.search(r'"buildid"\s+"(\d+)"', (game.parent.parent / 'appmanifest_3527290.acf').read_text(encoding='utf8')).group(1)
     destination = cache / build / 'PEAK_Data'
-    evidence_path = destination / 'extraction-evidence.json'
-    if evidence_path.exists():
-        evidence = json.loads(evidence_path.read_text(encoding='utf8'))
-        if evidence['sourceBundleSha256'] != sha(bundle):
-            raise ValueError('Cached bundle input differs; select a fresh private --input-cache')
-        for item in evidence['files']:
-            path = (destination / item['name']).resolve()
-            if not path.is_relative_to(destination.resolve()) or path.stat().st_size != item['bytes'] or sha(path) != item['sha256']:
-                raise ValueError('Private extracted source cache is corrupt')
-    else:
-        unpack(bundle, destination)
-    target = destination / 'Resources/unity default resources'
-    if not target.exists():
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(native / 'Resources/unity default resources', target)
-    elif sha(target) != sha(native / 'Resources/unity default resources'):
-        raise ValueError('Unity default resources differs from the installed game')
+    with input_cache_lock(destination):
+        evidence_path = destination / 'extraction-evidence.json'
+        if evidence_path.exists():
+            evidence = json.loads(evidence_path.read_text(encoding='utf8'))
+            if evidence['sourceBundleSha256'] != sha(bundle):
+                raise ValueError('Cached bundle input differs; select a fresh private --input-cache')
+            for item in evidence['files']:
+                path = (destination / item['name']).resolve()
+                if not path.is_relative_to(destination.resolve()) or path.stat().st_size != item['bytes'] or sha(path) != item['sha256']:
+                    raise ValueError('Private extracted source cache is corrupt')
+        else:
+            unpack(bundle, destination)
+        target = destination / 'Resources/unity default resources'
+        if not target.exists():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(native / 'Resources/unity default resources', target)
+        elif sha(target) != sha(native / 'Resources/unity default resources'):
+            raise ValueError('Unity default resources differs from the installed game')
     return destination
 
 
@@ -81,12 +131,15 @@ def export_build(args):
     platform = Path(__file__).resolve().parents[2]
     os.environ['PEAK_TRAIL_GAME_DATA'] = str(prepare_input(args.game, args.input_cache))
     mapping, version, build = game_info(args.game)
+    if args.prepare_only:
+        print('PREPARED', build, len(mapping), 'authenticated map inputs', flush=True)
+        return
     slots = sorted(int(name.split('_')[1]) for name in mapping) if args.slots == 'all' else [int(value) for value in args.slots.split(',')]
     working = args.assets / 'maps/working'
     legacy, meshes = working / 'legacy', working / 'mesh-v3'
     for slot in slots:
         name = f'Level_{slot}'
-        source_digest = sha(game_data(args.game) / f'level{mapping[name]}')
+        source_digest = sha(source_scene_path(args.game, mapping[name]))
         legacy_manifest = legacy / str(build) / name / 'map-pack.json'
         if not valid_completed_manifest(legacy_manifest, build, version, name, source_digest,
                                         [('texture', 'textureSha256'), ('height', 'heightSha256')]):
@@ -107,12 +160,13 @@ def export_build(args):
             layer.update(geometry=target.name, geometryFormat='glb-instanced-v1+gzip', geometrySha256=sha(target))
         mesh_manifest.write_text(json.dumps(value, ensure_ascii=False, indent=2) + '\n', encoding='utf8')
         subprocess.run(['node', str(platform / 'tools/offline-maps/finalize-map.mjs'), str(mesh_manifest)], check=True)
-        register_pack(platform, mesh_manifest.parent, args.assets)
+        if not args.no_register:
+            register_pack(platform, mesh_manifest.parent, args.assets)
         print('READY', name, build, flush=True)
     if args.with_sidecars:
         from export_build_sidecars import export_build_sidecars
         export_build_sidecars(args.game, platform / 'data/maps/catalog.json', args.assets / 'maps/packs',
-                              args.assets / 'maps/enclosures', platform / 'data/maps')
+                              args.assets / 'maps/enclosures', platform / 'data/maps', with_loot=args.with_loot)
 
 
 if __name__ == '__main__':
@@ -125,7 +179,14 @@ if __name__ == '__main__':
     parser.add_argument('--texture', type=int, default=256)
     parser.add_argument('--height', type=int, default=256)
     parser.add_argument('--with-sidecars', action='store_true', help='Export all six source sidecars after every scene in the installed build is registered')
+    parser.add_argument('--with-loot', action='store_true', help='With --with-sidecars, write bounded per-map loot chunks and their authenticated index')
+    parser.add_argument('--prepare-only', action='store_true', help='Authenticate and unpack source inputs once before starting disjoint parallel slot jobs')
+    parser.add_argument('--no-register', action='store_true', help='Prepare canonical working packs without changing the active catalog')
     args = parser.parse_args()
     if min(args.texture, args.height) < 2:
         parser.error('Planar reference dimensions must be at least two')
+    if args.no_register and args.with_sidecars:
+        parser.error('--with-sidecars requires registered canonical packs')
+    if args.with_loot and not args.with_sidecars:
+        parser.error('--with-loot requires --with-sidecars')
     export_build(args)

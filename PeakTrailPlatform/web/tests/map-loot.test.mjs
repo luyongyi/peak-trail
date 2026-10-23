@@ -164,6 +164,22 @@ test("indexed surveys download only the selected map and reuse completed map res
   assert.equal(await read(pack("c")), null); assert.equal(calls.length, 3);
 });
 
+test("a 208-map index reads only the selected scene and still bounds oversized indexes", async () => {
+  const maps = Array.from({ length: 208 }, (_, slot) => ({ ...pack(), gameBuildId: "26134529",
+    mapPackId: `sha256-${slot.toString(16).padStart(64, "0")}`, sceneName: `Level_${slot}`, mapSlot: slot }));
+  const selected = maps[207], index = indexedCatalog(maps), calls = [];
+  const read = createMapLootLoader({ fetchImpl: async url => {
+    calls.push(url.pathname);
+    return new Response(JSON.stringify(calls.length === 1 ? index : catalog(selected)));
+  } });
+  assert.equal((await read(selected)).markers.length, 4);
+  assert.equal(calls.length, 2);
+  assert.ok(calls[1].endsWith(index.maps[207].path));
+  const oversized = { ...index, maps: [...index.maps, ...index.maps, ...index.maps] };
+  const reject = createMapLootLoader({ fetchImpl: async () => new Response(JSON.stringify(oversized)) });
+  assert.equal(await reject(selected), null);
+});
+
 test("map indexes cannot redirect item requests or relabel another scene", async () => {
   for (const change of [index => index.gameBuildId = "25739797",
     index => index.maps[0].path = "https://example.com/private.json",
