@@ -1,7 +1,11 @@
 import unittest
+from unittest.mock import patch
+import json
+from pathlib import Path
+import tempfile
 from types import SimpleNamespace
 import numpy as np
-from export_enclosure import child_named, hierarchy, source_enclosure
+from export_enclosure import child_named, hierarchy, source_enclosure, export_enclosures
 
 
 class SourceScene:
@@ -48,6 +52,18 @@ class SourceScene:
 
 
 class EnclosureSourceTests(unittest.TestCase):
+    def test_source_equivalent_build_is_audited_but_unknown_future_build_still_fails(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            catalog = root / 'catalog.json'
+            catalog.write_text(json.dumps({'mapPacks': []}), encoding='utf8')
+            with patch('export_enclosure.game_info', return_value=({}, '3.0.1--logFile', '26155610')):
+                result = export_enclosures(root, catalog, root / 'packs', root / 'assets', root / 'enclosures.json')
+            self.assertEqual(result['gameBuildId'], '26155610')
+            with patch('export_enclosure.game_info', return_value=({}, 'future', '26155611')):
+                with self.assertRaisesRegex(ValueError, 'audited only'):
+                    export_enclosures(root, catalog, root / 'packs', root / 'assets', root / 'unverified.json')
+
     def test_selected_branch_walks_to_its_real_sibling_enclosure(self):
         for branch in ('swamp-temple', 'volcano-kiln'):
             scene = SourceScene(branch)

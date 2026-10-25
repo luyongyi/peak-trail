@@ -7,7 +7,8 @@ import { parseWatchId, parseWatchCode, watchCodeFromState } from "../src/watch-c
 
 const source = readFileSync(new URL("../src/app.js", import.meta.url), "utf8");
 function functions(names, ports) {
-  ports = { itemEventPanel: { sync() {} }, watchText: value => value, tr: value => value, formatNumber: String, ...ports };
+  ports = { itemEventPanel: { sync() {} }, watchText: value => value, tr: value => value, formatNumber: String,
+    selectedSegmentStatus: () => ({ status: "ready" }), errorUiText: value => String(value || ""), ...ports };
   return new Function(...Object.keys(ports), names.map(name => {
     const match = source.match(new RegExp(`^(?:async )?function ${name}\\([^]*?^\\}`, "m"));
     assert.ok(match, name); return match[0];
@@ -107,6 +108,91 @@ function watchNodes() {
   const appShell = { classList: { add(...names) { names.forEach(name => classes.add(name)); }, remove(...names) { names.forEach(name => classes.delete(name)); }, toggle(name, value) { if (value) classes.add(name); else classes.delete(name); } } };
   return { $, classes, elements: { appShell, playButton: $('play'), segmentNavigator: $('navigator') } };
 }
+
+function watchMapFixture(locale = 'zh-CN') {
+  const f = watchNodes(), trace = makeTrace();
+  trace.manifest.gameBuildId = '26155610';
+  const state = { trace, currentTime: 0, traceSelectionRevision: 0, mapPack: null, dailyMapStatus: null,
+    usingCompatibleMap: false, selectedSegment: 0, segmentMapStatuses: new Map(),
+    watch: { active: true, trace, status: 'live', connection: 'connected', following: true } };
+  const ports = { ...f, state, finalizeLiveFlush, trimWatchTrace, LIVE_TRAIL_S: .3,
+    tr: (zh, en) => locale === 'en' ? en : zh, getLocale: () => locale,
+    resetSegmentNavigation() {}, viewer: { setFollowTarget() {} }, setPlaying() {}, syncGameAssetsForTrace() {},
+    clearAutomaticMap: async () => { state.mapPack = null; },
+    assessCompatibility: (_manifest, pack) => ({ compatible: Boolean(pack), reasons: [] }),
+    renderData: async () => { state.usingCompatibleMap = Boolean(state.mapPack && state.compatibility?.compatible); },
+    updateTraceUI() {}, updateMapUI() {}, updateCompatibilityUI() {}, flushWatch() {}, updatePlaybackTime() {},
+    watchProgressLabel: () => '', updateWatchShareUI() {}, segmentStatusKey: String };
+  return { ...f, trace, state, api: (syncMapForTrace) => functions(
+    ['applyWatchSnapshot', 'errorUiText', 'selectedSegmentStatus', 'updateWatchStatus'], { ...ports, syncMapForTrace }) };
+}
+
+test('map load failures stay visible in both watch languages without hiding the received path, and clear on recovery', async () => {
+  for (const locale of ['zh-CN', 'en']) {
+    const f = watchMapFixture(locale);
+    const failure = Object.assign(new Error(locale === 'en' ? 'Unable to load map pack' : '无法加载地图包'), { detail: 'HTTP 404 Not Found' });
+    let fail = true;
+    const api = f.api(async () => { if (fail) throw failure; f.state.mapPack = { mapPackId: 'recovered' }; f.state.dailyMapStatus = null; });
+    await api.applyWatchSnapshot({ epoch: 1 }, f.trace);
+    api.updateWatchStatus();
+    assert.equal(f.state.watch.trace, f.trace);
+    assert.equal(f.trace.sampleCount, 1);
+    assert.equal(f.state.watch.initializing, false);
+    assert.equal(f.classes.has('watch-loading'), false);
+    assert.equal(f.$('watchNotice').hidden, true, 'a map failure must not cover the live path');
+    assert.equal(f.state.watch.connection, 'connected');
+    assert.match(f.$('watchFreshness').textContent, /404/);
+    assert.match(f.$('watchFreshness').textContent, locale === 'en' ? /map could not load.*trails only/ : /底图加载失败.*仅显示足迹/);
+    assert.match(f.$('watchFreshness').title, /404/);
+    assert.equal(api.selectedSegmentStatus().status, 'error');
+    if (locale === 'en') assert.doesNotMatch(f.$('watchFreshness').title, /\p{Script=Han}/u);
+    fail = false;
+    await api.applyWatchSnapshot({ epoch: 2 }, f.trace);
+    api.updateWatchStatus();
+    assert.equal(f.state.usingCompatibleMap, true);
+    assert.doesNotMatch(f.$('watchFreshness').textContent, /404|map could not load|底图加载失败/);
+    assert.equal(f.$('watchFreshness').title, '');
+  }
+});
+
+test('a missing watch map names the required build and waiting rooms do not retain the warning', () => {
+  for (const locale of ['zh-CN', 'en']) {
+    const f = watchMapFixture(locale), api = f.api(async () => {});
+    f.state.dailyMapStatus = { title: locale === 'en' ? 'No matching map for Level_1' : 'Level_1 尚无匹配底图',
+      detail: locale === 'en' ? 'A map for build 26155610 is required' : '需要 build 26155610 的匹配底图' };
+    api.updateWatchStatus();
+    assert.match(f.$('watchFreshness').textContent, /26155610/);
+    f.state.watch.trace = null;
+    f.state.watch.awaitingRun = true;
+    f.state.watch.status = 'waiting';
+    api.updateWatchStatus();
+    assert.doesNotMatch(f.$('watchFreshness').textContent, /26155610/);
+    assert.equal(f.$('watchFreshness').title, '');
+  }
+});
+
+test('a late map failure cannot replace the new epoch map state while old-map cleanup finishes', async () => {
+  const f = watchMapFixture(), next = makeTrace('new');
+  let finishCleanup, beginCleanup;
+  const cleaning = new Promise(resolve => { beginCleanup = resolve; });
+  const cleanup = new Promise(resolve => { finishCleanup = resolve; });
+  const api = functions(['applyWatchSnapshot', 'errorUiText'], {
+    state: f.state, elements: f.elements, finalizeLiveFlush, trimWatchTrace, LIVE_TRAIL_S: .3,
+    resetSegmentNavigation() {}, viewer: { setFollowTarget() {} }, setPlaying() {}, syncGameAssetsForTrace() {},
+    syncMapForTrace: async () => { throw new Error('old map failure'); },
+    clearAutomaticMap: () => { beginCleanup(); return cleanup; }, getLocale: () => 'zh-CN',
+  });
+  const pending = api.applyWatchSnapshot({ epoch: 1 }, f.trace);
+  await cleaning;
+  f.state.traceSelectionRevision++;
+  f.state.trace = next;
+  f.state.watch.trace = next;
+  f.state.dailyMapStatus = null;
+  finishCleanup();
+  await pending;
+  assert.equal(f.state.dailyMapStatus, null);
+  assert.equal(f.state.watch.trace, next);
+});
 
 test('waiting UI explains airport preparation without showing a map, replay window, or persistence claim', () => {
   const f = watchNodes(), state = { currentTime: 0, trace: null, playing: false,

@@ -1,15 +1,15 @@
 {
   "schemaVersion": 1,
-  "fetchedAtUtc": "2026-10-24T19:28:13.705Z",
-  "nextChangeAtUtc": "2026-10-25T16:59:59.705Z",
+  "fetchedAtUtc": "2026-10-25T16:41:08.224Z",
+  "nextChangeAtUtc": "2026-10-25T17:00:02.224Z",
   "source": "https://peaklogin3.azurewebsites.net/api/VersionCheck?version=3.0",
   "apiVersion": "3.0",
-  "gameBuildId": "26134529",
+  "gameBuildId": "26155610",
   "versionOkay": true,
   "levelIndex": 497,
   "mapCount": 208,
   "mapSlot": 81,
   "sceneName": "Level_81",
-  "secondsRemaining": 77506,
+  "secondsRemaining": 1134,
   "message": "PEAK is finally out on consoles (with crossplay!) Have fun, scouts! Let us know if anything breaks!!!"
 }

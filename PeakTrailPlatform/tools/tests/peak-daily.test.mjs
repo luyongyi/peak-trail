@@ -46,7 +46,7 @@ test("new rotation wraps at 208 while explicit older versions keep their own poo
       fetchImpl: async () => response(payload({ LevelIndex: levelIndex })) });
     assert.equal(daily.mapSlot, mapSlot);
     assert.equal(daily.sceneName, `Level_${mapSlot}`);
-    assert.equal(daily.gameBuildId, "26134529");
+    assert.equal(daily.gameBuildId, "26155610");
   }
   const previous = await resolveDaily({ apiVersion: "2.6", mapCount: 21, now: () => START,
     fetchImpl: async () => response(payload()) });

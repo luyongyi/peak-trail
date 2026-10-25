@@ -77,8 +77,10 @@ function linearComponent(value) {
 }
 
 export function getSourceEffectMaterial(buildId, materialName, shader) {
+  // Build 26155610 retains these audited map material/shader bytes; see
+  // data/maps/game-build.26155610.json. Keep the original evidence build explicit.
   const registry = String(buildId) === '25306743' ? effects : String(buildId) === '25739797' ? effects25739797
-    : String(buildId) === '26134529' ? effects26134529 : null;
+    : ['26134529', '26155610'].includes(String(buildId)) ? effects26134529 : null;
   if (!registry || !Object.hasOwn(registry, materialName)) return null;
   const effect = registry[materialName];
   if (effect.shader !== shader) return null;
@@ -121,8 +123,8 @@ export function getSourceEffectMaterial(buildId, materialName, shader) {
         depth: effect.depth,
         shallowStored: [...effect.waterDepth.shallow], tintStored: [...effect.waterDepth.tint],
         propertyFlags: effect.waterDepth.flags,
-        shaderEvidenceBuildId: String(buildId) === '26134529' ? 26134529 : 25739797,
-        crossBuildShaderIdentityVerified: String(buildId) === '26134529',
+        shaderEvidenceBuildId: ['26134529', '26155610'].includes(String(buildId)) ? 26134529 : 25739797,
+        crossBuildShaderIdentityVerified: ['26134529', '26155610'].includes(String(buildId)),
         sameBuildShaderEvidence: ['25739797', '26134529'].includes(String(buildId)),
         formula: 'smoothstep(0, 1, min(10 * min(abs(sceneEyeDepth - surfaceEyeDepth) / _Depth, 1), 1))',
         approximation: 'Shallow replaces the missing refracted scene colour; primary branch without noise, secondary colour, foam or waves; native alpha is not reconstructed',

@@ -1,0 +1,436 @@
+{
+  "schemaVersion": 1,
+  "identityVersion": 3,
+  "mapPackId": "sha256-6af99c0dc11a0664cc80a1578e70bcbbc4e4d469d9f94e340e2e72fe97b17b3e",
+  "generatedAtUtc": "2026-10-25T16:39:26.012Z",
+  "gameVersion": "3.0.1--logFile",
+  "gameBuildId": "26155610",
+  "sceneName": "Level_138",
+  "mapSlot": 138,
+  "projectionVersion": 1,
+  "coordinateSpace": "unity-world-meters",
+  "textureUv": "u=(x-minX)/(maxX-minX);v=(z-minZ)/(maxZ-minZ)",
+  "imageOrigin": "bottom-left-in-uv;viewer-flips-for-top-left-images",
+  "layers": [
+    {
+      "id": "segment-00-shore",
+      "name": "Shore",
+      "segment": 0,
+      "biome": "Shore",
+      "texture": "segment-00-shore.png",
+      "textureSha256": "3293425cc6743a7b71321b9385f443924efaeaa04ccf18e6c6ba41df9f4ebe0a",
+      "height": "segment-00-shore.height.f32",
+      "heightSha256": "accfe3ce5776cd79c18e2996c85ab58306f6dd0cfec752f56998f99ad4e358cc",
+      "columns": 256,
+      "rows": 256,
+      "minX": -378.741455078125,
+      "maxX": 364.7971496582031,
+      "minY": -127.34547424316406,
+      "maxY": 297.19134521484375,
+      "minZ": -479.08050537109375,
+      "maxZ": 264.4580993652344,
+      "heightEncoding": "float32-le-row-major-minz-minx",
+      "noData": "NaN",
+      "sampleLocation": "cell-centers",
+      "validHeightSamples": 39057,
+      "geometry": "segment-00-shore.glb.gz",
+      "geometrySha256": "c4ca631804102fb04e181448bcc622e2c04a165cc0305ed2a30fd2cd36b855d0",
+      "geometryFormat": "glb-instanced-v1+gzip",
+      "meshBounds": {
+        "min": [
+          -235.42243431651514,
+          -127.34547237260995,
+          -474.0805059698432
+        ],
+        "max": [
+          221.4781163921689,
+          298.3396250444988,
+          259.4581055428496
+        ]
+      },
+      "meshStatistics": {
+        "bytes": 6707080,
+        "uniqueMeshes": 775,
+        "uniqueVertices": 152212,
+        "uniqueTriangles": 180532,
+        "instances": 4641,
+        "renderedTriangles": 6776294,
+        "affineNodes": 1333,
+        "instancedGroups": 44,
+        "gpuInstances": 2577,
+        "materials": 46,
+        "embeddedTextures": 11,
+        "drawGroups": 795,
+        "uncompressedBytes": 8105736,
+        "compression": {
+          "sourceBytes": 8105736,
+          "compressedBytes": 6707080,
+          "ratio": 0.827,
+          "compressedViews": 3261,
+          "losslessViewsVerified": 3261
+        }
+      }
+    },
+    {
+      "id": "segment-01-tropics",
+      "name": "Tropics",
+      "segment": 1,
+      "biome": "Tropics",
+      "texture": "segment-01-tropics.png",
+      "textureSha256": "83fa0700c13792c9bcbe68f694254da3374cc7af8e4d1c70247d56cd2560c7ad",
+      "height": "segment-01-tropics.height.f32",
+      "heightSha256": "a9b9abb39770bfe44657a801f5deae08304235c329f9930758aae840da6bec00",
+      "columns": 256,
+      "rows": 256,
+      "minX": -262.7254638671875,
+      "maxX": 253.00949096679688,
+      "minY": 152.33169555664062,
+      "maxY": 588.2682495117188,
+      "minZ": 104.37908935546875,
+      "maxZ": 620.1140747070312,
+      "heightEncoding": "float32-le-row-major-minz-minx",
+      "noData": "NaN",
+      "sampleLocation": "cell-centers",
+      "validHeightSamples": 38003,
+      "geometry": "segment-01-tropics.glb.gz",
+      "geometrySha256": "ba27f465881035dff984d051c5bed01e0090dee8e9bf770a3d89a68b683e5f66",
+      "geometryFormat": "glb-instanced-v1+gzip",
+      "meshBounds": {
+        "min": [
+          -181.28050924419,
+          152.3316915482503,
+          109.37909016327467
+        ],
+        "max": [
+          171.35224932019813,
+          588.2683649748515,
+          615.1140570599752
+        ]
+      },
+      "meshStatistics": {
+        "bytes": 15405076,
+        "uniqueMeshes": 477,
+        "uniqueVertices": 518494,
+        "uniqueTriangles": 306218,
+        "instances": 6414,
+        "renderedTriangles": 11792006,
+        "affineNodes": 1872,
+        "instancedGroups": 36,
+        "gpuInstances": 4015,
+        "materials": 151,
+        "embeddedTextures": 10,
+        "drawGroups": 597,
+        "uncompressedBytes": 21786760,
+        "compression": {
+          "sourceBytes": 21786760,
+          "compressedBytes": 15405076,
+          "ratio": 0.707,
+          "compressedViews": 2026,
+          "losslessViewsVerified": 2026
+        }
+      }
+    },
+    {
+      "id": "segment-02-alpine",
+      "name": "Alpine",
+      "segment": 2,
+      "biome": "Alpine",
+      "texture": "segment-02-alpine.png",
+      "textureSha256": "493b73d7c82623e94425e08eff47b89c0999513edfa97852aa69fb2e38f533a5",
+      "height": "segment-02-alpine.height.f32",
+      "heightSha256": "ad49d3aeb3e8aa095ea7cde41acead4b1f5fb046eef20dc32a49c5f402ad1577",
+      "columns": 256,
+      "rows": 256,
+      "minX": -399.0938415527344,
+      "maxX": 380.8774719238281,
+      "minY": 414.1266174316406,
+      "maxY": 882.6403198242188,
+      "minZ": 535.7822265625,
+      "maxZ": 1315.7535400390625,
+      "heightEncoding": "float32-le-row-major-minz-minx",
+      "noData": "NaN",
+      "sampleLocation": "cell-centers",
+      "validHeightSamples": 27821,
+      "geometry": "segment-02-alpine.glb.gz",
+      "geometrySha256": "4da23ce853693af24a9a81686824617aecfd7a504be07b0aec91ab3c12d8c3d5",
+      "geometryFormat": "glb-instanced-v1+gzip",
+      "meshBounds": {
+        "min": [
+          -250.68568028057973,
+          414.1266159087754,
+          540.7822207699502
+        ],
+        "max": [
+          232.46931295161357,
+          882.6403411452204,
+          1310.7535442737974
+        ]
+      },
+      "meshStatistics": {
+        "bytes": 6466308,
+        "uniqueMeshes": 749,
+        "uniqueVertices": 137144,
+        "uniqueTriangles": 146301,
+        "instances": 3486,
+        "renderedTriangles": 7963575,
+        "affineNodes": 907,
+        "instancedGroups": 48,
+        "gpuInstances": 1880,
+        "materials": 31,
+        "embeddedTextures": 14,
+        "drawGroups": 750,
+        "uncompressedBytes": 7695688,
+        "compression": {
+          "sourceBytes": 7695688,
+          "compressedBytes": 6466308,
+          "ratio": 0.84,
+          "compressedViews": 3151,
+          "losslessViewsVerified": 3151
+        }
+      }
+    },
+    {
+      "id": "segment-03-volcano",
+      "name": "Volcano",
+      "segment": 3,
+      "biome": "Volcano",
+      "texture": "segment-03-volcano.png",
+      "textureSha256": "c80a951875896bff2e53cc3bcafde2a51c8daab6a32b7fcee7c80b6c534dbb1f",
+      "height": "segment-03-volcano.height.f32",
+      "heightSha256": "ced05b0b0b38e78d48296dcd10fa36734ef31a1a1fed9416e302ffdee93ac259",
+      "columns": 256,
+      "rows": 256,
+      "minX": -399.8708801269531,
+      "maxX": 447.1971130371094,
+      "minY": 526.3395385742188,
+      "maxY": 1152.5413818359375,
+      "minZ": 1232.47509765625,
+      "maxZ": 2079.543212890625,
+      "heightEncoding": "float32-le-row-major-minz-minx",
+      "noData": "NaN",
+      "sampleLocation": "cell-centers",
+      "validHeightSamples": 27627,
+      "geometry": "segment-03-volcano.glb.gz",
+      "geometrySha256": "9e3462402a9161c1ef5a7b174ac203e16c3823118d8dada710bbac06aa935179",
+      "geometryFormat": "glb-instanced-v1+gzip",
+      "meshBounds": {
+        "min": [
+          -280.5775789459225,
+          526.3395100548204,
+          1237.4750947474643
+        ],
+        "max": [
+          327.90380597270484,
+          1152.5413819759542,
+          2074.543091902655
+        ]
+      },
+      "meshStatistics": {
+        "bytes": 4906508,
+        "uniqueMeshes": 34,
+        "uniqueVertices": 179540,
+        "uniqueTriangles": 150250,
+        "instances": 1213,
+        "renderedTriangles": 3594712,
+        "affineNodes": 741,
+        "instancedGroups": 13,
+        "gpuInstances": 408,
+        "materials": 85,
+        "embeddedTextures": 5,
+        "drawGroups": 104,
+        "uncompressedBytes": 7959112,
+        "compression": {
+          "sourceBytes": 7959112,
+          "compressedBytes": 4906508,
+          "ratio": 0.616,
+          "compressedViews": 181,
+          "losslessViewsVerified": 181
+        }
+      }
+    },
+    {
+      "id": "segment-04-volcano",
+      "name": "Volcano",
+      "segment": 4,
+      "biome": "Volcano",
+      "texture": "segment-04-volcano.png",
+      "textureSha256": "7856e55dac428f9f6aea06f0e8cd1f6b129baf2b003e22be1916578a2ef1cba1",
+      "height": "segment-04-volcano.height.f32",
+      "heightSha256": "a4aabccf253a13c74f4d2edffed93961261fa12ce17cdc402f0721a2f768776e",
+      "columns": 256,
+      "rows": 256,
+      "minX": -186.416259765625,
+      "maxX": 187.51133728027344,
+      "minY": 763.0264282226562,
+      "maxY": 1233.1920166015625,
+      "minZ": 1946.4000244140625,
+      "maxZ": 2320.32763671875,
+      "heightEncoding": "float32-le-row-major-minz-minx",
+      "noData": "NaN",
+      "sampleLocation": "cell-centers",
+      "validHeightSamples": 22729,
+      "geometry": "segment-04-volcano.glb.gz",
+      "geometrySha256": "5ab4e33ced6edf9d54ebab5d68971e5a156f7521e0a87439ea5688b7394c12f0",
+      "geometryFormat": "glb-instanced-v1+gzip",
+      "meshBounds": {
+        "min": [
+          -91.89772737072161,
+          -32.40068817138672,
+          192.54608535766602
+        ],
+        "max": [
+          92.9928138222815,
+          1233.1920121735482,
+          2315.3276203154546
+        ]
+      },
+      "meshStatistics": {
+        "bytes": 3793652,
+        "uniqueMeshes": 49,
+        "uniqueVertices": 100350,
+        "uniqueTriangles": 144571,
+        "instances": 847,
+        "renderedTriangles": 4173288,
+        "affineNodes": 251,
+        "instancedGroups": 29,
+        "gpuInstances": 576,
+        "materials": 25,
+        "embeddedTextures": 9,
+        "drawGroups": 58,
+        "uncompressedBytes": 5337168,
+        "compression": {
+          "sourceBytes": 5337168,
+          "compressedBytes": 3793652,
+          "ratio": 0.711,
+          "compressedViews": 289,
+          "losslessViewsVerified": 289
+        }
+      }
+    },
+    {
+      "id": "segment-05-void",
+      "name": "Void",
+      "segment": 5,
+      "biome": "Void",
+      "texture": "segment-05-void.png",
+      "textureSha256": "418a3eef4edd7523de2ade008a69c66aabfd9eadd24d8c3dccd34ee617961a21",
+      "height": "segment-05-void.height.f32",
+      "heightSha256": "63ea71415cb8ab190d8ddea2f9f7ce80d1a68178779089f98402ca5f86b08b82",
+      "columns": 256,
+      "rows": 256,
+      "minX": -2505,
+      "maxX": 2505,
+      "minY": -272.47381591796875,
+      "maxY": 1015.9666137695312,
+      "minZ": -2294.124267578125,
+      "maxZ": 2715.875732421875,
+      "heightEncoding": "float32-le-row-major-minz-minx",
+      "noData": "NaN",
+      "sampleLocation": "cell-centers",
+      "validHeightSamples": 65536,
+      "geometry": "segment-05-void.glb.gz",
+      "geometrySha256": "fc3c7f9225c6dfbe25ea935cbca4f40bc67cfc406068a3d089f3d2c2132cf673",
+      "geometryFormat": "glb-instanced-v1+gzip",
+      "meshBounds": {
+        "min": [
+          -2500,
+          695.0967873552195,
+          -2289.1243286132812
+        ],
+        "max": [
+          2500,
+          1012.8896855436772,
+          2710.8756713867188
+        ]
+      },
+      "meshStatistics": {
+        "bytes": 4575868,
+        "uniqueMeshes": 88,
+        "uniqueVertices": 119713,
+        "uniqueTriangles": 147163,
+        "instances": 5677,
+        "renderedTriangles": 17185163,
+        "affineNodes": 1775,
+        "instancedGroups": 30,
+        "gpuInstances": 3746,
+        "materials": 225,
+        "embeddedTextures": 10,
+        "drawGroups": 291,
+        "uncompressedBytes": 6276324,
+        "compression": {
+          "sourceBytes": 6276324,
+          "compressedBytes": 4575868,
+          "ratio": 0.729,
+          "compressedViews": 462,
+          "losslessViewsVerified": 462
+        }
+      }
+    }
+  ],
+  "source": {
+    "kind": "offline-unity-original-mesh",
+    "sceneFile": "levels128-159/BuildPlayer-Level_138",
+    "sceneSha256": "20e86a098d56d495c79c8e7d5d227e40769aa67d1e07004cee8d0b2738296008",
+    "unityVersion": "6000.3.15f1",
+    "renderer": "Mesh UV/base texture; terrain _BaseColor/_TopColor with slope; prop _Tint; orthographic albedo survey rasterizer",
+    "heightSource": "highest non-trigger MeshCollider/BoxCollider/SphereCollider/CapsuleCollider surface, excluding fog wall roots",
+    "transformSource": "full serialized parent-chain TRS; static-batch root when present",
+    "limitations": [
+      "Game-specific custom shader effects remain approximated with source material colors and original UV/base textures.",
+      "Moving props and spawned loot are not part of the static scene model.",
+      "Legacy height/PNG data is retained only as a separate planar reference, never used to build this 3D geometry."
+    ],
+    "geometrySource": "original indexed MeshFilter geometry, shared meshes and exact world transforms; no height-field reconstruction or decimation",
+    "equivalence": {
+      "authority": "verified-map-build-equivalence",
+      "sourceGameBuildId": "26134529",
+      "sourceMapPackId": "sha256-882615f90beac2dea5d220db9ffd982f5a63b6e680cd71c5d8e9b5201ce3cefb",
+      "receiptSha256": "045c1d36773badd69e63050ca85e1e3e0d0f6eaa08856a750a8ba8fdc0e150e7"
+    }
+  },
+  "route": {
+    "authority": "serialized-map-handler",
+    "branch": "volcano-kiln",
+    "segments": [
+      {
+        "index": 0,
+        "biome": "Shore",
+        "biomeId": 0,
+        "name": "Beach_Segment",
+        "campfireName": "Beach_Campfire"
+      },
+      {
+        "index": 1,
+        "biome": "Tropics",
+        "biomeId": 1,
+        "name": "Jungle_Segment",
+        "campfireName": "Jungle_Campfire"
+      },
+      {
+        "index": 2,
+        "biome": "Alpine",
+        "biomeId": 2,
+        "name": "Snow_Segment",
+        "campfireName": "Snow_Campfire"
+      },
+      {
+        "index": 3,
+        "biome": "Volcano",
+        "biomeId": 3,
+        "name": "Caldera_Segment",
+        "campfireName": "Volcano_Campfire",
+        "stageId": "caldera",
+        "displayName": "火山"
+      },
+      {
+        "index": 4,
+        "biome": "Volcano",
+        "biomeId": 3,
+        "name": "Volcano_Segment",
+        "campfireName": null,
+        "stageId": "kiln",
+        "displayName": "熔炉"
+      }
+    ]
+  }
+}

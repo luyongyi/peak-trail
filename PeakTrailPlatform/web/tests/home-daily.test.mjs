@@ -325,6 +325,20 @@ test("shared summit mapping is not extended to an unverified future build", () =
   assert.equal(summit.segment, 6);
 });
 
+test("source-equivalent 3.0.1 uses its own exact build identity for the verified summit", () => {
+  const build = "26155610";
+  const currentCatalog = { ...catalog, activeGameBuildId: build, mapPacks: [{ ...entry, gameBuildId: build }] };
+  const pack = { ...mapPack(), gameBuildId: build, mapPeak: { segment: 4 } };
+  const observation = { ...daily, levelIndex: 419, mapCount: 208, gameBuildId: build };
+  const result = view({ catalog: currentCatalog, mapPack: pack, daily: observation });
+  assert.equal(result.mapStatus, "ready");
+  assert.equal(result.destinations[0].available, true);
+  assert.equal(result.destinations[0].sharedLayer, true);
+  const old = view({ catalog: currentCatalog, mapPack: pack, daily: { ...observation, gameBuildId: "26134529" } });
+  assert.equal(old.mapStatus, "missing-build");
+  assert.equal(old.destinations[0].available, false);
+});
+
 test("stale observations can expose special regions only as an archive, and do not mutate evidence", () => {
   const pack = mapPack();
   pack.mapPeak = { segment: 4, collisionBounds: { min: [-70, 979, 2131], max: [78, 1233, 2315] } };

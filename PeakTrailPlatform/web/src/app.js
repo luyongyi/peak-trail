@@ -306,7 +306,7 @@ function segmentChineseBase(option) {
       ? state.trace?.manifest?.gameBuildId : state.mapPack?.gameBuildId;
     // These source-audited builds share the summit with the final regular layer.
     // The label describes an available area, not a recorded summit arrival.
-    return ["25306743", "25739797", "26134529"].includes(String(routeBuild)) && option?.segment === 4
+    return ["25306743", "25739797", "26134529", "26155610"].includes(String(routeBuild)) && option?.segment === 4
       && ["volcano-kiln", "swamp-temple"].includes(route?.branch)
       && classifyRouteSegment(route.segments.find((entry) => entry.index === 4)).kind === "chapter"
       ? `${biomeName(option?.segment === 4 ? (route.branch === "swamp-temple" ? "citadel" : "kiln") : option?.biome, routed)} · ${tr("含顶峰", "includes PEAK")}`
@@ -429,9 +429,16 @@ function selectedSegmentStatus() {
     return { status: "muted", text: tr("本关底图与实际分支不符 · 仅显示足迹", "Map route differs from this run · trails only"), message: state.routeView.message };
   }
   if (!state.usingCompatibleMap) {
-    return state.mapPack
-      ? { status: "muted", text: tr("底图版本不匹配 · 仅回放足迹", "Map build differs · trails only"), message: "" }
-      : { status: "muted", text: tr("无同版本底图 · 仅回放足迹", "No map for this build · trails only"), message: "" };
+    const build = state.trace?.manifest?.gameBuildId || tr("未知", "Unknown");
+    const title = state.dailyMapStatus?.title || (state.mapPack
+      ? tr("底图版本不匹配", "Map build differs") : tr("无同版本底图", "No map for this build"));
+    const detail = state.dailyMapStatus?.detail || state.compatibility?.reasons?.join(tr("；", "; "));
+    return {
+      status: state.dailyMapStatus ? "error" : "muted",
+      text: `${errorUiText(title, "Map unavailable")} · ${tr("仅显示足迹", "trails only")}`,
+      message: errorUiText(detail, `A matching map for build ${build} is required`)
+        || tr(`需要 build ${build} 的匹配底图`, `A matching map for build ${build} is required`),
+    };
   }
 
   if (state.selectedSegment !== null) {
@@ -1572,6 +1579,11 @@ function updateWatchStatus() {
   $("watchFreshness").textContent = watch.awaitingRun
     ? watch.status === "ended" ? watchText("本次尚未开始攀登") : watchText("机场准备中 · 入图后自动显示")
     : `${state.trace?.manifest?.sceneName || watch.sceneName || watchText("等待地图")} · ${age === null ? watchText("等待游戏数据") : age === 0 ? watchText("刚刚更新") : tr(`${age} 秒前更新`, `Updated ${age}s ago`)}`;
+  const mapStatus = !empty && !watch.initializing ? selectedSegmentStatus() : null;
+  const mapWarning = mapStatus && (!state.usingCompatibleMap || mapStatus.status === "error")
+    ? [mapStatus.text, errorUiText(mapStatus.message, "Map geometry could not be loaded")].filter(Boolean).join(" · ") : "";
+  if (mapWarning) $("watchFreshness").textContent += ` · ${mapWarning}`;
+  $("watchFreshness").title = mapWarning;
   const notice = watch.initializing || !watch.trace || !watch.trace.sampleCount || watch.connection === "error";
   $("watchNotice").hidden = !notice;
   $("watchNoticeText").textContent = watchText(watch.message) || (watch.initializing ? watchText("正在匹配本局地图…")
@@ -1641,9 +1653,15 @@ async function applyWatchSnapshot(snapshot, trace) {
   setPlaying(false);
   syncGameAssetsForTrace(trace, revision);
   try { await syncMapForTrace(trace); }
-  catch {
+  catch (error) {
     if (revision !== state.traceSelectionRevision || state.trace !== trace) return;
     await clearAutomaticMap();
+    if (revision !== state.traceSelectionRevision || !watch.active || state.trace !== trace) return;
+    state.dailyMapStatus = {
+      title: tr(`${trace.manifest.sceneName} 底图加载失败`, `${trace.manifest.sceneName} map could not load`),
+      detail: [errorUiText(error.message, "Unable to load the published map"),
+        errorUiText(error.detail, "Map data does not match this run")].filter(Boolean).join(" · "),
+    };
   }
   if (revision !== state.traceSelectionRevision || !watch.active || state.trace !== trace) return;
   state.compatibility = assessCompatibility(trace.manifest, state.mapPack);

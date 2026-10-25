@@ -7,12 +7,13 @@ class EnclosureBudgetTests(unittest.TestCase):
     def test_measured_208_map_native_shells_fit_only_the_new_build_allowance(self):
         assets = {'97-unique-native-shells': 224_830_963}
         check_enclosure_asset_budget(assets, 26134529)
+        check_enclosure_asset_budget(assets, 26155610)
         for build in ('25306743', '25739797', 'unknown-build'):
             with self.subTest(build=build), self.assertRaisesRegex(ValueError, '64 MiB'):
                 check_enclosure_asset_budget(assets, build)
 
     def test_limits_include_exact_boundary_but_reject_one_additional_byte(self):
-        for build, mib in [('25306743', 64), ('25739797', 64), ('26134529', 256)]:
+        for build, mib in [('25306743', 64), ('25739797', 64), ('26134529', 256), ('26155610', 256), ('26155611', 64)]:
             with self.subTest(build=build):
                 budget = mib * 1024 * 1024
                 self.assertEqual(enclosure_asset_budget(build), budget)

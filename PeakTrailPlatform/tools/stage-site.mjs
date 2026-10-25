@@ -13,6 +13,7 @@ import { HOME_ART_FILES } from "../web/src/home-art.js";
 import { checkSiteBudget, checkSiteDownloadReferences, loadSiteArtifact, optionValue, readSiteRelease, siteReleaseOptions, readSiteStagingProfile } from "./lib/site-release.mjs";
 import { createPublicAssetWriter } from "./lib/public-asset-pool.mjs";
 import { readMapLootSource, publicMapLootChunk } from "./lib/map-loot-source.mjs";
+import { resolveVerifiedMapInput } from "./lib/verified-map-input.mjs";
 
 const toolDirectory = dirname(fileURLToPath(import.meta.url));
 const platformDirectory = resolve(toolDirectory, "..");
@@ -111,8 +112,9 @@ for (const entry of catalog.mapPacks) {
   if (!/^sha256-[a-f0-9]{64}$/.test(mapPackId) || entry.path !== expectedPath) {
     throw new Error(`Cannot stage unsafe map catalog path: ${entry?.path}`);
   }
-  const sourceDirectory = resolve(mapPacksDirectory, mapPackId);
-  const { files, manifest } = await readMapPackAllowlist(sourceDirectory, mapPackId);
+  const { manifestPath, assetsDirectory: sourceDirectory } = await resolveVerifiedMapInput(mapPackId,
+    { packsDirectory: mapPacksDirectory, mapsDirectory });
+  const { files, manifest } = await readMapPackAllowlist(sourceDirectory, mapPackId, manifestPath);
   const route = await verifiedRouteMetadata(manifest);
   const mapFog = await verifiedFogMetadata(manifest);
   const mapWater = await verifiedWaterMetadata(manifest);
@@ -140,7 +142,7 @@ for (const entry of catalog.mapPacks) {
     if (digest !== enclosure.geometrySha256) throw new Error("Map enclosure geometry SHA-256 mismatch");
     enclosureFiles.add(enclosure.geometry);
   }
-  mapPacks.push({ mapPackId, sourceDirectory, files, manifest, route, mapFog, mapWater, mapEnclosures, mapPeak });
+  mapPacks.push({ mapPackId, sourceDirectory, manifestPath, files, manifest, route, mapFog, mapWater, mapEnclosures, mapPeak });
 }
 
 // Supply and animal surveys must match each canonical map before publication.
@@ -216,7 +218,7 @@ for (const pack of mapPacks) {
     await mkdir(dirname(destination), { recursive: true });
     // Manifests are enriched below and must never share a writable inode with
     // an earlier release. Only allowlisted geometry/texture/height bytes pool.
-    if (reference === "map-pack.json") await cp(resolve(pack.sourceDirectory, reference), destination);
+    if (reference === "map-pack.json") await cp(pack.manifestPath, destination);
     else await assetWriter.stageImmutable(resolve(pack.sourceDirectory, reference), destination);
   }
   // Route evidence is additive metadata and is not part of geometry identity.
@@ -273,8 +275,7 @@ return { outputDirectory, release: downloadRelease, releases: downloads.map(item
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url))
   await stageSite({ preview: process.argv.includes("--preview") });
 
-async function readMapPackAllowlist(directory, expectedMapPackId) {
-  const manifestPath = resolve(directory, "map-pack.json");
+async function readMapPackAllowlist(directory, expectedMapPackId, manifestPath = resolve(directory, "map-pack.json")) {
   let manifest;
   try {
     manifest = JSON.parse(await readFile(manifestPath, "utf8"));
@@ -297,7 +298,7 @@ async function readMapPackAllowlist(directory, expectedMapPackId) {
   }
 
   for (const reference of files) {
-    const source = resolve(directory, reference);
+    const source = reference === "map-pack.json" ? manifestPath : resolve(directory, reference);
     if (source !== manifestPath && !source.startsWith(directory + sep)) {
       throw new Error(`Map asset escapes local pack ${expectedMapPackId}: ${reference}`);
     }
@@ -310,7 +311,7 @@ async function readMapPackAllowlist(directory, expectedMapPackId) {
       }
       throw error;
     }
-    if (!entry.isFile()) throw new Error(`Local map asset must be a regular file: ${source}`);
+    if (!entry.isFile() || entry.isSymbolicLink()) throw new Error(`Local map asset must be a regular file: ${source}`);
   }
   return { files: [...files], manifest };
 }

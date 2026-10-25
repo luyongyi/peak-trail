@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, resolve } from "node:path";
 import test from "node:test";
 import { publicMapLootChunk, readMapLootSource } from "../lib/map-loot-source.mjs";
+import { computeMapPackId } from "../lib/map-pack-identity.mjs";
 
 const sha = body => createHash("sha256").update(body).digest("hex");
 const build = "26134529";
@@ -173,4 +174,147 @@ test("a source is re-read on every publication pass instead of caching stale mar
   const original = await readFile(f.file, "utf8");
   await writeFile(f.file, original.replace('"pos":[1,2,3]', '"pos":[4,2,3]'));
   await assert.rejects(publicMapLootChunk(source, pack), /checksum mismatch/);
+});
+
+async function verified(t, { legacy = false } = {}) {
+  const root = await directory(t), targetBuild = "26155610";
+  const oldManifest = { schemaVersion: 1, identityVersion: 3, gameBuildId: build, gameVersion: "3.0.0--logFile",
+    sceneName: pack.sceneName, mapSlot: pack.mapSlot, projectionVersion: 1, coordinateSpace: "unity-world-meters",
+    textureUv: "u=(x-minX)/(maxX-minX);v=(z-minZ)/(maxZ-minZ)", imageOrigin: "bottom-left-in-uv;viewer-flips-for-top-left-images",
+    source: pack.source, layers: [{ ...pack.layers[0], biome: "Shore", texture: "shore.png", textureSha256: sha("texture"),
+      height: "shore.height.f32", heightSha256: sha("height"), geometry: "shore.glb.gz", geometryFormat: "glb-instanced-v1+gzip",
+      columns: 2, rows: 2, minX: 0, maxX: 10, minY: 0, maxY: 10, minZ: 0, maxZ: 10,
+      heightEncoding: "float32-le-row-major-minz-minx", noData: "NaN", sampleLocation: "cell-centers" }] };
+  oldManifest.mapPackId = computeMapPackId(oldManifest);
+  const proof = { schemaVersion: 1, authority: "verified-map-build-equivalence", verified: true,
+    sourceBuildId: build, targetBuildId: targetBuild, targetGameVersion: "3.0.1--logFile", bundles: [{ bundleContentsVerified: true }],
+    maps: [{ sourceMapPackId: oldManifest.mapPackId, sceneName: pack.sceneName, mapSlot: pack.mapSlot,
+      sourceSceneSha256: pack.source.sceneSha256, sourceManifestSha256: sha(JSON.stringify(oldManifest)) }] };
+  const manifest = { ...structuredClone(oldManifest), gameBuildId: targetBuild, gameVersion: proof.targetGameVersion,
+    source: { ...pack.source, equivalence: { authority: proof.authority, sourceGameBuildId: build,
+      sourceMapPackId: oldManifest.mapPackId, receiptSha256: "" } } };
+  manifest.mapPackId = computeMapPackId(manifest);
+  const plan = { schemaVersion: 1, sourceGameBuildId: build, gameBuildId: targetBuild, gameVersion: proof.targetGameVersion,
+    equivalenceReceiptSha256: "", packs: [{ sourceMapPackId: oldManifest.mapPackId, mapPackId: manifest.mapPackId,
+      manifestSha256: "", manifestBytes: 0, assets: [{ name: "shore.png", bytes: 7, sha256: sha("texture") },
+        { name: "shore.height.f32", bytes: 6, sha256: sha("height") }, { name: "shore.glb.gz", bytes: 8, sha256: pack.layers[0].geometrySha256 }] }] };
+  const raw = fixture(); raw.maps[0].mapPackId = oldManifest.mapPackId;
+  raw.maps[0].markers[0].source = { geometrySha256: pack.layers[0].geometrySha256, anchor: "geometry-bounds-center" };
+  const chunkPath = `loot/${build}/${oldManifest.mapPackId}.json`;
+  const nativeIndex = { schemaVersion: 1, kind: "map-loot-index", gameBuildId: build, source: raw.source,
+    maps: [{ mapPackId: oldManifest.mapPackId, sceneName: pack.sceneName, mapSlot: pack.mapSlot,
+      sourceSceneSha256: pack.source.sceneSha256, path: chunkPath, size: 0, sha256: "" }] };
+  const buildDirectory = resolve(root, "verified-builds", targetBuild), manifestPath = resolve(buildDirectory, "manifests", manifest.mapPackId, "map-pack.json");
+  await mkdir(dirname(manifestPath), { recursive: true }); await mkdir(dirname(resolve(root, chunkPath)), { recursive: true });
+  const f = { root, targetBuild, raw, manifest, oldManifest, plan, proof, nativeIndex, buildDirectory, manifestPath,
+    chunkPath: resolve(root, chunkPath), nativePath: resolve(root, `loot.${build}.json`) };
+  f.saveNative = async () => {
+    const body = JSON.stringify(raw) + "\n";
+    nativeIndex.maps[0].sha256 = sha(body); nativeIndex.maps[0].size = Buffer.byteLength(body);
+    await writeFile(f.nativePath, JSON.stringify(legacy ? raw : nativeIndex));
+    if (!legacy) await writeFile(f.chunkPath, body);
+  };
+  f.saveVerified = async () => {
+    const receipt = JSON.stringify(proof) + "\n";
+    plan.equivalenceReceiptSha256 = sha(receipt);
+    manifest.source.equivalence.receiptSha256 = sha(receipt);
+    const body = JSON.stringify(manifest) + "\n";
+    plan.packs[0].manifestSha256 = sha(body); plan.packs[0].manifestBytes = Buffer.byteLength(body);
+    const planBody = JSON.stringify(plan) + "\n";
+    await writeFile(manifestPath, body);
+    await writeFile(resolve(buildDirectory, "equivalence.json"), receipt);
+    await writeFile(resolve(buildDirectory, "plan.json"), planBody);
+    await writeFile(resolve(root, "verified-builds", "index.json"), JSON.stringify({ schemaVersion: 1,
+      builds: [{ gameBuildId: targetBuild, planSha256: sha(planBody), receiptSha256: sha(receipt) }] }));
+  };
+  await f.saveNative(); await f.saveVerified();
+  return f;
+}
+
+test("verified reuse remaps canonical survey identities in memory while preserving every source marker and public chunk path", async t => {
+  for (const legacy of [false, true]) {
+    const f = await verified(t, { legacy }), source = await readMapLootSource(f.root, f.targetBuild);
+    assert.equal(source.raw.gameBuildId, f.targetBuild); assert.equal(source.raw.maps.length, 1);
+    assert.equal(source.raw.maps[0].mapPackId, f.manifest.mapPackId);
+    const chunk = await source.readMap(f.manifest.mapPackId);
+    assert.equal(chunk.gameBuildId, f.targetBuild); assert.equal(chunk.maps[0].mapPackId, f.manifest.mapPackId);
+    assert.deepEqual(chunk.maps[0].markers, f.raw.maps[0].markers);
+    assert.deepEqual(chunk.maps[0].layers, f.raw.maps[0].layers);
+    assert.equal(f.raw.maps[0].mapPackId, f.oldManifest.mapPackId, "source identity is immutable");
+    const output = await publicMapLootChunk(source, f.manifest);
+    assert.equal(output.path, `loot/${f.targetBuild}/${f.manifest.mapPackId}.json`);
+    assert.equal(output.sha256, sha(output.body)); assert.equal(JSON.parse(output.body).maps[0].markers.length, 1);
+    assert.equal(await source.readMap(f.oldManifest.mapPackId), null);
+    await assert.rejects(readFile(resolve(f.root, `loot.${f.targetBuild}.json`)), { code: "ENOENT" });
+    await assert.rejects(readFile(resolve(f.root, output.path)), { code: "ENOENT" });
+  }
+});
+
+test("an unpinned changed plan, receipt or target manifest cannot authorize survey reuse", async t => {
+  for (const path of ["plan.json", "equivalence.json", "manifest"]) {
+    const f = await verified(t), file = path === "manifest" ? f.manifestPath : resolve(f.buildDirectory, path);
+    await writeFile(file, (await readFile(file, "utf8")) + " ");
+    if (path === "manifest") {
+      const source = await readMapLootSource(f.root, f.targetBuild);
+      await assert.rejects(source.readMap(f.manifest.mapPackId), /SHA-256\/size mismatch/);
+    } else await assert.rejects(readMapLootSource(f.root, f.targetBuild), /SHA-256\/size mismatch/);
+  }
+});
+
+test("false, cyclic, cross-scene or duplicated verified mappings fail even with freshly pinned JSON", async t => {
+  for (const mutate of [
+    f => { f.proof.verified = false; },
+    f => { f.proof.bundles[0].bundleContentsVerified = false; },
+    f => { f.plan.sourceGameBuildId = f.targetBuild; },
+    f => { f.plan.packs.push(f.plan.packs[0]); f.proof.maps.push(f.proof.maps[0]); },
+    f => { f.proof.maps[0].sceneName = "Level_0"; f.proof.maps[0].mapSlot = 0; },
+    f => { f.proof.maps[0].sourceSceneSha256 = "d".repeat(64); },
+  ]) {
+    const f = await verified(t); mutate(f); await f.saveVerified();
+    await assert.rejects(readMapLootSource(f.root, f.targetBuild), /proof|bind|identity|duplicate|scene/i);
+  }
+});
+
+test("reuse requires a native source survey and never follows another verified-build mapping", async t => {
+  const f = await verified(t);
+  await rm(f.nativePath);
+  const indexPath = resolve(f.root, "verified-builds", "index.json"), index = JSON.parse(await readFile(indexPath, "utf8"));
+  index.builds.push({ ...index.builds[0], gameBuildId: build });
+  await writeFile(indexPath, JSON.stringify(index));
+  await assert.rejects(readMapLootSource(f.root, f.targetBuild), /native source survey.*chains are unsupported/);
+  assert.equal(await readMapLootSource(f.root, "12345678"), null, "ordinary builds cannot inherit maps or markers");
+});
+
+test("source chunks retain checksum verification and cannot become stale after a verified reader is created", async t => {
+  const f = await verified(t), source = await readMapLootSource(f.root, f.targetBuild);
+  await source.readMap(f.manifest.mapPackId);
+  const body = await readFile(f.chunkPath, "utf8");
+  await writeFile(f.chunkPath, body.replace('"pos":[1,2,3]', '"pos":[9,2,3]'));
+  await assert.rejects(source.readMap(f.manifest.mapPackId), /checksum mismatch/);
+});
+
+test("verified markers require complete matching layer digests and individual native or geometry source identities", async t => {
+  for (const mutate of [
+    raw => { delete raw.maps[0].layers; }, raw => { raw.maps[0].layers = []; },
+    raw => { raw.maps[0].layers[0].geometrySha256 = "d".repeat(64); },
+    raw => { raw.maps[0].layers.push(raw.maps[0].layers[0]); },
+    raw => { delete raw.maps[0].markers; }, raw => { delete raw.maps[0].markers[0].source; },
+    raw => { delete raw.maps[0].markers[0].source.geometrySha256; },
+    raw => { raw.maps[0].markers[0].source.geometrySha256 = "d".repeat(64); },
+    raw => { raw.maps[0].markers[0].source = { sourceKind: "serialized-scene-component" }; },
+    raw => { raw.maps[0].markers[0].id = ""; },
+  ]) {
+    const f = await verified(t); mutate(f.raw); await f.saveNative();
+    const source = await readMapLootSource(f.root, f.targetBuild);
+    await assert.rejects(source.readMap(f.manifest.mapPackId), /layer identity|source identity|marker identity/);
+  }
+});
+
+test("a native target survey takes precedence over optional verified fallback data", async t => {
+  const f = await verified(t);
+  const native = { ...fixture(), gameBuildId: f.targetBuild };
+  await writeFile(resolve(f.root, `loot.${f.targetBuild}.json`), JSON.stringify(native));
+  await writeFile(resolve(f.buildDirectory, "plan.json"), "broken proof");
+  const source = await readMapLootSource(f.root, f.targetBuild);
+  assert.deepEqual(source.raw, native);
 });

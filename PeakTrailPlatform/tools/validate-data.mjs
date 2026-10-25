@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { SUPPORTED_MAP_PACK_IDENTITY_VERSIONS, verifyMapPackIdentity, verifyGeometryGlb } from "./lib/map-pack-identity.mjs";
 import { readMergedGameAssets, requireActiveCharacterAssets } from "./lib/game-assets.mjs";
 import { localAssetHint, localAssetPaths } from "./lib/local-paths.mjs";
+import { resolveVerifiedMapInput } from "./lib/verified-map-input.mjs";
 
 const toolDirectory = dirname(fileURLToPath(import.meta.url));
 const platformDirectory = resolve(toolDirectory, "..");
@@ -69,9 +70,9 @@ const mapsDirectory = resolve(platformDirectory, "data", "maps");
 const { gameAssetsDirectory, mapPacksDirectory: packsDirectory } = localAssetPaths;
 for (const [index, entry] of catalog.mapPacks.entries()) {
   validateCatalogEntry(entry, index);
-  const packDirectory = resolve(packsDirectory, entry.mapPackId.toLowerCase());
+  const { manifestPath, assetsDirectory: packDirectory } = await resolveVerifiedMapInput(entry.mapPackId.toLowerCase(),
+    { packsDirectory, mapsDirectory });
   assert(packDirectory.startsWith(packsDirectory + sep), `catalog entry ${index} resolves outside ${packsDirectory}`);
-  const manifestPath = resolve(packDirectory, "map-pack.json");
   const mapPack = await readLocalJson(manifestPath, `map pack ${entry.mapPackId}`);
   assert(mapPack.schemaVersion === 1, `${entry.path} must use schemaVersion 1`);
   assert(SUPPORTED_MAP_PACK_IDENTITY_VERSIONS.includes(mapPack.identityVersion), `${entry.path} must use identityVersion 2 or 3`);

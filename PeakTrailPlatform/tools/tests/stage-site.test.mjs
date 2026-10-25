@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { promisify } from "node:util";
 import { HOME_ART_FILES } from "../../web/src/home-art.js";
+import { computeMapPackId } from "../lib/map-pack-identity.mjs";
 
 const execFileAsync = promisify(execFile);
 const testDirectory = dirname(fileURLToPath(import.meta.url));
@@ -65,6 +66,8 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
     copyFile(resolve(platformSource, "tools", "lib", "site-release.mjs"), resolve(tools, "lib", "site-release.mjs")),
     copyFile(resolve(platformSource, "tools", "lib", "public-asset-pool.mjs"), resolve(tools, "lib", "public-asset-pool.mjs")),
     copyFile(resolve(platformSource, "tools", "lib", "map-loot-source.mjs"), resolve(tools, "lib", "map-loot-source.mjs")),
+    copyFile(resolve(platformSource, "tools", "lib", "verified-map-input.mjs"), resolve(tools, "lib", "verified-map-input.mjs")),
+    copyFile(resolve(platformSource, "tools", "lib", "map-pack-identity.mjs"), resolve(tools, "lib", "map-pack-identity.mjs")),
     copyFile(resolve(platformSource, "web", "src", "map-fog.js"), resolve(platform, "web", "src", "map-fog.js")),
     copyFile(resolve(platformSource, "web", "src", "map-water.js"), resolve(platform, "web", "src", "map-water.js")),
     copyFile(resolve(platformSource, "web", "src", "map-enclosures.js"), resolve(platform, "web", "src", "map-enclosures.js")),
@@ -583,6 +586,61 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
     (error) => /Local map asset is missing:.*PEAK_TRAIL_ASSET_ROOT/s.test(`${error.stderr}\n${error.stdout}`),
   );
   assert.equal(await readFile(resolve(staged, "preflight-marker.txt"), "utf8"), "keep on failure");
+
+  // A new build can be staged from independently signed manifests and proven
+  // identical immutable source bytes without writing into the shared asset root.
+  await writeFile(resolve(pack, "shore.glb.gz"), geometry);
+  const originalCatalog = JSON.parse(await readFile(resolve(platform, "data/maps/catalog.json"), "utf8"));
+  const old = { schemaVersion: 1, identityVersion: 3, gameBuildId: "123", gameVersion: "source-version",
+    sceneName: "Level_81", mapSlot: 81, projectionVersion: 1, coordinateSpace: "unity-world-meters",
+    textureUv: "u=(x-minX)/(maxX-minX);v=(z-minZ)/(maxZ-minZ)", imageOrigin: "bottom-left-in-uv;viewer-flips-for-top-left-images",
+    source: { sceneSha256: "7".repeat(64) }, layers: [{ id: "shore", segment: 0, biome: "Shore",
+      texture: "shore.png", textureSha256: sha256(texture), height: "shore.f32", heightSha256: sha256(height),
+      geometry: "shore.glb.gz", geometrySha256: sha256(geometry), geometryFormat: "glb-instanced-v1+gzip",
+      minX: 0, maxX: 10, minY: 0, maxY: 10, minZ: 0, maxZ: 10, columns: 2, rows: 2,
+      heightEncoding: "float32-le-row-major-minz-minx", noData: "NaN", sampleLocation: "cell-centers" }] };
+  old.mapPackId = computeMapPackId(old);
+  const oldBody = JSON.stringify(old), source = resolve(assets, "maps/packs", old.mapPackId);
+  await mkdir(source);
+  await Promise.all([writeFile(resolve(source, "map-pack.json"), oldBody), writeFile(resolve(source, "shore.png"), texture),
+    writeFile(resolve(source, "shore.f32"), height), writeFile(resolve(source, "shore.glb.gz"), geometry)]);
+  const proof = { schemaVersion: 1, authority: "verified-map-build-equivalence", verified: true, sourceBuildId: "123",
+    targetBuildId: "124", targetGameVersion: "target-version", bundles: [{ bundleContentsVerified: true }],
+    maps: [{ sourceMapPackId: old.mapPackId, sceneName: old.sceneName, mapSlot: old.mapSlot,
+      sourceSceneSha256: old.source.sceneSha256, sourceManifestSha256: sha256(oldBody) }] };
+  const proofBody = JSON.stringify(proof), proofHash = sha256(proofBody);
+  const next = { ...structuredClone(old), gameBuildId: "124", gameVersion: "target-version" };
+  next.source.equivalence = { authority: proof.authority, sourceGameBuildId: "123", sourceMapPackId: old.mapPackId, receiptSha256: proofHash };
+  next.mapPackId = computeMapPackId(next);
+  const nextBody = JSON.stringify(next);
+  const plan = { schemaVersion: 1, sourceGameBuildId: "123", gameBuildId: "124", gameVersion: next.gameVersion,
+    equivalenceReceiptSha256: proofHash, packs: [{ sourceMapPackId: old.mapPackId, mapPackId: next.mapPackId,
+      manifestSha256: sha256(nextBody), manifestBytes: Buffer.byteLength(nextBody),
+      assets: [["shore.png", texture], ["shore.f32", height], ["shore.glb.gz", geometry]]
+        .map(([name, bytes]) => ({ name, bytes: bytes.length, sha256: sha256(bytes) })) }] };
+  const proofDirectory = resolve(platform, "data/maps/verified-builds/124");
+  await mkdir(resolve(proofDirectory, "manifests", next.mapPackId), { recursive: true });
+  const planBody = JSON.stringify(plan);
+  await Promise.all([writeFile(resolve(proofDirectory, "equivalence.json"), proofBody), writeFile(resolve(proofDirectory, "plan.json"), planBody),
+    writeFile(resolve(proofDirectory, "manifests", next.mapPackId, "map-pack.json"), nextBody),
+    writeFile(resolve(platform, "data/maps/verified-builds/index.json"), JSON.stringify({ schemaVersion: 1,
+      builds: [{ gameBuildId: "124", planSha256: sha256(planBody), receiptSha256: proofHash }] }))]);
+  lootEvidence.maps.push({ mapPackId: old.mapPackId, sceneName: old.sceneName, mapSlot: old.mapSlot,
+    sourceSceneSha256: old.source.sceneSha256,
+    layers: old.layers.map(layer => ({ id: layer.id, segment: layer.segment, geometrySha256: layer.geometrySha256 })), markers: [] });
+  await writeFile(lootPath, JSON.stringify(lootEvidence));
+  await writeFile(resolve(platform, "data/maps/catalog.json"), JSON.stringify({ ...originalCatalog,
+    mapPacks: [...originalCatalog.mapPacks, { mapPackId: next.mapPackId, path: `./packs/${next.mapPackId}/map-pack.json` }] }));
+  await execFileAsync(process.execPath, [resolve(tools, "stage-site.mjs")], options);
+  const nextOutput = resolve(staged, "data/maps/packs", next.mapPackId);
+  assert.deepEqual(JSON.parse(await readFile(resolve(nextOutput, "map-pack.json"), "utf8")), next);
+  assert.deepEqual(await readFile(resolve(nextOutput, "shore.glb.gz")), geometry);
+  assert.equal(await readFile(resolve(source, "map-pack.json"), "utf8"), oldBody);
+  await assert.rejects(access(resolve(assets, "maps/packs", next.mapPackId)), /ENOENT/);
+  await writeFile(resolve(staged, "preflight-marker.txt"), "keep on failed verified input");
+  await writeFile(resolve(proofDirectory, "equivalence.json"), "{}");
+  await assert.rejects(execFileAsync(process.execPath, [resolve(tools, "stage-site.mjs")], options), /SHA-256\/size mismatch/);
+  assert.equal(await readFile(resolve(staged, "preflight-marker.txt"), "utf8"), "keep on failed verified input");
 });
 
 function sha256(bytes) {

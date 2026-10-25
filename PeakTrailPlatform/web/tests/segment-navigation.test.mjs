@@ -81,6 +81,13 @@ test("future or missing build evidence does not extend the verified shared-summi
   }
 });
 
+test("the verified 26155610 static-map build retains its shared-summit labels", () => {
+  const f = fixture();
+  f.state.mapPack.gameBuildId = "26155610";
+  f.api.renderSegmentNavigation();
+  assert.equal(f.elements.segmentName.textContent, "城塞 · 含顶峰");
+});
+
 test("recorded route uses its recording build, independently of the loaded map build", () => {
   const f = fixture();
   f.state.routeView.source = "recorded";

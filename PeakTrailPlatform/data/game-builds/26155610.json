@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "gameBuildId": "26155610",
+  "nativeGameVersion": "3.0.1--logFile",
+  "versionSource": {
+    "file": "globalgamemanagers",
+    "objectType": "PlayerSettings",
+    "pathId": 1,
+    "field": "bundleVersion",
+    "retainedVerbatim": true
+  },
+  "unityVersion": "6000.3.15f1",
+  "sourceEvidence": {
+    "installedSteamBuildId": "26155610",
+    "assembly": {
+      "file": "Assembly-CSharp.dll",
+      "sha256": "e526a5234ea2289ea55297fbd6fb7626c75e86e6a0a26a6b87d82ed8f44cd168"
+    },
+    "packaging": "direct-serialized-files",
+    "serializedInputs": [
+      {
+        "name": "resources.assets",
+        "bytes": 41000620,
+        "sha256": "c3aee88c29840d29c7a1bc47443175f0c15363f6ec65395a0afec5fb3ecb926e"
+      },
+      {
+        "name": "resources.assets.resS",
+        "bytes": 494299632,
+        "sha256": "38818b589cadb36234e3e52a967fef77639cc98e8681eff11ecd3fed53770e11"
+      },
+      {
+        "name": "level3",
+        "bytes": 15158116,
+        "sha256": "6e4fef88c65c45277d4931988dca7555bbd706e7562a27584afadffbd76439e5"
+      },
+      {
+        "name": "sharedassets3.assets",
+        "bytes": 29634392,
+        "sha256": "c4b8daa998478df5aca6a5a4091955dd882c7248beb1e9c2fcbd25519b03e4a0"
+      },
+      {
+        "name": "sharedassets3.assets.resS",
+        "bytes": 262788256,
+        "sha256": "b95e85898233fe0aa7dbcee795ba418ffea6f7beb3c615dc3e4b673c53a7a816"
+      }
+    ],
+    "exporters": [
+      {
+        "file": "export-game-assets.py",
+        "sha256": "d4081ce1fb9f66eadea5a7d6c12146f5cf0af3fc3f0c7cb5dd12df163bd8d469"
+      },
+      {
+        "file": "render-previews.py",
+        "sha256": "4a09a380fb6726d99993e47331f3ed7426828059128ab83b203911460cedc3ea"
+      },
+      {
+        "file": "export-form-assets.py",
+        "sha256": "a1a1feb6161f8ee9556fd37ef41603819732c4485de7dc86b7f45fd34bfe71b9"
+      },
+      {
+        "file": "export-world-assets.py",
+        "sha256": "ac97970a9f5c936d1a41e6a2d4314849710b0073376bc3070690c3c677a81263"
+      },
+      {
+        "file": "export-ghost-assets.py",
+        "sha256": "3108bd97e2888aa006e34d66bcf4fcee37f2d25c7acf32e0b54ad51a64dee5a0"
+      },
+      {
+        "file": "export-state-assets.py",
+        "sha256": "615e58800ae253e961a5904519cded5e132f8773a9693badd99eb405ca223bbc"
+      },
+      {
+        "file": "prepare-live-visual-assets.py",
+        "sha256": "961064baedaa59a202229e9ede605ee559fb890b911f26881c4ac2f130d7c2c4"
+      }
+    ]
+  },
+  "visualAssets": {
+    "canonicalItems": 194,
+    "assets": 835,
+    "bytes": 109941829,
+    "reexportedFromCurrentInstalledBuild": true
+  }
+}

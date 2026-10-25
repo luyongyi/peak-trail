@@ -9,6 +9,26 @@ const currentEvidence = JSON.parse(await readFile(new URL("../../tools/offline-m
 const crossplayEvidence = JSON.parse(await readFile(new URL("../../tools/offline-maps/source-effect-materials.26134529.json", import.meta.url), "utf8"));
 const linear = (v) => v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
 
+test("source-equivalent 3.0.1 maps preserve the audited effect values and their original evidence identity", () => {
+  let checked = 0;
+  for (const source of crossplayEvidence.materials) {
+    const old = getSourceEffectMaterial(26134529, source.name, source.shader);
+    if (!old) continue;
+    const expected = structuredClone(old);
+    expected.source.mapBuildId = 26155610;
+    if (expected.source.waterDepth) expected.source.waterDepth.sameBuildShaderEvidence = false;
+    const current = getSourceEffectMaterial(26155610, source.name, source.shader);
+    assert.deepEqual(current, expected);
+    assert.equal(current.source.buildId, 26134529, "the source evidence is not relabelled as a new inspection");
+    assert.equal(getSourceEffectMaterial(26155611, source.name, source.shader), null);
+    assert.equal(getSourceEffectMaterial(26155610, source.name, "unknown-shader"), null);
+    checked++;
+  }
+  assert.equal(checked, 15);
+  for (const name of ["M_Mushroom_tree", "M_Mushroom_tree_evil", "Glow Shroom"])
+    assert.equal(getSourceEffectMaterial(26155610, name, "W/Peak_Standard"), null);
+});
+
 for (const exactEvidence of [currentEvidence, crossplayEvidence]) test(`build ${exactEvidence.gameBuildId} effect values use their own source and omit legacy fungal corrections`, () => {
   let checked = 0;
   for (const source of exactEvidence.materials) {
