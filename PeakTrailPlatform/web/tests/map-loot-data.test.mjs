@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { lootGeometryTypes } from '../../tools/offline-maps/export-loot-from-geometry.mjs';
 import { readMapLootSource } from '../../tools/lib/map-loot-source.mjs';
+import { readVerifiedMapBuild } from '../../tools/lib/verified-map-input.mjs';
 import { normalizeMapLoot } from '../src/map-loot.js';
 import { fileURLToPath } from 'node:url';
 
@@ -231,14 +232,16 @@ test('current scene components restore the complete audited set of fixed spawn a
   assert.equal(surveys[0].survey.source.componentCoverage, undefined);
 });
 
-test('every catalog map has its own versioned survey without reusing another build identity', () => {
+test('every catalog map has its own versioned survey without reusing another build identity', async () => {
   const enabled = catalog.mapPacks.filter(entry => entry.enabled !== false);
-  const surveyed = [...surveys.flatMap(({ survey }) => survey.maps), ...currentIndex.maps];
-  assert.equal(enabled.length, 250);
-  assert.equal(surveyed.length, 250);
+  const verified = await readMapLootSource(fileURLToPath(new URL('../../data/maps/', import.meta.url)), '26155610');
+  assert.ok(verified);
+  const surveyed = [...surveys.flatMap(({ survey }) => survey.maps), ...currentIndex.maps, ...verified.raw.maps];
+  assert.equal(enabled.length, 458);
+  assert.equal(surveyed.length, 458);
   assert.deepEqual(surveyed.map(map => map.mapPackId).sort(), enabled.map(map => map.mapPackId).sort());
-  assert.equal(new Set(surveyed.map(map => map.mapPackId)).size, 250);
-  assert.equal(String(catalog.activeGameBuildId), '26134529');
+  assert.equal(new Set(surveyed.map(map => map.mapPackId)).size, 458);
+  assert.equal(String(catalog.activeGameBuildId), '26155610');
   const [older, current] = surveys.map(({ survey }) => survey);
   for (const map of current.maps) {
     const oldMap = older.maps.find(old => old.sceneName === map.sceneName);
@@ -246,6 +249,32 @@ test('every catalog map has its own versioned survey without reusing another bui
     assert.notDeepEqual(map.markers.filter(marker => marker.category === 'animal').map(marker => marker.pos),
       oldMap.markers.filter(marker => marker.category === 'animal').map(marker => marker.pos));
   }
+});
+
+test('all 208 verified maps expose independent loot identities while representative source marker coordinates remain exact', async () => {
+  const directory = fileURLToPath(new URL('../../data/maps/', import.meta.url));
+  const verified = await readVerifiedMapBuild('26155610', { mapsDirectory: directory });
+  const source = await readMapLootSource(directory, '26134529');
+  const rebound = await readMapLootSource(directory, '26155610');
+  assert.ok(verified && source && rebound);
+  assert.equal(verified.plan.packs.length, 208);
+  assert.equal(rebound.raw.gameBuildId, '26155610');
+  assert.equal(rebound.raw.maps.length, 208);
+  assert.deepEqual(rebound.raw.maps.map(map => map.mapPackId).sort(), verified.plan.packs.map(map => map.mapPackId).sort());
+  assert.deepEqual(verified.plan.packs.map(map => map.sourceMapPackId).sort(), currentIndex.maps.map(map => map.mapPackId).sort());
+  const ids = new Set(currentIndex.maps.map(map => map.mapPackId));
+  assert.ok(rebound.raw.maps.every(map => !ids.has(map.mapPackId)));
+  for (const mapping of [verified.plan.packs[0], verified.plan.packs.at(-1)]) {
+    const old = await source.readMap(mapping.sourceMapPackId), next = await rebound.readMap(mapping.mapPackId);
+    assert.equal(next.gameBuildId, '26155610');
+    assert.equal(next.maps[0].mapPackId, mapping.mapPackId);
+    assert.equal(old.maps[0].mapPackId, mapping.sourceMapPackId);
+    assert.equal(next.maps[0].sceneName, old.maps[0].sceneName);
+    assert.equal(next.maps[0].sourceSceneSha256, old.maps[0].sourceSceneSha256);
+    assert.deepEqual(next.maps[0].layers, old.maps[0].layers);
+    assert.deepEqual(next.maps[0].markers, old.maps[0].markers);
+  }
+  await assert.rejects(readFile(new URL('../../data/maps/loot.26155610.json', import.meta.url)), { code: 'ENOENT' });
 });
 
 test('all 208 new scene surveys authenticate their own coordinates, labels and source components', async () => {

@@ -10,6 +10,7 @@ test("only the verified 5km Void water plane is omitted from camera extents", ()
   assert.deepEqual(nadirCameraBounds({ biome: "Void" }, "25306743", [floor, terrain]), terrain.bounds);
   assert.deepEqual(nadirCameraBounds({ biome: "Void" }, "25739797", [floor, terrain]), terrain.bounds);
   assert.deepEqual(nadirCameraBounds({ biome: "Void" }, "26134529", [floor, terrain]), terrain.bounds);
+  assert.deepEqual(nadirCameraBounds({ biome: "Void" }, "26155610", [floor, terrain]), terrain.bounds);
   assert.deepEqual([floor, terrain], original);
   const smallWater = { ...floor, bounds: { min: [-70, 740, 120], max: [90, 740, 650] } };
   assert.deepEqual(nadirCameraBounds({ biome: "Void" }, "25306743", [floor, terrain, smallWater]),
@@ -18,6 +19,7 @@ test("only the verified 5km Void water plane is omitted from camera extents", ()
 test("unverified identity, shape, or absent remaining geometry preserves the original camera fallback", () => {
   assert.equal(nadirCameraBounds({ biome: "Peak" }, "25306743", [floor, terrain]), null);
   assert.equal(nadirCameraBounds({ biome: "Void" }, "other", [floor, terrain]), null);
+  assert.equal(nadirCameraBounds({ biome: "Void" }, "26155611", [floor, terrain]), null);
   assert.equal(nadirCameraBounds({ biome: "Void" }, "25306743", [floor]), null);
   assert.equal(nadirCameraBounds({ biome: "Void" }, "25306743", [terrain]), null);
   assert.equal(nadirCameraBounds({ biome: "Void" }, "25306743", [{ ...floor, materials: [{ name: "water" }] }, terrain]), null);
@@ -29,7 +31,7 @@ test("filtered Void parts retain original oriented points, entries and ordering"
   const orientedTerrain = { ...terrain, points };
   const smallWater = { ...floor, bounds: { min: [-70, 740, 120], max: [90, 740, 650] }, points: [[-70, 740, 120], [90, 740, 650]] };
   const input = [orientedTerrain, floor, smallWater], original = structuredClone(input);
-  for (const build of ["25306743", "25739797", "26134529"]) {
+  for (const build of ["25306743", "25739797", "26134529", "26155610"]) {
     const retained = nadirCameraParts({ biome: "Void" }, build, input);
     assert.deepEqual(retained, [orientedTerrain, smallWater]);
     assert.notEqual(retained, input);
@@ -78,7 +80,7 @@ test("opaque audited Void water excludes only fully submerged parts within its f
   const atSurface = { bounds: { min: [-50, 728.276, 150], max: [80, 728.276, 600] } };
   const input = [fog, crossingRock, hiddenFloor, outside, water, outsideZ, nearSurface, atSurface];
   const original = structuredClone(input), expected = [crossingRock, outside, outsideZ, nearSurface, atSurface];
-  for (const build of ["25306743", "25739797", "26134529"]) {
+  for (const build of ["25306743", "25739797", "26134529", "26155610"]) {
     const retained = nadirCameraParts({ biome: "Void" }, build, input);
     assert.deepEqual(retained, expected);
     expected.forEach((part, index) => assert.equal(retained[index], part));

@@ -102,7 +102,9 @@ def source_enclosure(scene):
 def enclosure_asset_budget(build):
     # The 208-map 3.0.0 survey contains 97 unique native shells (224,830,963 bytes).
     # Previous 21-map builds retain their independently bounded allowance.
-    return (256 if str(build) == '26134529' else 64) * 1024 * 1024
+    # Build 26155610 retains all 208 audited scene bundles byte for byte:
+    # data/maps/game-build.26155610.json.
+    return (256 if str(build) in ('26134529', '26155610') else 64) * 1024 * 1024
 
 
 def check_enclosure_asset_budget(sizes, build, max_asset_bytes=None):
@@ -119,8 +121,8 @@ def export_enclosures(game, catalog_path, packs_path, asset_directory, output, s
     # 2.6.b keeps both selected branch hierarchies, original mesh identities,
     # disabled parent renderers, enabled splits and vertical model axes. Every
     # scene is still checked by source_enclosure; an unfamiliar build fails.
-    if str(build) not in ('25306743', '25739797', '26134529'):
-        raise ValueError('Enclosure root selection is audited only for builds 25306743, 25739797 and 26134529')
+    if str(build) not in ('25306743', '25739797', '26134529', '26155610'):
+        raise ValueError('Enclosure root selection is audited only for builds 25306743, 25739797, 26134529 and 26155610')
     catalog = json.loads(catalog_path.read_text(encoding='utf8'))
     result = {'schemaVersion': 1, 'gameBuildId': str(build), 'authority': 'serialized-map-enclosure',
               'note': 'Original active pre-split outer mesh roots and exact source model axes; custom shader effects remain approximated. Existing canonical map packs are unchanged.',

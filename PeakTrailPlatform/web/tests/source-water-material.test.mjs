@@ -30,7 +30,7 @@ test("audited swamp tint replaces the full-strength yellow fallback without chan
 });
 
 test("re-audited current build keeps the swamp tint and shared depth uniforms", () => {
-  for (const build of [25739797, 26134529]) {
+  for (const build of [25739797, 26134529, 26155610]) {
     const value = effect(); value.source.mapBuildId = build;
     const material = new THREE.MeshStandardMaterial();
     assert.equal(applySourceWaterDepth(material, value), true);
@@ -81,6 +81,7 @@ test("unverified builds, other water types and invalid depth metadata remain unt
   for (const mutate of [
     (value) => { value.source.material = "M_Water_forest"; },
     (value) => { value.source.mapBuildId = 25739798; },
+    (value) => { value.source.mapBuildId = 26155611; },
     (value) => { value.source.shader = "W/Peak_Waterfall"; },
     (value) => { value.source.waterDepth = { ...parameters, depth: 0 }; },
     (value) => { value.source.waterDepth = { ...parameters, tintLinear: [0, NaN, 1] }; },

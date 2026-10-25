@@ -147,6 +147,7 @@ for (const [identityVersion, isGzip] of [[2, false], [3, false], [3, true]]) tes
     const platform = resolve(testDirectory, "..", "..");
     await Promise.all([
       copyFile(resolve(platform, "tools", "validate-data.mjs"), resolve(toolDirectory, "validate-data.mjs")),
+      copyFile(resolve(platform, "tools", "lib", "verified-map-input.mjs"), resolve(toolDirectory, "lib", "verified-map-input.mjs")),
       copyFile(resolve(platform, "tools", "lib", "game-assets.mjs"), resolve(toolDirectory, "lib", "game-assets.mjs")),
       copyFile(resolve(platform, "data", "daily", "current.json"), resolve(root, "data", "daily", "current.json")),
       copyFile(resolve(platform, "data", "daily", "history.json"), resolve(root, "data", "daily", "history.json")),

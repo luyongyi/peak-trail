@@ -1668,7 +1668,8 @@ export class TrailScene {
 
   nadirGeometryBounds() {
     const layer = this.selectedLayer();
-    if (!this.useMap || !["25306743", "25739797", "26134529"].includes(String(this.mapPack?.gameBuildId)) || String(layer?.biome).toLowerCase() !== "void") return null;
+    // Build 26155610 source equivalence: data/maps/game-build.26155610.json.
+    if (!this.useMap || !["25306743", "25739797", "26134529", "26155610"].includes(String(this.mapPack?.gameBuildId)) || String(layer?.biome).toLowerCase() !== "void") return null;
     const group = this.terrainRoot.children.find((entry) => entry.userData.mapLayer === layer && entry.userData.loaded);
     if (!group) return null;
     if (Object.hasOwn(group.userData, "nadirCameraBounds")) return group.userData.nadirCameraBounds;

@@ -1782,7 +1782,7 @@ export function selectDailyMapPack(catalog, daily) {
   if (daily.gameBuildId != null && String(daily.gameBuildId).trim() !== activeBuildId) return null;
   // Unbound 2.x observations use a 21-map pool; the same index means a
   // different scene in 3.0. Require the resolver's verified build binding.
-  if (activeBuildId === "26134529" && daily.gameBuildId == null) return null;
+  if (["26134529", "26155610"].includes(activeBuildId) && daily.gameBuildId == null) return null;
 
   const candidates = catalog.mapPacks.filter((entry) => {
     if (!validCatalogEntry(entry)) return false;

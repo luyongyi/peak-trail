@@ -519,7 +519,7 @@ test("recorded, inactive, ambiguous or wrong-source fog never hides static surfa
 
 test("current exported materials keep tinted swamp depth, fog replacement and primary fungal colours", () => {
   const { batchStaticMeshes, updateMapFogSurfaceVisibility } = compile();
-  for (const build of ['25739797', '26134529']) {
+  for (const build of ['25739797', '26134529', '26155610']) {
     const swamp = effectFixture('M_Water_swamp', 'GD/Water-GD');
     const waterModel = batchStaticMeshes(swamp.scene, build);
     assert.ok(swamp.material.userData.peakWaterDepth);

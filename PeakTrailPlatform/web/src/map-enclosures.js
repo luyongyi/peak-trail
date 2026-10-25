@@ -47,7 +47,8 @@ export function chapterEnclosures(mapPack, layer, { includeContext = false } = {
   const enclosures = normalizeMapEnclosures(mapPack.mapEnclosures, mapPack)?.enclosures || [];
   const own = enclosures.filter(entry => entry.segment === layer.segment);
   const route = mapPack.route;
-  if (!includeContext || mapPack.identityVersion !== 3 || !['25306743', '25739797', '26134529'].includes(String(mapPack.gameBuildId))
+  // Build 26155610 source equivalence: data/maps/game-build.26155610.json.
+  if (!includeContext || mapPack.identityVersion !== 3 || !['25306743', '25739797', '26134529', '26155610'].includes(String(mapPack.gameBuildId))
       || route?.authority !== 'serialized-map-handler' || route.branch !== 'swamp-temple'
       || layer.segment !== 3 || String(layer.biome).toLowerCase() !== 'swamp') return own;
   const current = route.segments?.find(entry => entry.index === 3);

@@ -235,8 +235,8 @@ test("public server budget is an explicit profile, preserving Pages cap and excl
   assert.equal(siteStagingProfile(["--profile", "pages"], { configuredProfile: "server" }), "pages");
   assert.throws(() => siteStagingProfile(["--profile", "server"], { preview: true }), /cannot use --preview/);
   for (const args of [["--profile"], ["--profile", "unknown"], ["--profile", "pages", "--profile", "server"]]) assert.throws(() => siteStagingProfile(args));
-  assert.doesNotThrow(() => checkSiteBudget(12_000_000_000, { profile: "server" }));
-  assert.throws(() => checkSiteBudget(12_000_000_001, { profile: "server" }), /server 12 GB/);
+  assert.doesNotThrow(() => checkSiteBudget(20_000_000_000, { profile: "server" }));
+  assert.throws(() => checkSiteBudget(20_000_000_001, { profile: "server" }), /server 20 GB/);
   assert.throws(() => checkSiteBudget(1_000_000_001), /GitHub Pages 1 GB/);
   assert.throws(() => checkSiteBudget(1, { preview: true, profile: "server" }), /cannot use --preview/);
 });

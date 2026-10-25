@@ -2,7 +2,8 @@
 // snapshot is not an explosion, and a blast radius is not a mesh-hide radius.
 export function isExplosiveMineMaterial(buildId, name, shader) {
   // Current-build material identity re-audited in source-effect-materials.26134529.json.
-  return ['25306743', '25739797', '26134529'].includes(String(buildId)) && name === 'M_SporeShroomExplo' && shader === 'W/Peak_Standard';
+  // Build 26155610 source equivalence: data/maps/game-build.26155610.json.
+  return ['25306743', '25739797', '26134529', '26155610'].includes(String(buildId)) && name === 'M_SporeShroomExplo' && shader === 'W/Peak_Standard';
 }
 
 const point = (value) => Array.isArray(value) && value.length === 3 && value.every(Number.isFinite);

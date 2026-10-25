@@ -26,8 +26,9 @@ export function sourceWaterDepthGap(sceneHit, surfaceHit, cameraForward, heightS
 
 export function applySourceWaterDepth(material, effect) {
   const parameters = effect?.source?.waterDepth;
+  // Build 26155610 source equivalence: data/maps/game-build.26155610.json.
   if (effect?.kind !== "water" || effect.source?.material !== "M_Water_swamp"
-      || effect.source?.shader !== "GD/Water-GD" || !["25306743", "25739797", "26134529"].includes(String(effect.source?.mapBuildId))
+      || effect.source?.shader !== "GD/Water-GD" || !["25306743", "25739797", "26134529", "26155610"].includes(String(effect.source?.mapBuildId))
       || !parameters || ![parameters.primaryLinear, parameters.shallowLinear, parameters.tintLinear].every(triple)
       || !Number.isFinite(parameters.depth) || parameters.depth <= 0 || !material?.color) return false;
   if (material.userData.peakWaterDepth) return true;

@@ -242,11 +242,11 @@ test("a preset drains real OrbitControls drag damping before setting the new cam
   }
 });
 
-test("Void presets fit oriented terrain vertices while retaining the audited 5km water and source bounds", (t) => {
+for (const build of ["25739797", "26155610"]) test(`Void presets for build ${build} fit oriented terrain vertices while retaining the audited 5km water and source bounds`, (t) => {
   const { scene } = fixture(t, { width: 1800, height: 600 });
   const layer = { segment: 5, biome: "Void", name: "Void_Segment",
     minX: -2400, maxX: 2600, minY: 702.6, maxY: 1100, minZ: -2300, maxZ: 2700 };
-  scene.mapPack = { identityVersion: 3, gameBuildId: "25739797", layers: [layer] };
+  scene.mapPack = { identityVersion: 3, gameBuildId: build, layers: [layer] };
   scene.activeSegment = 5;
   const originalBounds = structuredClone(scene.viewBounds());
   const world = new THREE.Group(); world.scale.z = -1; world.add(scene.terrainRoot);
@@ -295,4 +295,6 @@ test("Void presets fit oriented terrain vertices while retaining the audited 5km
     assert.equal(water.visible, true);
     assert.deepEqual(scene.viewBounds(), originalBounds, "source bounds remain available for players and trail clipping");
   }
+  scene.mapPack.gameBuildId = "26155611";
+  assert.equal(scene.nadirGeometryBounds(), null, "a future build cannot reuse the audited Void camera convention");
 });

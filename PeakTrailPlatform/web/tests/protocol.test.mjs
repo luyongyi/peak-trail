@@ -133,6 +133,18 @@ test("daily catalog selects only the active build and current scene", () => {
     gameBuildId: "25306743" })?.mapPackId, activeLevel16);
 });
 
+test("3.0.1 daily maps require the exact build binding and retain historical maps", () => {
+  const mapPackId = `sha256-${"e".repeat(64)}`;
+  const catalog = { schemaVersion: 1, activeGameBuildId: "26155610", mapPacks: [{
+    identityVersion: 3, mapPackId, path: `./packs/${mapPackId}/map-pack.json`,
+    gameBuildId: "26155610", sceneName: "Level_81", mapSlot: 81,
+  }] };
+  const daily = { sceneName: "Level_81", mapSlot: 81 };
+  assert.equal(selectDailyMapPack(catalog, daily), null);
+  assert.equal(selectDailyMapPack(catalog, { ...daily, gameBuildId: "26134529" }), null);
+  assert.equal(selectDailyMapPack(catalog, { ...daily, gameBuildId: "26155610" })?.mapPackId, mapPackId);
+});
+
 test("daily catalog refuses to guess without an explicitly active build", () => {
   const unmarkedLevel16 = `sha256-${"d".repeat(64)}`;
   const catalog = {

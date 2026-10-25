@@ -6,7 +6,7 @@
 // MapBaker.ScenePaths contains Level_0..Level_207 in native rotation order.
 export const DEFAULT_API_VERSION = "3.0";
 export const DEFAULT_MAP_COUNT = 208;
-export const DEFAULT_GAME_BUILD_ID = "26134529";
+export const DEFAULT_GAME_BUILD_ID = "26155610";
 export const DAILY_CACHE_MS = 10 * 60_000;
 // Current NextLevelService adds the native integer HoursUntilLevel directly;
 // it is a total hour count, not a 0..23 wall-clock component. Bound the sum to

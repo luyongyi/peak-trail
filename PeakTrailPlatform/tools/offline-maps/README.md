@@ -1,6 +1,10 @@
 # Offline PEAK map baker
 
-当前 Steam build `26134529`（3.0.0）从七个原生地图 bundle 导出 208 张地图。
+当前 Steam build `26155610`（3.0.1）包含 208 张地图。此次补丁的原生地图资源
+经完整源校验后复用 `26134529` 的派生资源，并为新构建计算独立的地图身份；
+认证、准备和只读发布流程见 [底图构建升级](../../docs/basemap-build-upgrade.md)。
+
+Steam build `26134529`（3.0.0）从七个原生地图 bundle 导出 208 张地图。
 完整重建入口为 `export_build.py --slots all --with-sidecars --with-loot`，
 使用已认证的私有输入缓存、逐图 loot 分片，保留旧版规范包。源 bundle、
 原生 MapBaker 场景顺序和逐图摘要见 `data/maps/game-build.26134529.json`。
