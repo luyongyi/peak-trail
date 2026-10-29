@@ -56,7 +56,7 @@ export function mountMapDiagnostics(canvas, { getRenderDiagnostics = () => ({}) 
   const panel = document.createElement("details"), summary = document.createElement("summary");
   const description = document.createElement("p"), output = document.createElement("pre"), copy = document.createElement("button");
   panel.className = "map-loading-diagnostics";
-  Object.assign(panel.style, { position: "absolute", left: "12px", bottom: "12px", zIndex: "15", maxWidth: "min(28rem, calc(100% - 24px))", maxHeight: "45%", overflow: "auto", color: "#e4e8db", background: "#10201ded", border: "1px solid #64725e", borderRadius: "8px", padding: "7px 10px", fontSize: "12px", pointerEvents: "auto" });
+  Object.assign(panel.style, { position: "absolute", right: "12px", bottom: "12px", zIndex: "3", maxWidth: "min(28rem, calc(100% - 24px))", maxHeight: "45%", overflow: "auto", color: "#e4e8db", background: "#10201ded", border: "1px solid #64725e", borderRadius: "8px", padding: "7px 10px", fontSize: "12px", pointerEvents: "auto" });
   summary.textContent = tr("加载诊断", "Loading diagnostics");
   summary.style.cursor = "pointer";
   description.textContent = tr("若地图卡住，可复制此信息。诊断只保存在本机，不含房间号或账号信息。", "If the map stalls, copy this information. Diagnostics stay on this device and contain no room or account details.");
@@ -64,7 +64,7 @@ export function mountMapDiagnostics(canvas, { getRenderDiagnostics = () => ({}) 
   Object.assign(output.style, { whiteSpace: "pre-wrap", overflowWrap: "anywhere", userSelect: "text", fontSize: "11px" });
   copy.type = "button";
   copy.textContent = tr("复制诊断", "Copy diagnostics");
-  panel.append(summary, description, output, copy);
+  panel.append(summary, description, copy, output);
   canvas.parentElement.append(panel);
 
   function refresh() {
@@ -79,6 +79,7 @@ export function mountMapDiagnostics(canvas, { getRenderDiagnostics = () => ({}) 
       : state.mapStatus === "error" ? tr("地图暂未就绪 · 加载诊断", "Map unavailable · diagnostics")
       : state.mapStatus === "loading" ? `${tr(...PHASE_LABELS[state.phase])} · ${tr("加载诊断", "diagnostics")}` : tr("加载诊断", "Loading diagnostics");
     if (graphicsInterrupted || state.mapStatus === "error") panel.open = true;
+    panel.style.zIndex = panel.open ? "15" : "3";
   }
   const listeners = [
     ["peaktrail-map-status", event => {

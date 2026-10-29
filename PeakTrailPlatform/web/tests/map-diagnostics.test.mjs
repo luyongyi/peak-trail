@@ -21,7 +21,7 @@ function fixture(saved = null, { storageFailure = false, copyFailure = false } =
   const canvas = new Element(); canvas.ownerDocument = document; canvas.parentElement = new Element();
   let rendering = { status: "initializing" };
   const diagnostics = mountMapDiagnostics(canvas, { getRenderDiagnostics: () => rendering });
-  const panel = canvas.parentElement.children[0], [, , output, copy] = panel.children;
+  const panel = canvas.parentElement.children[0], [, , copy, output] = panel.children;
   return { panel, output, copy, timers, copied, diagnostics,
     state: () => JSON.parse(output.textContent),
     emit(name, detail) { canvas.dispatchEvent(new CustomEvent(name, { detail })); },
