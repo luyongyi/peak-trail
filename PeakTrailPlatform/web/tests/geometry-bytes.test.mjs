@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { gzipSync } from "node:zlib";
 import test from "node:test";
-import { decodeGeometryBytes, MAX_GEOMETRY_BYTES } from "../src/geometry-bytes.js";
+import { decodeGeometryBytes, MAX_GEOMETRY_BYTES, readGeometryResponse, checkGeometryAbort } from "../src/geometry-bytes.js";
 import { verifyGeometryGlb, MAX_GEOMETRY_BYTES as NODE_LIMIT } from "../../tools/lib/map-pack-identity.mjs";
 
 const FORMAT = "glb-instanced-v1+gzip";
@@ -44,4 +44,46 @@ test("gzip decode respects cancellation and rejects unsupported formats", async 
   const controller = new AbortController(); controller.abort();
   await assert.rejects(decodeGeometryBytes(gzipSync(glb()), FORMAT, controller.signal), { name: "AbortError" });
   await assert.rejects(decodeGeometryBytes(glb(), "unknown"), /不支持/);
+});
+
+test("single-member gzip size must agree, including sliced inputs and checksum failures", async () => {
+  const original = glb(), zipped = gzipSync(original), envelope = Buffer.concat([Buffer.alloc(17), zipped, Buffer.alloc(13)]);
+  assert.deepEqual(Buffer.from(await decodeGeometryBytes(envelope.subarray(17, 17 + zipped.length), FORMAT)), original);
+  const wrongSize = Buffer.from(zipped); wrongSize.writeUInt32LE(original.length + 1, wrongSize.length - 4);
+  const badCrc = Buffer.from(zipped); badCrc[badCrc.length - 8] ^= 1;
+  for (const invalid of [wrongSize, badCrc, Buffer.concat([zipped, zipped])]) await assert.rejects(decodeGeometryBytes(invalid, FORMAT));
+});
+
+test("download counts stream bytes even without or with a misleading content length", async () => {
+  const bytes = glb(), progress = [];
+  const response = new Response(new ReadableStream({ start(controller) {
+    controller.enqueue(bytes.subarray(0, 8)); controller.enqueue(bytes.subarray(8)); controller.close();
+  } }), { headers: { "content-length": "1" } });
+  assert.deepEqual(Buffer.from(await readGeometryResponse(response, undefined, event => progress.push(event))), bytes);
+  assert.equal(progress.at(-1).loadedBytes, bytes.length);
+  assert.ok(progress.every(event => Object.keys(event).every(key => ["stage", "loadedBytes", "totalBytes"].includes(key))));
+  let canceled = false;
+  const hugeHeader = new Response(new ReadableStream({ cancel() { canceled = true; } }), { headers: { "content-length": String(MAX_GEOMETRY_BYTES + 1) } });
+  await assert.rejects(readGeometryResponse(hugeHeader), /128 MiB/);
+  assert.equal(canceled, true);
+  canceled = false; let sent = 0;
+  const chunk = new Uint8Array(1024 * 1024);
+  const unknownSize = new Response(new ReadableStream({ pull(controller) { controller.enqueue(chunk); sent++; }, cancel() { canceled = true; } }));
+  await assert.rejects(readGeometryResponse(unknownSize), /128 MiB/);
+  assert.ok(sent <= 131, "cancel before reading an unbounded stream");
+  assert.equal(canceled, true);
+});
+
+test("older AbortSignal without throwIfAborted can cancel a pending stream read", async () => {
+  const controller = new AbortController();
+  Object.defineProperty(controller.signal, "throwIfAborted", { value: undefined });
+  let canceled = false;
+  const response = new Response(new ReadableStream({ cancel() { canceled = true; } }));
+  const pending = readGeometryResponse(response, controller.signal);
+  controller.abort();
+  await assert.rejects(pending, { name: "AbortError" });
+  assert.equal(canceled, true);
+  assert.throws(() => checkGeometryAbort({ aborted: true }), { name: "AbortError" });
+  const active = { aborted: false };
+  assert.deepEqual(Buffer.from(await decodeGeometryBytes(gzipSync(glb()), FORMAT, active, () => { throw Error("observer"); })), glb());
 });

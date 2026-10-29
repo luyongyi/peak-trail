@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
-import { decodeGeometryBytes, GEOMETRY_FORMATS } from "./geometry-bytes.js";
+import { decodeGeometryBytes, GEOMETRY_FORMATS, readGeometryResponse, checkGeometryAbort, reportGeometryProgress, yieldGeometryTask } from "./geometry-bytes.js";
 import { positiveInstanceTransform } from "./geometry-matrices.js";
 import { getSourceEffectMaterial } from "./source-materials.js";
 import { applySourceWaterDepth } from "./source-water-material.js";
@@ -168,35 +168,97 @@ function useExactInstanceNormals(material) {
   material.needsUpdate = true;
 }
 
-function indexedBounds(geometry) {
-  const bounds = new THREE.Box3();
-  const position = geometry.getAttribute("position");
-  const vertex = new THREE.Vector3();
-  const index = geometry.getIndex();
-  // Shared Unity static-batch vertex buffers may contain an entire scene. Only
-  // the vertices addressed by this primitive's index buffer belong to this mine.
+function setInstanceBounds(mesh, primitiveBounds) {
+  const box = new THREE.Box3(), transformed = new THREE.Box3(), matrix = new THREE.Matrix4();
+  for (let i = 0; i < mesh.count; i++) {
+    // Read the float32 matrices actually sent to the GPU. Transform a box,
+    // not a sphere's radius: shear can exceed the longest matrix column.
+    mesh.getMatrixAt(i, matrix);
+    box.union(transformed.copy(primitiveBounds).applyMatrix4(matrix));
+  }
+  mesh.boundingBox = box;
+  mesh.boundingSphere = box.getBoundingSphere(new THREE.Sphere());
+}
+
+function indexedBounds(geometry, useGroups = false) {
+  const bounds = new THREE.Box3(), vertex = new THREE.Vector3();
+  const position = geometry.getAttribute("position"), index = geometry.getIndex();
+  if (!position) return bounds;
+  // Unity static-batch positions can cover the entire scene. Visit only this
+  // primitive's actual draw range; array materials additionally select groups.
   const count = index?.count ?? position.count;
-  for (let i = 0; i < count; i++) bounds.expandByPoint(vertex.fromBufferAttribute(position, index ? index.getX(i) : i));
+  const start = Math.max(0, geometry.drawRange.start);
+  const end = Math.min(count, start + geometry.drawRange.count);
+  const ranges = useGroups ? geometry.groups.map(group => [Math.max(start, group.start),
+    Math.min(end, group.start + group.count)]) : [[start, end]];
+  ranges.sort((a, b) => a[0] - b[0]);
+  let visitedEnd = start;
+  for (const [from, to] of ranges) {
+    for (let i = Math.max(from, visitedEnd); i < to; i++) {
+      bounds.expandByPoint(vertex.fromBufferAttribute(position, index ? index.getX(i) : i));
+    }
+    visitedEnd = Math.max(visitedEnd, to);
+  }
   return bounds;
+}
+
+// Keep the synchronous entry for offline geometry audits. The browser drains
+// the same builder cooperatively, without dropping triangles or instances.
+function batchStaticMeshes(...args) {
+  const work = buildStaticMeshes(...args);
+  for (;;) { const next = work.next(); if (next.done) return next.value; }
+}
+
+async function batchStaticMeshesAsync(scene, build, shadowOnly, associations, context, signal) {
+  const work = buildStaticMeshes(scene, build, shadowOnly, associations, context);
+  let deadline = performance.now() + 8;
+  try {
+    for (;;) {
+      checkGeometryAbort(signal);
+      const next = work.next();
+      if (next.done) return next.value;
+      if (performance.now() >= deadline) {
+        await yieldGeometryTask(signal);
+        deadline = performance.now() + 8;
+      }
+    }
+  } finally { work.return(); }
 }
 
 /** Keep every visible source triangle; share repeated rocks/trees and preserve full
  * matrixWorld, including shear that glTF's TRS instancing cannot represent. */
-function batchStaticMeshes(scene, gameBuildId, shadowOnlyNodes = new Set(), associations = new Map()) {
+function* buildStaticMeshes(scene, gameBuildId, shadowOnlyNodes = new Set(), associations = new Map()) {
   scene.updateMatrixWorld(true);
   const batches = new Map();
   const instance = new THREE.Matrix4();
   const prepared = new Set();
+  const boundsCache = new Map(), groupBoundsCache = new Map(), preciseBoundsCache = new Map();
+  const cachedBounds = (geometry, grouped = false, precise = false) => {
+    const cache = grouped ? groupBoundsCache : precise ? preciseBoundsCache : boundsCache;
+    if (!cache.has(geometry)) {
+      const count = geometry.index?.count ?? geometry.getAttribute("position")?.count ?? 0;
+      const existing = geometry.boundingBox;
+      // GLTFLoader normally supplies conservative accessor min/max bounds.
+      // Reuse them for a full primitive rather than adding a new index scan.
+      const reusable = !grouped && !precise && geometry.drawRange.start === 0
+        && geometry.drawRange.count >= count && existing && !existing.isEmpty()
+        && [...existing.min.toArray(), ...existing.max.toArray()].every(Number.isFinite);
+      cache.set(geometry, reusable ? existing : indexedBounds(geometry, grouped));
+    }
+    return cache.get(geometry);
+  };
   let omittedProjectionInstances = 0;
   let omittedShadowOnlyInstances = 0;
-  scene.traverse((object) => {
-    if (!object.isMesh || object.isSkinnedMesh) return;
+  const objects = [];
+  scene.traverse(object => { if (object.isMesh && !object.isSkinnedMesh) objects.push(object); });
+  objects: for (const object of objects) {
+    if (!object.isMesh || object.isSkinnedMesh) continue objects;
     // Multi-primitive glTF nodes can own child meshes. Resolve their associated
     // node before batching; hidden panels must not affect camera/trail raycasts.
     for (let owner = object; owner && owner !== scene; owner = owner.parent) {
       if (shadowOnlyNodes.has(associations.get(owner)?.nodes)) {
         omittedShadowOnlyInstances += object.isInstancedMesh ? object.count : 1;
-        return;
+        continue objects;
       }
     }
     const materials = Array.isArray(object.material) ? object.material : [object.material];
@@ -206,13 +268,13 @@ function batchStaticMeshes(scene, gameBuildId, shadowOnlyNodes = new Set(), asso
       // A Unity depth-projection volume rendered as an opaque glTF surface
       // becomes a huge false ball. Keep the separate original crystal/prop.
       omittedProjectionInstances += object.isInstancedMesh ? object.count : 1;
-      return;
+      continue objects;
     }
     if (proxyMaterials.some(Boolean)) {
       // GLTFLoader normally splits primitives. Preserve unrelated material
       // groups if a caller supplies a combined mesh, including for raycasts.
       const groups = geometry.groups.filter((group) => !proxyMaterials[group.materialIndex]);
-      if (!groups.length) return;
+      if (!groups.length) continue objects;
       geometry = geometry.clone(); geometry.clearGroups();
       for (const group of groups) geometry.addGroup(group.start, group.count, group.materialIndex);
     }
@@ -220,7 +282,7 @@ function batchStaticMeshes(scene, gameBuildId, shadowOnlyNodes = new Set(), asso
       const source = material.userData?.peakTerrain;
       return isExplosiveMineMaterial(gameBuildId, source?.sourceMaterial || material.name, source?.sourceColors?.shader);
     });
-    const mineBounds = mine ? indexedBounds(object.geometry) : null;
+    const mineBounds = mine ? cachedBounds(geometry, Array.isArray(object.material), true) : null;
     for (const material of materials) {
       if (!prepared.has(material)) {
         applySourceCutoutMaterial(material, gameBuildId);
@@ -247,9 +309,11 @@ function batchStaticMeshes(scene, gameBuildId, shadowOnlyNodes = new Set(), asso
       for (let index = 0; index < object.count; index++) {
         object.getMatrixAt(index, instance);
         addMatrix(new THREE.Matrix4().multiplyMatrices(object.matrixWorld, instance));
+        if ((index & 127) === 127) yield;
       }
     } else addMatrix(object.matrixWorld);
-  });
+    yield;
+  }
   const root = new THREE.Group();
   for (const batch of batches.values()) {
     const mesh = new THREE.InstancedMesh(batch.geometry, batch.material, batch.matrices.length);
@@ -259,9 +323,9 @@ function batchStaticMeshes(scene, gameBuildId, shadowOnlyNodes = new Set(), asso
       ...mine, originalMatrix: batch.matrices[mine.index].clone(), hidden: false,
     }));
     mesh.instanceMatrix.needsUpdate = true;
-    mesh.computeBoundingBox();
-    mesh.computeBoundingSphere();
+    setInstanceBounds(mesh, cachedBounds(batch.geometry, Array.isArray(batch.material)));
     root.add(mesh);
+    yield;
   }
   root.userData.drawBatches = batches.size;
   root.userData.omittedProjectionInstances = omittedProjectionInstances;
@@ -333,20 +397,41 @@ export function updateMapFogSurfaceVisibility(terrainRoot, fogObjects = []) {
   return hidden;
 }
 
-export async function loadGameGeometry(layer, signal, gameBuildId) {
+export async function loadGameGeometry(layer, signal, gameBuildId, context = {}) {
   if (!GEOMETRY_FORMATS.includes(layer.geometryFormat) || !layer.geometryUrl
       || !/^[a-f0-9]{64}$/i.test(layer.geometrySha256 || "")) throw new Error("此关缺少已校验的真实模型引用");
+  let lastProgressStage, lastProgressTime = -Infinity;
+  const progress = event => {
+    const now = performance.now();
+    if (event.stage !== lastProgressStage || now - lastProgressTime >= 100
+        || (event.totalBytes !== undefined && event.loadedBytes === event.totalBytes)) {
+      lastProgressStage = event.stage; lastProgressTime = now;
+      context.onProgress?.(event);
+    }
+  };
+  checkGeometryAbort(signal);
+  reportGeometryProgress(progress, "download", 0);
   const response = await fetch(layer.geometryUrl, { signal, cache: "force-cache" });
   if (!response.ok) throw new Error(`真实模型读取失败（${response.status}）`);
-  let bytes = await response.arrayBuffer();
-  // Works on insecure origins too (plain-HTTP LAN viewing) via the JS fallback.
-  // `crypto` is the caller-injected port in tests, the browser global in production.
+  let bytes = await readGeometryResponse(response, signal, progress);
+  reportGeometryProgress(progress, "hash", bytes.byteLength, bytes.byteLength);
+  await yieldGeometryTask(signal);
   const digest = await sha256Hex(new Uint8Array(bytes), crypto?.subtle);
+  checkGeometryAbort(signal);
   if (digest !== layer.geometrySha256.toLowerCase()) throw new Error("真实模型内容哈希不匹配，已拒绝显示");
-  bytes = await decodeGeometryBytes(bytes, layer.geometryFormat, signal);
+  reportGeometryProgress(progress, "decompress");
+  await yieldGeometryTask(signal);
+  bytes = await decodeGeometryBytes(bytes, layer.geometryFormat, signal, progress);
   assertEmbeddedGlb(bytes);
+  reportGeometryProgress(progress, "parse", bytes.byteLength, bytes.byteLength);
+  await yieldGeometryTask(signal);
   const gltf = await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).parseAsync(bytes, "");
+  checkGeometryAbort(signal);
+  reportGeometryProgress(progress, "batch");
+  await yieldGeometryTask(signal);
   preserveAffineMatrices(gltf);
-  return batchStaticMeshes(gltf.scene, gameBuildId,
-    shadowOnlyNodeIndices(gameBuildId, digest), gltf.parser.associations);
+  const root = await batchStaticMeshesAsync(gltf.scene, gameBuildId,
+    shadowOnlyNodeIndices(gameBuildId, digest), gltf.parser.associations, { ...context, geometryLayer: layer }, signal);
+  reportGeometryProgress(progress, "ready");
+  return root;
 }

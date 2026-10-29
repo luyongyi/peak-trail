@@ -4,7 +4,7 @@ import { createHash, webcrypto } from "node:crypto";
 import { gzipSync } from "node:zlib";
 import test from "node:test";
 import * as THREE from "../../vendor/three/0.180.0/build/three.module.js";
-import { decodeGeometryBytes, GEOMETRY_FORMATS } from "../src/geometry-bytes.js";
+import { decodeGeometryBytes, GEOMETRY_FORMATS, readGeometryResponse, checkGeometryAbort, reportGeometryProgress, yieldGeometryTask } from "../src/geometry-bytes.js";
 import { positiveInstanceTransform } from "../src/geometry-matrices.js";
 import { getSourceEffectMaterial } from "../src/source-materials.js";
 import { isExplosiveMineMaterial, recordedHiddenMineIndices } from "../src/mine-visibility.js";
@@ -19,9 +19,9 @@ const waterSource = (await readFile(new URL("../src/source-water-material.js", i
   .replace(/^import .*;\r?\n/gm, "").replace(/^export (?=function )/gm, "");
 const applySourceWaterDepth = new Function("THREE", `${waterSource}\nreturn applySourceWaterDepth;`)(THREE);
 const compile = (ports = {}) => new Function(
-  "THREE", "GLTFLoader", "MeshoptDecoder", "decodeGeometryBytes", "GEOMETRY_FORMATS", "positiveInstanceTransform", "getSourceEffectMaterial", "isExplosiveMineMaterial", "recordedHiddenMineIndices", "sha256Hex", "fetch", "crypto", "isProjectionProxyMaterial", "shadowOnlyNodeIndices", "applySourceWaterDepth",
+  "THREE", "GLTFLoader", "MeshoptDecoder", "decodeGeometryBytes", "GEOMETRY_FORMATS", "positiveInstanceTransform", "getSourceEffectMaterial", "isExplosiveMineMaterial", "recordedHiddenMineIndices", "sha256Hex", "fetch", "crypto", "isProjectionProxyMaterial", "shadowOnlyNodeIndices", "applySourceWaterDepth", "readGeometryResponse", "checkGeometryAbort", "reportGeometryProgress", "yieldGeometryTask",
   `${source}\nreturn { loadGameGeometry, batchStaticMeshes, updateRecordedMineVisibility, updateMapFogSurfaceVisibility, verifiableTopBlend };`,
-)(THREE, ports.GLTFLoader, {}, ports.decode || decodeGeometryBytes, GEOMETRY_FORMATS, positiveInstanceTransform, getSourceEffectMaterial, isExplosiveMineMaterial, recordedHiddenMineIndices, sha256Hex, ports.fetch, ports.crypto || webcrypto, isProjectionProxyMaterial, ports.shadowOnlyNodeIndices || shadowOnlyNodeIndices, applySourceWaterDepth);
+)(THREE, ports.GLTFLoader, {}, ports.decode || decodeGeometryBytes, GEOMETRY_FORMATS, positiveInstanceTransform, getSourceEffectMaterial, isExplosiveMineMaterial, recordedHiddenMineIndices, sha256Hex, ports.fetch, ports.crypto || webcrypto, isProjectionProxyMaterial, ports.shadowOnlyNodeIndices || shadowOnlyNodeIndices, applySourceWaterDepth, readGeometryResponse, checkGeometryAbort, reportGeometryProgress, yieldGeometryTask);
 
 test("audited shadow-only affine/GPU panels are omitted, same-name solid props remain", () => {
   const { batchStaticMeshes } = compile();

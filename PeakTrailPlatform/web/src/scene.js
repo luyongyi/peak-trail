@@ -23,6 +23,8 @@ import { MapLootFocus } from "./map-loot-focus.js";
 import { EnclosureContextRenderer } from "./enclosure-context-renderer.js";
 import { fitPerspectivePoints } from "./camera-framing.js";
 import { collectCameraParts, selectCameraSubjectParts } from "./camera-subject.js";
+import { chooseRenderPolicy, renderErrorName } from "./render-policy.js";
+import { mountMapDiagnostics } from "./map-diagnostics.js";
 import { tr, formatNumber } from "./i18n.js";
 
 function collectWaterDepthEntries(root, heightScale) {
@@ -156,6 +158,14 @@ function disposeObject(root) {
 export class TrailScene {
   constructor(canvas) {
     this.canvas = canvas;
+    this.disposed = false;
+    this.contextLost = false;
+    this.contextLossCount = 0;
+    this.contextRestoreCount = 0;
+    this.renderStatus = "initializing";
+    this.renderFailure = null;
+    this.renderingStarted = false;
+    this.mapDiagnostics = mountMapDiagnostics(canvas, { getRenderDiagnostics: () => this.getRenderDiagnostics() });
     this.mapPack = null;
     this.trace = null;
     this.useMap = false;
@@ -210,13 +220,36 @@ export class TrailScene {
     ];
     for (const [target, name, handler] of this.followListeners) target.addEventListener(name, handler);
 
-    this.renderer = new THREE.WebGLRenderer({
-      canvas,
-      antialias: true,
-      alpha: true,
-      powerPreference: "high-performance",
-    });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    try {
+      this.renderer = new THREE.WebGLRenderer({
+        canvas,
+        antialias: true,
+        alpha: true,
+        powerPreference: "high-performance",
+      });
+    } catch (error) {
+      this.renderFailure = renderErrorName(error);
+      this.emitRenderStatus("render-error", "浏览器未能创建图形连接，请复制加载诊断后重试。");
+      for (const [target, name, handler] of this.followListeners) target.removeEventListener(name, handler);
+      this.followListeners = [];
+      this.followTerrain.dispose();
+      this.labelOverlay.remove();
+      throw error;
+    }
+    this.renderer.debug.onShaderError = () => {
+      this.renderFailure = "ShaderError";
+      cancelAnimationFrame(this.animationFrame);
+      this.animationFrame = null;
+      this.emitRenderStatus("render-error", "浏览器未能完成地图着色，请复制加载诊断后重试。");
+    };
+    const gl = this.renderer.getContext();
+    this.renderLimits = { maxTextureSize: this.renderer.capabilities.maxTextureSize,
+      maxRenderbufferSize: gl.getParameter(gl.MAX_RENDERBUFFER_SIZE) };
+    this.contextListeners = [
+      ["webglcontextlost", event => this.onRenderContextLost(event)],
+      ["webglcontextrestored", () => this.onRenderContextRestored()],
+    ];
+    for (const [name, handler] of this.contextListeners) canvas.addEventListener(name, handler);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 0.93;
@@ -292,6 +325,7 @@ export class TrailScene {
   }
 
   resize() {
+    if (this.disposed) return;
     const container = this.canvas.parentElement;
     const width = Math.max(1, container.clientWidth);
     const height = Math.max(1, container.clientHeight);
@@ -301,7 +335,13 @@ export class TrailScene {
     this.viewportHeight = height;
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
-    this.renderer.setSize(width, height, false);
+    const view = this.canvas.ownerDocument?.defaultView ?? window;
+    this.renderPolicy = chooseRenderPolicy({ width, height, devicePixelRatio: view.devicePixelRatio || 1,
+      coarsePointer: view.matchMedia?.("(pointer: coarse)").matches === true, ...this.renderLimits });
+    // Set size and scale together: changing either separately can temporarily
+    // allocate the old large viewport at the new (larger) pixel ratio.
+    this.renderer.setDrawingBufferSize(width, height, this.renderPolicy.pixelRatio);
+    this.mapLootOverlay?.setPixelRatio(this.renderPolicy.pixelRatio);
     this.communityOverlay?.setViewport(width, height);
     // Reframe only an untouched preset. A resized sidebar or phone rotation
     // must not replace a view the user has already moved or a replay camera.
@@ -311,21 +351,100 @@ export class TrailScene {
   }
 
   animate(timestamp) {
-    const delta = this.lastFrameTime === null ? 0 : (timestamp - this.lastFrameTime) / 1000;
-    this.lastFrameTime = timestamp;
-    if (this.mapLootFocus?.update(timestamp)) { /* The close-up flight owns the camera this frame. */ }
-    else if (this.freeCamera.mode === "free") this.freeCamera.update(delta);
-    else if (this.followTargetId !== null) this.updateFollowCamera(delta);
-    else this.controls.update();
-    this.updateCameraMarkerVisibility();
-    this.fogDepthPass.render({ renderer: this.renderer, scene: this.scene, camera: this.camera,
-      fogEntries: this.worldRenderer.entries.values(), depthEntries: this.waterDepthEntries,
-      hiddenRoots: [this.trailRoot, this.gridRoot, this.communityOverlay?.root, this.mapLootOverlay?.root, this.itemEventOverlay?.root].filter(Boolean) });
-    this.renderer.render(this.scene, this.camera);
-    this.updatePlayerLabelPositions();
-    this.worldRenderer.projectLabels(this.camera, this.viewportWidth, this.viewportHeight, true);
-    this.animationFrame = requestAnimationFrame(this.animate);
+    this.animationFrame = null;
+    if (this.disposed || this.contextLost || this.renderFailure) return;
+    try {
+      const delta = this.lastFrameTime === null ? 0 : (timestamp - this.lastFrameTime) / 1000;
+      this.lastFrameTime = timestamp;
+      if (this.mapLootFocus?.update(timestamp)) { /* The close-up flight owns the camera this frame. */ }
+      else if (this.freeCamera.mode === "free") this.freeCamera.update(delta);
+      else if (this.followTargetId !== null) this.updateFollowCamera(delta);
+      else this.controls.update();
+      this.updateCameraMarkerVisibility();
+      this.fogDepthPass.render({ renderer: this.renderer, scene: this.scene, camera: this.camera,
+        fogEntries: this.worldRenderer.entries.values(), depthEntries: this.waterDepthEntries,
+        hiddenRoots: [this.trailRoot, this.gridRoot, this.communityOverlay?.root, this.mapLootOverlay?.root, this.itemEventOverlay?.root].filter(Boolean) });
+      if (this.renderFailure || this.contextLost) return;
+      this.renderer.render(this.scene, this.camera);
+      if (this.renderFailure || this.contextLost) return;
+      this.updatePlayerLabelPositions();
+      this.worldRenderer.projectLabels(this.camera, this.viewportWidth, this.viewportHeight, true);
+      if (!this.renderingStarted) {
+        this.renderingStarted = true;
+        this.emitRenderStatus("ready", "地图渲染已就绪。");
+      }
+    } catch (error) {
+      this.renderFailure = renderErrorName(error);
+      this.emitRenderStatus("render-error", "地图渲染遇到异常，请复制加载诊断后重试。");
+      return;
+    }
+    if (!this.disposed && !this.contextLost) this.animationFrame = requestAnimationFrame(this.animate);
   }
+
+  onRenderContextLost(event) {
+    event.preventDefault();
+    if (this.disposed) return;
+    this.contextLost = true;
+    this.contextLossCount += 1;
+    cancelAnimationFrame(this.animationFrame);
+    this.animationFrame = null;
+    this.lastFrameTime = null;
+    this.fogDepthPass?.disableMaterials();
+    this.emitRenderStatus("context-lost", "图形连接已中断，正在等待浏览器恢复。若一直未恢复，请复制加载诊断。");
+  }
+
+  onRenderContextRestored() {
+    if (this.disposed) return;
+    this.contextLost = false;
+    this.contextRestoreCount += 1;
+    this.renderFailure = null;
+    this.renderingStarted = false;
+    this.lastFrameTime = null;
+    this.renderContextDiagnostics = null;
+    try {
+      this.fogDepthPass?.dispose();
+      this.fogDepthPass = new FogDepthPass(THREE);
+      this.resize();
+      this.emitRenderStatus("context-restored", "图形连接已恢复，正在重新绘制原地图。");
+      if (this.animationFrame == null) this.animationFrame = requestAnimationFrame(this.animate);
+    } catch (error) {
+      this.renderFailure = renderErrorName(error);
+      this.emitRenderStatus("render-error", "图形连接恢复后未能完成绘制，请复制加载诊断后重试。");
+    }
+  }
+
+  getRenderDiagnostics() {
+    const renderer = this.renderer;
+    // These settings change only on context restoration. Avoid synchronous GL
+    // queries for each download chunk or diagnostic refresh.
+    if (!this.renderContextDiagnostics && renderer && !this.contextLost) {
+      let antialias = null, samples = null;
+      try {
+        const gl = renderer.getContext();
+        antialias = gl?.getContextAttributes?.()?.antialias ?? null;
+        samples = gl?.getParameter(gl.SAMPLES) ?? null;
+      } catch { /* A lost context can reject queries. */ }
+      this.renderContextDiagnostics = { antialias, samples };
+    }
+    return { status: this.renderStatus, errorName: this.renderFailure,
+      drawingWidth: this.canvas.width, drawingHeight: this.canvas.height,
+      viewportWidth: this.viewportWidth, viewportHeight: this.viewportHeight,
+      pixelRatio: renderer?.getPixelRatio?.() ?? null, pixelBudget: this.renderPolicy?.pixelBudget ?? null,
+      coarsePointer: this.renderPolicy?.coarsePointer ?? null, antialias: this.renderContextDiagnostics?.antialias ?? null,
+      samples: this.renderContextDiagnostics?.samples ?? null,
+      maxTextureSize: this.renderLimits?.maxTextureSize ?? null,
+      maxRenderbufferSize: this.renderLimits?.maxRenderbufferSize ?? null,
+      contextLost: this.contextLost, contextLossCount: this.contextLossCount, contextRestoreCount: this.contextRestoreCount,
+      geometryCount: renderer?.info?.memory?.geometries ?? null, textureCount: renderer?.info?.memory?.textures ?? null,
+      programCount: renderer?.info?.programs?.length ?? null,
+      fogDepthWidth: this.fogDepthPass?.target?.width ?? 0, fogDepthHeight: this.fogDepthPass?.target?.height ?? 0 };
+  }
+
+  emitRenderStatus(status, message) {
+    this.renderStatus = status;
+    this.canvas.dispatchEvent(new CustomEvent("peaktrail-render-status", { detail: { status, message, diagnostics: this.getRenderDiagnostics() } }));
+  }
+
 
   async setData({ mapPack, trace, useMap, activeSegment, viewIntent = null }) {
     this.clearMapLootFocus();
@@ -589,18 +708,30 @@ export class TrailScene {
 
   async loadChapterGeometry(layer, signal, gameBuildId) {
     const enclosures = (this.mapPack.mapEnclosures?.enclosures || []).filter(entry => entry.segment === layer.segment);
-    const model = await loadGameGeometry(layer, signal, gameBuildId);
+    const token = this.buildToken;
+    const context = { chapterLayer: layer, route: this.mapPack.route,
+      onProgress: progress => this.emitGeometryProgress(layer, progress, token) };
+    const model = await loadGameGeometry(layer, signal, gameBuildId, context);
     try {
       // The exact-source siblings were missed by the original root traversal.
       // Load them into the same chapter, including its terrain collision query.
       for (const enclosure of enclosures) {
         signal?.throwIfAborted?.();
-        const shell = await loadGameGeometry({ ...enclosure, id: enclosure.objectId }, signal, gameBuildId);
+        const shell = await loadGameGeometry({ ...enclosure, id: enclosure.objectId }, signal, gameBuildId, context);
         shell.userData.sourceEnclosure = enclosure.objectId;
         model.add(shell);
       }
       return model;
     } catch (error) { disposeObject(model); throw error; }
+  }
+
+  emitGeometryProgress(layer, progress, token) {
+    if (this.disposed || token !== this.buildToken || !this.isGeometryLayerRequested(layer)) return;
+    if (!["download", "hash", "decompress", "parse", "batch", "ready"].includes(progress?.stage)) return;
+    const detail = { stage: progress.stage, segment: Number.isInteger(layer.segment) ? layer.segment : null };
+    for (const field of ["loadedBytes", "totalBytes"])
+      if (Number.isSafeInteger(progress[field]) && progress[field] >= 0) detail[field] = progress[field];
+    this.canvas.dispatchEvent(new CustomEvent("peaktrail-geometry-progress", { detail }));
   }
 
   async ensureGeometryLayers(token = this.buildToken, selectionToken = this.geometrySelectionToken) {
@@ -1888,12 +2019,17 @@ export class TrailScene {
   }
 
   dispose() {
+    this.disposed = true;
+    this.mapDiagnostics?.dispose();
     this.clearMapLootFocus();
     this.lootFocusTerrain?.dispose();
     ++this.cameraSelectionRevision;
     ++this.buildToken;
     ++this.geometrySelectionToken;
     cancelAnimationFrame(this.animationFrame);
+    this.animationFrame = null;
+    for (const [name, handler] of this.contextListeners || []) this.canvas.removeEventListener(name, handler);
+    this.contextListeners = [];
     this.resizeObserver.disconnect();
     this.setFollowTarget(null);
     this.followTerrain?.dispose();

@@ -8,6 +8,7 @@ import { fitPerspectivePoints } from "../src/camera-framing.js";
 import { collectCameraParts, selectCameraSubjectParts } from "../src/camera-subject.js";
 import { isInteriorLayer } from "../src/camera-placement.js";
 import { nadirCameraBounds, nadirCameraParts } from "../src/nadir-camera-bounds.js";
+import { chooseRenderPolicy } from "../src/render-policy.js";
 
 // Use the bundled controller and production scene methods unchanged except for
 // import wiring. The DOM surface and renderer sizing are the only boundary ports.
@@ -17,7 +18,7 @@ const orbitSource = (await readFile(new URL("../../vendor/three/0.180.0/examples
 const OrbitControls = new Function(...Object.keys(THREE), `${orbitSource}\nreturn OrbitControls;`)(...Object.values(THREE));
 const source = (await readFile(new URL("../src/scene.js", import.meta.url), "utf8"))
   .replace(/^import .*;\r?\n/gm, "").replace("export class TrailScene", "class TrailScene");
-const ports = { ...i18n, THREE, fitPerspectivePoints, collectCameraParts, selectCameraSubjectParts, isInteriorLayer, nadirCameraBounds, nadirCameraParts };
+const ports = { ...i18n, THREE, fitPerspectivePoints, collectCameraParts, selectCameraSubjectParts, isInteriorLayer, nadirCameraBounds, nadirCameraParts, chooseRenderPolicy };
 const TrailScene = new Function(...Object.keys(ports), `${source}\nreturn TrailScene;`)(...Object.values(ports));
 
 class Surface extends EventTarget {
@@ -32,6 +33,7 @@ class Surface extends EventTarget {
 function fixture(t, { width = 1600, height = 900, heightScale = 2.5 } = {}) {
   const document = new Surface();
   document.defaultView = new Surface();
+  document.defaultView.devicePixelRatio = 1;
   const canvas = new Surface();
   canvas.ownerDocument = document;
   canvas.getRootNode = () => document;
@@ -61,7 +63,14 @@ function fixture(t, { width = 1600, height = 900, heightScale = 2.5 } = {}) {
     onModeChange: () => { scene.surveyPreset = null; } });
   const sizing = [];
   Object.assign(scene, { canvas, camera, controls, freeCamera,
-    renderer: { setSize: (...args) => sizing.push(args) },
+    renderer: { setDrawingBufferSize(width, height, pixelRatio) {
+      const { width: styleWidth, height: styleHeight } = canvas.style;
+      canvas.width = Math.floor(width * pixelRatio);
+      canvas.height = Math.floor(height * pixelRatio);
+      // Record CSS-space sizing and whether renderer sizing changed CSS, as
+      // before. Three's atomic buffer-size API preserves the canvas styles.
+      sizing.push([width, height, canvas.style.width !== styleWidth || canvas.style.height !== styleHeight]);
+    } },
     origin: new THREE.Vector3(100, 150, 300), heightScale,
     activeSegment: 0, useMap: true, surveyPreset: null, followTargetId: null,
     viewIntent: null, cameraSelectionRevision: 0, terrainRoot: new THREE.Group(),

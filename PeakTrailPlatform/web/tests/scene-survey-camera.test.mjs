@@ -6,10 +6,11 @@ import * as THREE from "../../vendor/three/0.180.0/build/three.module.js";
 import { fitPerspectivePoints } from "../src/camera-framing.js";
 import { collectCameraParts, selectCameraSubjectParts } from "../src/camera-subject.js";
 import { isInteriorLayer } from "../src/camera-placement.js";
+import { chooseRenderPolicy } from "../src/render-policy.js";
 
 const source = (await readFile(new URL("../src/scene.js", import.meta.url), "utf8"))
   .replace(/^import .*;\r?\n/gm, "").replace("export class TrailScene", "class TrailScene");
-const ports = { ...i18n, THREE, fitPerspectivePoints, collectCameraParts, selectCameraSubjectParts, isInteriorLayer };
+const ports = { ...i18n, THREE, fitPerspectivePoints, collectCameraParts, selectCameraSubjectParts, isInteriorLayer, chooseRenderPolicy };
 const Scene = new Function(...Object.keys(ports), `${source}\nreturn TrailScene;`)(...Object.values(ports));
 const layers = [
   { id: "shore", segment: 0, name: "Shore_Segment", biome: "Shore", minX: -230, maxX: 230, minY: -127, maxY: 295, minZ: -540, maxZ: 340 },
@@ -19,10 +20,15 @@ function fixture() {
   const scene = Object.create(Scene.prototype), container = { clientWidth: 1280, clientHeight: 720 };
   const camera = new THREE.PerspectiveCamera(38, 1, .1, 20000), target = new THREE.Vector3();
   const controls = { target, enableDamping: true, update() { camera.lookAt(target); } };
+  const canvas = { parentElement: container,
+    ownerDocument: { defaultView: { devicePixelRatio: 1, matchMedia: () => ({ matches: false }) } } };
   let finish;
   const pending = new Promise(resolve => { finish = resolve; });
-  Object.assign(scene, { camera, controls, canvas: { parentElement: container },
-    renderer: { setSize() {} }, freeCamera: { mode: "orbit", setMode(value) { this.mode = value; } },
+  Object.assign(scene, { camera, controls, canvas,
+    renderer: { setDrawingBufferSize(width, height, pixelRatio) {
+      canvas.width = Math.floor(width * pixelRatio);
+      canvas.height = Math.floor(height * pixelRatio);
+    } }, freeCamera: { mode: "orbit", setMode(value) { this.mode = value; } },
     origin: new THREE.Vector3(), currentBounds: null, heightScale: 1, cameraSelectionRevision: 0,
     followTargetId: null, buildToken: 0, geometrySelectionToken: 0, geometryLoads: new Map(),
     terrainRoot: new THREE.Group(), trailRoot: new THREE.Group(), gridRoot: new THREE.Group(),
