@@ -948,19 +948,28 @@ syncWakeLockChip();
 
 /** Fullscreen includes airport waiting; leaving it restores the existing playback policy. */
 function syncWakeLock() {
-  wakeLock.setDesired(Boolean(fullscreen.active || (state.watch?.active && state.watch.trace && !state.watch.awaitingRun && state.watch.status !== "ended") || state.live?.es || state.live?.demoTimer || state.playing));
+  wakeLock.setDesired(Boolean((fullscreen.presentationActive ?? fullscreen.active) || (state.watch?.active && state.watch.trace && !state.watch.awaitingRun && state.watch.status !== "ended") || state.live?.es || state.live?.demoTimer || state.playing));
   syncWakeLockChip();
 }
 
 function syncWakeLockChip() {
   const button = elements.fullscreenButton;
-  const active = fullscreen.active;
-  button.textContent = active ? tr("退出全屏", "Exit fullscreen") : tr("全屏", "Fullscreen");
-  button.setAttribute("aria-label", active ? tr("退出全屏", "Exit fullscreen") : tr("进入全屏", "Enter fullscreen"));
+  const active = fullscreen.presentationActive ?? fullscreen.active;
+  const expanded = fullscreen.mode === "page";
+  const nativeSupported = fullscreen.supported();
+  const enterLabel = nativeSupported ? tr("全屏", "Fullscreen") : tr("展开地图", "Expand map");
+  const exitLabel = expanded ? tr("收起地图", "Collapse map") : tr("退出全屏", "Exit fullscreen");
+  document.body.classList.toggle("map-expanded", active);
+  if (!active) {
+    elements.appShell?.classList.remove("map-details-open");
+    elements.phonePanelButton?.setAttribute("aria-expanded", "false");
+  }
+  button.textContent = active ? exitLabel : enterLabel;
+  button.setAttribute("aria-label", active ? exitLabel : nativeSupported ? tr("进入全屏", "Enter fullscreen") : enterLabel);
   button.setAttribute("aria-pressed", String(active));
   button.disabled = fullscreen.pending;
-  elements.fullscreenHomeExit.textContent = tr("退出全屏", "Exit fullscreen");
-  elements.fullscreenHomeExit.setAttribute("aria-label", tr("退出全屏", "Exit fullscreen"));
+  elements.fullscreenHomeExit.textContent = exitLabel;
+  elements.fullscreenHomeExit.setAttribute("aria-label", exitLabel);
   elements.fullscreenHomeExit.hidden = !active;
   elements.fullscreenHomeExit.disabled = fullscreen.pending;
   const message = elements.fullscreenMessage;
@@ -983,7 +992,7 @@ function syncWakeLockChip() {
   }
   elements.wakeLockRetry.textContent = tr("重试常亮", "Retry keep-awake");
   elements.wakeLockRetry.hidden = !wakeLock.desired || !wakeLock.supported() || !["denied", "released"].includes(wakeLock.status);
-  elements.screenFeedback.hidden = message.hidden && (chip.hidden || state.watch?.active && wakeLock.held);
+  elements.screenFeedback.hidden = message.hidden && (chip.hidden || (state.watch?.active || active) && wakeLock.held);
 }
 
 function enterLive(code) {
@@ -2927,12 +2936,24 @@ function updatePhonePanelButton() {
     elements.phonePanelButton.setAttribute("aria-label", tr("展开玩家面板", "Open players"));
     return;
   }
+  if (document.body.classList.contains("map-expanded")) {
+    const open = elements.appShell.classList.contains("map-details-open");
+    elements.phonePanelButton.textContent = open ? tr("地图", "Map") : tr("玩家", "Players");
+    elements.phonePanelButton.setAttribute("aria-label", open ? tr("回到地图", "Back to map") : tr("展开玩家面板", "Open players"));
+    elements.phonePanelButton.setAttribute("aria-expanded", String(open));
+    return;
+  }
   const atInspector = isAtPhoneInspector();
   elements.phonePanelButton.textContent = atInspector ? tr("地图 ↑", "Map ↑") : tr("玩家 ↓", "Players ↓");
   elements.phonePanelButton.setAttribute("aria-label", atInspector ? tr("回到地图", "Back to map") : tr("跳到玩家状态与回放设置", "Go to player status and replay settings"));
 }
 elements.phonePanelButton.addEventListener("click", () => {
   if (state.watch?.active) { toggleWatchPlayers(); return; }
+  if (document.body.classList.contains("map-expanded")) {
+    elements.appShell.classList.toggle("map-details-open");
+    updatePhonePanelButton();
+    return;
+  }
   const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
   if (isAtPhoneInspector()) document.querySelector(".app-shell").scrollIntoView({ block: "start", behavior });
   else replayInspector.scrollIntoView({ block: "start", behavior });
@@ -3229,6 +3250,7 @@ window.addEventListener("drop", async (event) => {
 });
 
 window.addEventListener("beforeunload", () => {
+  fullscreen.dispose();
   cancelWatchJoin();
   state.watch.client?.stop();
   disposeLocaleUi();
