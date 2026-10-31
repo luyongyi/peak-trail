@@ -1876,11 +1876,18 @@ export class TrailScene {
   }
 
   enterInteriorView(focus = true) {
+    const pose = chooseRecordedInteriorPose(this.trace, this.currentTime, this.viewBounds(), { playerVisibility: this.playerVisibility });
+    // Lighting a campfire advances the shared chapter before players enter it.
+    // Keep an overview until an actual interior visit has been recorded. The
+    // geometry reference below is an explicit exploration action only.
+    if (!focus && !pose) {
+      this.fitView();
+      return;
+    }
     this.clearMapLootFocus();
     this.setFollowTarget(null);
     this.surveyPreset = null;
     ++this.cameraSelectionRevision;
-    const pose = chooseRecordedInteriorPose(this.trace, this.currentTime, this.viewBounds(), { playerVisibility: this.playerVisibility });
     if (pose) {
       const yaw = THREE.MathUtils.degToRad(pose.yaw || 0);
       // Recorder pos is Character.Center (torso), NOT feet. No head pose was

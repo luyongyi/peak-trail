@@ -5,12 +5,12 @@ import test from "node:test";
 import * as THREE from "../../vendor/three/0.180.0/build/three.module.js";
 import { fitPerspectivePoints } from "../src/camera-framing.js";
 import { collectCameraParts, selectCameraSubjectParts } from "../src/camera-subject.js";
-import { isInteriorLayer } from "../src/camera-placement.js";
+import { chooseRecordedInteriorPose, isInteriorLayer } from "../src/camera-placement.js";
 import { chooseRenderPolicy } from "../src/render-policy.js";
 
 const source = (await readFile(new URL("../src/scene.js", import.meta.url), "utf8"))
   .replace(/^import .*;\r?\n/gm, "").replace("export class TrailScene", "class TrailScene");
-const ports = { ...i18n, THREE, fitPerspectivePoints, collectCameraParts, selectCameraSubjectParts, isInteriorLayer, chooseRenderPolicy };
+const ports = { ...i18n, THREE, fitPerspectivePoints, collectCameraParts, selectCameraSubjectParts, chooseRecordedInteriorPose, isInteriorLayer, chooseRenderPolicy };
 const Scene = new Function(...Object.keys(ports), `${source}\nreturn TrailScene;`)(...Object.values(ports));
 const layers = [
   { id: "shore", segment: 0, name: "Shore_Segment", biome: "Shore", minX: -230, maxX: 230, minY: -127, maxY: 295, minZ: -540, maxZ: 340 },
@@ -172,6 +172,24 @@ test("map-only citadel entry keeps the complete model in view", async () => {
   const loading = scene.setData({ mapPack, trace: null, useMap: true, activeSegment: 4 });
   finish(); await loading;
   assert.equal(interior, 0); assert.equal(scene.freeCamera.mode, "orbit");
+  assertInFrame(scene, layers[1]);
+});
+
+test("automatic citadel entry frames the chapter while the recorded player remains at its outside campfire", async () => {
+  const { scene, finish } = fixture();
+  const loading = scene.setData({ mapPack, trace: null, useMap: true, activeSegment: 4 });
+  finish(); await loading;
+  scene.currentTime = 318;
+  scene.trace = { manifest: { sampleHz: 5 }, events: [], tracks: new Map([["p1", [
+    { t: 317, pos: [10.3641, 806.59937, 1977.4646], yaw: 0, activeSegment: 4 },
+    { t: 400, pos: [10, 900, 2200], yaw: 0, activeSegment: 4 },
+  ]]]) };
+  // Neither a shared chapter change nor a future interior visit authorizes an
+  // automatic geometry landing. A full perspective refit must remain usable.
+  scene.camera.position.set(0, 900, -2200);
+  scene.enterInteriorView(false);
+  assert.equal(scene.freeCamera.mode, "orbit");
+  assert.equal(scene.surveyPreset, "overview");
   assertInFrame(scene, layers[1]);
 });
 

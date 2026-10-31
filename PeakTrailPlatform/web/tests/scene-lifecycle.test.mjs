@@ -425,6 +425,32 @@ test("actual scene interior camera uses the recorded torso center without adding
   freeCamera.dispose();
 });
 
+test("manual interior exploration still finds a real floor and ceiling without a recorded interior visit", () => {
+  const { scene } = fixture();
+  Object.assign(scene.mapPack.layers[0], { name: "Temple_Segment", minX: 0, maxX: 20,
+    minY: 0, maxY: 10, minZ: 0, maxZ: 20 });
+  const root = new THREE.Group();
+  const material = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide });
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(20, 20), material);
+  floor.rotation.x = -Math.PI / 2; floor.position.set(10, 0, -10);
+  const ceiling = floor.clone(); ceiling.position.y = 10;
+  root.add(floor, ceiling);
+  const placements = []; let focuses = 0;
+  Object.assign(scene, { terrainRoot: root, origin: new THREE.Vector3(), heightScale: 1,
+    currentTime: 5, trace: { manifest: { sampleHz: 5 }, events: [], tracks: new Map() },
+    setCameraPlacementNote(chinese, english) { this.cameraPlacementLabels = [chinese, english]; },
+    freeCamera: { mode: "orbit", enterAt(position, direction, options) {
+      this.mode = "free"; placements.push({ position: position.toArray(), direction, options });
+    }, focus() { focuses++; } },
+  });
+  scene.enterInteriorView(true);
+  assert.equal(scene.freeCamera.mode, "free");
+  assert.deepEqual(placements, [{ position: [10, 1.6, -10], direction: [0, 0, 1], options: { focus: true } }]);
+  assert.equal(focuses, 1);
+  assert.match(scene.cameraPlacementLabels[0], /内部几何参考点/);
+  floor.geometry.dispose(); material.dispose();
+});
+
 test("a stale settled task is retried with a fresh request instead of leaving the chapter unloaded", async () => {
   const { scene, requests } = fixture();
   // A task left over from an aborted round settles without mounting and removes
