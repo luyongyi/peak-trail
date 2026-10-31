@@ -1,9 +1,31 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { clipTrailSegment, pointInBounds } from "../src/trail-spatial.js";
+import { clipTrailSegment, pointInBounds, markerInDisplayBounds } from "../src/trail-spatial.js";
 
 const bounds = { min: [0, 10, 20], max: [10, 20, 30] };
 const point = (pos, t = 0, extra = {}) => ({ pos, t, ...extra });
+
+test("native campfire handoff retains the team's actual marker outside the next mesh", () => {
+  const nextChapter = { min: [-253.1417, 130.7132, 104.3791], max: [255.1493, 589.4510, 612.6702] };
+  const atFire = point([-9.35997, 285.80337, 100.15952], 118, { segment: null, activeSegment: 1 });
+  const before = JSON.stringify(atFire);
+  assert.equal(pointInBounds(atFire.pos, nextChapter), false);
+  assert.equal(markerInDisplayBounds(atFire, nextChapter, 1), true);
+  assert.equal(markerInDisplayBounds(atFire, nextChapter, 2), false);
+  assert.equal(JSON.stringify(atFire), before, "display must not move the recorded player");
+  assert.equal(clipTrailSegment(atFire, { ...atFire, t: 119, pos: [-8, 285, 101] }, nextChapter), null,
+    "current-team markers must not disable trail clipping");
+});
+
+test("marker handoff does not override explicit player chapters or unknown legacy samples", () => {
+  const outside = point([-5, 15, 25], 0, { activeSegment: 1 });
+  assert.equal(markerInDisplayBounds({ ...outside, segment: 0 }, bounds, 1), false);
+  assert.equal(markerInDisplayBounds({ ...outside, activeSegment: null }, bounds, 1), false);
+  assert.equal(markerInDisplayBounds(point([5, 15, 25]), bounds, 1), true);
+  assert.equal(markerInDisplayBounds(outside, null, null), true);
+  assert.equal(markerInDisplayBounds({ ...outside, pos: [NaN, 0, 0] }, bounds, 1), false);
+  assert.equal(markerInDisplayBounds(outside, {}, 1), false);
+});
 
 test("point selection uses actual XYZ on all axes with inclusive boundaries", () => {
   assert.equal(pointInBounds([5, 15, 25], bounds), true);

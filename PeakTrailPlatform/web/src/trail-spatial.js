@@ -18,6 +18,19 @@ export function pointInBounds(pos, bounds) {
   return Boolean(normalized && normalized.min.every((min, axis) => pos[axis] >= min && pos[axis] <= normalized.max[axis]));
 }
 
+/** Keep a current-team marker at its recorded XYZ during native campfire handoff.
+ * The next chapter's mesh bounds can exclude the previous campfire where the
+ * team is still standing. Shared progression does not assign a player chapter;
+ * explicit per-player chapters and spatial filtering of old samples remain.
+ */
+export function markerInDisplayBounds(sample, bounds, selectedSegment) {
+  if (!position(sample?.pos)) return false;
+  if (bounds !== null && bounds !== undefined && !normalizeBounds(bounds)) return false;
+  if (Number.isInteger(selectedSegment) && !Number.isInteger(sample.segment)
+      && sample.activeSegment === selectedSegment) return true;
+  return pointInBounds(sample.pos, bounds);
+}
+
 function interpolate(left, right, ratio) {
   // Preserve exact recorded endpoints at 0 and 1 rather than introducing a
   // rounding difference through subtract/add arithmetic.

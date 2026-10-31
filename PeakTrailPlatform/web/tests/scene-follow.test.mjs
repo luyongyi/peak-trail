@@ -7,7 +7,7 @@ import { ReplayCamera } from "../src/replay-camera.js";
 import { fitPerspectivePoints } from "../src/camera-framing.js";
 import { chooseRecordedInteriorPose, isInteriorLayer } from "../src/camera-placement.js";
 import { latestLifeEventBefore, MARKER_LIFE_EVENT_TYPES } from "../src/protocol.js";
-import { pointInBounds } from "../src/trail-spatial.js";
+import { pointInBounds, markerInDisplayBounds } from "../src/trail-spatial.js";
 import { FOLLOW_DISTANCE, FOLLOW_MIN_DISTANCE, FOLLOW_MAX_DISTANCE, FOLLOW_INTERIOR_DISTANCE, FOLLOW_INTERIOR_MIN_DISTANCE, FOLLOW_INTERIOR_MAX_DISTANCE } from "../src/spectator-camera.js";
 import { followLayerAtPosition } from "../src/map-enclosures.js";
 import { fitSurveyCamera } from "../src/survey-camera-fit.js";
@@ -18,7 +18,7 @@ const source = (await readFile(new URL("../src/scene.js", import.meta.url), "utf
   .replace(/^import .*;\r?\n/gm, "")
   .replace("export class TrailScene", "class TrailScene");
 const ports = { ...i18n, THREE, fitPerspectivePoints, chooseRecordedInteriorPose, isInteriorLayer, latestLifeEventBefore,
-  MARKER_LIFE_EVENT_TYPES, pointInBounds, FOLLOW_DISTANCE, FOLLOW_MIN_DISTANCE, FOLLOW_MAX_DISTANCE,
+  MARKER_LIFE_EVENT_TYPES, pointInBounds, markerInDisplayBounds, FOLLOW_DISTANCE, FOLLOW_MIN_DISTANCE, FOLLOW_MAX_DISTANCE,
   FOLLOW_INTERIOR_DISTANCE, FOLLOW_INTERIOR_MIN_DISTANCE, FOLLOW_INTERIOR_MAX_DISTANCE, followLayerAtPosition,
   fitSurveyCamera,
   updateRecordedMineVisibility() {}, updateMapFogSurfaceVisibility() {} };

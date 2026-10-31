@@ -9,7 +9,7 @@ import { ReplayCamera, REPLAY_CAMERA_HELP } from "./replay-camera.js";
 import { chooseRecordedInteriorPose, isInteriorLayer } from "./camera-placement.js";
 import { WorldRenderer } from "./world-renderer.js";
 import { ItemEventOverlay } from "./item-event-overlay.js";
-import { pointInBounds, clipTrailSegment } from "./trail-spatial.js";
+import { markerInDisplayBounds, clipTrailSegment } from "./trail-spatial.js";
 import { FogDepthPass } from "./fog-depth-pass.js";
 import { latestLifeEventBefore, MARKER_LIFE_EVENT_TYPES } from "./protocol.js";
 import { SpectatorCamera, FOLLOW_DISTANCE, FOLLOW_MIN_DISTANCE, FOLLOW_MAX_DISTANCE, FOLLOW_INTERIOR_DISTANCE, FOLLOW_INTERIOR_MIN_DISTANCE, FOLLOW_INTERIOR_MAX_DISTANCE } from "./spectator-camera.js";
@@ -1567,12 +1567,13 @@ export class TrailScene {
       const segmentMatches =
         markerState && (this.activeSegment === null || !Number.isInteger(markerState.segment) || markerState.segment === this.activeSegment);
       const displayBounds = this.useMap && this.activeSegment !== null ? this.viewBounds() : null;
-      marker.visible = Boolean(this.showMarkers && markerState && segmentMatches && isPresent && pointInBounds(markerState.pos, displayBounds));
+      const spatiallyVisible = markerInDisplayBounds(markerState, displayBounds, this.activeSegment);
+      marker.visible = Boolean(this.showMarkers && markerState && segmentMatches && isPresent && spatiallyVisible);
       marker.userData.replayVisible = marker.visible;
       marker.userData.ghost = Boolean(ghost);
       marker.userData.nativeGhostVisible = ghost?.nativeVisible ?? null;
       marker.userData.followable = Boolean(markerState && segmentMatches && isPresent
-        && (ghost || life?.type !== "death" && this.currentTime - sample.t <= maxGap) && pointInBounds(markerState.pos, displayBounds));
+        && (ghost || life?.type !== "death" && this.currentTime - sample.t <= maxGap) && spatiallyVisible);
       if (markerState) {
         marker.position.set(
           markerState.pos[0] - this.origin.x,
