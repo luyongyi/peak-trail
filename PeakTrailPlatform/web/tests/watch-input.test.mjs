@@ -129,6 +129,7 @@ test('leaving a watch session clears its code and copy confirmation before anoth
   const state = { traceSelectionRevision: 1, watch: { active: true, code: 'ABCD', copiedUntil: 99999,
     client: { stop() { stops++; } }, trace: {}, timer: 7 } };
   const ports = { state, setPlaying() {}, clearInterval() {}, syncWakeLock() {}, watchChrome: { reset() { chromeResets++; } },
+    liveCameraController: { suspend() {} }, viewer: null,
     elements: { timeline: {}, appShell: { classList: { remove() {} } } },
     $: id => { if (!nodes.has(id)) nodes.set(id, {}); return nodes.get(id); } };
   const source = app.match(/^function stopWatch\([^]*?^\}/m)[0];
