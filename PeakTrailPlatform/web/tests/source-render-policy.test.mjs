@@ -30,3 +30,15 @@ test("shadow-only correction is pinned to audited builds and exact delivery dige
   result.add(42); result.delete(83);
   assert.deepEqual([...shadowOnlyNodeIndices(25306743, digest)], [83, 1609], "callers cannot mutate the registry");
 });
+
+test("pit fade volumes require the audited build and exact material/shader pair", () => {
+  for (const build of [26134529, "26134529", 26155610, "26155610"])
+    assert.equal(isSourceProjectionProxy(build, "DarkFade", "DarkFade"), true);
+  for (const build of [undefined, 25306743, 25739797, 26155611, "new-build"])
+    assert.equal(isSourceProjectionProxy(build, "DarkFade", "DarkFade"), false);
+  for (const [material, shader] of [
+    ["DarkFade", undefined], ["DarkFade", "W/Peak_Standard"], ["DarkFade", "Decal"],
+    ["OtherFade", "DarkFade"], ["darkfade", "DarkFade"], ["Cube", "DarkFade"],
+    ["M_DesertSand", "W/Peak_Rock"], ["Lit", "Universal Render Pipeline/Lit"],
+  ]) assert.equal(isSourceProjectionProxy(26155610, material, shader), false);
+});

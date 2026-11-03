@@ -1,14 +1,20 @@
 // Exact-build effect-volume evidence is documented in
-// tools/offline-maps/EFFECT-PROXIES.md. These are projection volumes, not props.
+// tools/offline-maps/EFFECT-PROXIES.md. These are shader-effect volumes, not props.
 // Do not classify by mesh name: PEAK also has genuine spherical mushrooms,
 // glass and AntiSphere objects that must remain visible.
 const PROJECTED_DECALS = new Set(["M_VFX_PetrifyDecal", "M_VFX_FireballDecal"]);
 
 export function isSourceProjectionProxy(gameBuildId, materialName, shader) {
+  const build = String(gameBuildId);
+  // The Mesa pit's DarkFade cube is a transparent, front-culled unlit effect
+  // (ZTest Always / ZWrite Off), not the opaque white box exported to glTF.
+  // Only the audited source build and its verified asset-equivalent build apply.
+  if (["26134529", "26155610"].includes(build) && materialName === "DarkFade" && shader === "DarkFade")
+    return true;
   // Re-audited exact current materials and transparent Decal pass; the legacy
   // digest-bound ShadowsOnly node table below remains limited to its own build.
   // Build 26155610 source equivalence: data/maps/game-build.26155610.json.
-  return ["25306743", "25739797", "26134529", "26155610"].includes(String(gameBuildId)) && shader === "Decal"
+  return ["25306743", "25739797", "26134529", "26155610"].includes(build) && shader === "Decal"
     && PROJECTED_DECALS.has(materialName);
 }
 

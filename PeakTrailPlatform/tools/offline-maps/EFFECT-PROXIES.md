@@ -62,3 +62,51 @@ Transparent/Unlit tags. The exact source values and serialized-file hashes are
 retained in `source-effect-materials.26134529.json`; this evidence permits the
 same narrowly scoped exclusion for 26134529. Legacy digest-bound shadow-only
 node corrections remain restricted to 25306743.
+
+## Mesa pit fade volumes, builds 26134529 and 26155610
+
+Audited on 2026-11-03 against the raw `BuildPlayer-Level_87` and its
+`.sharedAssets` sidecar from the 26134529 map bundle. The scene SHA-256 is
+`32a8cc8ef5b7c76cf920d162340570247f27386cc5f0a12cf6323ce1b320ca2b`, matching
+the Level_87 entry in `data/maps/game-build.26155610.json`. That build's
+`sourceEquivalence` receipt verifies the map assets against 26134529.
+The sidecar SHA-256 is
+`c1f2afb4e966a440ac5ac78ed0be6f2879ef486aad80698e154ca803aaeb4e2a`.
+
+The four `DarkFade` cubes are children of
+`Map/Biome_3/Mesa/Desert_Segment/Platteau/Rocks/Timple/Inside`:
+
+| Child path | MeshRenderer path ID | World minimum | World maximum |
+| --- | --- | --- | --- |
+| `End/Pit (1)` | 427837 | (-6.209, 394.010, 540.913) | (67.903, 445.390, 620.307) |
+| `Carridor/Pit (1)` | 428032 | (21.279, 424.936, 630.913) | (40.415, 447.264, 722.965) |
+| `Carridor/Pit` | 428432 | (21.279, 291.706, 630.913) | (40.415, 388.325, 722.965) |
+| `End/Pit` | 429340 | (-6.209, 291.706, 540.913) | (67.903, 388.325, 620.307) |
+
+Each is active, has an enabled MeshRenderer with cast-shadows mode 1, and has
+only Transform, MeshFilter and MeshRenderer components; no collider is attached.
+They reference sidecar material path ID **25**, name **DarkFade**, and shader
+path ID **5231**, also **DarkFade**. The serialized object SHA-256 values are:
+
+- Material: `1cce4c3912a00816bbf5660290d65f369a0eb17f5b4bee242a4444b50ba4be92`.
+- Shader: `f1c5fd933476612d0f9695638592346f2aefdcdc8bcb2bcc362ad815d3aa6462`.
+
+The native Forward pass is Transparent/Unlit, with `zTest=8` (Always),
+`zWrite=0`, `culling=1` (Front), `srcBlend=5` (SrcAlpha) and `destBlend=10`
+(OneMinusSrcAlpha). Its material has no base-color property. The export's
+generic material fallback instead produced an opaque, double-sided white
+PBR cube. This is an unsupported shader-effect container, not a white platform.
+
+The published `segment-02-mesa.glb.gz` SHA-256 is
+`248d248b6033cae2dc2337bc2a91c315d35767c4b1660ccec0a70bcee7288717`.
+Within that GLB, material 16 is DarkFade, mesh 47 is Cube, node 717 is one
+affine instance and node 1772 is a three-instance GPU group. Browser raycasts
+at the visible foreground white box confirmed DarkFade; the detached rock at
+the upper right instead uses M_DesertSand and is retained.
+
+The runtime correction omits only the exact `DarkFade` material plus `DarkFade`
+shader pair for these two verified builds. It uses the existing primitive-group
+filter before batching, keeping the effect out of rendering, camera bounds and
+terrain raycasts. The pit darkening effect is not reproduced. Ordinary cubes,
+white materials, other shaders, unknown builds and the actual temple geometry
+remain intact. Source meshes, map coordinates and published hashes are unchanged.

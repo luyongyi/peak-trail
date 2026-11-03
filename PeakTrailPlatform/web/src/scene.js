@@ -21,7 +21,7 @@ import { CommunityRouteOverlay } from "./community-route-overlay.js";
 import { MapLootOverlay } from "./map-loot-overlay.js";
 import { MapLootFocus } from "./map-loot-focus.js";
 import { EnclosureContextRenderer } from "./enclosure-context-renderer.js";
-import { fitPerspectivePoints } from "./camera-framing.js";
+import { chooseOverviewDirection, fitPerspectivePoints } from "./camera-framing.js";
 import { collectCameraParts, selectCameraSubjectParts } from "./camera-subject.js";
 import { chooseRenderPolicy, renderErrorName } from "./render-policy.js";
 import { mountMapDiagnostics } from "./map-diagnostics.js";
@@ -546,7 +546,7 @@ export class TrailScene {
     const divisions = THREE.MathUtils.clamp(Math.round(size / 12), 12, 64);
     const grid = new THREE.GridHelper(size, divisions, 0x39534f, 0x20302f);
     grid.material.transparent = true;
-    grid.material.opacity = 0.38;
+    grid.material.opacity = 0.14;
     grid.position.y = bounds.min[1] - this.origin.y - 0.7;
     grid.renderOrder = -2;
     this.gridRoot.add(grid);
@@ -555,7 +555,7 @@ export class TrailScene {
     const ringMaterial = new THREE.MeshBasicMaterial({
       color: 0x385b55,
       transparent: true,
-      opacity: 0.28,
+      opacity: 0.10,
       side: THREE.DoubleSide,
       depthWrite: false,
     });
@@ -1992,12 +1992,15 @@ export class TrailScene {
     // OrbitControls caches the Y-up orbit axis. A tiny Z offset gives the top
     // view a stable north direction without changing that axis after creation.
     const up = [0, 1, 0];
-    // Keep the sea in front and later, taller chapters behind the route.
     const points = this.cameraFitPoints();
-    const fit = fitPerspectivePoints(points, {
+    const framing = {
       aspect: this.camera.aspect, fov: this.camera.fov,
-      direction: top ? [0, 1, 0.000001] : [0.52, 0.85, 0.62], up, padding: 1.02, frame: this.surveyCameraFrame(),
-    });
+      up, padding: 1.02, frame: this.surveyCameraFrame(),
+    };
+    // Keep the full chapter, but use its shape and the available screen area
+    // to avoid the empty corners of a fixed diagonal view on narrow screens.
+    const direction = top ? [0, 1, 0.000001] : chooseOverviewDirection(points, framing);
+    const fit = fitPerspectivePoints(points, { ...framing, direction });
     if (!fit) return;
     // A preset must not inherit the last drag's residual rotation or pan.
     const damping = this.controls.enableDamping;

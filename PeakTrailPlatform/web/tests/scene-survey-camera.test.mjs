@@ -3,14 +3,14 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import * as THREE from "../../vendor/three/0.180.0/build/three.module.js";
-import { fitPerspectivePoints } from "../src/camera-framing.js";
+import { chooseOverviewDirection, fitPerspectivePoints } from "../src/camera-framing.js";
 import { collectCameraParts, selectCameraSubjectParts } from "../src/camera-subject.js";
 import { chooseRecordedInteriorPose, isInteriorLayer } from "../src/camera-placement.js";
 import { chooseRenderPolicy } from "../src/render-policy.js";
 
 const source = (await readFile(new URL("../src/scene.js", import.meta.url), "utf8"))
   .replace(/^import .*;\r?\n/gm, "").replace("export class TrailScene", "class TrailScene");
-const ports = { ...i18n, THREE, fitPerspectivePoints, collectCameraParts, selectCameraSubjectParts, chooseRecordedInteriorPose, isInteriorLayer, chooseRenderPolicy };
+const ports = { ...i18n, THREE, chooseOverviewDirection, fitPerspectivePoints, collectCameraParts, selectCameraSubjectParts, chooseRecordedInteriorPose, isInteriorLayer, chooseRenderPolicy };
 const Scene = new Function(...Object.keys(ports), `${source}\nreturn TrailScene;`)(...Object.values(ports));
 const layers = [
   { id: "shore", segment: 0, name: "Shore_Segment", biome: "Shore", minX: -230, maxX: 230, minY: -127, maxY: 295, minZ: -540, maxZ: 340 },

@@ -81,6 +81,33 @@ test("mixed meshes retain ordinary groups but never raycast against decal volume
   batched.children.forEach((mesh) => { mesh.geometry.dispose(); mesh.dispose(); });
 });
 
+test("pit fade boxes are excluded from rendering and terrain raycasts without hiding real cubes", () => {
+  const { batchStaticMeshes } = compile();
+  const geometry = new THREE.BoxGeometry();
+  const fade = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide });
+  fade.name = "DarkFade";
+  fade.userData.peakTerrain = { sourceMaterial: "DarkFade", sourceColors: { shader: "DarkFade" } };
+  const solid = new THREE.MeshStandardMaterial(); solid.name = "M_DesertSand";
+  const scene = new THREE.Group();
+  const affine = new THREE.Mesh(geometry, fade); affine.name = "Cube-affine";
+  affine.position.set(0, 4, 0); scene.add(affine);
+  const instances = new THREE.InstancedMesh(geometry, fade, 3);
+  for (let i = 0; i < 3; i++) instances.setMatrixAt(i, new THREE.Matrix4().makeTranslation(i * 4, 2, 0));
+  scene.add(instances);
+  const terrain = new THREE.Mesh(geometry, solid); terrain.name = "Cube"; scene.add(terrain);
+  const batched = batchStaticMeshes(scene, 26155610); batched.updateMatrixWorld(true);
+  assert.equal(batched.userData.omittedProjectionInstances, 4);
+  assert.equal(batched.children.length, 1);
+  assert.equal(batched.children[0].material, solid);
+  const hits = new THREE.Raycaster(new THREE.Vector3(0, 10, 0), new THREE.Vector3(0, -1, 0))
+    .intersectObject(batched, true);
+  assert.ok(hits.length > 0);
+  assert.ok(hits.every((hit) => Math.abs(hit.point.y - 0.5) < 1e-6), "only the genuine ground remains pickable");
+  assert.equal(geometry.index.count, 36, "shared cube geometry keeps every original triangle");
+  geometry.dispose(); fade.dispose(); solid.dispose(); instances.dispose();
+  batched.children.forEach((mesh) => mesh.dispose());
+});
+
 function glb() {
   const text = JSON.stringify({ asset: { version: "2.0" }, scenes: [{ nodes: [] }] });
   const json = Buffer.from(text.padEnd(Math.ceil(Buffer.byteLength(text) / 4) * 4, " "));

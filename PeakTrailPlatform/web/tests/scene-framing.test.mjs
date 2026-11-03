@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import * as THREE from "../../vendor/three/0.180.0/build/three.module.js";
 import { ReplayCamera } from "../src/replay-camera.js";
-import { fitPerspectivePoints } from "../src/camera-framing.js";
+import { chooseOverviewDirection, fitPerspectivePoints } from "../src/camera-framing.js";
 import { collectCameraParts, selectCameraSubjectParts } from "../src/camera-subject.js";
 import { isInteriorLayer } from "../src/camera-placement.js";
 import { nadirCameraBounds, nadirCameraParts } from "../src/nadir-camera-bounds.js";
@@ -18,7 +18,7 @@ const orbitSource = (await readFile(new URL("../../vendor/three/0.180.0/examples
 const OrbitControls = new Function(...Object.keys(THREE), `${orbitSource}\nreturn OrbitControls;`)(...Object.values(THREE));
 const source = (await readFile(new URL("../src/scene.js", import.meta.url), "utf8"))
   .replace(/^import .*;\r?\n/gm, "").replace("export class TrailScene", "class TrailScene");
-const ports = { ...i18n, THREE, fitPerspectivePoints, collectCameraParts, selectCameraSubjectParts, isInteriorLayer, nadirCameraBounds, nadirCameraParts, chooseRenderPolicy };
+const ports = { ...i18n, THREE, chooseOverviewDirection, fitPerspectivePoints, collectCameraParts, selectCameraSubjectParts, isInteriorLayer, nadirCameraBounds, nadirCameraParts, chooseRenderPolicy };
 const TrailScene = new Function(...Object.keys(ports), `${source}\nreturn TrailScene;`)(...Object.values(ports));
 
 class Surface extends EventTarget {
