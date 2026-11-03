@@ -54,20 +54,84 @@ test("first chapter is already framed while its model is still downloading", asy
   const { scene, finish } = fixture();
   const loading = scene.setData({ mapPack, trace: null, useMap: true, activeSegment: 0 });
   assert.equal(scene.surveyPreset, "overview");
+  assert.equal(scene.followChangeReason, "data");
+  assert.equal(scene.followChangeRevision, scene.cameraSelectionRevision);
   assertInFrame(scene, layers[0]);
   const preLoad = scene.camera.position.clone();
   finish(); await loading;
   assert.ok(scene.camera.position.distanceTo(preLoad) < 1e-8);
+  assert.equal(scene.followChangeReason, "data");
+  assert.equal(scene.followChangeRevision, scene.cameraSelectionRevision);
 });
 
 test("loading completion keeps later user camera choices after the early frame", async () => {
   const { scene, finish } = fixture();
   const loading = scene.setData({ mapPack, trace: null, useMap: true, activeSegment: 0 });
   assertInFrame(scene, layers[0]);
+  const dataRevision = scene.followChangeRevision;
   scene.cameraSelectionRevision++; scene.surveyPreset = null;
   scene.camera.position.set(7, 8, 9);
   finish(); await loading;
   assert.deepEqual(scene.camera.position.toArray(), [7, 8, 9]);
+  assert.equal(scene.followChangeRevision, dataRevision,
+    "loading completion cannot attach its data reason to a later drag revision");
+  assert.notEqual(scene.followChangeRevision, scene.cameraSelectionRevision);
+});
+
+test("manual overview selected during a data load keeps its manual reason after geometry resolves", async () => {
+  const { scene, finish } = fixture();
+  const loading = scene.setData({ mapPack, trace: null, useMap: true, activeSegment: 0 });
+  scene.fitView();
+  const revision = scene.cameraSelectionRevision;
+  const position = scene.camera.position.clone();
+  finish(); await loading;
+  assert.equal(scene.followChangeReason, "manual");
+  assert.equal(scene.followChangeRevision, revision);
+  assert.equal(scene.cameraSelectionRevision, revision);
+  assert.deepEqual(scene.camera.position.toArray(), position.toArray());
+});
+
+test("retained presets and automatic interior fallback remain data-owned after an in-place map load", async () => {
+  for (const retained of [false, true]) {
+    const { scene, finish } = fixture();
+    const trace = { manifest: { sampleHz: 5 }, events: [], tracks: new Map() };
+    if (retained) { scene.trace = trace; scene.surveyPreset = "top"; }
+    const loading = scene.setData({ mapPack, trace, useMap: true, activeSegment: 4 });
+    assert.equal(scene.followChangeReason, "data");
+    assert.equal(scene.followChangeRevision, scene.cameraSelectionRevision);
+    finish(); await loading;
+    assert.equal(scene.followChangeReason, "data");
+    assert.equal(scene.followChangeRevision, scene.cameraSelectionRevision);
+    assert.equal(scene.surveyPreset, retained ? "top" : "overview");
+  }
+});
+
+test("automatic and manual chapter changes carry their reason through the guarded asynchronous refit", async () => {
+  for (const manualDuringLoad of [false, true]) {
+    const { scene, finish } = fixture();
+    const initial = scene.setData({ mapPack, trace: null, useMap: true, activeSegment: 0 });
+    finish(); await initial;
+    let resolveChapter;
+    scene.ensureGeometryLayers = () => new Promise(resolve => { resolveChapter = resolve; });
+    scene.cameraSubjectParts = () => [{ bounds: { min: [-120, 800, 2000], max: [120, 1233, 2400] } }];
+    scene.setViewIntent(null, { reason: "data" });
+    assert.equal(scene.followChangeReason, "data");
+    scene.setActiveSegment(4, { reason: "data" });
+    assert.equal(scene.followChangeReason, "data");
+    assert.equal(scene.followChangeRevision, scene.cameraSelectionRevision);
+    const dataRevision = scene.cameraSelectionRevision;
+    if (manualDuringLoad) scene.fitView();
+    resolveChapter(); await new Promise(resolve => setImmediate(resolve));
+    assert.equal(scene.followChangeReason, manualDuringLoad ? "manual" : "data");
+    assert.equal(scene.followChangeRevision, scene.cameraSelectionRevision);
+    assert.equal(scene.cameraSelectionRevision, dataRevision + 1,
+      "only the user choice or the permitted refit increments the camera revision");
+    scene.ensureGeometryLayers = async () => {};
+    scene.setActiveSegment(0);
+    assert.equal(scene.followChangeReason, "manual", "the old no-options API stays a user chapter choice");
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(scene.followChangeReason, "manual");
+  }
 });
 
 test("resize refits an untouched preset without invalidating the pending source-bound refit", async () => {

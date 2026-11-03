@@ -196,6 +196,8 @@ export class TrailScene {
     // 真实网格外侧观测 + 平滑跟随 + 手动环绕；网络播放头独立运行。
     // 锚点 = 播放头插值后的玩家标记世界坐标（setTime 每帧刷新）。
     this.followTargetId = null;
+    this.followChangeReason = null;
+    this.followChangeRevision = null;
     this.followAnchor = new THREE.Vector3();
     this.followTmp = new THREE.Vector3();
     this.followAzimuth = 0.6;
@@ -457,7 +459,7 @@ export class TrailScene {
     const retainReplayCamera = Boolean(trace && this.trace === trace);
     const retainedPreset = retainReplayCamera ? this.surveyPreset : null;
     const autoFrame = !retainReplayCamera || Boolean(retainedPreset);
-    if (this.trace !== trace) this.setFollowTarget(null);
+    if (this.trace !== trace) this.setFollowTarget(null, { reason: "data" });
     if (this.trace !== trace) this.playerPortraits.clear();
     this.mapPack = mapPack || null;
     this.trace = trace || null;
@@ -515,7 +517,9 @@ export class TrailScene {
     this.resize();
     if (autoFrame && this.followTargetId == null) {
       if (retainedPreset) this.applySurveyPreset(retainedPreset);
-      else this.fitView();
+      else this.fitView({ reason: "data" });
+      this.followChangeReason = "data";
+      this.followChangeRevision = this.cameraSelectionRevision;
     }
     const cameraRevision = this.cameraSelectionRevision;
     // A retained follow target needs its marker before awaiting terrain; the
@@ -533,8 +537,12 @@ export class TrailScene {
     this.setTime(this.currentTime);
     if (autoFrame && cameraRevision === this.cameraSelectionRevision && this.followTargetId === null) {
       if (retainedPreset) this.applySurveyPreset(retainedPreset);
-      else this.fitView();
-      if (this.trace && !retainReplayCamera && !this.summitCameraBounds() && isInteriorLayer(this.selectedLayer(), this.mapPack?.route)) this.enterInteriorView(false);
+      else this.fitView({ reason: "data" });
+      if (this.trace && !retainReplayCamera && !this.summitCameraBounds() && isInteriorLayer(this.selectedLayer(), this.mapPack?.route)) this.enterInteriorView(false, { reason: "data" });
+      // Only the guarded data-owned refit is stamped. A gesture made while
+      // geometry was loading keeps its own revision and camera ownership.
+      this.followChangeReason = "data";
+      this.followChangeRevision = this.cameraSelectionRevision;
     }
   }
 
@@ -1142,12 +1150,20 @@ export class TrailScene {
     this.followAutoRotate = true;
     this.followUserOrbit = false;
     this.followAutoSwitchAt = performance.now() + 60_000;
-    this.setFollowTarget(id);
+    const sameTarget = this.followTargetId === id;
+    this.setFollowTarget(id, { reason: "manual" });
+    if (sameTarget) {
+      // Choosing a follow mode is an explicit camera choice even when the
+      // player stays the same. Record intent without snapping the current rig.
+      ++this.cameraSelectionRevision;
+      this.followChangeReason = "manual";
+      this.followChangeRevision = this.cameraSelectionRevision;
+    }
     this.emitFollowStatus();
     return true;
   }
 
-  setFollowTarget(playerId) {
+  setFollowTarget(playerId, { reason = "manual" } = {}) {
     if (playerId !== null && playerId !== undefined && !this.playerObjects.has(playerId)) return;
     const next = playerId ?? null;
     // `== null` covers scenes whose constructor never ran (fixtures) where the
@@ -1157,6 +1173,8 @@ export class TrailScene {
     this.followTargetId = next;
     this.surveyPreset = null;
     ++this.cameraSelectionRevision;
+    this.followChangeReason = reason;
+    this.followChangeRevision = this.cameraSelectionRevision;
     if (next !== null) {
       this.freeCamera.setMode("orbit", { focus: false });
       // Clear accumulated OrbitControls damping before taking ownership.
@@ -1197,18 +1215,24 @@ export class TrailScene {
     this.emitFollowStatus();
   }
 
-  cycleFollowTarget() {
+  cycleFollowTarget({ reason = "manual" } = {}) {
     const ids = [...this.playerObjects.keys()]
       .filter((id) => this.canFollowPlayer(id));
     if (!ids.length) return;
     const index = ids.indexOf(this.followTargetId);
-    this.setFollowTarget(ids[(index + 1) % ids.length]);
+    this.setFollowTarget(ids[(index + 1) % ids.length], { reason });
   }
 
   /** 用户通过 ◎ / 标记点击锁定某位玩家：关闭自动轮换。 */
   lockFollowTarget(playerId) {
     this.followAutoRotate = false;
-    this.setFollowTarget(playerId);
+    const sameTarget = this.followTargetId === playerId;
+    this.setFollowTarget(playerId, { reason: "manual" });
+    if (sameTarget) {
+      ++this.cameraSelectionRevision;
+      this.followChangeReason = "manual";
+      this.followChangeRevision = this.cameraSelectionRevision;
+    }
     this.emitFollowStatus();
   }
 
@@ -1221,6 +1245,7 @@ export class TrailScene {
         name: participant?.nickname ?? playerId ?? null,
         autoRotate: playerId !== null && this.followAutoRotate,
         viewMode: this.followViewMode || "exterior",
+        reason: this.followChangeReason,
       },
     }));
   }
@@ -1287,16 +1312,16 @@ export class TrailScene {
     if (!object?.marker || !this.canFollowPlayer(this.followTargetId) || !this.updateFollowAnchor()) {
       if (this.followAutoRotate) {
         const next = [...this.playerObjects.keys()].find((id) => this.canFollowPlayer(id));
-        if (next) { this.setFollowTarget(next); return; }
+        if (next) { this.setFollowTarget(next, { reason: "automatic" }); return; }
       }
-      this.setFollowTarget(null);
+      this.setFollowTarget(null, { reason: "unavailable" });
       return;
     }
 
     // 自动巡游：每 60 秒轮换到下一位玩家（◎ 锁定后关闭）。
     if (this.followAutoRotate && performance.now() >= this.followAutoSwitchAt) {
       this.followAutoSwitchAt = performance.now() + 60_000;
-      this.cycleFollowTarget();
+      this.cycleFollowTarget({ reason: "automatic" });
       return;
     }
 
@@ -1725,7 +1750,7 @@ export class TrailScene {
     this.setTime(this.currentTime);
   }
 
-  setActiveSegment(segment) {
+  setActiveSegment(segment, { reason = "manual" } = {}) {
     const next = segment === null || segment === "all" ? null : Number(segment);
     if (next === this.activeSegment) return;
     this.clearMapLootFocus();
@@ -1739,7 +1764,7 @@ export class TrailScene {
     this.applyLayerVisibility();
     if (this.trace) this.buildTracks();
     this.setTime(this.currentTime);
-    if (this.followTargetId == null) this.fitView();
+    if (this.followTargetId == null) this.fitView({ reason });
     const selected = this.activeSegment;
     const cameraRevision = this.cameraSelectionRevision;
     const buildRevision = this.buildToken;
@@ -1747,18 +1772,18 @@ export class TrailScene {
     void this.ensureGeometryLayers().then(() => {
       if (this.followTargetId != null || selected !== this.activeSegment || buildRevision !== this.buildToken
           || selectionRevision !== this.geometrySelectionToken || cameraRevision !== this.cameraSelectionRevision) return;
-      if (this.summitCameraBounds() || this.nadirGeometryBounds() || this.enclosureContext?.bounds) this.fitView();
-      else if (this.trace && isInteriorLayer(this.selectedLayer(), this.mapPack?.route)) this.enterInteriorView(false);
-      else if (this.cameraSubjectParts()?.length) this.fitView();
+      if (this.summitCameraBounds() || this.nadirGeometryBounds() || this.enclosureContext?.bounds) this.fitView({ reason });
+      else if (this.trace && isInteriorLayer(this.selectedLayer(), this.mapPack?.route)) this.enterInteriorView(false, { reason });
+      else if (this.cameraSubjectParts()?.length) this.fitView({ reason });
     });
   }
 
-  setViewIntent(intent) {
+  setViewIntent(intent, { reason = "manual" } = {}) {
     this.clearMapLootFocus();
     this.viewIntent = intent === "summit" ? "summit" : null;
     if (this.followTargetId == null) {
-      this.fitView();
-      if (this.trace && !this.viewIntent && isInteriorLayer(this.selectedLayer(), this.mapPack?.route)) this.enterInteriorView(false);
+      this.fitView({ reason });
+      if (this.trace && !this.viewIntent && isInteriorLayer(this.selectedLayer(), this.mapPack?.route)) this.enterInteriorView(false, { reason });
     }
   }
 
@@ -1875,17 +1900,17 @@ export class TrailScene {
     return points;
   }
 
-  enterInteriorView(focus = true) {
+  enterInteriorView(focus = true, { reason = "manual" } = {}) {
     const pose = chooseRecordedInteriorPose(this.trace, this.currentTime, this.viewBounds(), { playerVisibility: this.playerVisibility });
     // Lighting a campfire advances the shared chapter before players enter it.
     // Keep an overview until an actual interior visit has been recorded. The
     // geometry reference below is an explicit exploration action only.
     if (!focus && !pose) {
-      this.fitView();
+      this.fitView({ reason });
       return;
     }
     this.clearMapLootFocus();
-    this.setFollowTarget(null);
+    this.setFollowTarget(null, { reason });
     this.surveyPreset = null;
     ++this.cameraSelectionRevision;
     if (pose) {
@@ -1925,6 +1950,8 @@ export class TrailScene {
     }
     this.setCameraPlacementNote(...this.cameraPlacementLabels);
     if (focus) this.freeCamera.focus();
+    this.followChangeReason = reason;
+    this.followChangeRevision = this.cameraSelectionRevision;
   }
 
   toggleFreeCamera() { this.clearMapLootFocus(); this.setFollowTarget(null); this.surveyPreset = null; ++this.cameraSelectionRevision; this.freeCamera.setMode(this.freeCamera.mode === "free" ? "orbit" : "free"); this.freeCamera.focus(); }
@@ -1942,13 +1969,15 @@ export class TrailScene {
     this.setCameraPlacementNote("事件近景 · 特效为回放示意", "Event close-up · effects illustrate the replay");
   }
 
-  fitView() {
+  fitView({ reason = "manual" } = {}) {
     this.clearMapLootFocus();
-    this.setFollowTarget(null);
+    this.setFollowTarget(null, { reason });
     ++this.cameraSelectionRevision;
     this.freeCamera.setMode("orbit");
     this.surveyPreset = "overview";
     this.applySurveyPreset(this.surveyPreset);
+    this.followChangeReason = reason;
+    this.followChangeRevision = this.cameraSelectionRevision;
   }
 
   topView() {

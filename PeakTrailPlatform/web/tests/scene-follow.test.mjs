@@ -135,22 +135,30 @@ test("canFollowPlayer and automatic selection reject pre-join, dead, departed, s
       assert.equal(scene.canFollowPlayer(id), false, id);
     assert.equal(scene.canFollowPlayer("alive"), true);
     assert.equal(scene.startAutoFollow(), true); assert.equal(scene.followTargetId, "alive");
+    assert.equal(f.statuses.at(-1).reason, "manual", "the explicit auto-follow button is a user choice");
     scene.cycleFollowTarget(); assert.equal(scene.followTargetId, "alive");
     scene.playerObjects.get("alive").group.visible = false;
     assert.equal(scene.canFollowPlayer("alive"), false);
     scene.updateFollowCamera(1 / 60); assert.equal(scene.followTargetId, null);
+    assert.equal(f.statuses.at(-1).reason, "unavailable", "lost player data does not express a manual camera choice");
+    assert.equal(scene.followChangeRevision, scene.cameraSelectionRevision);
   } finally { f.cleanup(); }
 });
 
-test("locking the same followed player disables automatic rotation and still emits a HUD update", () => {
+test("locking the same followed player records manual ownership without snapping the rig", () => {
   const f = fixture(); const { scene } = f;
   try {
     f.player("a"); scene.startAutoFollow(); const count = f.statuses.length;
     const revision = scene.cameraSelectionRevision;
+    const resets = scene.followRig.resets;
     scene.lockFollowTarget("a");
     assert.equal(scene.followTargetId, "a"); assert.equal(scene.followAutoRotate, false);
     assert.ok(f.statuses.length > count); assert.equal(f.statuses.at(-1).autoRotate, false);
-    assert.equal(scene.cameraSelectionRevision, revision, "same-ID lock does not snap the rig");
+    assert.equal(scene.cameraSelectionRevision, revision + 1, "same-ID lock invalidates a pending automatic selection");
+    assert.equal(scene.followRig.resets, resets, "recording intent does not snap the rig");
+    assert.equal(scene.followChangeReason, "manual");
+    assert.equal(f.statuses.at(-1).reason, "manual");
+    assert.equal(scene.followChangeRevision, scene.cameraSelectionRevision);
   } finally { f.cleanup(); }
 });
 
@@ -160,11 +168,75 @@ test("starting auto-follow on the same locked first player updates the HUD witho
     f.player("a"); scene.lockFollowTarget("a"); const count = f.statuses.length;
     scene.followUserOrbit = true;
     const revision = scene.cameraSelectionRevision;
+    const resets = scene.followRig.resets;
     assert.equal(scene.startAutoFollow(), true);
     assert.equal(scene.followTargetId, "a"); assert.equal(scene.followAutoRotate, true);
     assert.equal(scene.followUserOrbit, false, "explicit auto-follow releases a prior manual orbit");
     assert.ok(f.statuses.length > count); assert.equal(f.statuses.at(-1).autoRotate, true);
-    assert.equal(scene.cameraSelectionRevision, revision, "same-ID mode switch preserves the view");
+    assert.equal(scene.cameraSelectionRevision, revision + 1, "explicit cruise selection records manual camera ownership");
+    assert.equal(scene.followRig.resets, resets, "same-ID mode switch preserves the rig");
+    assert.equal(f.statuses.at(-1).reason, "manual");
+    assert.equal(scene.followChangeRevision, scene.cameraSelectionRevision);
+  } finally { f.cleanup(); }
+});
+
+test("automatic follow replacement and timed rotation remain distinct from manual cycling", () => {
+  const f = fixture(); const { scene } = f;
+  try {
+    const a = f.player("a"), b = f.player("b");
+    scene.startAutoFollow();
+    a.group.visible = false;
+    scene.updateFollowCamera(1 / 60);
+    assert.equal(scene.followTargetId, "b");
+    assert.equal(scene.followChangeReason, "automatic");
+    assert.equal(f.statuses.at(-1).reason, "automatic");
+    assert.equal(scene.followChangeRevision, scene.cameraSelectionRevision);
+    a.group.visible = true;
+    scene.followAutoSwitchAt = 0;
+    scene.updateFollowCamera(1 / 60);
+    assert.equal(scene.followTargetId, "a");
+    assert.equal(f.statuses.at(-1).reason, "automatic");
+    assert.equal(scene.followChangeRevision, scene.cameraSelectionRevision);
+    scene.cycleFollowTarget();
+    assert.equal(scene.followTargetId, "b");
+    assert.equal(f.statuses.at(-1).reason, "manual", "the existing no-argument API remains a manual next-player action");
+    a.group.visible = false; b.group.visible = false;
+    scene.updateFollowCamera(1 / 60);
+    assert.equal(scene.followTargetId, null);
+    assert.equal(f.statuses.at(-1).reason, "unavailable");
+  } finally { f.cleanup(); }
+});
+
+test("follow reasons cannot misclassify a later overview choice after the target disappears", () => {
+  const f = fixture(); const { scene } = f;
+  try {
+    const a = f.player("a"); scene.setFollowTarget("a", { reason: "automatic" });
+    a.group.visible = false; scene.updateFollowCamera(1 / 60);
+    const unavailableRevision = scene.followChangeRevision;
+    assert.equal(unavailableRevision, scene.cameraSelectionRevision);
+    scene.fitView();
+    assert.equal(scene.followTargetId, null);
+    assert.ok(scene.cameraSelectionRevision > unavailableRevision);
+    assert.equal(scene.followChangeRevision, scene.cameraSelectionRevision);
+    assert.equal(scene.followChangeReason, "manual",
+      "the later explicit overview replaces the old unavailability reason");
+  } finally { f.cleanup(); }
+});
+
+test("replacing the trace labels the follow release as a data change", async () => {
+  const f = fixture(); const { scene } = f;
+  try {
+    f.player("a"); scene.setFollowTarget("a", { reason: "automatic" });
+    Object.assign(scene, {
+      playerPortraits: new Map(), playerLabels: new Map(), playerGroups: new Map(), geometryLoads: new Map(),
+      labelOverlay: { replaceChildren() {} }, buildGrid() {}, buildTracks() {}, resize() {},
+    });
+    scene.worldRenderer.setData = () => {};
+    scene.worldRenderer.setMapFog = () => {};
+    await scene.setData({ mapPack: null, trace: null, useMap: false, activeSegment: null });
+    assert.equal(scene.followTargetId, null);
+    assert.equal(f.statuses.at(-1).reason, "data");
+    assert.equal(f.statuses.at(-1).active, false);
   } finally { f.cleanup(); }
 });
 
