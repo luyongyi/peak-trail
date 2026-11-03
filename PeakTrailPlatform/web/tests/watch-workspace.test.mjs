@@ -8,6 +8,7 @@ import { parseWatchId, parseWatchCode, watchCodeFromState } from "../src/watch-c
 const source = readFileSync(new URL("../src/app.js", import.meta.url), "utf8");
 function functions(names, ports) {
   ports = { itemEventPanel: { sync() {} }, watchText: value => value, tr: value => value, formatNumber: String,
+    liveCameraController: { begin() {}, suspend() {}, resume() {}, checkpoint() {} }, syncWatchCamera() {},
     selectedSegmentStatus: () => ({ status: "ready" }), errorUiText: value => String(value || ""), ...ports };
   return new Function(...Object.keys(ports), names.map(name => {
     const match = source.match(new RegExp(`^(?:async )?function ${name}\\([^]*?^\\}`, "m"));

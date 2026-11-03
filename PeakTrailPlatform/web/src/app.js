@@ -21,6 +21,7 @@ import { createPlayerCard, updatePlayerCard } from "./player-card.js";
 import { classifyRouteSegment, resolveReplayRoute, routeSegmentName } from "./map-route.js";
 import { worldTelemetryNote } from "./world-timeline.js";
 import { createTrailEstimator, liveChaseTarget, LIVE_TRAIL_S } from "./live-follow.js";
+import { createLiveCameraController } from "./live-camera.js";
 import { createWakeLock } from "./wake-lock.js";
 import { createFullscreen } from "./fullscreen.js";
 import { HomePage } from "./home-page.js";
@@ -565,10 +566,12 @@ function chooseSegment(segment, mode = "manual") {
   renderSegmentNavigation();
   updateSceneMeta();
   if ((changed || clearedViewIntent) && viewer) {
-    viewer.setViewIntent(null);
+    if (state.watch?.active) liveCameraController.checkpoint(viewer, { runId: state.trace?.manifest?.sessionId });
+    const cameraChange = { reason: mode === "auto" ? "data" : "manual" };
+    viewer.setViewIntent(null, cameraChange);
     if (changed) {
       markSegmentTransition(normalized);
-      viewer.setActiveSegment(normalized);
+      viewer.setActiveSegment(normalized, cameraChange);
     }
     updateWorldTelemetry();
   }
@@ -624,6 +627,7 @@ function syncGameAssetsForTrace(trace, selectionRevision) {
 }
 
 let viewer;
+const liveCameraController = createLiveCameraController();
 let itemEventPanel, communitySnapshot = null;
 const watchChrome = createWatchChrome({
   shell: elements.appShell, menu: $("watchMenu"),
@@ -1544,6 +1548,7 @@ function disconnectLive(silent = false) {
 // remains off and this path never requests the retired /api/runs endpoints.
 function stopWatch() {
   const watch = state.watch;
+  if (watch.active) liveCameraController.suspend(viewer);
   if (watch.active) setPlaying(false);
   watch.client?.stop();
   clearInterval(watch.timer);
@@ -1615,6 +1620,7 @@ function updateWatchStatus() {
 async function applyEmptyWatchSnapshot(snapshot) {
   const watch = state.watch;
   if (!watch.active) return;
+  liveCameraController.suspend(viewer);
   ++state.traceSelectionRevision;
   ++state.mapRequestRevision;
   Object.assign(watch, { trace: null, epoch: 0, awaitingRun: true, status: snapshot.status,
@@ -1624,7 +1630,7 @@ async function applyEmptyWatchSnapshot(snapshot) {
   state.currentTime = 0;
   state.lastRenderSignature = null;
   setPlaying(false);
-  viewer?.setFollowTarget(null);
+  viewer?.setFollowTarget(null, { reason: "data" });
   elements.appShell.classList.add("watch-loading");
   elements.appShell.classList.remove("watch-players-open");
   elements.appShell.classList.remove("watch-replay-open");
@@ -1638,6 +1644,9 @@ async function applyEmptyWatchSnapshot(snapshot) {
 async function applyWatchSnapshot(snapshot, trace) {
   const watch = state.watch;
   if (!watch.active) return;
+  liveCameraController.begin(watch.id, viewer, { runId: trace.manifest.sessionId });
+  const cameraToken = liveCameraController.suspend(viewer);
+  if (["waiting", "live", "ended"].includes(snapshot.status)) watch.status = snapshot.status;
   const revision = ++state.traceSelectionRevision;
   finalizeLiveFlush(trace);
   trimWatchTrace(trace);
@@ -1657,7 +1666,7 @@ async function applyWatchSnapshot(snapshot, trace) {
   state.traceCollection = { sessions: [trace], days: [], warnings: trace.warnings };
   state.workspaceMode = "watch";
   resetSegmentNavigation(trace);
-  viewer?.setFollowTarget(null);
+  viewer?.setFollowTarget(null, { reason: "data" });
   state.currentTime = Math.max(trace.windowStart || 0, trace.duration - (watch.status === "ended" ? 0 : LIVE_TRAIL_S));
   setPlaying(false);
   syncGameAssetsForTrace(trace, revision);
@@ -1684,6 +1693,17 @@ async function applyWatchSnapshot(snapshot, trace) {
   elements.appShell.classList.remove("watch-loading");
   flushWatch();
   updatePlaybackTime(state.currentTime, false);
+  liveCameraController.resume(cameraToken, viewer);
+  syncWatchCamera();
+}
+
+function syncWatchCamera() {
+  const watch = state.watch;
+  liveCameraController.sync(viewer, {
+    active: watch.active,
+    ready: Boolean(watch.trace && !watch.initializing && state.trace === watch.trace && viewer?.trace === watch.trace),
+    status: watch.status,
+  });
 }
 
 function flushWatch() {
@@ -1712,6 +1732,7 @@ function flushWatch() {
   }
   itemEventPanel?.sync();
   updateWatchStatus();
+  syncWatchCamera();
 }
 
 async function startWatch(id, { replaceUrl = true, watchCode = null } = {}) {
@@ -1723,6 +1744,8 @@ async function startWatch(id, { replaceUrl = true, watchCode = null } = {}) {
   Object.assign(watch, { active: true, id, trace: null, status: "connecting", connection: "connecting",
     lastRecordAt: null, following: true, dirty: false, records: 0, playerKey: "", epoch: null,
     initializing: false, awaitingRun: false, message: "", sceneName: null, persistence: null, code: parseWatchCode(watchCode), copiedUntil: 0, copiedKind: null });
+  liveCameraController.begin(id, viewer);
+  liveCameraController.suspend(viewer);
   state.trace = null;
   state.historicalRoute = null;
   state.traceCollection = null;
@@ -1734,7 +1757,7 @@ async function startWatch(id, { replaceUrl = true, watchCode = null } = {}) {
   setPlaying(false);
   state.lastRenderSignature = null;
   resetSegmentNavigation(null);
-  viewer?.setFollowTarget(null);
+  viewer?.setFollowTarget(null, { reason: "data" });
   syncWorkspaceState();
   dismissGate();
   void renderData();
@@ -1793,6 +1816,7 @@ async function startWatch(id, { replaceUrl = true, watchCode = null } = {}) {
         if (watch.trace && !watch.initializing && watch.following) updatePlaybackTime(watch.trace.duration, false);
       }
       updateWatchStatus();
+      syncWatchCamera();
       syncWakeLock();
     },
     onConnection: (connection, message) => {
@@ -1972,6 +1996,7 @@ async function renderDataNow() {
     state.segmentOptions = [];
     elements.segmentNavigator.hidden = true;
     if (viewer && state.lastRenderSignature !== "watch-empty") {
+      if (state.watch?.active) liveCameraController.checkpoint(viewer, { runId: state.trace?.manifest?.sessionId });
       await viewer.setData({ mapPack: null, trace: null, useMap: false, activeSegment: null });
       state.lastRenderSignature = "watch-empty";
     }
@@ -1993,9 +2018,13 @@ async function renderDataNow() {
       useMap, activeSegment,
       state.mapViewIntent,
     ].join("|");
-    if (signature !== state.lastRenderSignature) {
+    // Reconnect snapshots can replace the trace object without changing its
+    // session ID. A queued older render may also restore the same signature
+    // after the snapshot cleared it, so identity must participate in reuse.
+    if (signature !== state.lastRenderSignature || viewer.trace !== state.trace) {
       if (useMap) markSegmentTransition(activeSegment);
       const displayMap = state.mapPack ? { ...state.mapPack, layers: state.routeView.layers } : null;
+      if (state.watch?.active) liveCameraController.checkpoint(viewer, { runId: state.trace?.manifest?.sessionId });
       await viewer.setData({ mapPack: displayMap, trace: state.trace, useMap, activeSegment,
         viewIntent: state.mapViewIntent });
       state.lastRenderSignature = signature;
@@ -2006,6 +2035,7 @@ async function renderDataNow() {
     viewer.setTrackVisibility(elements.trackToggle.checked);
     viewer.setMarkerVisibility(elements.markerToggle.checked);
     viewer.setTime(state.currentTime);
+    syncWatchCamera();
     updatePlayerTelemetry();
   }
   updateEmptyState();
@@ -2379,6 +2409,7 @@ function updatePlaybackTime(nextTime, detectEvents = true) {
   elements.timeline.style.background = `linear-gradient(90deg, var(--accent) ${percent}%, rgba(255, 255, 255, 0.12) ${percent}%)`;
   syncSegmentToPlayback();
   viewer?.setTime(state.currentTime);
+  syncWatchCamera();
   // The 3D scene needs a per-frame update; sidebar cards are DOM text and do not.
   // Refreshing them at ~8 Hz during playback and live-follow keeps long
   // multiplayer sessions smooth; pausing and scrubbing refresh immediately.
