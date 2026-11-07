@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta
       name="description"
-      content="PEAK 每日地图与玩家线路。下载路线 MOD，分享实时登山路线，或在游戏内录制与回放。"
+      content="Peak导航服务：输入房间号共享3.0.1地图与路线，下载Windows组件回放本次录像。"
     />
     <meta name="theme-color" content="#0b1010" />
     <meta name="referrer" content="no-referrer" />
@@ -32,7 +32,8 @@
           <span><strong>PEAK TRAIL</strong><small>每日地图与玩家线路</small></span>
         </div>
         <nav class="home-actions" aria-label="回忆录与地图工具">
-          <details class="home-watch-entry">
+          <a class="home-nav-link" href="./record.html">Peak导航服务 ↗</a>
+          <details class="home-watch-entry" hidden>
             <summary class="home-nav-link">观看直播 ↗</summary>
             <form id="watchJoinForm" class="watch-join-form">
               <label for="watchLinkInput">输入 4 位直播码</label>
@@ -41,7 +42,7 @@
             </form>
           </details>
           <button class="language-toggle" data-language-toggle type="button" aria-label="切换为英语" title="切换为英语" lang="en"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c5 5 5 13 0 18-5-5-5-13 0-18Z" /></svg><span data-language-label>English</span></button>
-          <a class="home-nav-link" href="./mods.html">下载路线 MOD <span aria-hidden="true">↓</span></a>
+          <a class="home-nav-link" href="./mods.html">Windows 回放组件 <span aria-hidden="true">↓</span></a>
           <button class="home-live is-empty" id="gateLive" type="button" aria-controls="gateLiveList" aria-expanded="false" hidden>
             <i aria-hidden="true"></i><span>现场观测</span><span class="home-live-count" id="homeLiveCount">—</span>
           </button>
@@ -235,6 +236,7 @@
           <div class="watch-notice" id="watchNotice" role="status" hidden>
             <strong id="watchNoticeText">正在连接直播…</strong>
             <button id="watchRetry" type="button" hidden>重新连接</button>
+            <a id="watchUnlock" href="./record.html" hidden>输入房间号使用导航</a>
           </div>
           <div class="watch-camera" id="watchCamera" hidden aria-label="观战视角">
             <button id="watchAllPlayers" type="button">全队视角</button>

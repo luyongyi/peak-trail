@@ -264,7 +264,7 @@ test("published checker stays metadata-only by default and rejects local substit
   await Promise.all(["tools/lib", "data/memories"].map(path => mkdir(resolve(platform, path), { recursive: true })));
   await Promise.all([
     copyFile(resolve(platformSource, "tools/check-memories-download.mjs"), resolve(platform, "tools/check-memories-download.mjs")),
-    ...["site-release", "memories-release", "recorder-release"].map(name => copyFile(resolve(platformSource, `tools/lib/${name}.mjs`), resolve(platform, `tools/lib/${name}.mjs`))),
+    ...["site-release", "memories-release", "recorder-release", "packet-replay-release"].map(name => copyFile(resolve(platformSource, `tools/lib/${name}.mjs`), resolve(platform, `tools/lib/${name}.mjs`))),
     writeFile(resolve(platform, "data/memories/release.json"), JSON.stringify(release)),
   ]);
   const script = resolve(platform, "tools/check-memories-download.mjs");

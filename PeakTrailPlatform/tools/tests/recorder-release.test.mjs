@@ -126,7 +126,7 @@ test("static HTML verification exempts only the manifest-pinned generated downlo
   await Promise.all(["web/tools", "web/src", "tools/lib", "data/recorder"].map(path => mkdir(resolve(platform, path), { recursive: true })));
   await Promise.all([
     copyFile(resolve(source, "web/tools/verify.mjs"), resolve(platform, "web/tools/verify.mjs")),
-    ...["recorder-release", "memories-release", "site-release"].map(name => copyFile(resolve(source, `tools/lib/${name}.mjs`), resolve(platform, `tools/lib/${name}.mjs`))),
+    ...["recorder-release", "memories-release", "site-release", "packet-replay-release"].map(name => copyFile(resolve(source, `tools/lib/${name}.mjs`), resolve(platform, `tools/lib/${name}.mjs`))),
     writeFile(resolve(platform, "data/recorder/release.json"), JSON.stringify(release)),
     ...["app", "protocol", "scene", "community-map-panel", "community-routes"].map(name => writeFile(resolve(platform, `web/src/${name}.js`), "export {};")),
   ]);

@@ -64,6 +64,7 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
     copyFile(resolve(platformSource, "tools", "lib", "recorder-release.mjs"), resolve(tools, "lib", "recorder-release.mjs")),
     copyFile(resolve(platformSource, "tools", "lib", "memories-release.mjs"), resolve(tools, "lib", "memories-release.mjs")),
     copyFile(resolve(platformSource, "tools", "lib", "site-release.mjs"), resolve(tools, "lib", "site-release.mjs")),
+    copyFile(resolve(platformSource, "tools", "lib", "packet-replay-release.mjs"), resolve(tools, "lib", "packet-replay-release.mjs")),
     copyFile(resolve(platformSource, "tools", "lib", "public-asset-pool.mjs"), resolve(tools, "lib", "public-asset-pool.mjs")),
     copyFile(resolve(platformSource, "tools", "lib", "map-loot-source.mjs"), resolve(tools, "lib", "map-loot-source.mjs")),
     copyFile(resolve(platformSource, "tools", "lib", "verified-map-input.mjs"), resolve(tools, "lib", "verified-map-input.mjs")),
@@ -436,7 +437,7 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
   await writeFile(memoriesPath, memoriesBytes);
   await writeFile(resolve(repository, "local", "private.peakrun"), "private memoir");
   await writeFile(resolve(platform, "data", "memories", "release.json"), JSON.stringify({ ...memoriesRelease, privatePath: memoriesPath }));
-  const memoriesOptions = { env: { ...options.env, PEAK_TRAIL_DOWNLOAD_PRODUCT: "", PEAK_TRAIL_MEMORIES_DLL: memoriesPath } };
+  const memoriesOptions = { env: { ...options.env, PEAK_TRAIL_DOWNLOAD_PRODUCT: "memories", PEAK_TRAIL_MEMORIES_DLL: memoriesPath } };
   await writeFile(resolve(staged, "preflight-marker.txt"), "keep on failure");
   await assert.rejects(execFileAsync(process.execPath, [resolve(tools, "stage-site.mjs")], memoriesOptions), /unpublished development build/);
   assert.equal(await readFile(resolve(staged, "preflight-marker.txt"), "utf8"), "keep on failure");
@@ -641,8 +642,68 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
   await writeFile(resolve(proofDirectory, "equivalence.json"), "{}");
   await assert.rejects(execFileAsync(process.execPath, [resolve(tools, "stage-site.mjs")], options), /SHA-256\/size mismatch/);
   assert.equal(await readFile(resolve(staged, "preflight-marker.txt"), "utf8"), "keep on failed verified input");
+
+  await t.test("packet replay stages one Git-owned navigation surface and preserves it when the ZIP fails verification", async () => {
+    await writeFile(resolve(proofDirectory, "equivalence.json"), proofBody);
+    const zipBytes = packetZipFixture();
+    const zipPath = resolve(repository, "local", "packet-replay.zip");
+    const packetRelease = { schemaVersion: 1, version: "2026.10.31.2", gameVersion: "3.0.1", gameBuildId: "26155610", platform: "windows-x64",
+      filename: "peak-packet-replay-windows.zip", downloadPath: "downloads/peak-packet-replay-windows.zip",
+      bytes: zipBytes.length, sha256: sha256(zipBytes),
+      artifactUrl: "https://github.com/luyongyi/peak-trail/releases/download/packet-replay-windows-2026.10.31.2/peak-packet-replay-windows.zip" };
+    const navigationFiles = { "record.html": '<!doctype html><title>Peak导航服务</title><a href="./downloads/peak-packet-replay-windows.zip">Windows replay</a>',
+      "record.css": ".navigation-card{display:flex}", "src/packet-recorder.js": "export const navigation = true;",
+      "src/packet-watch-client.js": "export const packetWatch = true;", "src/app.js": "export const app = 'unified';" };
+    await mkdir(resolve(platform, "data", "packet-replay"));
+    await Promise.all([
+      writeFile(zipPath, zipBytes),
+      writeFile(resolve(platform, "data", "packet-replay", "release.json"), JSON.stringify(packetRelease)),
+      ...Object.entries(navigationFiles).map(([name, content]) => writeFile(resolve(platform, "web", name), content)),
+      ...["index.html", "mods.html", "guide.html"].map(name => writeFile(resolve(platform, "web", name),
+        '<!doctype html><a href="./record.html">Navigation</a><a href="./downloads/peak-packet-replay-windows.zip">Windows replay</a>')),
+      // The current product must never need either retired DLL, even on a clean build.
+      rm(resolve(platform, "data", "recorder", "release.json")), rm(recorderPath),
+    ]);
+    const packetArgs = [resolve(tools, "stage-site.mjs"), "--download-product", "packet-replay", "--windows-replay-zip", zipPath];
+    await execFileAsync(process.execPath, packetArgs, options);
+    assert.deepEqual(await readdir(resolve(staged, "downloads")), [packetRelease.filename]);
+    assert.deepEqual(await readFile(resolve(staged, packetRelease.downloadPath)), zipBytes);
+    assert.deepEqual(JSON.parse(await readFile(resolve(staged, "data", "packet-replay", "release.json"), "utf8")), packetRelease);
+    for (const [name, content] of Object.entries(navigationFiles)) assert.equal(await readFile(resolve(staged, name), "utf8"), content);
+    assert.equal(await readFile(resolve(staged, "guide.html"), "utf8"), await readFile(resolve(platform, "web", "guide.html"), "utf8"));
+    for (const oldProduct of ["recorder", "memories"]) await assert.rejects(access(resolve(staged, "data", oldProduct)), { code: "ENOENT" });
+    const expectedHashes = Object.fromEntries(Object.entries(navigationFiles).map(([name, content]) => [name, sha256(content)]));
+    expectedHashes[packetRelease.downloadPath] = packetRelease.sha256;
+    const markerPath = resolve(staged, "deployment", "unified-web.json");
+    const marker = await readFile(markerPath, "utf8");
+    assert.deepEqual(JSON.parse(marker), { schemaVersion: 1, navigationApiVersion: 1, releaseFiles: expectedHashes });
+    const before = await readFile(resolve(staged, "record.html"));
+    const corrupt = Buffer.from(zipBytes); corrupt[31] ^= 1;
+    await writeFile(zipPath, corrupt);
+    await assert.rejects(execFileAsync(process.execPath, packetArgs, options), /Replay ZIP SHA-256 mismatch/);
+    assert.deepEqual(await readFile(resolve(staged, "record.html")), before);
+    assert.deepEqual(await readFile(resolve(staged, packetRelease.downloadPath)), zipBytes);
+    assert.equal(await readFile(markerPath, "utf8"), marker);
+  });
 });
 
 function sha256(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
+}
+
+function packetZipFixture() {
+  const names = ["Play-Replay.cmd", "README.zh-CN.txt", "release.json", "Prepare-NativeReplay.ps1", "Start-NativeReplay.ps1",
+    "bridge/PeakPacketReplay.NativeBridge.BuildInput.dll", "tools/PeakPacketReplay.WindowsPatch.exe",
+    "tools/PeakPacketReplay.WindowsPatch.dll", "licenses/dotnet-LICENSE.TXT", "licenses/Mono.Cecil-LICENSE.txt"];
+  const local = [], central = []; let localSize = 0;
+  for (const path of names) {
+    const name = Buffer.from(`peak-packet-replay-windows/${path}`);
+    const header = Buffer.alloc(30); header.writeUInt32LE(0x04034b50); header.writeUInt16LE(name.length, 26);
+    const entry = Buffer.alloc(46); entry.writeUInt32LE(0x02014b50); entry.writeUInt16LE(name.length, 28); entry.writeUInt32LE(localSize, 42);
+    local.push(header, name); central.push(entry, name); localSize += header.length + name.length;
+  }
+  const directory = Buffer.concat(central), end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50); end.writeUInt16LE(names.length, 8); end.writeUInt16LE(names.length, 10);
+  end.writeUInt32LE(directory.length, 12); end.writeUInt32LE(localSize, 16);
+  return Buffer.concat([...local, directory, end]);
 }

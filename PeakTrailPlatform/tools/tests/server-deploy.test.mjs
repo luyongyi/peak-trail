@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from "node
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
-import { containedPath, liveActivationEnabled, parseDeployCommand, publishAndActivate, publishAtomically, verifyLiveHealth, verifyStagedSite, withDeployLock } from "../../deploy/receiver.mjs";
+import { containedPath, liveActivationEnabled, parseDeployCommand, publishAndActivate, publishAtomically, verifyLiveHealth, verifyNavigationHealth, verifyStagedSite, withDeployLock } from "../../deploy/receiver.mjs";
 
 const commit = "a1".repeat(20);
 const mapPackId = `sha256-${"ab".repeat(32)}`;
@@ -174,6 +174,25 @@ test("live health reads only the fixed non-private endpoint and validates its se
     await assert.rejects(verifyLiveHealth(async () => new Response(JSON.stringify(body))), /Live health response/);
   }
   await assert.rejects(verifyLiveHealth(async () => new Response("offline", { status: 503 })), /not ready/);
+});
+
+test("navigation deployment health requires an enabled configured versioned API", async () => {
+  const valid = { ok: true, service: "peak-packet-web", version: 1, enabled: true, configured: true };
+  await verifyNavigationHealth(async (url, options) => {
+    assert.equal(url, "http://127.0.0.1:8787/api/packet-replay/health");
+    assert.equal(options.redirect, "error");
+    assert.ok(options.signal instanceof AbortSignal);
+    return new Response(JSON.stringify(valid));
+  });
+  for (const changed of [{ ok: false }, { service: "other" }, { version: 2 }, { enabled: false }, { configured: false }]) {
+    await assert.rejects(verifyNavigationHealth(async () => new Response(JSON.stringify({ ...valid, ...changed }))), /Navigation health response/);
+  }
+  await assert.rejects(verifyNavigationHealth(async () => new Response("offline", { status: 503 })), /not ready/);
+  const state = simulatedPublication();
+  await assert.rejects(publishAndActivate("state", "new", async target => {
+    if (target === "new") await verifyNavigationHealth(async () => new Response(JSON.stringify({ ...valid, configured: false })));
+  }, state.operations), error => error.rollbackStatus === "restored");
+  assert.equal(state.current, "old");
 });
 
 test("live activation is disabled by default and rejects a directory flag", async (t) => {

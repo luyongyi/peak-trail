@@ -37,6 +37,7 @@ import { historicalRouteTitle, historicalRouteUrl, loadHistoricalRouteLink, pars
 import { getLocale, tr, onLocaleChange, biomeName, gameItemName, formatNumber } from "./i18n.js";
 import { initLanguageControls } from "./i18n-dom.js";
 import { WatchClient, parseWatchId, parseWatchCode, normalizeWatchInput, resolveWatchInput, watchSharePayload, watchCodeFromState } from "./watch-client.js";
+import { PacketWatchClient, parseCaptureId } from "./packet-watch-client.js";
 import { trimWatchTrace, isWatchMilestone, watchProgressLabel } from "./watch-window.js";
 import { watchText } from "./watch-text.js";
 import { createWatchChrome } from "./watch-chrome.js";
@@ -1580,12 +1581,15 @@ function updateWatchStatus() {
   $("watchMenuLayers").hidden = empty;
   $("watchReplay").disabled = empty;
   $("watchPlayers").disabled = empty;
-  const labels = { waiting: watchText("等待主播入图"), live: watchText("直播中"), reconnecting: watchText("主播重连中"),
+  const labels = watch.kind === "packet" ? { waiting: tr("等待本局关卡", "Waiting for the current map"), live: tr("导航中", "Navigation live"), reconnecting: tr("导航重连中", "Navigation reconnecting"), ended: tr("导航已结束", "Navigation ended") }
+    : { waiting: watchText("等待主播入图"), live: watchText("直播中"), reconnecting: watchText("主播重连中"),
     ended: watch.awaitingRun ? watchText("等待已结束") : watchText("直播已结束") };
-  const text = watch.connection === "error" ? watchText("无法打开直播")
+  const text = watch.connection === "unauthorized" ? watch.operator ? tr("请先解锁导航管理", "Unlock navigation management") : tr("请检查导航链接", "Check the navigation link")
+    : watch.connection === "waiting" ? tr("等待本局关卡", "Waiting for the current map")
+    : watch.connection === "error" ? watch.kind === "packet" ? tr("无法打开导航", "Navigation unavailable") : watchText("无法打开直播")
     : watch.status === "ended" ? labels.ended
     : watch.connection === "reconnecting" ? watchText("观看连接重连中")
-    : watch.connection === "connecting" ? watchText("正在连接直播")
+    : watch.connection === "connecting" ? watch.kind === "packet" ? tr("正在连接导航", "Connecting navigation") : watchText("正在连接直播")
     : watch.trace && !watch.following ? tr("回看中", "Replaying") : labels[watch.status] || watchText("等待游戏数据");
   $("watchStatusText").textContent = [text, watchProgressLabel(watch.trace)].filter(Boolean).join(" · ");
   $("watchStatus").dataset.status = watch.status === "ended" ? "ended" : watch.connection === "error" ? "error" : watch.status;
@@ -1598,16 +1602,21 @@ function updateWatchStatus() {
     ? [mapStatus.text, errorUiText(mapStatus.message, "Map geometry could not be loaded")].filter(Boolean).join(" · ") : "";
   if (mapWarning) $("watchFreshness").textContent += ` · ${mapWarning}`;
   $("watchFreshness").title = mapWarning;
-  const notice = watch.initializing || !watch.trace || !watch.trace.sampleCount || watch.connection === "error";
+  const packetMapMissing = watch.kind === "packet" && watch.trace && !state.usingCompatibleMap && !watch.initializing;
+  const notice = watch.initializing || !watch.trace || !watch.trace.sampleCount || packetMapMissing || ["error", "unauthorized"].includes(watch.connection);
   $("watchNotice").hidden = !notice;
   $("watchNoticeText").textContent = watchText(watch.message) || (watch.initializing ? watchText("正在匹配本局地图…")
+    : packetMapMissing ? tr("暂未加载到与本局版本匹配的地图，正在继续采集玩家路线；请稍后重新连接。", "The map for this game build is unavailable. Capture continues; reconnect later.")
     : watch.awaitingRun ? watch.status === "ended" ? watchText("等待已结束，本次尚未开始攀登") : watchText("主播已在机场，等待进入关卡。入图后会自动开始观战。")
-    : watch.status === "ended" ? watchText("直播已结束，本次没有可显示的路径")
-    : watch.trace ? watchText("已连接，等待玩家位置…") : watchText("正在连接直播…"));
+    : watch.status === "ended" ? watch.kind === "packet" ? tr("导航已结束，本次没有可显示的路径", "Navigation ended without a visible path") : watchText("直播已结束，本次没有可显示的路径")
+    : watch.trace ? watchText("已连接，等待玩家位置…") : watch.kind === "packet" ? tr("正在连接导航…", "Connecting navigation…") : watchText("正在连接直播…"));
   $("watchRetry").hidden = !["error", "reconnecting"].includes(watch.connection);
+  $("watchUnlock").hidden = watch.kind !== "packet" || watch.connection !== "unauthorized";
+  $("watchUnlock").href = `./record.html?room=${watch.kind === "packet" ? watch.id.split(".")[0] : ""}${watch.operator ? "&operator=1#managementPanel" : ""}`;
+  $("watchUnlock").textContent = watch.operator ? tr("返回导航管理解锁", "Unlock navigation management") : tr("返回 Peak导航服务", "Return to Peak navigation");
   const behind = Math.max(0, (watch.trace?.duration || 0) - state.currentTime);
   $("watchTimeStatus").textContent = empty ? "" : watch.status === "ended"
-    ? watchText("直播已结束 · 可回看保留的路径")
+    ? watch.kind === "packet" ? tr("导航已结束 · 可回看保留的路径", "Navigation ended · Retained paths are available") : watchText("直播已结束 · 可回看保留的路径")
     : watch.following ? watchText("实时 · 最近 2 分钟可回看") : tr(`正在回看 · 落后 ${Math.round(behind)} 秒`, `Replaying · ${Math.round(behind)}s behind`);
   if (!empty && watch.persistence === "durable") $("watchTimeStatus").textContent += watchText(" · 轨迹自动保存");
   $("watchGoLive").textContent = watch.status === "ended" ? watchText("回到最后") : watchText("回到实时");
@@ -1735,13 +1744,36 @@ function flushWatch() {
   syncWatchCamera();
 }
 
-async function startWatch(id, { replaceUrl = true, watchCode = null } = {}) {
-  if (!parseWatchId(id)) return;
+async function applyPacketWaitingSnapshot(snapshot) {
+  const watch = state.watch;
+  liveCameraController.suspend(viewer);
+  const revision = ++state.traceSelectionRevision;
+  ++state.mapRequestRevision;
+  watch.trace = null; watch.epoch = snapshot.epoch; watch.initializing = true; watch.sceneName = null;
+  watch.awaitingRun = false; watch.lastRecordAt = null; state.compatibility = null; state.usingCompatibleMap = false;
+  state.trace = null; state.traceCollection = null; state.lastRenderSignature = null;
+  state.currentTime = 0;
+  resetSegmentNavigation(null);
+  viewer?.setFollowTarget(null, { reason: "data" });
+  // Unknown packet scenes must never inherit a previous or daily map.
+  if (state.mapPack) state.mapSourceKind = "archive";
+  await clearAutomaticMap();
+  if (revision !== state.traceSelectionRevision || !watch.active) return;
+  await renderData();
+  if (revision !== state.traceSelectionRevision || !watch.active) return;
+  watch.initializing = false;
+  elements.appShell.classList.remove("watch-loading");
+  updateTraceUI(); updateMapUI(); updateWatchStatus();
+}
+
+async function startWatch(id, { replaceUrl = true, watchCode = null, capture = false, operator = false } = {}) {
+  id = capture ? parseCaptureId(id) : parseWatchId(id);
+  if (!id) return;
   cancelWatchJoin();
   stopWatch();
   disconnectLive(true);
   const watch = state.watch;
-  Object.assign(watch, { active: true, id, trace: null, status: "connecting", connection: "connecting",
+  Object.assign(watch, { active: true, id, kind: capture ? "packet" : "v2", operator: capture && operator, trace: null, status: "connecting", connection: "connecting",
     lastRecordAt: null, following: true, dirty: false, records: 0, playerKey: "", epoch: null,
     initializing: false, awaitingRun: false, message: "", sceneName: null, persistence: null, code: parseWatchCode(watchCode), copiedUntil: 0, copiedKind: null });
   liveCameraController.begin(id, viewer);
@@ -1761,23 +1793,27 @@ async function startWatch(id, { replaceUrl = true, watchCode = null } = {}) {
   syncWorkspaceState();
   dismissGate();
   void renderData();
-  elements.modeChip.textContent = watchText("观战");
+  elements.modeChip.textContent = capture ? "Peak导航服务" : watchText("观战");
   for (const key of ["watchStatus", "watchShare", "watchCamera", "watchTimebar"]) $(key).hidden = false;
   if (replaceUrl) {
     const url = new URL(location.href);
-    url.search = new URLSearchParams({ watch: id }).toString();
+    url.search = new URLSearchParams(capture ? { capture: id } : { watch: id }).toString();
+    if (capture && operator) url.searchParams.set("operator", "1");
     url.hash = "";
     history.replaceState(null, "", url);
   }
   updateWatchStatus();
-  const client = new WatchClient({
+  const Client = capture ? PacketWatchClient : WatchClient;
+  const client = new Client({
     watchId: id,
+    operator: capture && operator,
     onSnapshot: data => {
       if (!watch.active || state.watch.client !== client) return;
       // Parsing is synchronous before the first await: malformed snapshots throw
       // into the controller's recovery path instead of accepting a bad cursor.
       let promise;
-      if (data.epoch === 0) promise = applyEmptyWatchSnapshot(data);
+      if (capture && !data.manifest) promise = applyPacketWaitingSnapshot(data);
+      else if (!capture && data.epoch === 0) promise = applyEmptyWatchSnapshot(data);
       else {
         const trace = createLiveTrace({ ...data.manifest, sessionId: data.sessionId }, {
           code: data.watchId, sessionId: `${data.sessionId}:${data.epoch}`,
@@ -1787,7 +1823,8 @@ async function startWatch(id, { replaceUrl = true, watchCode = null } = {}) {
       }
       promise.catch(error => {
         if (state.watch.client !== client) return;
-        watch.message = tr(`直播数据无法显示：${error.message}`, `Unable to display live data: ${error.message}`);
+        watch.message = capture ? tr("导航数据暂时无法显示，请重新连接。", "Navigation data is temporarily unavailable. Please reconnect.")
+          : tr(`直播数据无法显示：${error.message}`, `Unable to display live data: ${error.message}`);
         watch.connection = "error";
         updateWatchStatus();
       });
@@ -1803,12 +1840,13 @@ async function startWatch(id, { replaceUrl = true, watchCode = null } = {}) {
     onState: data => {
       if (!watch.active || state.watch.client !== client) return;
       if (data.status) watch.status = data.status;
-      if (data.epoch === 0 && data.manifest === null) watch.awaitingRun = true;
+      if (!capture && data.epoch === 0 && data.manifest === null) watch.awaitingRun = true;
       if (data.persistence) watch.persistence = data.persistence;
-      watch.code = watchCodeFromState(watch.code, data);
+      if (!capture) watch.code = watchCodeFromState(watch.code, data);
       if (data.manifest?.sceneName) watch.sceneName = data.manifest.sceneName;
       const time = typeof data.lastRecordAt === "number" ? data.lastRecordAt : Date.parse(data.lastRecordAt);
       if (Number.isFinite(time)) watch.lastRecordAt = time;
+      else if (capture && data.lastRecordAt === null) watch.lastRecordAt = null;
       if (data.status === "ended") {
         watch.code = null;
         watch.copiedUntil = 0;
@@ -1828,6 +1866,10 @@ async function startWatch(id, { replaceUrl = true, watchCode = null } = {}) {
     },
   });
   watch.client = client;
+  if (capture) void applyPacketWaitingSnapshot({ epoch: null }).catch(() => {
+    if (state.watch.client !== client) return;
+    watch.message = tr("地图暂时不可用，正在同步本局关卡。", "Synchronizing the current game map."); updateWatchStatus();
+  });
   state.live.trail = createTrailEstimator();
   watch.timer = setInterval(flushWatch, 1000);
   syncWakeLock();
@@ -2059,7 +2101,7 @@ function syncWorkspaceState() {
   shell.dataset.replayState = replayEmpty ? "empty" : state.trace ? "ready" : "explore";
   if (state.workspaceMode === "explore") elements.modeChip.textContent = state.historicalRoute
     ? state.historicalRoute.inspectionId ? tr("验收预览", "Review preview") : state.historicalRoute.teamId ? tr("团队路线", "Team route") : tr("历史路线", "Historical route") : tr("地图", "Map");
-  else if (state.workspaceMode === "watch") elements.modeChip.textContent = tr("观战", "Watch");
+  else if (state.workspaceMode === "watch") elements.modeChip.textContent = state.watch.kind === "packet" ? "Peak导航服务" : tr("观战", "Watch");
   else elements.modeChip.textContent = state.workspaceMode === "live" ? tr("直播", "Live")
     : FEATURES.legacyReplayVisible ? tr("回放", "Replay") : tr("地图", "Map");
   syncCommunityContext();
@@ -3067,7 +3109,7 @@ $("watchJoinForm").addEventListener("submit", event => {
   event.preventDefault();
   void joinWatchFromInput($("watchLinkInput").value);
 });
-$("watchRetry").addEventListener("click", () => void startWatch(state.watch.id));
+$("watchRetry").addEventListener("click", () => void startWatch(state.watch.id, { capture: state.watch.kind === "packet", operator: state.watch.operator }));
 $("watchGoLive").addEventListener("click", () => {
   if (!state.watch.trace) return;
   state.watch.following = true;
@@ -3084,6 +3126,10 @@ $("watchCloseReplay").addEventListener("click", () => { toggleWatchReplay(false)
 function updateWatchShareUI() {
   const watch = state.watch;
   if (!watch.active) return;
+  if (watch.kind === "packet") {
+    $("watchShare").textContent = watch.copiedUntil > Date.now() ? tr("已复制链接", "Link copied") : tr("复制地图链接", "Copy map link");
+    $("watchShareLink").hidden = true; return;
+  }
   const hasCode = watch.status !== "ended" && Boolean(parseWatchCode(watch.code));
   const copied = watch.copiedUntil > Date.now();
   $("watchShare").textContent = copied && watch.copiedKind === (hasCode ? "code" : "link")
@@ -3096,7 +3142,11 @@ function updateWatchShareUI() {
 async function copyWatchShare(kind = "code") {
   const watch = state.watch;
   const id = watch.id;
-  const payload = watchSharePayload(watch, location.href, kind);
+  let payload;
+  if (watch.kind === "packet") {
+    const url = new URL(location.href); url.search = new URLSearchParams({ capture: id }).toString(); url.hash = "";
+    payload = { kind: "link", text: url.href };
+  } else payload = watchSharePayload(watch, location.href, kind);
   const current = () => watch.active && watch.id === id;
   try {
     await navigator.clipboard.writeText(payload.text);
@@ -3108,7 +3158,9 @@ async function copyWatchShare(kind = "code") {
   } catch {
     if (!current()) return;
     if (payload.kind === "code") showError(watchText("请手动复制直播码"), payload.text);
-    else showError(watchText("请复制地址栏链接"), watchText("当前浏览器未允许自动复制，地址栏中的链接可直接分享。"));
+    else showError(watchText("请复制地址栏链接"), watch.kind === "packet"
+      ? tr("复制地址栏中的本次导航链接即可分享。", "Share this navigation using its address-bar link.")
+      : watchText("当前浏览器未允许自动复制，地址栏中的链接可直接分享。"));
   }
 }
 $("watchShare").addEventListener("click", () => void copyWatchShare());
@@ -3338,12 +3390,14 @@ async function bootstrap() {
   }
   elements.gateDebug.closest("details").hidden = !FEATURES.liveVisible;
   const watchId = parseWatchId(new URL(location.href).searchParams.get("watch"));
-  if (watchId) void startWatch(watchId, { replaceUrl: false });
+  const captureId = parseCaptureId(new URL(location.href).searchParams.get("capture"));
+  if (captureId) void startWatch(captureId, { replaceUrl: false, capture: true, operator: new URL(location.href).searchParams.get("operator") === "1" });
+  else if (watchId) void startWatch(watchId, { replaceUrl: false });
   else showGate();
   updateCompatibilityUI();
   updateRangeFill(elements.heightScale);
   requestAnimationFrame(playbackLoop);
-  if (!watchId) {
+  if (!watchId && !captureId) {
     await bootstrapMapFromQuery();
     await bootstrapHistoricalRouteFromQuery();
   }

@@ -22,6 +22,7 @@ import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { createTrajectoryApi } from "./trajectory-api.mjs";
 import { createLiveV2Api } from "./live-v2-api.mjs";
+import { createPacketReplayApi } from "./packet-replay-api.mjs";
 import { createLiveWal } from "./live-wal.mjs";
 import { appendFileSync, mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -50,6 +51,13 @@ function htmlEscape(value) {
 
 export function createLiveServer(options = {}) {
   const legacyLiveEnabled = options.legacyLiveEnabled === true;
+  // Deployment enables this after the private environment and proxy routes are
+  // installed. Merely publishing code (or inheriting credentials) does not
+  // activate navigation or contact the collector.
+  const packetNavigationEnabled = options.packetNavigationEnabled === true;
+  const packetReplay = createPacketReplayApi({ ...options.packetReplay,
+    ...(!packetNavigationEnabled ? { env: {}, operatorKey: "", apiKey: "" } : {}),
+    trustedProxy: options.trustedProxy });
   const liveArchive = options.liveV2?.memoryOnly === true ? null : createLiveWal({ ...options.liveWal, root: options.trajectoryDir });
   const liveV2 = createLiveV2Api({ ...options.liveV2, archive: liveArchive, trustedProxy: options.trustedProxy });
   const trajectories = createTrajectoryApi({ root: options.trajectoryDir, catalogPath: options.catalogPath, trustedProxy: options.trustedProxy });
@@ -354,6 +362,16 @@ export function createLiveServer(options = {}) {
   }
 
   async function handle(req, res) {
+    if (req.url === "/api/packet-replay/health" && req.method === "GET") {
+      const ready = packetNavigationEnabled && packetReplay.configured;
+      res.writeHead(ready ? 200 : 503, { "content-type": "application/json; charset=utf-8",
+        "cache-control": "no-store", "x-content-type-options": "nosniff", "referrer-policy": "no-referrer" });
+      res.end(JSON.stringify({ ok: ready, service: "peak-packet-web", version: 1,
+        enabled: packetNavigationEnabled, configured: packetReplay.configured }));
+      return;
+    }
+    // This handler owns its headers and never inherits the legacy wildcard CORS.
+    if (await packetReplay.handle(req, res)) return;
     if (await liveV2.handle(req, res)) return;
     if (await trajectories.handle(req, res)) return;
     const url = new URL(req.url, "http://localhost");
@@ -553,8 +571,25 @@ function upsert(playerId, player) {
   });
   server.once("close", () => { if (sweeper) clearInterval(sweeper); });
   server.once("close", trajectories.close);
+  server.once("close", () => packetReplay.close());
   server.once("close", () => { liveV2.close().catch(() => {}); });
-  return { server, runs, codeByRunId, startDailyPrewarm, liveV2 };
+  return { server, runs, codeByRunId, startDailyPrewarm, liveV2, packetReplay };
+}
+
+// Abort bridge downloads before waiting for HTTP shutdown. A stalled client
+// cannot keep a routine deployment waiting for the full systemd stop timeout.
+export async function closeLiveServer({ server, runs, liveV2, packetReplay }, { timeoutMs = 5000 } = {}) {
+  const stopped = new Promise(done => server.close(done));
+  const forceClose = setTimeout(() => server.closeAllConnections(), Math.max(1, timeoutMs));
+  forceClose.unref?.();
+  packetReplay?.close();
+  for (const run of runs.values()) for (const viewer of run.viewers) viewer.res.end();
+  server.closeIdleConnections?.();
+  let failed = false;
+  try { await liveV2.close(); } catch { failed = true; }
+  await stopped;
+  clearTimeout(forceClose);
+  return !failed;
 }
 
 export function startCli(argv = process.argv.slice(2)) {
@@ -567,7 +602,10 @@ export function startCli(argv = process.argv.slice(2)) {
   const dir = flag("dir", null);
   const trajectoryDir = flag("routes-dir", process.env.PEAK_TRAJECTORY_DIR ?? null);
   const legacyLiveEnabled = argv.includes("--legacy-live");
-  const { server, startDailyPrewarm, liveV2, runs } = createLiveServer({ persistenceDir: dir, trajectoryDir, legacyLiveEnabled, trustedProxy: argv.includes("--trusted-proxy") });
+  const instance = createLiveServer({ persistenceDir: dir, trajectoryDir, legacyLiveEnabled,
+    packetNavigationEnabled: process.env.PEAK_PACKET_NAVIGATION_ENABLED === "1",
+    trustedProxy: argv.includes("--trusted-proxy") });
+  const { server, startDailyPrewarm } = instance;
   startDailyPrewarm();
   server.listen(port, host, () => {
     console.log(`PeakTrail memoir and live v2 service on http://${host}:${port}/ (legacy live ${legacyLiveEnabled ? "enabled" : "disabled"})`);
@@ -579,12 +617,7 @@ export function startCli(argv = process.argv.slice(2)) {
   const stop = async () => {
     if (stopping) return;
     stopping = true;
-    const stopped = new Promise(done => server.close(done));
-    for (const run of runs.values()) for (const viewer of run.viewers) viewer.res.end();
-    let failed = false;
-    try { await liveV2.close(); } catch { failed = true; }
-    await stopped;
-    process.exit(failed ? 1 : 0);
+    process.exit(await closeLiveServer(instance) ? 0 : 1);
   };
   process.once("SIGINT", stop);
   process.once("SIGTERM", stop);

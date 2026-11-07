@@ -75,13 +75,13 @@ test("symlink DLL is refused even when its target matches the pinned bytes", asy
   await assert.rejects(loadMemoriesArtifact(release, { localPath: link }), /regular file/);
 });
 
-test("site defaults to memories, legacy requires explicit selection, and public mode never admits local development", async t => {
-  assert.deepEqual(siteReleaseOptions(), { product: "memories", localPath: undefined });
-  assert.deepEqual(siteReleaseOptions([], { PEAK_TRAIL_RECORDER_DLL: "legacy.dll" }), { product: "memories", localPath: undefined });
-  assert.deepEqual(siteReleaseOptions(["--memories-dll", "current.dll"], { PEAK_TRAIL_MEMORIES_DLL: "other.dll" }), { product: "memories", localPath: "current.dll" });
+test("site defaults to packet replay, legacy requires explicit selection, and public mode never admits local development", async t => {
+  assert.deepEqual(siteReleaseOptions(), { product: "packet-replay", localPath: undefined });
+  assert.deepEqual(siteReleaseOptions([], { PEAK_TRAIL_RECORDER_DLL: "legacy.dll" }), { product: "packet-replay", localPath: undefined });
+  assert.deepEqual(siteReleaseOptions(["--download-product", "memories", "--memories-dll", "current.dll"], { PEAK_TRAIL_MEMORIES_DLL: "other.dll" }), { product: "memories", localPath: "current.dll" });
   assert.deepEqual(siteReleaseOptions(["--download-product", "recorder"], { PEAK_TRAIL_RECORDER_DLL: "legacy.dll" }), { product: "recorder", localPath: "legacy.dll" });
   for (const args of [["--download-product", "other"], ["--memories-dll"], ["--memories-dll", "--open"], ["--memories-dll", "one", "--memories-dll", "two"]])
-    assert.throws(() => siteReleaseOptions(args));
+    assert.throws(() => siteReleaseOptions(["--download-product", "memories", ...args]));
   await assert.rejects(loadSiteArtifact(release), /unpublished development build/);
   await assert.rejects(loadSiteArtifact(release, { preview: true }), /requires --memories-dll/);
   const directory = await mkdtemp(resolve(tmpdir(), "peak-memories-site-"));
@@ -121,7 +121,7 @@ test("checker is offline metadata-only by default, verifies explicit bytes, and 
   await Promise.all(["tools/lib", "data/memories"].map(path => mkdir(resolve(platform, path), { recursive: true })));
   await Promise.all([
     copyFile(resolve(platformSource, "tools/check-memories-download.mjs"), resolve(platform, "tools/check-memories-download.mjs")),
-    ...["site-release", "memories-release", "recorder-release"].map(name => copyFile(resolve(platformSource, `tools/lib/${name}.mjs`), resolve(platform, `tools/lib/${name}.mjs`))),
+    ...["site-release", "memories-release", "recorder-release", "packet-replay-release"].map(name => copyFile(resolve(platformSource, `tools/lib/${name}.mjs`), resolve(platform, `tools/lib/${name}.mjs`))),
     writeFile(resolve(platform, "data/memories/release.json"), JSON.stringify(release)),
   ]);
   const script = resolve(platform, "tools/check-memories-download.mjs");
@@ -133,7 +133,7 @@ test("checker is offline metadata-only by default, verifies explicit bytes, and 
   await assert.rejects(execFileAsync(process.execPath, [script, "--dll", dll]), /SHA-256 mismatch/);
 });
 
-test("default HTML checker exempts only the two pinned MOD paths and validates MOD and guide pages", async t => {
+test("legacy HTML checker explicitly selects the two pinned MOD paths and validates MOD and guide pages", async t => {
   const platform = await mkdtemp(resolve(tmpdir(), "peak-memories-html-"));
   t.after(() => rm(platform, { recursive: true, force: true }));
   await Promise.all(["web/tools", "web/src", "tools/lib", "data/memories", "data/recorder"].map(path => mkdir(resolve(platform, path), { recursive: true })));
@@ -142,7 +142,7 @@ test("default HTML checker exempts only the two pinned MOD paths and validates M
     downloadPath: "downloads/recorder/0.8.0/PeakTrailRecorder.dll" };
   await Promise.all([
     copyFile(resolve(platformSource, "web/tools/verify.mjs"), resolve(platform, "web/tools/verify.mjs")),
-    ...["site-release", "memories-release", "recorder-release"].map(name => copyFile(resolve(platformSource, `tools/lib/${name}.mjs`), resolve(platform, `tools/lib/${name}.mjs`))),
+    ...["site-release", "memories-release", "recorder-release", "packet-replay-release"].map(name => copyFile(resolve(platformSource, `tools/lib/${name}.mjs`), resolve(platform, `tools/lib/${name}.mjs`))),
     ...["app", "protocol", "scene", "community-map-panel", "community-routes"].map(name => writeFile(resolve(platform, `web/src/${name}.js`), "export {};")),
     writeFile(resolve(platform, "data/memories/release.json"), JSON.stringify(release)),
     writeFile(resolve(platform, "data/recorder/release.json"), JSON.stringify(recorder)),
@@ -152,14 +152,15 @@ test("default HTML checker exempts only the two pinned MOD paths and validates M
   await writeFile(resolve(platform, "web/guide.html"), html(release.downloadPath));
   await writeFile(resolve(platform, "web/mods.html"), html(recorder.downloadPath));
   const script = resolve(platform, "web/tools/verify.mjs");
-  await execFileAsync(process.execPath, [script]);
+  const args = [script, "--download-product", "memories"];
+  await execFileAsync(process.execPath, args);
   await mkdir(resolve(platform, "web/downloads/recorder/other"), { recursive: true });
   await writeFile(resolve(platform, "web/downloads/recorder/other/PeakTrailRecorder.dll"), bytes);
   await writeFile(resolve(platform, "web/mods.html"), html("downloads/recorder/other/PeakTrailRecorder.dll"));
-  await assert.rejects(execFileAsync(process.execPath, [script]), /缺少本地静态资源/);
+  await assert.rejects(execFileAsync(process.execPath, args), /缺少本地静态资源/);
   await writeFile(resolve(platform, "web/mods.html"), html(recorder.downloadPath));
   await writeFile(resolve(platform, "web/guide.html"), html("downloads/recorder/0.7.1/PeakTrailRecorder.dll"));
-  await assert.rejects(execFileAsync(process.execPath, [script]), /缺少本地静态资源/);
+  await assert.rejects(execFileAsync(process.execPath, args), /缺少本地静态资源/);
   await writeFile(resolve(platform, "web/guide.html"), html("downloads/memories/0.8.0/Other.dll"));
-  await assert.rejects(execFileAsync(process.execPath, [script]), /缺少本地静态资源/);
+  await assert.rejects(execFileAsync(process.execPath, args), /缺少本地静态资源/);
 });

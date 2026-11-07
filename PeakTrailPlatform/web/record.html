@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="referrer" content="same-origin" />
+    <title>Peak导航服务 · PEAK Trail</title>
+    <link rel="stylesheet" href="./record.css" />
+    <script type="module" src="./src/packet-recorder.js"></script>
+  </head>
+  <body>
+    <div class="record-page" data-packet-recorder>
+      <header class="record-header">
+        <a class="record-brand" href="./" aria-label="PEAK Trail 首页"><span class="brand-symbol" aria-hidden="true">△</span><span>PEAK TRAIL<small>保存这一次攀登</small></span></a>
+        <a class="quiet-link" href="./">返回地图 ↗</a>
+      </header>
+      <main>
+        <section class="intro">
+          <p class="eyebrow">FIND YOUR WAY TOGETHER</p>
+          <h1>Peak导航服务</h1>
+          <p>输入房间号，查看导航或下载录像。</p>
+        </section>
+        <p id="navigationStatus" class="connection-status" role="status">正在连接 Peak导航服务…</p>
+        <p id="navigationError" class="notice error" role="alert" hidden></p>
+        <section class="panel navigation-entry" aria-labelledby="navigationHeading">
+          <div class="panel-heading"><div><p class="eyebrow">你的队伍 · 同一张地图</p><h2 id="navigationHeading">输入房间号</h2></div><span class="status-badge">PEAK 3.0.1</span></div>
+          <form id="navigationForm">
+            <label for="navigationRoom">六位房间号</label>
+            <div class="input-row"><input id="navigationRoom" class="code-input" placeholder="ABC123" maxlength="6" pattern="[A-Pa-p][A-Za-z0-9]{5}" autocomplete="off" autocapitalize="characters" spellcheck="false" required aria-describedby="navigationHint" /><button id="navigationStart" type="submit" disabled>查询房间</button></div>
+            <p id="navigationHint" class="field-note">同房共享导航。请征得队友同意，并预留 1 个玩家名额。</p>
+          </form>
+        </section>
+        <section id="navigationCapture" class="panel capture-panel navigation-session" aria-labelledby="navigationCaptureHeading" hidden>
+          <div class="panel-heading"><h2 id="navigationCaptureHeading">当前导航</h2></div>
+          <div class="navigation-record-row">
+            <div class="navigation-art" aria-hidden="true"><img id="navigationArtwork" alt="" width="76" height="76" decoding="async" /></div>
+            <div class="navigation-record-content">
+              <div class="navigation-record-copy">
+                <p class="navigation-record-name"><strong id="navigationCaptureHost">等待识别房主</strong><span id="navigationCaptureRoom" class="navigation-room-tag">—</span></p>
+                <div class="navigation-record-meta"><span id="navigationTitle">正在接入房间</span><time id="navigationStarted">—</time></div>
+              </div>
+              <div class="history-actions navigation-record-actions"><a id="navigationMap" class="button secondary" hidden>地图 ↗</a><a id="navigationZip" class="button" hidden>下载 ZIP</a><button id="navigationRefresh" type="button" class="text-button">刷新</button></div>
+            </div>
+          </div>
+          <span id="navigationFeature" hidden aria-hidden="true"></span>
+          <p id="navigationDescription" class="field-note" hidden></p>
+          <p id="navigationShared" class="field-note" hidden>已共享房间导航。</p>
+          <p id="navigationNote" class="field-note" hidden></p>
+          <p class="field-note navigation-retention">每位房主最近 2 份 · 最长 7 天</p>
+        </section>
+        <section id="navigationRoomHistory" class="panel" aria-labelledby="navigationRoomHistoryHeading" hidden>
+          <div class="panel-heading"><div><p class="eyebrow">房间 <span id="navigationRoomHistoryCode" class="code-input"></span></p><h2 id="navigationRoomHistoryHeading">房间录像</h2></div></div>
+          <div id="navigationRoomHistoryList" class="navigation-record-list" aria-live="polite"></div>
+          <p id="navigationRoomHistoryMore" class="field-note" hidden>显示最近 20 份有效录像。</p>
+          <div class="capture-actions"><button id="navigationNewGame" type="button" hidden>开始本局导航</button></div>
+          <p id="navigationNewGameHint" class="field-note" hidden>房间号用于新一局时，点击“开始本局导航”。</p>
+        </section>
+        <section id="navigationHistoryPanel" class="panel" aria-labelledby="navigationHistoryHeading" hidden>
+          <div class="panel-heading"><div><p class="eyebrow">本机记录</p><h2 id="navigationHistoryHeading">我的导航记录</h2></div><button id="navigationHistoryRefresh" type="button" class="text-button">刷新</button></div>
+          <p class="field-note navigation-history-hint">最近 30 次查询，仅保存在本机。</p>
+          <p id="navigationHistoryEmpty" class="field-note">暂无查询记录。</p>
+          <div id="navigationHistoryList" class="navigation-record-list" aria-live="polite"></div>
+          <div class="capture-actions"><button id="navigationHistoryClear" type="button" class="text-button" title="仅清空本机记录，不影响导航或服务器录像" disabled>清空本机记录</button><a class="quiet-link" href="/downloads/peak-packet-replay-windows.zip">下载 Windows 回放组件 ↗</a></div>
+          <p class="field-note">回放需 Windows 和正版 PEAK 3.0.1。</p>
+          <details class="field-note"><summary>回放方法</summary><p>保持 Steam 登录并退出游戏，将录像 ZIP 解压后的 capture.peaknet 拖到 Play-Replay.cmd。详见回放包 README。</p></details>
+        </section>
+        <details id="managementPanel" class="management-panel">
+          <summary>管理员入口 <span>停止采集与录像管理</span></summary>
+        <p id="connectionStatus" class="connection-status" role="status">正在检查录制服务…</p>
+        <p id="recordError" class="notice error" role="alert" hidden></p>
+        <section id="loginPanel" class="panel login-panel" aria-labelledby="loginTitle" hidden>
+          <div><p class="eyebrow">管理入口</p><h2 id="loginTitle">解锁管理</h2><p class="muted">仅管理员需要访问码。普通导航直接在上方输入房间号即可。</p></div>
+          <form id="loginForm">
+            <label for="accessCode">录制访问码</label>
+            <div class="input-row"><input id="accessCode" type="password" required maxlength="512" autocomplete="off" spellcheck="false" /><button id="loginButton" type="submit">解锁</button></div>
+          </form>
+        </section>
+        <div id="recorderWorkspace" hidden>
+          <section class="panel" aria-labelledby="startTitle">
+            <div class="panel-heading"><div><p class="eyebrow">采集管理</p><h2 id="startTitle">启动或接入房间</h2></div><button id="logoutButton" type="button" class="text-button">退出管理</button></div>
+            <form id="startForm">
+              <label for="roomCode">六位联机码</label>
+              <div class="input-row"><input id="roomCode" class="code-input" placeholder="ABC123" maxlength="6" pattern="[A-Pa-p][A-Za-z0-9]{5}" autocomplete="off" autocapitalize="characters" spellcheck="false" required aria-describedby="roomHint" /><button id="startButton" type="submit">启动或接入房间</button></div>
+              <p class="field-note" id="roomHint">请征得同房玩家同意，并预留一个玩家名额。录像从采集器加入时开始。</p>
+              <p class="field-note">多个房间可同时导航，同一个房间自动共享。选中房间后点“停止并保存”只会结束该房间；切换关卡会继续录制。</p>
+            </form>
+          </section>
+          <section class="panel" aria-labelledby="activeTitle">
+            <div class="panel-heading"><div><p class="eyebrow">正在导航</p><h2 id="activeTitle">活动房间 <span id="activeCount" class="status-badge">0 个房间</span></h2></div><button id="activeRefresh" type="button" class="text-button">刷新房间</button></div>
+            <p id="activeEmpty" class="field-note">正在读取房间…</p>
+            <div id="activeList" aria-live="polite"></div>
+            <p class="field-note">选择一个房间查看状态、地图或停止采集。其他房间会继续运行。</p>
+          </section>
+          <section id="capturePanel" class="panel capture-panel" aria-labelledby="captureTitle" hidden>
+            <div class="panel-heading"><div><p class="eyebrow">当前选中的房间</p><h2 id="captureTitle">等待加入</h2></div><span id="captureBadge" class="status-badge"></span></div>
+            <p id="captureDescription" class="muted"></p>
+            <p class="field-note">房主：<span id="captureHost">等待识别房主</span></p>
+            <dl class="capture-identity"><div><dt>联机码</dt><dd id="captureRoom">—</dd></div><div><dt>特征码</dt><dd id="captureFeature">—</dd></div></dl>
+            <dl class="capture-stats"><div><dt>已保存数据</dt><dd id="captureBytes">0 B</dd></div><div><dt>记录条数</dt><dd id="captureEvents">0</dd></div></dl>
+            <p id="captureNote" class="field-note" hidden></p>
+            <div class="capture-actions"><a id="mapLink" class="button" hidden>查看导航地图 ↗</a><button id="stopButton" type="button" class="secondary" hidden>停止并保存</button><button id="refreshButton" type="button" class="text-button">刷新状态</button><a id="downloadLink" class="button secondary" hidden>下载录像 ZIP</a><a id="rawDownloadLink" class="quiet-link" hidden>原始录像</a></div>
+            <p id="playbackHint" class="field-note" hidden>解压 ZIP 后，将其中的 .peaknet 文件拖到 Windows 回放包的 Play-Replay.cmd 上，在游戏内回放。</p>
+          </section>
+          <section class="panel" aria-labelledby="historyTitle">
+            <div class="panel-heading"><div><p class="eyebrow">录像归档</p><h2 id="historyTitle">最近的攀登</h2></div><button id="libraryRefresh" type="button" class="text-button">刷新列表</button></div>
+            <p class="muted">按房主保留最近 2 份录像 ZIP，最多保存 7 天。请及时下载。</p>
+            <p id="historyEmpty" class="field-note">正在读取录像…</p>
+            <div id="historyList" aria-live="polite"></div>
+            <p id="historyMore" class="field-note" hidden>这里只显示最近的录像；仍在保留期内的文件也可用下方联机码与特征码查找。</p>
+          </section>
+          <section class="panel lookup-panel" aria-labelledby="lookupTitle">
+            <div><p class="eyebrow">02 / 找回录像</p><h2 id="lookupTitle">已有联机码与特征码？</h2><p class="muted">两项一起定位一次录制。请保存本次特征码，联机码可能被重复使用。</p></div>
+            <form id="lookupForm"><div class="lookup-inputs"><div><label for="lookupRoom">联机码</label><input id="lookupRoom" class="code-input" maxlength="6" pattern="[A-Pa-p][A-Za-z0-9]{5}" autocomplete="off" autocapitalize="characters" spellcheck="false" required /></div><div><label for="lookupFeature">20 位特征码</label><input id="lookupFeature" class="code-input feature-input" maxlength="20" pattern="[A-Fa-f0-9]{20}" autocomplete="off" autocapitalize="characters" spellcheck="false" required /></div></div><button id="lookupButton" type="submit" class="secondary">查找录像</button></form>
+          </section>
+        </div>
+        </details>
+        <noscript><p class="notice">请启用 JavaScript 使用 Peak导航服务。</p></noscript>
+      </main>
+      <footer>支持多房间 · 同房共享 · 关闭网页后继续导航</footer>
+    </div>
+  </body>
+</html>

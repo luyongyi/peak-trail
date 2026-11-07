@@ -1887,7 +1887,13 @@ export function assessCompatibility(manifest, mapPack) {
   };
 
   compare("sceneName", "场景");
-  compare("gameVersion", "游戏版本");
+  // The existing signed 3.0.1 exports retain Unity's literal bundleVersion
+  // "3.0.1--logFile". The verified packet profile reports "3.0.1" instead.
+  // Compare this one audited build's two spellings without rewriting either
+  // manifest (and therefore without changing any signed map identity).
+  const versionForComparison = value => String(manifest.gameBuildId) === "26155610"
+    && String(mapPack.gameBuildId) === "26155610" && value === "3.0.1--logFile" ? "3.0.1" : String(value);
+  compare("gameVersion", "游戏版本", versionForComparison);
   compare("gameBuildId", "游戏构建");
   compare("mapSlot", "地图槽位", Number);
   compare("projectionVersion", "投影版本", Number);

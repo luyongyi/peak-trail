@@ -43,6 +43,8 @@ if (env.PEAK_TRAIL_PUBLIC_ASSET_POOL !== undefined && (profile !== "server" || p
 const assetWriter = await createPublicAssetWriter(env.PEAK_TRAIL_PUBLIC_ASSET_POOL);
 // Verify every advertised DLL before replacing a previously staged site.
 const downloadOptions = siteReleaseOptions(argv, env);
+const unifiedWeb = downloadOptions.product === "packet-replay";
+const guidePage = unifiedWeb ? await readFile(resolve(webDirectory, "guide.html"), "utf8") : retiredEntryPage;
 const downloadRelease = await readSiteRelease(dataDirectory, downloadOptions.product);
 const downloadBytes = await loadSiteArtifact(downloadRelease, { ...downloadOptions, preview });
 const downloads = [{ product: downloadOptions.product, release: downloadRelease, bytes: downloadBytes }];
@@ -55,7 +57,8 @@ if (downloadOptions.product === "memories") {
 checkSiteDownloadReferences([
   await readFile(resolve(webDirectory, "index.html"), "utf8"),
   await readFile(resolve(webDirectory, "mods.html"), "utf8"),
-  retiredEntryPage,
+  guidePage,
+  ...(unifiedWeb ? [await readFile(resolve(webDirectory, "record.html"), "utf8")] : []),
 ], downloadRelease, downloads[1]?.release);
 // Only allowlisted illustrations are public; never copy a local folder wholesale.
 const homeArtSources = new Map();
@@ -189,14 +192,18 @@ await mkdir(resolve(outputDirectory, "schema"), { recursive: true });
 for (const { product, release, bytes } of downloads) {
   await mkdir(dirname(resolve(outputDirectory, release.downloadPath)), { recursive: true });
   await mkdir(resolve(outputDirectory, "data", product), { recursive: true });
-  await assetWriter.stageImmutableBytes(bytes, resolve(outputDirectory, release.downloadPath));
+  // The fixed ZIP URL gets an independent file per release, so old receivers
+  // also recognize retention safely during the one-time migration.
+  if (product === "packet-replay") await writeFile(resolve(outputDirectory, release.downloadPath), bytes);
+  else await assetWriter.stageImmutableBytes(bytes, resolve(outputDirectory, release.downloadPath));
   await writeFile(resolve(outputDirectory, "data", product, "release.json"), JSON.stringify(release, null, 2) + "\n");
 }
 await Promise.all([
   cp(resolve(webDirectory, "index.html"), resolve(outputDirectory, "index.html")),
   cp(resolve(webDirectory, "mods.html"), resolve(outputDirectory, "mods.html")),
   cp(resolve(webDirectory, "mods.css"), resolve(outputDirectory, "mods.css")),
-  writeFile(resolve(outputDirectory, "guide.html"), retiredEntryPage),
+  writeFile(resolve(outputDirectory, "guide.html"), guidePage),
+  ...(unifiedWeb ? ["record.html", "record.css"].map(name => cp(resolve(webDirectory, name), resolve(outputDirectory, name))) : []),
   writeFile(resolve(outputDirectory, "routes.html"), retiredEntryPage),
   cp(resolve(webDirectory, "styles.css"), resolve(outputDirectory, "styles.css")),
   cp(resolve(webDirectory, "home.css"), resolve(outputDirectory, "home.css")),
@@ -209,6 +216,13 @@ await Promise.all([
     resolve(outputDirectory, "schema", name),
   )),
 ]);
+if (unifiedWeb) {
+  const releaseFiles = {};
+  for (const name of ["record.html", "record.css", "src/packet-recorder.js", "src/packet-watch-client.js", "src/app.js", downloadRelease.downloadPath])
+    releaseFiles[name] = createHash("sha256").update(await readFile(resolve(outputDirectory, name))).digest("hex");
+  await mkdir(resolve(outputDirectory, "deployment"));
+  await writeFile(resolve(outputDirectory, "deployment/unified-web.json"), JSON.stringify({ schemaVersion: 1, navigationApiVersion: 1, releaseFiles }) + "\n");
+}
 await mkdir(resolve(outputDirectory, "data", "home-art"), { recursive: true });
 for (const file of HOME_ART_FILES) await assetWriter.stageImmutable(homeArtSources.get(file), resolve(outputDirectory, "data", "home-art", file));
 

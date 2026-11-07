@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 import { readFile } from "node:fs/promises";
 import { loadRecorderArtifact, readRecorderRelease, validateRecorderRelease } from "./recorder-release.mjs";
 import { loadMemoriesArtifact, readMemoriesRelease, requirePublicMemoriesRelease, validateMemoriesRelease } from "./memories-release.mjs";
+import { loadPacketReplayArtifact, readPacketReplayRelease, validatePacketReplayRelease } from "./packet-replay-release.mjs";
 
 export function optionValue(argv, flag) {
   const indexes = argv.flatMap((value, index) => value === flag ? [index] : []);
@@ -12,27 +13,30 @@ export function optionValue(argv, flag) {
 }
 
 export function siteReleaseOptions(argv = [], env = {}) {
-  const product = optionValue(argv, "--download-product") || env.PEAK_TRAIL_DOWNLOAD_PRODUCT || "memories";
-  if (!["memories", "recorder"].includes(product)) throw new Error("--download-product must be memories or recorder");
-  const localPath = product === "memories"
+  const product = optionValue(argv, "--download-product") || env.PEAK_TRAIL_DOWNLOAD_PRODUCT || "packet-replay";
+  if (!["memories", "recorder", "packet-replay"].includes(product)) throw new Error("--download-product must be memories, recorder or packet-replay");
+  const localPath = product === "packet-replay" ? optionValue(argv, "--windows-replay-zip") : product === "memories"
     ? optionValue(argv, "--memories-dll") || env.PEAK_TRAIL_MEMORIES_DLL
     : optionValue(argv, "--recorder-dll") || env.PEAK_TRAIL_RECORDER_DLL;
   return { product, localPath };
 }
 
 export function validateSiteRelease(value, product = "memories") {
+  if (product === "packet-replay") return validatePacketReplayRelease(value);
   if (product === "memories") return validateMemoriesRelease(value);
   if (product === "recorder") return validateRecorderRelease(value);
   throw new Error("Unknown site download product");
 }
 
 export async function readSiteRelease(dataDirectory, product = "memories") {
+  if (product === "packet-replay") return readPacketReplayRelease(resolve(dataDirectory, "packet-replay", "release.json"));
   if (product === "memories") return readMemoriesRelease(resolve(dataDirectory, "memories", "release.json"));
   if (product === "recorder") return readRecorderRelease(resolve(dataDirectory, "recorder", "release.json"));
   throw new Error("Unknown site download product");
 }
 
 export async function loadSiteArtifact(release, { product = "memories", preview = false, localPath, ...verification } = {}) {
+  if (product === "packet-replay") return loadPacketReplayArtifact(release, { localPath, ...verification });
   if (product === "memories") {
     if (!preview) {
       requirePublicMemoriesRelease(release);

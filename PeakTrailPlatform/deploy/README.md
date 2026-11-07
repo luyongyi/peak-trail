@@ -1,5 +1,7 @@
 # Static deployment receiver
 
+当前网页、导航 API 与 Windows 回放包的统一发布流程见 [unified-web.md](unified-web.md)。完成一次性迁移后，日常更新全部通过 GitHub Actions；下文保留基础设施安装与历史设计说明。
+
 历史轨迹接口的两阶段 owner 安装、精确源码提交要求与当前权限阻塞，见 [trajectory-enablement.md](trajectory-enablement.md)。该步骤与静态发布分开，未由本地开发自动执行。
 
 This is a deployment template, not proof that a server has been configured. It does

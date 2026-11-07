@@ -160,6 +160,20 @@ export async function verifyLiveHealth(fetchImpl = fetch) {
   }
 }
 
+// Installed by the one-time unified deployment migration after the environment
+// drop-in has enabled the Git-managed navigation API. No room or login is opened.
+export async function verifyNavigationHealth(fetchImpl = fetch) {
+  const response = await fetchImpl("http://127.0.0.1:8787/api/packet-replay/health", { signal: AbortSignal.timeout(2000), redirect: "error" });
+  if (response.status !== 200) {
+    await response.body?.cancel();
+    throw new Error("Navigation health endpoint is not ready");
+  }
+  const state = await response.json();
+  if (state?.ok !== true || state?.service !== "peak-packet-web" || state?.version !== 1 || state?.enabled !== true || state?.configured !== true) {
+    throw new Error("Navigation health response is invalid, disabled or unconfigured");
+  }
+}
+
 async function restartLiveService(options) {
   const serviceOptions = { ...options, timeout: 30_000 };
   await run("/usr/bin/sudo", ["-n", "/usr/bin/systemctl", "restart", LIVE_SERVICE], serviceOptions);
@@ -169,6 +183,7 @@ async function restartLiveService(options) {
     try {
       await run("/usr/bin/systemctl", ["is-active", "--quiet", LIVE_SERVICE], { ...serviceOptions, timeout: 2000 });
       await verifyLiveHealth();
+      await verifyNavigationHealth();
       return;
     } catch (error) { failure = error; }
     await new Promise((accept) => setTimeout(accept, 500));
@@ -478,8 +493,10 @@ export async function deploy(commit, { stateRoot = STATE_ROOT, assetRoot = ASSET
       const fetched = await git("rev-parse", "--verify", "FETCH_HEAD");
       if (fetched !== commit) throw new Error("Requested commit is no longer main HEAD; rerun deployment for the latest commit");
       await git("checkout", "--detach", "--quiet", commit);
+      await run("/usr/bin/python3", ["/srv/peak-trail/production-301-policy.py", "prepare", release], options);
       await run(process.execPath, ["PeakTrailPlatform/tools/validate-data.mjs"], options);
       await run(process.execPath, ["PeakTrailPlatform/tools/stage-site.mjs"], options);
+      await run("/usr/bin/python3", ["/srv/peak-trail/production-301-policy.py", "staged", release], options);
       const site = resolve(release, "PeakTrailPlatform", "site-dist");
       const summary = await verifyStagedSite(site);
       await writeFile(resolve(site, "release.json"), JSON.stringify({ commit, deployedAtUtc: new Date().toISOString(), ...summary }) + "\n", { flag: "wx", mode: 0o644 });
