@@ -1,0 +1,58 @@
+name: Publish Windows replay download
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Existing packet-replay-windows-<version> Release (e.g. 2026.11.08.1)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: peak-windows-replay-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'luyongyi/peak-trail' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Verify the existing public Release and update its descriptor
+        run: node PeakTrailPlatform/tools/update-packet-replay-release.mjs --version "$REPLAY_VERSION"
+        env:
+          REPLAY_VERSION: ${{ inputs.version }}
+      - name: Commit only the verified download descriptor
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add PeakTrailPlatform/data/packet-replay/release.json
+          if git diff --cached --quiet; then
+            echo "The verified version is already selected; checking and deploying it again."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "chore: update Windows replay download"
+            # A concurrent main update rejects this push. Never rebase or force
+            # unreviewed intervening changes; rerun against the new main instead.
+            git push origin HEAD:refs/heads/main
+          fi
+      - name: Start the normal code checks and production deployment
+        # GITHUB_TOKEN pushes do not trigger push workflows. Dispatch explicitly,
+        # including when the descriptor was unchanged. Check owns deployment.
+        run: gh workflow run peak-code-check.yml --repo luyongyi/peak-trail --ref main
+        env:
+          GH_TOKEN: ${{ github.token }}

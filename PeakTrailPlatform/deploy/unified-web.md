@@ -11,7 +11,9 @@
 
 页面不再由 `/opt/peak-packet-replay/site-overlay` 覆盖，`record.html` 也不再由独立服务提供。已有 API 路径、房间号鉴权、本机查询历史、录像存储和保留策略保持兼容。新浏览器不获取全站房间列表。
 
-## 一次性切换
+## 一次性切换（2026-11-08 已完成）
+
+线上已完成这次配置迁移。以下保留迁移设计，日常网页、API 和下载版本更新不需要再次执行迁移或手动 SSH。
 
 先发布本提交：浏览器资源与现有覆盖层内容一致，旧接收器可以正常部署；新导航 API 默认关闭，原服务继续处理请求。构建产物 `deployment/unified-web.json` 用于证明迁移依赖已经发布。
 
@@ -28,10 +30,23 @@
 
 ## 更新回放组件
 
-1. 构建并验证 Windows 分发包，使用新版本号，例如 `2026.11.07.1`。
+1. 在构建机生成并验证 Windows 分发包，使用新版本号，例如 `2026.11.08.1`。
 2. 发布到本仓库的 `packet-replay-windows-<版本>` Release，资产名保持 `peak-packet-replay-windows.zip`；不要覆盖旧版本资产。
-3. 更新 `data/packet-replay/release.json` 的版本、地址、字节数及 SHA-256，运行 `node PeakTrailPlatform/tools/check-packet-replay-download.mjs --public`。
-4. 提交到 `main`。构建时验证完整包和必要文件，再发布到网站原下载地址。
+3. 打开 GitHub Actions 的 **Publish Windows replay download**，选择 `main`，填入版本号并运行。
+4. 工作流从固定仓库、标签和文件名读取公开 Release，依据 GitHub 提供的大小与 SHA-256 下载验证，再检查 ZIP 内容。通过后自动更新 `data/packet-replay/release.json` 并提交到 `main`。
+5. 工作流显式启动 **Check PEAK Trail code**；完整检查通过后，现有部署流程将网页、API 和选定下载包一起发布到网站。后一个工作流成功才表示上线成功。
+
+重复填写当前版本也会重新验证并触发检查与部署，不产生多余提交。同版本资产被替换时会拒绝更新；应使用新版本号。若提交时 `main` 已被其他更新推进，正常 push 会安全失败，不强推，重新运行即可。
+
+该入口发布的是已经构建好的 ZIP，不在公开 Actions 中读取本机游戏 DLL 或编译回放组件。当前验证器限定 PEAK 3.0.1 / build 26155610；新游戏版本需要先完成兼容更新。`GITHUB_TOKEN` 提交不会自动触发 push 工作流，因此这里使用显式 dispatch，避免“描述符更新了，网站没发布”。
+
+需要在本机预检时，可运行：
+
+```sh
+node PeakTrailPlatform/tools/update-packet-replay-release.mjs --version 2026.11.08.1
+```
+
+它仅验证已有公开制品并更新本地描述符，不提交、不部署。
 
 仓库和制品只包含可公开的代码与分发文件。Steam 凭据、管理员访问码、采集录像和本机游戏程序集不得入库。
 
