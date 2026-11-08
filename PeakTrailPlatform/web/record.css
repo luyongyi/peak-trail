@@ -94,6 +94,10 @@ footer { padding: 17px 0 35px; color: #748b7b; font-size: 11px; line-height: 1.8
 .navigation-record-actions .text-button { padding-inline: 5px; }
 .navigation-retention { margin-top: 15px; padding-top: 12px; border-top: 1px solid #a7b89c18; font-size: 11px; }
 #navigationHistoryPanel > .eyebrow, #navigationHistoryPanel .panel-heading .eyebrow { display: none; }
+.replay-search-panel .panel-heading { margin-bottom: 16px; flex-wrap: wrap; }
+.replay-search-panel h2 { font-size: 17px; }
+.replay-search-panel .navigation-record-list:not(:empty) { margin-top: 16px; }
+#replaySearchError { color: #e8b8a7; }
 @media (max-width: 620px) {
   .navigation-record-row { gap: 12px; padding: 10px; }
   .navigation-art { flex-basis: 62px; width: 62px; height: 68px; }

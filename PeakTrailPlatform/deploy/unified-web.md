@@ -57,3 +57,11 @@ node PeakTrailPlatform/tools/update-packet-replay-release.mjs --version 2026.11.
 Steam 认证与 Photon 采集器不随 Web 发布重启。正在录制的房间会继续采集；Web 切换会短暂重连，正在进行的下载可重试。管理员登录会话在 Web 重启后需要重新登录，普通房间导航无需登录。
 
 首次 Steam 扫码、采集器本体/原生依赖升级和系统配置变更仍属于独立运维操作。本次没有把这些权限授予公开仓库的部署流程。
+
+## 按昵称查找录像
+
+网页与 Windows 游戏内组件共用 `POST /api/navigation/replays/search`，JSON 请求为 `{ "hostName": "录制时的房主昵称" }`。仅返回该昵称匹配的已完成、尚未过期且 ZIP 存在的录像，字段为 `hostName`、`history`、`hasMore`；单次最多 100 条，同名记录继续用房间号和时间区分。空查询不返回全站目录，不包含活动房间、Steam 身份或管理凭据，也不会启动采集。
+
+桥接调用 Collector 的只读 `GET /api/v1/replays/search?hostName=...`，在完整存储中先按昵称过滤再限制数量；不能用全站最近 100 条代替昵称查询。安装新 Collector 接口后，再通过 Actions 一起发布网页与组件包。下载沿用既有房间号与特征码 ZIP 路径。
+
+生产环境仍走网站 HTTPS（443），内部 Web 服务仍为 8787，Collector 仍只监听 127.0.0.1:17863，不增加公网端口。开发时游戏组件的 `[Replay] ServiceOrigin` 可指向本机 Web 服务（如 `http://localhost:8787`）；Web 与 DLL 使用同一接口。DLL 在游戏主线程读取原生 `NetworkingUtilities.GetUsername()` 预填昵称，只发送查询昵称，不发送 Steam 票据。

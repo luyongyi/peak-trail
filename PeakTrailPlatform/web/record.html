@@ -7,6 +7,7 @@
     <title>Peak导航服务 · PEAK Trail</title>
     <link rel="stylesheet" href="./record.css" />
     <script type="module" src="./src/packet-recorder.js"></script>
+    <script type="module" src="./src/replay-search.js"></script>
   </head>
   <body>
     <div class="record-page" data-packet-recorder>
@@ -62,7 +63,18 @@
           <div id="navigationHistoryList" class="navigation-record-list" aria-live="polite"></div>
           <div class="capture-actions"><button id="navigationHistoryClear" type="button" class="text-button" title="仅清空本机记录，不影响导航或服务器录像" disabled>清空本机记录</button><a class="quiet-link" href="/downloads/peak-packet-replay-windows.zip">下载 Windows 回放组件 ↗</a></div>
           <p class="field-note">回放需 Windows 和正版 PEAK 3.0.1。</p>
-          <details class="field-note"><summary>回放方法</summary><p>安装 BepInEx 和回放组件，正常启动 PEAK，在主菜单打开“录像回放”，选择录像 ZIP 即可。详见组件内 README。</p></details>
+          <details class="field-note"><summary>回放方法</summary><p>安装回放组件后，在游戏主菜单打开“录像回放”，按房主昵称查找并下载播放，也可选择本地录像 ZIP。</p></details>
+        </section>
+        <section class="panel replay-search-panel" data-replay-search aria-labelledby="replaySearchHeading">
+          <div class="panel-heading"><h2 id="replaySearchHeading">查找录像</h2><a class="quiet-link" href="/downloads/peak-packet-replay-windows.zip">Windows 回放组件 ↗</a></div>
+          <form id="replaySearchForm">
+            <label for="replaySearchName">房主昵称</label>
+            <div class="input-row"><input id="replaySearchName" maxlength="200" placeholder="录制时的房主昵称" autocomplete="off" autocapitalize="off" spellcheck="false" required /><button id="replaySearchSubmit" type="submit">查找</button></div>
+          </form>
+          <p id="replaySearchStatus" class="field-note" role="status">输入完整昵称，仅查找对应房主的录像。</p>
+          <p id="replaySearchError" class="field-note" role="alert" hidden></p>
+          <div id="replaySearchResults" class="navigation-record-list" aria-live="polite"></div>
+          <p id="replaySearchMore" class="field-note" hidden>同名录像较多，仅显示最近 100 份；也可用房间号查找。</p>
         </section>
         <details id="managementPanel" class="management-panel">
           <summary>管理员入口 <span>停止采集与录像管理</span></summary>

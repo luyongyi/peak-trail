@@ -147,6 +147,37 @@ function roomCapturesDto(value, room) {
   return { roomCode: room, active, history, hasMore: value.hasMore };
 }
 
+function searchName(value) {
+  if (typeof value !== "string" || value.length > 400 || !value.isWellFormed() || /[\u0000-\u001f\u007f-\u009f]/u.test(value)) return null;
+  const name = value.normalize("NFC").replace(/^\p{White_Space}+|\p{White_Space}+$/gu, "");
+  return name.length && Array.from(name).length <= 100 ? name : null;
+}
+
+const replayNameKey = name => Array.from(name, character => {
+  const upper = character.toUpperCase();
+  return Array.from(upper).length === 1 ? upper : character;
+}).join("");
+
+function replaySearchDto(value, requestedName) {
+  if (!object(value) || searchName(value.hostName) !== requestedName || !Array.isArray(value.history) ||
+      value.history.length > 100 || typeof value.hasMore !== "boolean") throw new Error("upstream_invalid_response");
+  const seen = new Set();
+  const history = value.history.map(item => {
+    const name = searchName(item?.hostName), capture = captureDto(item);
+    const key = `${capture.roomCode}.${capture.featureCode}`;
+    if (!name || replayNameKey(name) !== replayNameKey(requestedName) || capture.status !== "completed" ||
+        !capture.archiveAvailable || !capture.completedUtc || !capture.zipBytes || seen.has(key))
+      throw new Error("upstream_invalid_response");
+    seen.add(key);
+    // Search results expose only the fields needed to identify and download a
+    // completed recording. Never return the global roster or Steam identity.
+    return { roomCode: capture.roomCode, featureCode: capture.featureCode, hostName: name,
+      startedUtc: capture.startedUtc, completedUtc: capture.completedUtc, status: "completed",
+      archiveAvailable: true, zipBytes: capture.zipBytes, expiresUtc: capture.expiresUtc };
+  });
+  return { hostName: requestedName, history, hasMore: value.hasMore };
+}
+
 const displayName = value => typeof value === "string"
   ? Array.from(value.toWellFormed().replace(/[\u0000-\u001f\u007f-\u009f]/g, "")).slice(0, 100).join("") : "";
 const count = (value, maximum = Number.MAX_SAFE_INTEGER) => Number.isSafeInteger(value) && value >= 0 && value <= maximum;
@@ -277,7 +308,7 @@ export function createPacketReplayApi(options = {}) {
     return false;
   }
 
-  async function proxy(req, res, path, { body, room, feature, file = false, zip = false, list = false, live = false, navigationStart = false, roomLookup = false } = {}) {
+  async function proxy(req, res, path, { body, room, feature, file = false, zip = false, list = false, live = false, navigationStart = false, roomLookup = false, replaySearch = null } = {}) {
     const controller = new AbortController();
     activeRequests.add(controller);
     const timer = setTimeout(() => controller.abort(), file ? downloadTimeoutMs : requestTimeoutMs);
@@ -297,7 +328,7 @@ export function createPacketReplayApi(options = {}) {
       }
       if (body !== undefined) { headers["content-type"] = "application/json"; headers["idempotency-key"] = req.headers["idempotency-key"]; }
       if (file && req.headers.range) headers.range = req.headers.range;
-      const response = await fetch(`${origin}/api/v1${path}`, { method: roomLookup ? "GET" : req.method, headers,
+      const response = await fetch(`${origin}/api/v1${path}`, { method: roomLookup || replaySearch ? "GET" : req.method, headers,
         ...(body !== undefined ? { body: JSON.stringify(body) } : {}), redirect: "error", signal: controller.signal });
       if (response.status === 401 || response.status === 403) { await response.body?.cancel(); return fail(res, 502, "collector_auth_failed"); }
       if (file && (response.status === 200 || response.status === 206)) {
@@ -324,12 +355,16 @@ export function createPacketReplayApi(options = {}) {
         await response.body?.cancel();
         return responseJson(res, 416, { code: "range_not_satisfiable" }, /^bytes \*\/\d+$/.test(range ?? "") ? { "content-range": range } : {});
       }
-      const value = await upstreamJson(response, live ? 4 * 1024 * 1024 : list || roomLookup ? 256 * 1024 : 32768);
+      const value = await upstreamJson(response, live ? 4 * 1024 * 1024 : list || roomLookup || replaySearch ? 256 * 1024 : 32768);
       if (!response.ok) {
         const status = [400, 404, 409, 410, 413, 429, 503].includes(response.status) ? response.status : 502;
         return fail(res, status, CODES.has(value.code) ? value.code : "collector_unavailable");
       }
       if (![200, 202].includes(response.status) || file) throw new Error("upstream_invalid_response");
+      if (replaySearch) {
+        if (response.status !== 200) throw new Error("upstream_invalid_response");
+        return responseJson(res, 200, replaySearchDto(value, replaySearch));
+      }
       if (roomLookup) {
         if (response.status !== 200) throw new Error("upstream_invalid_response");
         return responseJson(res, 200, roomCapturesDto(value, room));
@@ -368,6 +403,13 @@ export function createPacketReplayApi(options = {}) {
           responseJson(res, 200, { configured: configured && !closed, captures: [] }); return true;
         }
         if (closed || !configured) { fail(res, 503, "collector_unavailable"); return true; }
+        if (rawPath === `${NAVIGATION}/replays/search` && req.method === "POST") {
+          if (!sameOrigin(req)) { fail(res, 403, "forbidden_origin"); return true; }
+          const body = await requestJson(req), name = searchName(body.hostName);
+          if (Object.keys(body).length !== 1 || !name) { fail(res, 400, "invalid_host_name"); return true; }
+          if (navigationLimited(req)) { fail(res, 429, "rate_limited"); return true; }
+          await proxy(req, res, `/replays/search?hostName=${encodeURIComponent(name)}`, { replaySearch: name }); return true;
+        }
         if (rawPath === `${NAVIGATION}/rooms/lookup` && req.method === "POST") {
           if (!sameOrigin(req)) { fail(res, 403, "forbidden_origin"); return true; }
           const body = await requestJson(req);

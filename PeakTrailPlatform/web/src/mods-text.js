@@ -2,6 +2,9 @@ import { UI_TEXT } from "./ui-text.js";
 import { initLanguageControls } from "./i18n-dom.js";
 
 const pairs = [
+  ["安装 BepInEx 和回放组件后，在游戏主菜单按房主昵称查找录像，下载后直接播放。", "Install BepInEx and the replay component, then find recordings by host name from the game menu. Download and play in game."],
+  ["在游戏内查找录像", "Find recordings in game"],
+  ["按录制时的房主昵称查找，也可打开本地录像 ZIP。", "Search using the host name from the recording, or open a local recording ZIP."],
   ["安装 BepInEx 和回放组件后，正常启动 PEAK，在主菜单选择录像 ZIP。", "Install BepInEx and the replay component, start PEAK normally, then choose a recording ZIP from the main menu."],
   ["复用本机正版 PEAK 3.0.1 的场景、光照与角色。", "Uses the scenes, lighting and characters from your installed copy of PEAK 3.0.1."],
   ["自由飞行或跟随玩家，拖动时间轴跳转。", "Fly freely or follow a player, and drag the timeline to seek."],
