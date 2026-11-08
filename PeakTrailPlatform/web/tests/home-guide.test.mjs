@@ -28,9 +28,10 @@ test("navigation instructions keep room consent, retention and native replay pre
   assert.match(guide, /正版 PEAK 3\.0\.1/);
   assert.match(guide, /保持 Steam 登录/);
   assert.match(guide, /退出游戏/);
-  assert.match(guide, /Play-Replay\.cmd/);
-  assert.match(guide, /capture\.peaknet/);
-  assert.match(guide, /原 Steam 游戏目录保持原样/);
+  assert.match(guide, /BepInEx 5/);
+  assert.match(guide, /主菜单打开“录像回放”/);
+  assert.match(guide, /选择下载的录像 ZIP/);
+  for (const page of [mods, guide, record]) assert.doesNotMatch(page, /Play-Replay\.cmd|独立回放副本|复制本机游戏资源/);
 });
 
 test("a fresh page contains no recorded rooms and keeps session identity out of display", () => {

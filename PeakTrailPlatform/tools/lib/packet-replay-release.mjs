@@ -7,9 +7,12 @@ export const PACKET_REPLAY_FILENAME = "peak-packet-replay-windows.zip";
 const RELEASE_ROOT = "https://github.com/luyongyi/peak-trail/releases/download/";
 const REDIRECT_HOSTS = new Set(["release-assets.githubusercontent.com", "objects.githubusercontent.com"]);
 const KEYS = ["schemaVersion", "version", "gameVersion", "gameBuildId", "platform", "filename", "downloadPath", "bytes", "sha256", "artifactUrl"];
-const REQUIRED = ["Play-Replay.cmd", "README.zh-CN.txt", "release.json", "Prepare-NativeReplay.ps1", "Start-NativeReplay.ps1",
+const LEGACY_REQUIRED = ["Play-Replay.cmd", "README.zh-CN.txt", "release.json", "Prepare-NativeReplay.ps1", "Start-NativeReplay.ps1",
   "bridge/PeakPacketReplay.NativeBridge.BuildInput.dll", "tools/PeakPacketReplay.WindowsPatch.exe",
   "tools/PeakPacketReplay.WindowsPatch.dll", "licenses/dotnet-LICENSE.TXT", "licenses/Mono.Cecil-LICENSE.txt"];
+const IN_GAME_REQUIRED = ["README.zh-CN.txt", "release.json", "BepInEx/patchers/PeakPacketReplay.Loader.dll",
+  "BepInEx/plugins/PeakPacketReplay/PeakPacketReplay.dll"];
+const LEGACY_VERSION = "2026.10.31.2";
 
 // This identifies the tested distribution, not a claim that its private build
 // inputs or the user's installed game assemblies are published in this repository.
@@ -33,8 +36,9 @@ export async function readPacketReplayRelease(path) {
 
 // Inspect the ZIP directory without unpacking or executing anything. Hash/size
 // pinning verifies the entire byte stream; these checks catch malformed packages,
-// accidental recordings and missing launchers before a release can be advertised.
-export function inspectPacketReplayZip(bytes) {
+// accidental recordings and missing components before a release can be advertised.
+// Only the already-published legacy version may keep its old launcher layout.
+export function inspectPacketReplayZip(bytes, { allowLegacy = true } = {}) {
   if (!Buffer.isBuffer(bytes) || bytes.length < 22 || bytes.length > MAX_PACKET_REPLAY_BYTES) throw new Error("Invalid replay ZIP size/type");
   let end = -1;
   for (let offset = bytes.length - 22; offset >= Math.max(0, bytes.length - 65_557); offset--) {
@@ -42,7 +46,7 @@ export function inspectPacketReplayZip(bytes) {
   }
   if (end < 0 || bytes.readUInt16LE(end + 4) !== 0 || bytes.readUInt16LE(end + 6) !== 0) throw new Error("Invalid replay ZIP directory");
   const count = bytes.readUInt16LE(end + 10), directoryBytes = bytes.readUInt32LE(end + 12), start = bytes.readUInt32LE(end + 16);
-  if (count < REQUIRED.length || count > 2048 || count !== bytes.readUInt16LE(end + 8) || start + directoryBytes !== end)
+  if (count < IN_GAME_REQUIRED.length || count > 2048 || count !== bytes.readUInt16LE(end + 8) || start + directoryBytes !== end)
     throw new Error("Invalid replay ZIP directory bounds");
   let offset = start, expanded = 0;
   const names = new Set(), prefix = "peak-packet-replay-windows/";
@@ -61,7 +65,7 @@ export function inspectPacketReplayZip(bytes) {
     const identity = name.toLowerCase();
     if (!name.startsWith(prefix) || name.endsWith("/") || !/^[A-Za-z0-9._/-]+$/.test(name)
         || name.split("/").some(part => !part || part === "." || part === "..") || names.has(identity)
-        || /(?:^|\/)(?:Assembly-CSharp(?:-[^.]+)?\.dll|UnityEngine[^/]*\.dll|steam[^/]*|\.env[^/]*|.*\.(?:peaknet|ndjson|log|pem|key))$/i.test(name))
+        || /(?:^|\/)(?:Assembly-CSharp(?:-[^.]+)?\.dll|PhotonUnityNetworking\.dll|Photon3Unity3D\.dll|UnityEngine[^/]*\.dll|steam[^/]*|\.env[^/]*|.*\.(?:peaknet|ndjson|log|pem|key|assets|bundle))$/i.test(name))
       throw new Error("Unsafe or private replay ZIP entry");
     if (local + 30 > start || bytes.readUInt32LE(local) !== 0x04034b50 || bytes.readUInt16LE(local + 6) !== flags
         || bytes.readUInt16LE(local + 8) !== method || bytes.readUInt16LE(local + 26) !== nameLength)
@@ -73,7 +77,17 @@ export function inspectPacketReplayZip(bytes) {
     if (expanded > 512 * 1024 * 1024) throw new Error("Replay ZIP expanded size exceeds limit");
     names.add(identity); offset = next;
   }
-  if (offset !== end || REQUIRED.some(name => !names.has((prefix + name).toLowerCase()))) throw new Error("Replay ZIP is missing required launchers or runtime files");
+  const inGame = [...names].some(name => name.startsWith(prefix + "bepinex/"));
+  const required = inGame ? IN_GAME_REQUIRED : LEGACY_REQUIRED;
+  if ((!inGame && !allowLegacy) || offset !== end || required.some(name => !names.has((prefix + name).toLowerCase())))
+    throw new Error("Replay ZIP is missing required in-game replay components");
+  if (inGame) {
+    const allowed = new Set(IN_GAME_REQUIRED.map(name => (prefix + name).toLowerCase()));
+    for (const name of names) {
+      if (!allowed.has(name) && !/^peak-packet-replay-windows\/licenses\/[a-z0-9._-]+\.(?:txt|md)$/i.test(name))
+        throw new Error("In-game replay ZIP contains an unexpected file; scripts, launchers and game files are not distributed");
+    }
+  }
   return { entries: count, expandedBytes: expanded };
 }
 
@@ -81,7 +95,7 @@ export function verifyPacketReplayBytes(bytes, release) {
   release = validatePacketReplayRelease(release);
   if (bytes.length !== release.bytes) throw new Error("Replay ZIP size mismatch");
   if (createHash("sha256").update(bytes).digest("hex") !== release.sha256) throw new Error("Replay ZIP SHA-256 mismatch");
-  inspectPacketReplayZip(bytes);
+  inspectPacketReplayZip(bytes, { allowLegacy: release.version === LEGACY_VERSION });
   return bytes;
 }
 

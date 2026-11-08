@@ -647,10 +647,10 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
     await writeFile(resolve(proofDirectory, "equivalence.json"), proofBody);
     const zipBytes = packetZipFixture();
     const zipPath = resolve(repository, "local", "packet-replay.zip");
-    const packetRelease = { schemaVersion: 1, version: "2026.10.31.2", gameVersion: "3.0.1", gameBuildId: "26155610", platform: "windows-x64",
+    const packetRelease = { schemaVersion: 1, version: "2026.11.08.1", gameVersion: "3.0.1", gameBuildId: "26155610", platform: "windows-x64",
       filename: "peak-packet-replay-windows.zip", downloadPath: "downloads/peak-packet-replay-windows.zip",
       bytes: zipBytes.length, sha256: sha256(zipBytes),
-      artifactUrl: "https://github.com/luyongyi/peak-trail/releases/download/packet-replay-windows-2026.10.31.2/peak-packet-replay-windows.zip" };
+      artifactUrl: "https://github.com/luyongyi/peak-trail/releases/download/packet-replay-windows-2026.11.08.1/peak-packet-replay-windows.zip" };
     const navigationFiles = { "record.html": '<!doctype html><title>Peak导航服务</title><a href="./downloads/peak-packet-replay-windows.zip">Windows replay</a>',
       "record.css": ".navigation-card{display:flex}", "src/packet-recorder.js": "export const navigation = true;",
       "src/packet-watch-client.js": "export const packetWatch = true;", "src/app.js": "export const app = 'unified';" };
@@ -692,9 +692,8 @@ function sha256(bytes) {
 }
 
 function packetZipFixture() {
-  const names = ["Play-Replay.cmd", "README.zh-CN.txt", "release.json", "Prepare-NativeReplay.ps1", "Start-NativeReplay.ps1",
-    "bridge/PeakPacketReplay.NativeBridge.BuildInput.dll", "tools/PeakPacketReplay.WindowsPatch.exe",
-    "tools/PeakPacketReplay.WindowsPatch.dll", "licenses/dotnet-LICENSE.TXT", "licenses/Mono.Cecil-LICENSE.txt"];
+  const names = ["README.zh-CN.txt", "release.json", "BepInEx/patchers/PeakPacketReplay.Loader.dll",
+    "BepInEx/plugins/PeakPacketReplay/PeakPacketReplay.dll"];
   const local = [], central = []; let localSize = 0;
   for (const path of names) {
     const name = Buffer.from(`peak-packet-replay-windows/${path}`);

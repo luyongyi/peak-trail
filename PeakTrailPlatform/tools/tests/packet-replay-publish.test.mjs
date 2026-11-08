@@ -8,9 +8,8 @@ import { resolvePublishedReplay, updateReplayRelease } from "../update-packet-re
 
 const version = "2026.11.08.1", previousVersion = "2026.10.31.2";
 const filename = "peak-packet-replay-windows.zip";
-const required = ["Play-Replay.cmd", "README.zh-CN.txt", "release.json", "Prepare-NativeReplay.ps1", "Start-NativeReplay.ps1",
-  "bridge/PeakPacketReplay.NativeBridge.BuildInput.dll", "tools/PeakPacketReplay.WindowsPatch.exe",
-  "tools/PeakPacketReplay.WindowsPatch.dll", "licenses/dotnet-LICENSE.TXT", "licenses/Mono.Cecil-LICENSE.txt"];
+const required = ["README.zh-CN.txt", "release.json", "BepInEx/patchers/PeakPacketReplay.Loader.dll",
+  "BepInEx/plugins/PeakPacketReplay/PeakPacketReplay.dll"];
 function zip(extra = []) {
   const local = [], central = [], names = [...required, ...extra];
   let offset = 0;
@@ -110,7 +109,7 @@ test("bad digest or unsafe ZIP never changes the selected website download", asy
 
 test("replacing a published asset under the same version requires a new version", async t => {
   const { manifestPath, original } = await fixture(t, descriptor());
-  const replacement = zip(["new-file.txt"]), release = descriptor(version, replacement);
+  const replacement = zip(["licenses/NOTICE.txt"]), release = descriptor(version, replacement);
   await assert.rejects(updateReplayRelease(version, { manifestPath, fetchImpl: source({ release, body: replacement }) }), /changed under an existing version/);
   assert.equal(await readFile(manifestPath, "utf8"), original);
 });

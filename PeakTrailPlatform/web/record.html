@@ -62,7 +62,7 @@
           <div id="navigationHistoryList" class="navigation-record-list" aria-live="polite"></div>
           <div class="capture-actions"><button id="navigationHistoryClear" type="button" class="text-button" title="仅清空本机记录，不影响导航或服务器录像" disabled>清空本机记录</button><a class="quiet-link" href="/downloads/peak-packet-replay-windows.zip">下载 Windows 回放组件 ↗</a></div>
           <p class="field-note">回放需 Windows 和正版 PEAK 3.0.1。</p>
-          <details class="field-note"><summary>回放方法</summary><p>保持 Steam 登录并退出游戏，将录像 ZIP 解压后的 capture.peaknet 拖到 Play-Replay.cmd。详见回放包 README。</p></details>
+          <details class="field-note"><summary>回放方法</summary><p>安装 BepInEx 和回放组件，正常启动 PEAK，在主菜单打开“录像回放”，选择录像 ZIP 即可。详见组件内 README。</p></details>
         </section>
         <details id="managementPanel" class="management-panel">
           <summary>管理员入口 <span>停止采集与录像管理</span></summary>
@@ -99,7 +99,7 @@
             <dl class="capture-stats"><div><dt>已保存数据</dt><dd id="captureBytes">0 B</dd></div><div><dt>记录条数</dt><dd id="captureEvents">0</dd></div></dl>
             <p id="captureNote" class="field-note" hidden></p>
             <div class="capture-actions"><a id="mapLink" class="button" hidden>查看导航地图 ↗</a><button id="stopButton" type="button" class="secondary" hidden>停止并保存</button><button id="refreshButton" type="button" class="text-button">刷新状态</button><a id="downloadLink" class="button secondary" hidden>下载录像 ZIP</a><a id="rawDownloadLink" class="quiet-link" hidden>原始录像</a></div>
-            <p id="playbackHint" class="field-note" hidden>解压 ZIP 后，将其中的 .peaknet 文件拖到 Windows 回放包的 Play-Replay.cmd 上，在游戏内回放。</p>
+            <p id="playbackHint" class="field-note" hidden>在游戏主菜单打开“录像回放”，直接选择下载的录像 ZIP。</p>
           </section>
           <section class="panel" aria-labelledby="historyTitle">
             <div class="panel-heading"><div><p class="eyebrow">录像归档</p><h2 id="historyTitle">最近的攀登</h2></div><button id="libraryRefresh" type="button" class="text-button">刷新列表</button></div>

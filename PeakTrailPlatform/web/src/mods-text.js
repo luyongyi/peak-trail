@@ -2,6 +2,12 @@ import { UI_TEXT } from "./ui-text.js";
 import { initLanguageControls } from "./i18n-dom.js";
 
 const pairs = [
+  ["安装 BepInEx 和回放组件后，正常启动 PEAK，在主菜单选择录像 ZIP。", "Install BepInEx and the replay component, start PEAK normally, then choose a recording ZIP from the main menu."],
+  ["复用本机正版 PEAK 3.0.1 的场景、光照与角色。", "Uses the scenes, lighting and characters from your installed copy of PEAK 3.0.1."],
+  ["自由飞行或跟随玩家，拖动时间轴跳转。", "Fly freely or follow a player, and drag the timeline to seek."],
+  ["在游戏内打开录像", "Open recordings in game"],
+  ["直接选择下载的录像 ZIP；安装步骤见组件内 README。", "Select the downloaded recording ZIP directly. See the included README for installation."],
+  ["网页导航直接使用，游戏内回放需安装组件。", "Navigation works in your browser. In-game replay requires the replay component."],
   ["下载路线 MOD · PEAK Trail", "Download Route MODs · PEAK Trail"],
   ["下载 PEAK 路线 MOD：直播 MOD 实时分享攀登路线，回忆录 MOD 在游戏内录制与回放，按需分享轨迹。", "Download PEAK Route MODs: stream your climb with Live Trail, or record and replay in game with Memories and share when you choose."],
   ["PEAK Trail 今日地图", "PEAK Trail — Today’s maps"],

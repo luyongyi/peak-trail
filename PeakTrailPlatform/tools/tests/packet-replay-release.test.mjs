@@ -35,6 +35,31 @@ function descriptor(body = bytes) {
     artifactUrl: "https://github.com/luyongyi/peak-trail/releases/download/packet-replay-windows-2026.10.31.2/peak-packet-replay-windows.zip" };
 }
 const release = descriptor();
+const inGameFiles = ["README.zh-CN.txt", "release.json", "BepInEx/patchers/PeakPacketReplay.Loader.dll",
+  "BepInEx/plugins/PeakPacketReplay/PeakPacketReplay.dll"];
+function inGameDescriptor(body) {
+  return { ...descriptor(body), version: "2026.11.08.1",
+    artifactUrl: "https://github.com/luyongyi/peak-trail/releases/download/packet-replay-windows-2026.11.08.1/peak-packet-replay-windows.zip" };
+}
+
+test("new releases require the in-game DLL layout and keep the pinned old release readable", () => {
+  const value = zip([...inGameFiles, "licenses/Mono.Cecil-LICENSE.txt"]);
+  assert.equal(verifyPacketReplayBytes(value, inGameDescriptor(value)), value);
+  assert.equal(verifyPacketReplayBytes(bytes, release), bytes);
+  assert.throws(() => verifyPacketReplayBytes(bytes, inGameDescriptor(bytes)), /required in-game/);
+  for (const missing of [0, 1, 2, 3]) {
+    const incomplete = zip([...inGameFiles.filter((_, i) => i !== missing), "licenses/NOTICE.txt"]);
+    assert.throws(() => verifyPacketReplayBytes(incomplete, inGameDescriptor(incomplete)), /required in-game/);
+  }
+});
+
+test("in-game packages reject external launchers, stale tools, game assemblies and extra DLLs", () => {
+  for (const extra of ["Play-Replay.cmd", "Start-NativeReplay.ps1", "tools/patch.exe", "BepInEx/plugins/other.dll",
+    "PhotonUnityNetworking.dll", "Photon3Unity3D.dll", "level.bundle", "resources.assets"]) {
+    const value = zip([...inGameFiles, extra]);
+    assert.throws(() => verifyPacketReplayBytes(value, inGameDescriptor(value)), /unexpected file|Unsafe or private/);
+  }
+});
 
 test("Windows ZIP manifest pins exact repository, version, filename, platform and digest", () => {
   assert.deepEqual(validatePacketReplayRelease(release), release);
