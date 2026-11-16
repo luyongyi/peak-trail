@@ -1,7 +1,8 @@
 import { cp, lstat, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { readGameAssets, readMergedGameAssets, requireActiveCharacterAssets } from "./lib/game-assets.mjs";
+import { readGameAssets, readMergedGameAssets } from "./lib/game-assets.mjs";
+import { requirePublishedCharacterAssets } from "./lib/player-visualization.mjs";
 import { localAssetHint, localAssetPaths } from "./lib/local-paths.mjs";
 import { normalizeMapFog } from "../web/src/map-fog.js";
 import { normalizeMapWater } from "../web/src/map-water.js";
@@ -105,7 +106,7 @@ const catalog = JSON.parse(await readFile(resolve(mapsDirectory, "catalog.json")
 if (catalog.schemaVersion !== 1 || !Array.isArray(catalog.mapPacks)) {
   throw new Error("Cannot stage an invalid map catalog");
 }
-requireActiveCharacterAssets(gameAssets, catalog.activeGameBuildId);
+await requirePublishedCharacterAssets(gameAssets, catalog, { mapsDirectory });
 const mapPacks = [];
 const enclosureFiles = new Set();
 const trajectorySidecars = new Map();

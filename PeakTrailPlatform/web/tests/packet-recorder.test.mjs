@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { PacketRecorder, parseCapture, capturePresentation, groupHistory, formatBytes, errorMessage, normalizeRoom, normalizeFeature, validRoom, validFeature, isActiveCapture } from "../src/packet-recorder.js";
 
-const room = "DRXPTJ", feature = "3CA5E6878769B9C53304";
+const room = "DRXPTJAB", feature = "3CA5E6878769B9C53304";
 const capture = (status = "connecting", fields = {}) => ({ roomCode: room, featureCode: feature, status, bytes: 0, events: 0, archiveAvailable: status === "completed", ...fields });
 const response = (body, status = 200) => ({ ok: status >= 200 && status < 300, status, json: async () => body });
 function fixture(handler = async () => response({ configured: true, authenticated: true })) {
@@ -21,17 +21,17 @@ function fixture(handler = async () => response({ configured: true, authenticate
 }
 
 test("capture identity is normalized but validates path-breaking and wrong-region values", () => {
-  assert.equal(normalizeRoom(" drxptj "), room);
+  assert.equal(normalizeRoom(" drxptjab "), room);
   assert.equal(normalizeFeature(feature.toLowerCase()), feature);
   assert.equal(validRoom(room), true); assert.equal(validFeature(feature), true);
-  for (const value of ["Q12345", "../abc", "ABC12", "ABC1234", "ABC 12"]) assert.equal(validRoom(value), false);
+  for (const value of ["Q12345", "../abc", "ABC12", "ABCDEF234", "ABC 12"]) assert.equal(validRoom(value), false);
   for (const value of ["a".repeat(20), "G".repeat(20), "1".repeat(21), "../" + "0".repeat(17)]) assert.equal(validFeature(value), false);
 });
 
 test("accepted start is connecting, then polls recording and completed before enabling download", async () => {
   const states = [capture("recording", { bytes: 500, events: 12 }), capture("completed", { bytes: 830000, events: 2529 })];
   const f = fixture(async (path, options) => options.method === "POST" ? response(capture(), 202) : path.endsWith("/session") ? response({ configured: true, authenticated: true }) : response(states.shift()));
-  await f.client.initialize(); await f.client.start(" drxptj ");
+  await f.client.initialize(); await f.client.start(" drxptjab ");
   assert.equal(f.client.state.capture.status, "connecting");
   assert.match(capturePresentation(f.client.state.capture).description, /尚未开始/);
   assert.equal(capturePresentation(f.client.state.capture).download, null);
@@ -47,7 +47,7 @@ test("unknown start outcome retries the same idempotency key, and cannot change 
   const f = fixture(async (path) => path.endsWith("/session") ? response({ configured: true, authenticated: true }) : ++count === 1 ? Promise.reject(new Error("private secret")) : response(capture(), 202));
   await f.client.initialize(); assert.equal(await f.client.start(room), false);
   assert.equal(f.client.state.pendingRoom, room); assert.equal(f.client.state.error.includes("private secret"), false);
-  assert.equal(await f.client.start("ABC123"), false); assert.equal(count, 1);
+  assert.equal(await f.client.start("ABCDEF23"), false); assert.equal(count, 1);
   assert.equal(await f.client.start(room), true);
   const posts = f.requests.filter(request => request.method === "POST");
   assert.equal(posts.length, 2); assert.equal(posts[0].headers["Idempotency-Key"], posts[1].headers["Idempotency-Key"]);
@@ -60,10 +60,10 @@ test("explicit rejected start releases pending identity for a corrected room", a
   await f.client.initialize(); await f.client.start(room);
   assert.equal(f.client.state.pendingRoom, null);
   assert.equal(f.stored.has("peak-packet-replay:pending-start"), false);
-  await f.client.start("ABC123");
+  await f.client.start("ABCDEF23");
   const posts = f.requests.filter(request => request.method === "POST");
   assert.notEqual(posts[0].headers["Idempotency-Key"], posts[1].headers["Idempotency-Key"]);
-  assert.equal(JSON.parse(posts[1].body).roomCode, "ABC123"); f.client.dispose();
+  assert.equal(JSON.parse(posts[1].body).roomCode, "ABCDEF23"); f.client.dispose();
 });
 
 test("reload and re-login recover an unacknowledged start with its original idempotency key", async () => {
@@ -76,12 +76,12 @@ test("reload and re-login recover an unacknowledged start with its original idem
   const g = fixture(async (path, options) => path.endsWith("/session") ? response({ configured: true, authenticated: options.method === "POST" }) : response(capture("recording"), 202));
   for (const [name, value] of f.stored) g.stored.set(name, value);
   // A previously completed archive must not replace the pending start on restore.
-  g.stored.set("peak-packet-replay:last-capture", JSON.stringify({ roomCode: "ABC123", featureCode: feature }));
+  g.stored.set("peak-packet-replay:last-capture", JSON.stringify({ roomCode: "ABCDEF23", featureCode: feature }));
   await g.client.initialize(); assert.equal(g.client.state.pendingRoom, null, "wait until authenticated to expose previous room");
   await g.client.login("operator-secret-never-store");
   assert.equal(g.client.state.pendingRoom, room); assert.equal(g.client.state.capture, null);
-  assert.equal(await g.client.lookup("ABC123", feature), false); assert.equal(g.requests.length, 2, "lookup does not discard an unresolved start");
-  assert.equal(await g.client.start("ABC123"), false);
+  assert.equal(await g.client.lookup("ABCDEF23", feature), false); assert.equal(g.requests.length, 2, "lookup does not discard an unresolved start");
+  assert.equal(await g.client.start("ABCDEF23"), false);
   await g.client.start(room);
   const retried = g.requests.find(request => request.path.endsWith("/captures"));
   assert.equal(retried.headers["Idempotency-Key"], key);
@@ -242,7 +242,7 @@ test("opening the library recovers the active server capture without another sta
 });
 
 test("administrators select and stop one of multiple rooms without switching or stopping the others", async () => {
-  const second = capture("recording", { roomCode: "DSVEHQ", featureCode: "B".repeat(20), hostName: "Second host" });
+  const second = capture("recording", { roomCode: "DSVEHQAB", featureCode: "B".repeat(20), hostName: "Second host" });
   const rooms = new Map([[room, capture("recording", { hostName: "First host" })], [second.roomCode, second]]);
   const f = fixture(async (path, options) => {
     if (path.endsWith("/session")) return response({ configured: true, authenticated: options.method !== "DELETE" });
@@ -263,12 +263,12 @@ test("administrators select and stop one of multiple rooms without switching or 
   await f.client.initialize(); assert.equal(f.client.state.activeCaptures.length, 2);
   await f.client.lookup(second.roomCode, second.featureCode);
   assert.equal(f.client.state.capture.roomCode, second.roomCode, "library refresh preserves chosen room B instead of selecting first room A");
-  assert.equal(await f.client.start("ABC123"), true, "room C may start while A and B record");
-  assert.equal(f.client.state.activeCaptures.length, 3); assert.equal(f.client.state.capture.roomCode, "ABC123");
+  assert.equal(await f.client.start("ABCDEF23"), true, "room C may start while A and B record");
+  assert.equal(f.client.state.activeCaptures.length, 3); assert.equal(f.client.state.capture.roomCode, "ABCDEF23");
   await f.client.lookup(room, feature); await f.client.stop();
   const stops = f.requests.filter(item => item.path.endsWith("/stop"));
   assert.equal(stops.length, 1); assert.ok(stops[0].path.endsWith(`/${room}/${feature}/stop`));
-  assert.equal(rooms.get(second.roomCode).status, "recording"); assert.equal(rooms.get("ABC123").status, "recording");
+  assert.equal(rooms.get(second.roomCode).status, "recording"); assert.equal(rooms.get("ABCDEF23").status, "recording");
   rooms.get(room).status = "completed";
   await f.poll();
   assert.equal(f.client.state.capture.roomCode, room); assert.equal(f.client.state.capture.status, "completed");
@@ -282,7 +282,7 @@ test("administrators select and stop one of multiple rooms without switching or 
 test("capacity rejection releases the pending room so administrators can select an existing room", async () => {
   const f = fixture(async (path, options) => path.endsWith("/session") ? response({ configured: true, authenticated: true })
     : options.method === "POST" ? response({ code: "capture_capacity" }, 429) : response(capture("recording")));
-  await f.client.initialize(); assert.equal(await f.client.start("ABC123"), false);
+  await f.client.initialize(); assert.equal(await f.client.start("ABCDEF23"), false);
   assert.match(f.client.state.error, /房间数已满/); assert.equal(f.client.state.pendingRoom, null);
   assert.equal(await f.client.lookup(room, feature), true); assert.equal(f.client.state.capture.roomCode, room);
   f.client.dispose();
@@ -295,7 +295,7 @@ test("invalid active room lists do not replace administrator state", async () =>
   f.client.libraryEnabled = true; await f.client.initialize();
   const previous = f.client.state.activeCaptures;
   for (supplied of [null, [capture("completed")], [capture("recording"), capture("recording", { featureCode: "B".repeat(20) })],
-    [capture("recording", { roomCode: "ABC123" })], Array(17).fill(capture("recording"))]) {
+    [capture("recording", { roomCode: "ABCDEF23" })], Array(17).fill(capture("recording"))]) {
     await f.client.refreshLibrary(); assert.equal(f.client.state.activeCaptures, previous); assert.match(f.client.state.error, /读取录制状态/);
   }
   f.client.dispose();

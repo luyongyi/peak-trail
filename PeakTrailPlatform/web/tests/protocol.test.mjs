@@ -145,6 +145,19 @@ test("3.0.1 daily maps require the exact build binding and retain historical map
   assert.equal(selectDailyMapPack(catalog, { ...daily, gameBuildId: "26155610" })?.mapPackId, mapPackId);
 });
 
+test("3.1 daily maps require the new build binding even when legacy geometry shares a slot", () => {
+  const pack = (build, digit) => ({ identityVersion: 3, mapPackId: `sha256-${digit.repeat(64)}`,
+    path: `./packs/sha256-${digit.repeat(64)}/map-pack.json`, gameBuildId: build,
+    sceneName: "Level_103", mapSlot: 103 });
+  const current = pack("26542162", "b"), legacy = pack("26155610", "e");
+  const catalog = { schemaVersion: 1, activeGameBuildId: "26542162", mapPacks: [legacy, current] };
+  const daily = { sceneName: "Level_103", mapSlot: 103 };
+  assert.equal(selectDailyMapPack(catalog, daily), null);
+  assert.equal(selectDailyMapPack(catalog, { ...daily, gameBuildId: "26155610" }), null);
+  assert.equal(selectDailyMapPack(catalog, { ...daily, gameBuildId: "26542162" }), current);
+  assert.equal(selectDailyMapPack({ ...catalog, mapPacks: [legacy] }, { ...daily, gameBuildId: "26542162" }), null);
+});
+
 test("daily catalog refuses to guess without an explicitly active build", () => {
   const unmarkedLevel16 = `sha256-${"d".repeat(64)}`;
   const catalog = {

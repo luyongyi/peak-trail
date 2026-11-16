@@ -16,7 +16,7 @@ const fixture = () => ({ schemaVersion: 1, gameBuildId: build,
   source: { kind: "canonical-map-geometry-survey", componentCoverage: "native components", privateField: "excluded" },
   types: [{ id: "chest-small", category: "chest", name: "小型行李箱", nameEn: "Small Luggage" }],
   maps: [{ mapPackId: pack.mapPackId, sceneName: pack.sceneName, mapSlot: pack.mapSlot,
-    sourceSceneSha256: pack.source.sceneSha256, layers: pack.layers,
+    sourceSceneSha256: pack.source.sceneSha256, layers: structuredClone(pack.layers),
     markers: [{ id: "chest:1", type: "chest-small", category: "chest", placement: "fixed",
       pos: [1, 2, 3], segment: 0, layerId: "shore" }] }] });
 
@@ -317,4 +317,69 @@ test("a native target survey takes precedence over optional verified fallback da
   await writeFile(resolve(f.buildDirectory, "plan.json"), "broken proof");
   const source = await readMapLootSource(f.root, f.targetBuild);
   assert.deepEqual(source.raw, native);
+});
+
+async function transitive310(t) {
+  const parent = await verified(t), targetBuild = "26542162";
+  const indexPath = resolve(parent.root,"verified-builds/index.json");
+  const parentEntry = JSON.parse(await readFile(indexPath,"utf8")).builds[0];
+  const proof = { ...structuredClone(parent.proof), sourceBuildId:parent.targetBuild,targetBuildId:targetBuild,
+    targetGameVersion:"3.1.0--logFile",transitiveVerification:{parentTargetBuildId:"26155610",originalSourceBuildId:"26134529",
+      parentReceiptSha256:parentEntry.receiptSha256,parentPlanSha256:parentEntry.planSha256},
+    maps:[{...parent.proof.maps[0],sourceMapPackId:parent.manifest.mapPackId,sourceManifestSha256:parent.plan.packs[0].manifestSha256}] };
+  const manifest={...structuredClone(parent.manifest),gameBuildId:targetBuild,gameVersion:proof.targetGameVersion,
+    source:{...parent.manifest.source,equivalence:{authority:proof.authority,sourceGameBuildId:"26155610",
+      sourceMapPackId:parent.manifest.mapPackId,receiptSha256:""}}};
+  const plan={schemaVersion:1,sourceGameBuildId:"26155610",gameBuildId:targetBuild,gameVersion:proof.targetGameVersion,
+    equivalenceReceiptSha256:"",packs:[{...structuredClone(parent.plan.packs[0]),sourceMapPackId:parent.manifest.mapPackId}]};
+  const buildDirectory=resolve(parent.root,"verified-builds",targetBuild);
+  async function save() {
+    const receipt=JSON.stringify(proof)+"\n";plan.equivalenceReceiptSha256=sha(receipt);
+    manifest.source.equivalence.receiptSha256=sha(receipt);manifest.mapPackId=computeMapPackId(manifest);
+    const body=JSON.stringify(manifest)+"\n";Object.assign(plan.packs[0],{mapPackId:manifest.mapPackId,manifestSha256:sha(body),manifestBytes:Buffer.byteLength(body)});
+    const planBody=JSON.stringify(plan)+"\n",manifestPath=resolve(buildDirectory,"manifests",manifest.mapPackId,"map-pack.json");
+    await mkdir(dirname(manifestPath),{recursive:true});await writeFile(manifestPath,body);
+    await writeFile(resolve(buildDirectory,"equivalence.json"),receipt);await writeFile(resolve(buildDirectory,"plan.json"),planBody);
+    await writeFile(indexPath,JSON.stringify({schemaVersion:1,builds:[parentEntry,{gameBuildId:targetBuild,planSha256:sha(planBody),receiptSha256:sha(receipt)}]}));
+  }
+  await save();return{parent,targetBuild,proof,plan,manifest,save};
+}
+
+test("the explicit 3.1 path authenticates both pinned hops and rebinds only identities",async t=>{
+  const f=await transitive310(t),before=await readFile(f.parent.chunkPath);
+  const source=await readMapLootSource(f.parent.root,f.targetBuild);
+  const chunk=await source.readMap(f.manifest.mapPackId);
+  assert.equal(source.raw.gameBuildId,"26542162");assert.equal(source.raw.maps[0].mapPackId,f.manifest.mapPackId);
+  assert.equal(chunk.gameBuildId,"26542162");assert.equal(chunk.maps[0].mapPackId,f.manifest.mapPackId);
+  assert.deepEqual(chunk.maps[0].markers,f.parent.raw.maps[0].markers);
+  assert.deepEqual(chunk.maps[0].layers,f.parent.raw.maps[0].layers);
+  const output=await publicMapLootChunk(source,f.manifest);assert.equal(output.path,`loot/26542162/${f.manifest.mapPackId}.json`);
+  chunk.maps[0].markers[0].pos[0]=999;
+  assert.equal((await source.readMap(f.manifest.mapPackId)).maps[0].markers[0].pos[0],1);
+  assert.deepEqual(await readFile(f.parent.chunkPath),before);
+});
+
+test("freshly pinned outer JSON cannot replace the explicit parent proof or source manifest binding",async t=>{
+  for(const mutate of [
+    f=>f.proof.transitiveVerification.parentReceiptSha256="f".repeat(64),
+    f=>f.proof.transitiveVerification.parentPlanSha256="f".repeat(64),
+    f=>f.proof.transitiveVerification.originalSourceBuildId="25739797",
+    f=>f.proof.transitiveVerification.parentTargetBuildId="26134529",
+    f=>f.proof.maps[0].sourceManifestSha256="f".repeat(64),
+  ]){
+    const f=await transitive310(t);mutate(f);await f.save();
+    await assert.rejects(readMapLootSource(f.parent.root,f.targetBuild),/native source survey|pinned parent|parent proof binding/);
+  }
+});
+
+test("the second hop retains complete layer equality and native chunk checksum validation",async t=>{
+  const f=await transitive310(t);f.manifest.layers[0].minX=1;await f.save();
+  const source=await readMapLootSource(f.parent.root,f.targetBuild);
+  await assert.rejects(source.readMap(f.manifest.mapPackId),/transitive layer bytes/);
+  const fresh=await transitive310(t),reader=await readMapLootSource(fresh.parent.root,fresh.targetBuild);
+  const body=await readFile(fresh.parent.chunkPath,"utf8");
+  await writeFile(fresh.parent.chunkPath,body.replace('"pos":[1,2,3]','"pos":[9,2,3]'));
+  await assert.rejects(reader.readMap(fresh.manifest.mapPackId),/checksum mismatch/);
+  await rm(fresh.parent.nativePath);
+  await assert.rejects(readMapLootSource(fresh.parent.root,fresh.targetBuild),/native source survey/);
 });

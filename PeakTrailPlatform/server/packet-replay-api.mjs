@@ -6,7 +6,8 @@ import { isIP } from "node:net";
 const PREFIX = "/api/packet-replay";
 const NAVIGATION = "/api/navigation";
 const COOKIE = "peak_packet_session";
-const ROOM = /^[A-P][A-Z0-9]{5}$/;
+const CURRENT_ROOM = /^[A-P][A-Z][A-Z2-9]{6}$/;
+const ROOM = /^(?:[A-P][A-Z0-9]{5}|[A-P][A-Z][A-Z2-9]{6})$/;
 const FEATURE = /^[A-F0-9]{20}$/;
 const STATES = new Set(["connecting", "recording", "stopping", "completed", "cancelled", "failed", "interrupted", "expired"]);
 const CODES = new Set([
@@ -422,14 +423,14 @@ export function createPacketReplayApi(options = {}) {
           if (!sameOrigin(req)) { fail(res, 403, "forbidden_origin"); return true; }
           const body = await requestJson(req);
           const room = typeof body.roomCode === "string" ? body.roomCode.trim().toUpperCase() : "";
-          if (Object.keys(body).length !== 1 || !ROOM.test(room)) { fail(res, 400, "invalid_room_code"); return true; }
+          if (Object.keys(body).length !== 1 || !CURRENT_ROOM.test(room)) { fail(res, 400, "invalid_room_code"); return true; }
           if (typeof req.headers["idempotency-key"] !== "string" || !/^[A-Za-z0-9_-]{16,128}$/.test(req.headers["idempotency-key"])) {
             fail(res, 400, "idempotency_key_required"); return true;
           }
           if (navigationLimited(req)) { fail(res, 429, "rate_limited"); return true; }
           await proxy(req, res, "/captures", { body: { roomCode: room }, room, navigationStart: true }); return true;
         }
-        const match = rawPath.slice(NAVIGATION.length).match(/^\/(captures|replays)\/([A-P][A-Z0-9]{5})\/([A-F0-9]{20})(\/live|\/archive\.zip)?$/);
+        const match = rawPath.slice(NAVIGATION.length).match(/^\/(captures|replays)\/([A-P][A-Z0-9]{5}|[A-P][A-Z][A-Z2-9]{6})\/([A-F0-9]{20})(\/live|\/archive\.zip)?$/);
         if (match) {
           const [, kind, room, feature, tail = ""] = match;
           const live = kind === "captures" && tail === "/live", status = kind === "captures" && tail === "";
@@ -470,11 +471,11 @@ export function createPacketReplayApi(options = {}) {
       if (rawPath === `${PREFIX}/captures` && req.method === "POST") {
         const body = await requestJson(req);
         const room = typeof body.roomCode === "string" ? body.roomCode.trim().toUpperCase() : "";
-        if (Object.keys(body).length !== 1 || !ROOM.test(room)) { fail(res, 400, "invalid_room_code"); return true; }
+        if (Object.keys(body).length !== 1 || !CURRENT_ROOM.test(room)) { fail(res, 400, "invalid_room_code"); return true; }
         if (typeof req.headers["idempotency-key"] !== "string" || !/^[A-Za-z0-9_-]{16,128}$/.test(req.headers["idempotency-key"])) { fail(res, 400, "idempotency_key_required"); return true; }
         await proxy(req, res, "/captures", { body: { roomCode: room }, room }); return true;
       }
-      const match = rawPath.slice(PREFIX.length).match(/^\/(captures|replays)\/([A-P][A-Z0-9]{5})\/([A-F0-9]{20})(\/stop|\/file|\/archive\.zip|\/live)?$/);
+      const match = rawPath.slice(PREFIX.length).match(/^\/(captures|replays)\/([A-P][A-Z0-9]{5}|[A-P][A-Z][A-Z2-9]{6})\/([A-F0-9]{20})(\/stop|\/file|\/archive\.zip|\/live)?$/);
       if (match) {
         const [, kind, room, feature, tail = ""] = match;
         const zip = kind === "replays" && tail === "/archive.zip" && req.method === "GET";

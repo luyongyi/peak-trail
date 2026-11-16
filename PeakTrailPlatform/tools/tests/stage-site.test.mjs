@@ -60,6 +60,7 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
     copyFile(resolve(platformSource, "tools", "stage-site.mjs"), resolve(tools, "stage-site.mjs")),
     copyFile(resolve(platformSource, "server", "map-alignment.mjs"), resolve(platform, "server", "map-alignment.mjs")),
     copyFile(resolve(platformSource, "tools", "lib", "game-assets.mjs"), resolve(tools, "lib", "game-assets.mjs")),
+    copyFile(resolve(platformSource, "tools", "lib", "player-visualization.mjs"), resolve(tools, "lib", "player-visualization.mjs")),
     copyFile(resolve(platformSource, "tools", "lib", "local-paths.mjs"), resolve(tools, "lib", "local-paths.mjs")),
     copyFile(resolve(platformSource, "tools", "lib", "recorder-release.mjs"), resolve(tools, "lib", "recorder-release.mjs")),
     copyFile(resolve(platformSource, "tools", "lib", "memories-release.mjs"), resolve(tools, "lib", "memories-release.mjs")),

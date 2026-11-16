@@ -235,13 +235,14 @@ test('current scene components restore the complete audited set of fixed spawn a
 test('every catalog map has its own versioned survey without reusing another build identity', async () => {
   const enabled = catalog.mapPacks.filter(entry => entry.enabled !== false);
   const verified = await readMapLootSource(fileURLToPath(new URL('../../data/maps/', import.meta.url)), '26155610');
-  assert.ok(verified);
-  const surveyed = [...surveys.flatMap(({ survey }) => survey.maps), ...currentIndex.maps, ...verified.raw.maps];
-  assert.equal(enabled.length, 458);
-  assert.equal(surveyed.length, 458);
+  const currentVerified = await readMapLootSource(fileURLToPath(new URL('../../data/maps/', import.meta.url)), '26542162');
+  assert.ok(verified && currentVerified);
+  const surveyed = [...surveys.flatMap(({ survey }) => survey.maps), ...currentIndex.maps, ...verified.raw.maps, ...currentVerified.raw.maps];
+  assert.equal(enabled.length, 666);
+  assert.equal(surveyed.length, 666);
   assert.deepEqual(surveyed.map(map => map.mapPackId).sort(), enabled.map(map => map.mapPackId).sort());
-  assert.equal(new Set(surveyed.map(map => map.mapPackId)).size, 458);
-  assert.equal(String(catalog.activeGameBuildId), '26155610');
+  assert.equal(new Set(surveyed.map(map => map.mapPackId)).size, 666);
+  assert.equal(String(catalog.activeGameBuildId), '26542162');
   const [older, current] = surveys.map(({ survey }) => survey);
   for (const map of current.maps) {
     const oldMap = older.maps.find(old => old.sceneName === map.sceneName);
@@ -275,6 +276,31 @@ test('all 208 verified maps expose independent loot identities while representat
     assert.deepEqual(next.maps[0].markers, old.maps[0].markers);
   }
   await assert.rejects(readFile(new URL('../../data/maps/loot.26155610.json', import.meta.url)), { code: 'ENOENT' });
+});
+
+test('all 208 3.1 identities resolve through both pinned receipts with exact original coordinates and provenance', async () => {
+  const directory = fileURLToPath(new URL('../../data/maps/', import.meta.url));
+  const parent = await readVerifiedMapBuild('26155610', { mapsDirectory: directory });
+  const current = await readVerifiedMapBuild('26542162', { mapsDirectory: directory });
+  const source = await readMapLootSource(directory, '26134529');
+  const rebound = await readMapLootSource(directory, '26542162');
+  assert.equal(current.plan.packs.length, 208);
+  assert.equal(rebound.raw.maps.length, 208);
+  assert.equal(current.proof.transitiveVerification.parentReceiptSha256, parent.receiptSha256);
+  assert.equal(current.proof.transitiveVerification.parentPlanSha256, parent.planSha256);
+  for (const mapping of current.plan.packs) {
+    const originalMapping = parent.plan.packs.find(entry => entry.mapPackId === mapping.sourceMapPackId);
+    assert.ok(originalMapping);
+    const old = await source.readMap(originalMapping.sourceMapPackId), next = await rebound.readMap(mapping.mapPackId);
+    assert.equal(next.gameBuildId, '26542162');
+    assert.equal(next.maps[0].mapPackId, mapping.mapPackId);
+    assert.notEqual(next.maps[0].mapPackId, old.maps[0].mapPackId);
+    assert.equal(next.maps[0].sourceSceneSha256, old.maps[0].sourceSceneSha256);
+    assert.equal(next.maps[0].sceneName, old.maps[0].sceneName);
+    assert.deepEqual(next.maps[0].layers, old.maps[0].layers);
+    assert.deepEqual(next.maps[0].markers, old.maps[0].markers);
+  }
+  await assert.rejects(readFile(new URL('../../data/maps/loot.26542162.json', import.meta.url)), { code: 'ENOENT' });
 });
 
 test('all 208 new scene surveys authenticate their own coordinates, labels and source components', async () => {

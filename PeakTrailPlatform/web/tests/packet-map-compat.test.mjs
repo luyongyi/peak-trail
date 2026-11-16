@@ -27,3 +27,23 @@ test("the audited version spelling never relaxes scene, build, projection or unk
   ]) assert.equal(assessCompatibility({ ...trace, ...fields }, map).compatible, false, JSON.stringify(fields));
   assert.equal(assessCompatibility({ ...trace, gameBuildId: "26134529" }, { ...map, gameBuildId: "26134529" }).compatible, false);
 });
+
+test("verified 3.1 packet traces select their own build while older recordings still select 3.0.1", () => {
+  const currentMap = Object.freeze({ ...map, gameBuildId: "26542162", gameVersion: "3.1.0--logFile",
+    mapPackId: `sha256-${"b".repeat(64)}`, path: `./packs/sha256-${"b".repeat(64)}/map-pack.json` });
+  const currentTrace = Object.freeze({ ...trace, gameBuildId: "26542162", gameVersion: "3.1.0" });
+  const before = JSON.stringify(currentMap);
+  const catalog = { schemaVersion: 1, activeGameBuildId: "26542162", mapPacks: [map, currentMap] };
+  assert.equal(selectTraceMapPack(catalog, currentTrace), currentMap);
+  assert.equal(selectTraceMapPack(catalog, trace), map);
+  assert.equal(assessCompatibility(currentTrace, currentMap).compatible, true);
+  assert.equal(assessCompatibility(trace, map).compatible, true);
+  assert.equal(assessCompatibility(currentTrace, map).compatible, false);
+  assert.equal(assessCompatibility(trace, currentMap).compatible, false);
+  assert.equal(JSON.stringify(currentMap), before);
+  for (const fields of [{ gameBuildId: "26155610" }, { gameBuildId: null }, { gameBuildId: "26542163" },
+    { gameVersion: "3.1.1" }, { gameVersion: "3.1" }, { gameVersion: "3.1.0--logFile-other" },
+    { sceneName: "Level_83" }, { projectionVersion: 2 }])
+    assert.equal(assessCompatibility({ ...currentTrace, ...fields }, currentMap).compatible, false, JSON.stringify(fields));
+  assert.equal(assessCompatibility({ ...currentTrace, gameBuildId: "26542163" }, { ...currentMap, gameBuildId: "26542163" }).compatible, false);
+});

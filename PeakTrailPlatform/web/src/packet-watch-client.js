@@ -1,6 +1,6 @@
 /** A single room/feature projection into the existing map viewer. Operator mode uses its separate protected API. */
 export function parseCaptureId(value) {
-  const match = String(value ?? "").trim().toUpperCase().match(/^([A-P][A-Z0-9]{5})\.([A-F0-9]{20})$/);
+  const match = String(value ?? "").trim().toUpperCase().match(/^([A-P][A-Z0-9]{5}|[A-P][A-Z][A-Z2-9]{6})\.([A-F0-9]{20})$/);
   return match ? `${match[1]}.${match[2]}` : null;
 }
 

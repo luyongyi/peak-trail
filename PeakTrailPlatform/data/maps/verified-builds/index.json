@@ -5,6 +5,11 @@
       "gameBuildId": "26155610",
       "planSha256": "f6c598d5896e1c4f2910f8515b0b139f52e374427921538b867ac37d0306ef57",
       "receiptSha256": "045c1d36773badd69e63050ca85e1e3e0d0f6eaa08856a750a8ba8fdc0e150e7"
+    },
+    {
+      "gameBuildId": "26542162",
+      "planSha256": "1003401d97ca71d5de6281cfba302e781f4934060da448fc7f2731ac8f37ed7e",
+      "receiptSha256": "621994e6322473283a100a30e83a4d0849a0fbad72afbca9fb247324b10c77ed"
     }
   ]
 }

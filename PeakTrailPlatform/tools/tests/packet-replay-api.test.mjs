@@ -11,11 +11,11 @@ const OPERATOR = "operator-only-test-key-not-the-collector-key";
 const API_KEY = "collector-private-test-key-0123456789012345";
 const PREFIX = "/api/packet-replay";
 const FEATURE = "0123456789ABCDEF0123";
-const SNAPSHOT = { roomCode: "DRXPTJ", featureCode: FEATURE, status: "recording", bytes: 120,
+const SNAPSHOT = { roomCode: "DRXPTJAB", featureCode: FEATURE, status: "recording", bytes: 120,
   events: 5, startedUtc: "2026-10-28T12:00:00Z", completedUtc: null, coverage: "from-join",
   errors: [], warnings: [], endReason: "", errorCode: null, photonReturnCode: null };
 const write = (res, code, value) => { res.writeHead(code, { "content-type": "application/json" }); res.end(JSON.stringify(value)); };
-const LIVE = { roomCode: "DRXPTJ", gameVersion: "3.0.1", gameBuildId: "26155610", projectionVersion: 1,
+const LIVE = { roomCode: "DRXPTJAB", gameVersion: "3.0.1", gameBuildId: "26155610", projectionVersion: 1,
   sceneName: "Level_84", coordinateSpace: "unity-world-meters", timeUnit: "milliseconds", sceneEpoch: 2,
   lastSequence: 10, positionProjectionSupported: true, positionSamples: 100, lastPacketSeconds: 12,
   players: [{ playerId: "p1", name: "房主", userKey: "private-user-id", isCollector: false },
@@ -121,7 +121,7 @@ test("authenticated start preserves idempotency and uses only server-side author
   try {
     assert.equal((await f.send("/captures", { method: "POST" })).status, 401);
     await f.login();
-    const post = () => f.send("/captures", { method: "POST", headers: { "content-type": "application/json", "idempotency-key": "test-job-id-00000001", authorization: "Bearer browser-key" }, body: '{"roomCode":" drxptj "}' });
+    const post = () => f.send("/captures", { method: "POST", headers: { "content-type": "application/json", "idempotency-key": "test-job-id-00000001", authorization: "Bearer browser-key" }, body: '{"roomCode":" drxptjab "}' });
     const a = await post(), b = await post();
     assert.equal(a.status, 202); assert.equal(b.status, 202);
     const text = await a.text();
@@ -132,7 +132,7 @@ test("authenticated start preserves idempotency and uses only server-side author
     assert.equal(f.calls[0].headers.authorization, `Bearer ${API_KEY}`);
     assert.equal(f.calls[0].headers.cookie, undefined);
     assert.equal(f.calls[0].path, "/api/v1/captures");
-    assert.equal(f.calls[0].body, '{"roomCode":"DRXPTJ"}');
+    assert.equal(f.calls[0].body, '{"roomCode":"DRXPTJAB"}');
   } finally { await f.close(); }
 });
 
@@ -140,19 +140,19 @@ test("status/stop use strict paths and mutations reject cross-origin requests", 
   const f = await fixture();
   try {
     await f.login();
-    assert.equal((await f.send(`/captures/DRXPTJ/${FEATURE}`)).status, 200);
-    assert.equal((await f.send(`/captures/DRXPTJ/${FEATURE}/stop`, { method: "POST" })).status, 200);
+    assert.equal((await f.send(`/captures/DRXPTJAB/${FEATURE}`)).status, 200);
+    assert.equal((await f.send(`/captures/DRXPTJAB/${FEATURE}/stop`, { method: "POST" })).status, 200);
     assert.equal(f.calls[1].method, "POST");
     assert.equal(f.calls[1].body, "");
     const before = f.calls.length;
     for (const [path, init, status] of [
-      [`/captures/DRXPTJ/${FEATURE}/stop`, { method: "POST", headers: { origin: "https://attacker.invalid" } }, 403],
-      ["/captures", { method: "POST", headers: { "content-type": "application/json", "idempotency-key": "test-job-id-00000001" }, body: '{"roomCode":"DRXPTJ","target":"https://evil"}' }, 400],
-      ["/captures", { method: "POST", headers: { "content-type": "application/json" }, body: '{"roomCode":"DRXPTJ"}' }, 400],
-      [`/captures/DRXPTJ/${FEATURE}?ticket=secret`, {}, 400],
+      [`/captures/DRXPTJAB/${FEATURE}/stop`, { method: "POST", headers: { origin: "https://attacker.invalid" } }, 403],
+      ["/captures", { method: "POST", headers: { "content-type": "application/json", "idempotency-key": "test-job-id-00000001" }, body: '{"roomCode":"DRXPTJAB","target":"https://evil"}' }, 400],
+      ["/captures", { method: "POST", headers: { "content-type": "application/json" }, body: '{"roomCode":"DRXPTJAB"}' }, 400],
+      [`/captures/DRXPTJAB/${FEATURE}?ticket=secret`, {}, 400],
       ["/captures/%44RXPTJ/0123456789ABCDEF0123", {}, 400],
-      [`/captures/DRXPTJ/${FEATURE}/stop`, { method: "POST", body: "ignored-not-allowed" }, 400],
-      [`/replays/DRXPTJ/${FEATURE}/file`, { headers: { range: "bytes=0-1,2-3" } }, 400],
+      [`/captures/DRXPTJAB/${FEATURE}/stop`, { method: "POST", body: "ignored-not-allowed" }, 400],
+      [`/replays/DRXPTJAB/${FEATURE}/file`, { headers: { range: "bytes=0-1,2-3" } }, 400],
     ]) assert.equal((await f.send(path, init)).status, status, path);
     assert.equal(f.calls.length, before);
   } finally { await f.close(); }
@@ -169,11 +169,11 @@ test("binary download streams ranges and never forwards upstream cookies or disp
   });
   try {
     await f.login();
-    const full = await f.send(`/replays/DRXPTJ/${FEATURE}/file`);
+    const full = await f.send(`/replays/DRXPTJAB/${FEATURE}/file`);
     assert.deepEqual(Buffer.from(await full.arrayBuffer()), bytes);
     assert.equal(full.headers.get("set-cookie"), null);
-    assert.equal(full.headers.get("content-disposition"), `attachment; filename="DRXPTJ-${FEATURE}.peaknet"`);
-    const partial = await f.send(`/replays/DRXPTJ/${FEATURE}/file`, { headers: { range: "bytes=1-3" } });
+    assert.equal(full.headers.get("content-disposition"), `attachment; filename="DRXPTJAB-${FEATURE}.peaknet"`);
+    const partial = await f.send(`/replays/DRXPTJAB/${FEATURE}/file`, { headers: { range: "bytes=1-3" } });
     assert.equal(partial.status, 206); assert.equal(partial.headers.get("content-range"), "bytes 1-3/6");
     assert.deepEqual(Buffer.from(await partial.arrayBuffer()), bytes.subarray(1, 4));
     assert.equal(f.calls[1].headers.range, "bytes=1-3");
@@ -186,7 +186,7 @@ test("upstream failures, unknown fields and redirects cannot reveal credentials"
     if (mode === "redirect") { res.writeHead(302, { location: "https://example.com/" }); res.end(); }
     else if (mode === "auth") write(res, 401, { message: API_KEY });
     else if (mode === "oversize") write(res, 200, { ...SNAPSHOT, secret: API_KEY.repeat(2000) });
-    else if (mode === "mismatch") write(res, 200, { ...SNAPSHOT, roomCode: "DSVEHQ" });
+    else if (mode === "mismatch") write(res, 200, { ...SNAPSHOT, roomCode: "DSVEHQAB" });
     else write(res, 409, { code: "capture_worker_busy", message: API_KEY, secret: OPERATOR });
   });
   try {
@@ -194,7 +194,7 @@ test("upstream failures, unknown fields and redirects cannot reveal credentials"
     for (const [current, status, code] of [["error", 409, "capture_worker_busy"], ["auth", 502, "collector_auth_failed"],
       ["redirect", 502, "collector_unavailable"], ["oversize", 502, "upstream_invalid_response"], ["mismatch", 502, "upstream_invalid_response"]]) {
       mode = current;
-      const response = await f.send(`/captures/DRXPTJ/${FEATURE}`);
+      const response = await f.send(`/captures/DRXPTJAB/${FEATURE}`);
       assert.equal(response.status, status, current);
       const text = await response.text(); assert.equal(JSON.parse(text).code, code);
       assert.ok(!text.includes(API_KEY) && !text.includes(OPERATOR));
@@ -207,7 +207,7 @@ test("upstream timeout closes request and responds with a fixed safe code", asyn
   const f = await fixture((req, res) => res.once("close", () => { closed = true; }), { requestTimeoutMs: 40 });
   try {
     await f.login();
-    const response = await f.send(`/captures/DRXPTJ/${FEATURE}`);
+    const response = await f.send(`/captures/DRXPTJAB/${FEATURE}`);
     assert.equal(response.status, 504); assert.equal((await response.json()).code, "upstream_timeout");
     await new Promise(resolve => setTimeout(resolve, 30)); assert.equal(closed, true);
   } finally { await f.close(); }
@@ -225,7 +225,7 @@ test("disconnecting a download client cancels the upstream stream", async () => 
   try {
     await f.login();
     await new Promise((resolve, reject) => {
-      const client = request(f.base + PREFIX + `/replays/DRXPTJ/${FEATURE}/file`, { headers: { cookie: f.cookie() } }, response => {
+      const client = request(f.base + PREFIX + `/replays/DRXPTJAB/${FEATURE}/file`, { headers: { cookie: f.cookie() } }, response => {
         response.once("data", () => { response.destroy(); client.destroy(); resolve(); });
       }); client.on("error", error => { if (error.code !== "ECONNRESET") reject(error); }); client.end();
     });
@@ -253,15 +253,15 @@ test("live DTO strips raw identities and packets and feeds existing map trace ca
   const f = await fixture((req, res) => write(res, 200, { capture: SNAPSHOT, live: { ...LIVE,
     rawPacket: API_KEY, auth: OPERATOR, records: LIVE.records.map(row => ({ ...row, ticket: API_KEY })) } }));
   try {
-    assert.equal((await f.send(`/captures/DRXPTJ/${FEATURE}/live`)).status, 401);
-    await f.login(); const response = await f.send(`/captures/DRXPTJ/${FEATURE}/live`); assert.equal(response.status, 200);
+    assert.equal((await f.send(`/captures/DRXPTJAB/${FEATURE}/live`)).status, 401);
+    await f.login(); const response = await f.send(`/captures/DRXPTJAB/${FEATURE}/live`); assert.equal(response.status, 200);
     const value = await response.json(), serialized = JSON.stringify(value);
     for (const privateValue of [API_KEY, OPERATOR, "private-user-id", "Collector"]) assert.ok(!serialized.includes(privateValue));
     assert.equal(value.live.manifest.mapSlot, 84); assert.equal(value.live.manifest.gameBuildId, "26155610");
     assert.equal(value.live.manifest.projectionVersion, 1); assert.equal(value.live.manifest.segmentResolution, "unassigned");
     assert.deepEqual(value.live.manifest.participants, [{ playerId: "p1", nickname: "房主" }]);
     let trace;
-    const client = new PacketWatchClient({ captureId: `DRXPTJ.${FEATURE}`, onSnapshot: snapshot => {
+    const client = new PacketWatchClient({ captureId: `DRXPTJAB.${FEATURE}`, onSnapshot: snapshot => {
       trace = createLiveTrace(snapshot.manifest);
       for (const entry of snapshot.snapshot.records) appendLiveRecord(trace, entry.record);
     } });
@@ -278,10 +278,10 @@ test("unknown build and Airport never invent a level map manifest", async () => 
     await f.login();
     for (const patch of [{ sceneName: "Airport" }, { gameBuildId: null, projectionVersion: null }, { positionProjectionSupported: false }]) {
       live = { ...LIVE, ...patch };
-      const response = await f.send(`/captures/DRXPTJ/${FEATURE}/live`);
+      const response = await f.send(`/captures/DRXPTJAB/${FEATURE}/live`);
       assert.equal(response.status, 200); assert.equal((await response.json()).live.manifest, null);
     }
-    live = null; assert.equal((await (await f.send(`/captures/DRXPTJ/${FEATURE}/live`)).json()).live, null);
+    live = null; assert.equal((await (await f.send(`/captures/DRXPTJAB/${FEATURE}/live`)).json()).live, null);
   } finally { await f.close(); }
 });
 
@@ -290,12 +290,12 @@ test("live projection rejects mixed scene records, invalid coordinates, ordering
   const f = await fixture((req, res) => write(res, 200, { capture: SNAPSHOT, live }));
   try {
     await f.login();
-    for (const patch of [{ roomCode: "DSVEHQ" }, { sceneEpoch: -1 }, { lastSequence: 8 },
+    for (const patch of [{ roomCode: "DSVEHQAB" }, { sceneEpoch: -1 }, { lastSequence: 8 },
       { records: [...LIVE.records].reverse() }, { records: Array(10001).fill(LIVE.records[1]) },
       { records: [{ ...LIVE.records[1], sceneEpoch: 1 }] }, { records: [{ ...LIVE.records[1], pos: [null, 2, 3] }] },
       { records: [{ ...LIVE.records[1], playerId: "../private" }] }, { records: [{ ...LIVE.records[1], type: "raw_packet" }] }]) {
       live = { ...LIVE, ...patch };
-      const response = await f.send(`/captures/DRXPTJ/${FEATURE}/live`);
+      const response = await f.send(`/captures/DRXPTJAB/${FEATURE}/live`);
       assert.equal(response.status, 502); assert.equal((await response.json()).code, "upstream_invalid_response");
     }
   } finally { await f.close(); }
@@ -312,14 +312,14 @@ test("ZIP download uses sanitized Unicode host name, preserves bytes/range and s
     res.end(data);
   });
   try {
-    assert.equal((await f.send(`/replays/DRXPTJ/${FEATURE}/archive.zip`)).status, 401);
+    assert.equal((await f.send(`/replays/DRXPTJAB/${FEATURE}/archive.zip`)).status, 401);
     await f.login();
     for (const partial of [false, true]) {
-      const response = await f.send(`/replays/DRXPTJ/${FEATURE}/archive.zip`, { headers: partial ? { range: "bytes=1-3" } : {} });
+      const response = await f.send(`/replays/DRXPTJAB/${FEATURE}/archive.zip`, { headers: partial ? { range: "bytes=1-3" } : {} });
       assert.equal(response.status, partial ? 206 : 200);
       assert.equal(response.headers.get("set-cookie"), null);
       assert.match(response.headers.get("content-disposition"), /filename\*=UTF-8''/);
-      assert.ok(decodeURIComponent(response.headers.get("content-disposition")).includes(`房主_测试-DRXPTJ-${FEATURE}.zip`));
+      assert.ok(decodeURIComponent(response.headers.get("content-disposition")).includes(`房主_测试-DRXPTJAB-${FEATURE}.zip`));
       assert.deepEqual(Buffer.from(await response.arrayBuffer()), partial ? bytes.subarray(1, 4) : bytes);
     }
   } finally { await f.close(); }
@@ -333,9 +333,9 @@ test("expired and missing archives fail without fetching a ZIP and live errors r
   });
   try {
     await f.login();
-    for (mode of ["expired", "recording"]) assert.equal((await f.send(`/replays/DRXPTJ/${FEATURE}/archive.zip`)).status, 410);
+    for (mode of ["expired", "recording"]) assert.equal((await f.send(`/replays/DRXPTJAB/${FEATURE}/archive.zip`)).status, 410);
     assert.equal(f.calls.length, 2); assert.ok(f.calls.every(call => call.path.startsWith("/api/v1/captures/")));
-    mode = "live"; const response = await f.send(`/captures/DRXPTJ/${FEATURE}/live`);
+    mode = "live"; const response = await f.send(`/captures/DRXPTJAB/${FEATURE}/live`);
     assert.equal(response.status, 409); assert.equal((await response.json()).code, "live_unavailable");
   } finally { await f.close(); }
 });
@@ -348,21 +348,21 @@ test("public navigation starts with a room code and exposes only the exact recor
     assert.deepEqual(await (await nav("/session")).json(), { configured: true, captures: [] });
     const response = await nav("/rooms", { method: "POST", headers: { origin: f.base,
       "content-type": "application/json", "idempotency-key": "guest-start-000000001", cookie: "irrelevant=private-browser-value" },
-      body: '{"roomCode":" drxptj "}' });
+      body: '{"roomCode":" drxptjab "}' });
     assert.equal(response.status, 202); assert.equal(response.headers.get("set-cookie"), null);
     const value = await response.json(); assert.equal(value.capture.featureCode, FEATURE);
     assert.equal(value.capture.status, "recording"); assert.equal(value.reused, false);
     assert.ok(!JSON.stringify(value).includes(API_KEY));
-    assert.equal(f.calls[0].body, '{"roomCode":"DRXPTJ"}'); assert.equal(f.calls[0].headers.cookie, undefined);
+    assert.equal(f.calls[0].body, '{"roomCode":"DRXPTJAB"}'); assert.equal(f.calls[0].headers.cookie, undefined);
     assert.equal(f.calls[0].headers.authorization, `Bearer ${API_KEY}`);
-    assert.equal((await nav(`/captures/DRXPTJ/${FEATURE}`)).status, 200);
+    assert.equal((await nav(`/captures/DRXPTJAB/${FEATURE}`)).status, 200);
     const before = f.calls.length;
-    for (const path of ["/captures", "/rooms/DRXPTJ", "/captures/DRXPTJ", `/captures/DRXPTJ/${FEATURE}/stop`, `/replays/DRXPTJ/${FEATURE}/file`])
+    for (const path of ["/captures", "/rooms/DRXPTJAB", "/captures/DRXPTJAB", `/captures/DRXPTJAB/${FEATURE}/stop`, `/replays/DRXPTJAB/${FEATURE}/file`])
       assert.equal((await nav(path)).status, 404, path);
-    assert.equal((await nav(`/captures/DRXPTJ/${FEATURE}`, { method: "POST" })).status, 405);
+    assert.equal((await nav(`/captures/DRXPTJAB/${FEATURE}`, { method: "POST" })).status, 405);
     assert.equal(f.calls.length, before);
     assert.equal((await f.send("/captures")).status, 401);
-    assert.equal((await f.send(`/captures/DRXPTJ/${FEATURE}/stop`, { method: "POST" })).status, 401);
+    assert.equal((await f.send(`/captures/DRXPTJAB/${FEATURE}/stop`, { method: "POST" })).status, 401);
   } finally { await f.close(); }
 });
 
@@ -379,31 +379,31 @@ test("multiple visitors attach to one active feature while a recycled room has a
     write(res, 200, { ...SNAPSHOT, featureCode: feature, status: feature === activeFeature ? "recording" : "completed" });
   });
   const start = key => fetch(f.base + "/api/navigation/rooms", { method: "POST", headers: { origin: f.base,
-    "content-type": "application/json", "idempotency-key": key }, body: '{"roomCode":"DRXPTJ"}' });
+    "content-type": "application/json", "idempotency-key": key }, body: '{"roomCode":"DRXPTJAB"}' });
   try {
     const a = await (await start("visitor-one-00000001")).json(), b = await (await start("visitor-two-00000002")).json();
     assert.equal(a.capture.featureCode, b.capture.featureCode); assert.equal(b.reused, true);
     activeFeature = nextFeature; first = true;
     const next = await (await start("visitor-new-run-00003")).json();
     assert.equal(next.capture.featureCode, nextFeature); assert.equal(next.reused, false);
-    const old = await fetch(f.base + `/api/navigation/captures/DRXPTJ/${FEATURE}`);
+    const old = await fetch(f.base + `/api/navigation/captures/DRXPTJAB/${FEATURE}`);
     assert.equal((await old.json()).status, "completed");
-    assert.equal((await fetch(f.base + "/api/navigation/captures/DRXPTJ")).status, 404);
-    assert.equal((await fetch(f.base + "/api/navigation/rooms/DRXPTJ/history")).status, 404);
+    assert.equal((await fetch(f.base + "/api/navigation/captures/DRXPTJAB")).status, 404);
+    assert.equal((await fetch(f.base + "/api/navigation/rooms/DRXPTJAB/history")).status, 404);
   } finally { await f.close(); }
 });
 
 test("public navigation validates origin and bounded admission without opening administrative access", async () => {
   const f = await fixture((req, res) => write(res, 200, SNAPSHOT), { navigationStartsPerMinute: 2 });
   const start = headers => fetch(f.base + "/api/navigation/rooms", { method: "POST", headers: {
-    origin: f.base, "content-type": "application/json", "idempotency-key": "navigation-test-00001", ...headers }, body: '{"roomCode":"DRXPTJ"}' });
+    origin: f.base, "content-type": "application/json", "idempotency-key": "navigation-test-00001", ...headers }, body: '{"roomCode":"DRXPTJAB"}' });
   try {
     assert.equal((await start({ origin: "https://other.invalid" })).status, 403);
     assert.equal(f.calls.length, 0);
     assert.equal((await start()).status, 200); assert.equal((await start()).status, 200);
     const limited = await start(); assert.equal(limited.status, 429); assert.equal((await limited.json()).code, "rate_limited");
     assert.equal(f.calls.length, 4);
-    assert.equal((await fetch(f.base + "/api/navigation/session?room=DRXPTJ")).status, 400);
+    assert.equal((await fetch(f.base + "/api/navigation/session?room=DRXPTJAB")).status, 400);
   } finally { await f.close(); }
 });
 
@@ -417,17 +417,17 @@ test("public live and ZIP use only full room-feature identity and preserve expir
   });
   const get = path => fetch(f.base + "/api/navigation" + path);
   try {
-    const live = await get(`/captures/DRXPTJ/${FEATURE}/live`); assert.equal(live.status, 200);
+    const live = await get(`/captures/DRXPTJAB/${FEATURE}/live`); assert.equal(live.status, 200);
     assert.equal((await live.json()).live.manifest.gameBuildId, "26155610");
-    const zip = await get(`/replays/DRXPTJ/${FEATURE}/archive.zip`); assert.equal(zip.status, 200); assert.equal(await zip.text(), 'PK');
+    const zip = await get(`/replays/DRXPTJAB/${FEATURE}/archive.zip`); assert.equal(zip.status, 200); assert.equal(await zip.text(), 'PK');
     expired = true;
-    assert.equal((await get(`/replays/DRXPTJ/${FEATURE}/archive.zip`)).status, 410);
-    const ended = await get(`/captures/DRXPTJ/${FEATURE}/live`); assert.equal(ended.status, 410); assert.equal((await ended.json()).code, "archive_expired");
+    assert.equal((await get(`/replays/DRXPTJAB/${FEATURE}/archive.zip`)).status, 410);
+    const ended = await get(`/captures/DRXPTJAB/${FEATURE}/live`); assert.equal(ended.status, 410); assert.equal((await ended.json()).code, "archive_expired");
   } finally { await f.close(); }
 });
 
 test("administrator listing includes every active room while public navigation exposes no global list", async () => {
-  const second = { ...SNAPSHOT, roomCode: "DSVEHQ", featureCode: "B".repeat(20), status: "connecting", hostName: "Second host", privateTicket: API_KEY };
+  const second = { ...SNAPSHOT, roomCode: "DSVEHQAB", featureCode: "B".repeat(20), status: "connecting", hostName: "Second host", privateTicket: API_KEY };
   let activeCaptures = [{ ...SNAPSHOT, hostName: "First host", privateTicket: API_KEY }, second];
   const f = await fixture((req, res) => {
     if (req.url === "/api/v1/captures") return write(res, 200, { active: activeCaptures[0] ?? null, activeCaptures, history: [], hasMore: false });
@@ -441,9 +441,9 @@ test("administrator listing includes every active room while public navigation e
     assert.equal((await fetch(f.base + "/api/navigation/captures")).status, 404);
     await f.login();
     const value = await (await f.send("/captures")).json();
-    assert.deepEqual(value.activeCaptures.map(item => item.roomCode), ["DRXPTJ", "DSVEHQ"]);
+    assert.deepEqual(value.activeCaptures.map(item => item.roomCode), ["DRXPTJAB", "DSVEHQAB"]);
     assert.deepEqual(value.active, value.activeCaptures[0]); assert.ok(!JSON.stringify(value).includes(API_KEY));
-    await f.send(`/captures/DSVEHQ/${second.featureCode}/stop`, { method: "POST" });
+    await f.send(`/captures/DSVEHQAB/${second.featureCode}/stop`, { method: "POST" });
     assert.equal(activeCaptures[0].status, "recording"); assert.equal(activeCaptures[1].status, "stopping");
     assert.equal(f.calls.filter(item => item.path.endsWith("/stop")).length, 1);
     activeCaptures = [];
@@ -452,7 +452,7 @@ test("administrator listing includes every active room while public navigation e
 });
 
 test("active room DTO rejects excessive, duplicated, inactive or inconsistent entries", async () => {
-  const second = { ...SNAPSHOT, roomCode: "DSVEHQ", featureCode: "B".repeat(20) };
+  const second = { ...SNAPSHOT, roomCode: "DSVEHQAB", featureCode: "B".repeat(20) };
   let active = SNAPSHOT, activeCaptures = [SNAPSHOT, second];
   const f = await fixture((req, res) => write(res, 200, { active, activeCaptures, history: [], hasMore: false }));
   try {
@@ -468,7 +468,7 @@ test("active room DTO rejects excessive, duplicated, inactive or inconsistent en
 });
 
 test("public admission preserves capacity errors and different room snapshots independently", async () => {
-  const captures = new Map([["DRXPTJ", SNAPSHOT], ["DSVEHQ", { ...SNAPSHOT, roomCode: "DSVEHQ", featureCode: "B".repeat(20) }]]);
+  const captures = new Map([["DRXPTJAB", SNAPSHOT], ["DSVEHQAB", { ...SNAPSHOT, roomCode: "DSVEHQAB", featureCode: "B".repeat(20) }]]);
   const f = await fixture((req, res, call) => {
     if (req.method === "POST") {
       const item = captures.get(JSON.parse(call.body).roomCode);
@@ -484,8 +484,8 @@ test("public admission preserves capacity errors and different room snapshots in
       const result = await start(room); assert.equal(result.status, 200);
       const value = await result.json(); assert.equal(value.capture.roomCode, room); assert.equal(value.capture.featureCode, captures.get(room).featureCode);
     }
-    const full = await start("ABC123"); assert.equal(full.status, 429); assert.equal((await full.json()).code, "capture_capacity");
-    assert.equal((await start("DRXPTJ")).status, 200, "existing room still attaches when new-room capacity is full");
+    const full = await start("ABCDEF23"); assert.equal(full.status, 429); assert.equal((await full.json()).code, "capture_capacity");
+    assert.equal((await start("DRXPTJAB")).status, 200, "existing room still attaches when new-room capacity is full");
   } finally { await f.close(); }
 });
 
@@ -497,8 +497,8 @@ test("shared Steam failure DTO preserves only fixed diagnostic codes for adminis
     await f.login();
     for (code of ["steam_session_busy", "steam_login_required", "steam_broker_timeout", "steam_broker_ended",
       "steam_broker_protocol", "steam_ticket_reused", "steam_ticket_capacity"]) {
-      for (const response of [await f.send(`/captures/DRXPTJ/${FEATURE}`),
-        await fetch(f.base + `/api/navigation/captures/DRXPTJ/${FEATURE}`)]) {
+      for (const response of [await f.send(`/captures/DRXPTJAB/${FEATURE}`),
+        await fetch(f.base + `/api/navigation/captures/DRXPTJAB/${FEATURE}`)]) {
         assert.equal(response.status, 200);
         const value = await response.json(); assert.equal(value.errorCode, code);
         assert.equal(value.errors.length, 1);
@@ -514,26 +514,64 @@ const lookupRoom = (fixture, roomCode, init = {}) => fetch(fixture.base + "/api/
   method: "POST", headers: { origin: fixture.base, "content-type": "application/json", ...init.headers },
   body: JSON.stringify({ roomCode }), ...Object.fromEntries(Object.entries(init).filter(([key]) => key !== "headers")),
 });
+
+test("current eight-character admission and legacy six-character archive identities remain separate", async () => {
+  const legacy = "DRXPTJ", current = "DYILUS97";
+  const f = await fixture((req, res, call) => {
+    const roomCode = req.method === "POST" ? JSON.parse(call.body).roomCode
+      : req.url.split("/").find(part => [legacy, current].includes(part));
+    if (req.url.startsWith("/api/v1/rooms/")) return write(res, 200, { roomCode, active: null,
+      history: [{ ...SNAPSHOT, roomCode, status: "completed", archiveAvailable: true, zipBytes: 2, completedUtc: "2026-11-16T00:00:00Z" }], hasMore: false });
+    if (req.url.endsWith("/archive.zip")) { res.writeHead(200, { "content-type": "application/zip" }); res.end("PK"); return; }
+    return write(res, 200, { ...SNAPSHOT, roomCode, status: "completed", archiveAvailable: true, completedUtc: "2026-11-16T00:00:00Z" });
+  });
+  try {
+    await f.login();
+    const start = (roomCode, admin = false) => (admin ? f.send("/captures", { method: "POST", headers: {
+      "content-type": "application/json", "idempotency-key": "current-room-admin-00001" }, body: JSON.stringify({ roomCode }) })
+      : fetch(f.base + "/api/navigation/rooms", { method: "POST", headers: { origin: f.base,
+        "content-type": "application/json", "idempotency-key": "current-room-public-0001" }, body: JSON.stringify({ roomCode }) }));
+    for (const admin of [false, true]) {
+      const before = f.calls.length;
+      for (const invalid of [legacy, "DYILUS90", "D1ILUS97", "QYILUS97", "DYILUS977"])
+        assert.equal((await start(invalid, admin)).status, 400, `${admin} ${invalid}`);
+      assert.equal(f.calls.length, before, "invalid admission never reaches Collector");
+      assert.equal((await start(current.toLowerCase(), admin)).status, 200);
+    }
+    for (const room of [legacy, current]) {
+      const found = await lookupRoom(f, room);
+      assert.equal(found.status, 200); assert.equal((await found.json()).history[0].roomCode, room);
+      for (const prefix of ["/api/navigation", PREFIX]) {
+        const status = await fetch(f.base + `${prefix}/captures/${room}/${FEATURE}`, { headers: { cookie: f.cookie() } });
+        assert.equal(status.status, 200); assert.equal((await status.json()).roomCode, room);
+        const zip = await fetch(f.base + `${prefix}/replays/${room}/${FEATURE}/archive.zip`, { headers: { cookie: f.cookie() } });
+        assert.equal(zip.status, 200); assert.equal(await zip.text(), "PK");
+      }
+    }
+    assert.deepEqual(await (await fetch(f.base + "/api/navigation/session")).json(), { configured: true, captures: [] });
+    assert.equal((await fetch(f.base + "/api/navigation/captures")).status, 404);
+  } finally { await f.close(); }
+});
 const savedCapture = (featureCode = FEATURE) => ({ ...SNAPSHOT, featureCode, status: "completed", archiveAvailable: true,
   completedUtc: "2026-10-28T12:04:00Z", hostName: "Saved host", zipBytes: 100 });
 
 test("fresh visitors receive no room list; an explicit code finds only that room without joining", async () => {
   const active = { ...SNAPSHOT, featureCode: "A".repeat(20), privateTicket: API_KEY };
   const f = await fixture((req, res) => {
-    assert.equal(req.url, "/api/v1/rooms/DRXPTJ/captures"); assert.equal(req.method, "GET");
-    write(res, 200, { roomCode: "DRXPTJ", active, history: [{ ...savedCapture(), privateTicket: API_KEY }], hasMore: false,
-      allRooms: ["DSVEHQ"], privateToken: OPERATOR });
+    assert.equal(req.url, "/api/v1/rooms/DRXPTJAB/captures"); assert.equal(req.method, "GET");
+    write(res, 200, { roomCode: "DRXPTJAB", active, history: [{ ...savedCapture(), privateTicket: API_KEY }], hasMore: false,
+      allRooms: ["DSVEHQAB"], privateToken: OPERATOR });
   });
   try {
     assert.deepEqual(await (await fetch(f.base + "/api/navigation/session")).json(), { configured: true, captures: [] });
-    for (const path of ["/api/navigation/captures", "/api/navigation/rooms", "/api/navigation/rooms/lookup", "/api/navigation/rooms/DRXPTJ/captures"])
+    for (const path of ["/api/navigation/captures", "/api/navigation/rooms", "/api/navigation/rooms/lookup", "/api/navigation/rooms/DRXPTJAB/captures"])
       assert.equal((await fetch(f.base + path)).status, 404, path);
     assert.equal(f.calls.length, 0, "opening a fresh page and probing list routes cannot contact the collector");
-    const response = await lookupRoom(f, " drxptj "); assert.equal(response.status, 200);
+    const response = await lookupRoom(f, " drxptjab "); assert.equal(response.status, 200);
     const value = await response.json();
-    assert.equal(value.roomCode, "DRXPTJ"); assert.equal(value.active.featureCode, active.featureCode);
+    assert.equal(value.roomCode, "DRXPTJAB"); assert.equal(value.active.featureCode, active.featureCode);
     assert.deepEqual(value.history.map(item => item.featureCode), [FEATURE]);
-    assert.ok(!JSON.stringify(value).includes("DSVEHQ"));
+    assert.ok(!JSON.stringify(value).includes("DSVEHQAB"));
     assert.ok(!JSON.stringify(value).includes(API_KEY) && !JSON.stringify(value).includes(OPERATOR));
     assert.equal(f.calls.length, 1); assert.equal(f.calls[0].body, "");
     assert.equal(f.calls[0].headers["idempotency-key"], undefined);
@@ -544,15 +582,15 @@ test("fresh visitors receive no room list; an explicit code finds only that room
 
 test("new devices can recover completed recordings by entered code; absent codes return an empty result", async () => {
   const f = await fixture((req, res) => {
-    const roomCode = req.url.includes("DRXPTJ") ? "DRXPTJ" : "DSVEHQ";
-    write(res, 200, { roomCode, active: null, history: roomCode === "DRXPTJ" ? [savedCapture(), savedCapture("B".repeat(20))] : [], hasMore: false });
+    const roomCode = req.url.includes("DRXPTJAB") ? "DRXPTJAB" : "DSVEHQAB";
+    write(res, 200, { roomCode, active: null, history: roomCode === "DRXPTJAB" ? [savedCapture(), savedCapture("B".repeat(20))] : [], hasMore: false });
   });
   try {
-    const value = await (await lookupRoom(f, "DRXPTJ")).json();
+    const value = await (await lookupRoom(f, "DRXPTJAB")).json();
     assert.equal(value.active, null); assert.equal(value.history.length, 2);
-    assert.ok(value.history.every(item => item.archiveAvailable && item.roomCode === "DRXPTJ"));
-    const absent = await lookupRoom(f, "DSVEHQ"); assert.equal(absent.status, 200);
-    assert.deepEqual(await absent.json(), { roomCode: "DSVEHQ", active: null, history: [], hasMore: false });
+    assert.ok(value.history.every(item => item.archiveAvailable && item.roomCode === "DRXPTJAB"));
+    const absent = await lookupRoom(f, "DSVEHQAB"); assert.equal(absent.status, 200);
+    assert.deepEqual(await absent.json(), { roomCode: "DSVEHQAB", active: null, history: [], hasMore: false });
     assert.equal(f.calls.length, 2);
     assert.ok(f.calls.every(call => call.method === "GET" && call.path.startsWith("/api/v1/rooms/")), "no new capture or ticket is requested");
   } finally { await f.close(); }
@@ -561,12 +599,12 @@ test("new devices can recover completed recordings by entered code; absent codes
 test("room lookup rejects another room, failed archives, duplicate identities and excessive results", async () => {
   let value;
   const f = await fixture((req, res) => write(res, 200, value));
-  const valid = { roomCode: "DRXPTJ", active: null, history: [savedCapture()], hasMore: false };
+  const valid = { roomCode: "DRXPTJAB", active: null, history: [savedCapture()], hasMore: false };
   const invalid = [
-    { ...valid, roomCode: "DSVEHQ" },
-    { ...valid, active: { ...SNAPSHOT, roomCode: "DSVEHQ" } },
+    { ...valid, roomCode: "DSVEHQAB" },
+    { ...valid, active: { ...SNAPSHOT, roomCode: "DSVEHQAB" } },
     { ...valid, active: savedCapture() },
-    { ...valid, history: [{ ...savedCapture(), roomCode: "DSVEHQ" }] },
+    { ...valid, history: [{ ...savedCapture(), roomCode: "DSVEHQAB" }] },
     { ...valid, history: [{ ...savedCapture(), status: "failed", errorCode: "room_not_found" }] },
     { ...valid, history: [{ ...savedCapture(), archiveAvailable: false }] },
     { ...valid, history: [{ ...savedCapture(), completedUtc: null }] },
@@ -578,7 +616,7 @@ test("room lookup rejects another room, failed archives, duplicate identities an
   ];
   try {
     for (value of invalid) {
-      const response = await lookupRoom(f, "DRXPTJ");
+      const response = await lookupRoom(f, "DRXPTJAB");
       assert.equal(response.status, 502); assert.equal((await response.json()).code, "upstream_invalid_response");
     }
   } finally { await f.close(); }
@@ -587,23 +625,23 @@ test("room lookup rejects another room, failed archives, duplicate identities an
 test("public room lookup requires a same-origin explicit body and rejects broad or malformed requests", async () => {
   const f = await fixture();
   try {
-    assert.equal((await lookupRoom(f, "DRXPTJ", { headers: { origin: "https://attacker.invalid" } })).status, 403);
-    assert.equal((await fetch(f.base + "/api/navigation/rooms/lookup", { method: "POST", headers: { "content-type": "application/json" }, body: '{"roomCode":"DRXPTJ"}' })).status, 403);
-    for (const body of [{}, { roomCode: "" }, { roomCode: "*" }, { roomCode: "DRXPTJ", all: true }, { roomCode: ["DRXPTJ", "DSVEHQ"] }])
-      assert.equal((await lookupRoom(f, "DRXPTJ", { body: JSON.stringify(body) })).status, 400);
-    assert.equal((await fetch(f.base + "/api/navigation/rooms/lookup?room=DRXPTJ")).status, 400);
+    assert.equal((await lookupRoom(f, "DRXPTJAB", { headers: { origin: "https://attacker.invalid" } })).status, 403);
+    assert.equal((await fetch(f.base + "/api/navigation/rooms/lookup", { method: "POST", headers: { "content-type": "application/json" }, body: '{"roomCode":"DRXPTJAB"}' })).status, 403);
+    for (const body of [{}, { roomCode: "" }, { roomCode: "*" }, { roomCode: "DRXPTJAB", all: true }, { roomCode: ["DRXPTJAB", "DSVEHQAB"] }])
+      assert.equal((await lookupRoom(f, "DRXPTJAB", { body: JSON.stringify(body) })).status, 400);
+    assert.equal((await fetch(f.base + "/api/navigation/rooms/lookup?room=DRXPTJAB")).status, 400);
     assert.equal(f.calls.length, 0);
   } finally { await f.close(); }
 });
 
 test("room lookup and admission share the room-code rate limit and never return cacheable lists", async () => {
-  const f = await fixture((req, res) => write(res, 200, { roomCode: "DRXPTJ", active: null, history: [], hasMore: false }), { navigationStartsPerMinute: 1 });
+  const f = await fixture((req, res) => write(res, 200, { roomCode: "DRXPTJAB", active: null, history: [], hasMore: false }), { navigationStartsPerMinute: 1 });
   try {
-    const first = await lookupRoom(f, "DRXPTJ"); assert.equal(first.status, 200);
+    const first = await lookupRoom(f, "DRXPTJAB"); assert.equal(first.status, 200);
     assert.equal(first.headers.get("cache-control"), "no-store"); assert.equal(first.headers.get("referrer-policy"), "no-referrer");
-    const next = await lookupRoom(f, "DRXPTJ"); assert.equal(next.status, 429); assert.equal((await next.json()).code, "rate_limited");
+    const next = await lookupRoom(f, "DRXPTJAB"); assert.equal(next.status, 429); assert.equal((await next.json()).code, "rate_limited");
     const start = await fetch(f.base + "/api/navigation/rooms", { method: "POST", headers: { origin: f.base,
-      "content-type": "application/json", "idempotency-key": "rate-limited-start-000001" }, body: '{"roomCode":"DRXPTJ"}' });
+      "content-type": "application/json", "idempotency-key": "rate-limited-start-000001" }, body: '{"roomCode":"DRXPTJAB"}' });
     assert.equal(start.status, 429); assert.equal(f.calls.length, 1);
   } finally { await f.close(); }
 });

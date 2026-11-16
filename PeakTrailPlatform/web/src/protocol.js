@@ -1782,7 +1782,7 @@ export function selectDailyMapPack(catalog, daily) {
   if (daily.gameBuildId != null && String(daily.gameBuildId).trim() !== activeBuildId) return null;
   // Unbound 2.x observations use a 21-map pool; the same index means a
   // different scene in 3.0. Require the resolver's verified build binding.
-  if (["26134529", "26155610"].includes(activeBuildId) && daily.gameBuildId == null) return null;
+  if (["26134529", "26155610", "26542162"].includes(activeBuildId) && daily.gameBuildId == null) return null;
 
   const candidates = catalog.mapPacks.filter((entry) => {
     if (!validCatalogEntry(entry)) return false;
@@ -1887,12 +1887,12 @@ export function assessCompatibility(manifest, mapPack) {
   };
 
   compare("sceneName", "场景");
-  // The existing signed 3.0.1 exports retain Unity's literal bundleVersion
-  // "3.0.1--logFile". The verified packet profile reports "3.0.1" instead.
-  // Compare this one audited build's two spellings without rewriting either
-  // manifest (and therefore without changing any signed map identity).
-  const versionForComparison = value => String(manifest.gameBuildId) === "26155610"
-    && String(mapPack.gameBuildId) === "26155610" && value === "3.0.1--logFile" ? "3.0.1" : String(value);
+  // Verified exports retain Unity's literal bundleVersion suffix; packet
+  // profiles use the clean version. Each spelling exception belongs to one
+  // exact build pair and never rewrites either signed manifest identity.
+  const exportedVersion = ({ "26155610": "3.0.1", "26542162": "3.1.0" })[String(manifest.gameBuildId)];
+  const versionForComparison = value => exportedVersion && String(manifest.gameBuildId) === String(mapPack.gameBuildId)
+    && value === `${exportedVersion}--logFile` ? exportedVersion : String(value);
   compare("gameVersion", "游戏版本", versionForComparison);
   compare("gameBuildId", "游戏构建");
   compare("mapSlot", "地图槽位", Number);

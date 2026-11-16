@@ -3,7 +3,8 @@ import { readFile } from "node:fs/promises";
 import { dirname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SUPPORTED_MAP_PACK_IDENTITY_VERSIONS, verifyMapPackIdentity, verifyGeometryGlb } from "./lib/map-pack-identity.mjs";
-import { readMergedGameAssets, requireActiveCharacterAssets } from "./lib/game-assets.mjs";
+import { readMergedGameAssets } from "./lib/game-assets.mjs";
+import { requirePublishedCharacterAssets } from "./lib/player-visualization.mjs";
 import { localAssetHint, localAssetPaths } from "./lib/local-paths.mjs";
 import { resolveVerifiedMapInput } from "./lib/verified-map-input.mjs";
 
@@ -130,7 +131,7 @@ for (const [index, entry] of catalog.mapPacks.entries()) {
 let gameAssets;
 try {
   gameAssets = await readMergedGameAssets(gameAssetsDirectory, resolve(platformDirectory, "data", "avatar-assets"));
-  requireActiveCharacterAssets(gameAssets, catalog.activeGameBuildId);
+  await requirePublishedCharacterAssets(gameAssets, catalog, { mapsDirectory: resolve(platformDirectory, "data", "maps") });
 } catch (error) {
   throw new Error(`Local game assets are missing or invalid at ${localAssetHint(gameAssetsDirectory)}: ${error.message}`);
 }

@@ -1,12 +1,12 @@
 // Resolves PEAK's current daily-map rotation from the game's own login API.
 // Shared by the live relay (/api/daily) and tools/update-daily.mjs. The endpoint
 // rejects requests without this project's User-Agent, so the header is mandatory.
-// PEAK 3.0.0's CloudAPI uses BuildVersion.ToMatchmaking(): major.minor.
+// PEAK's CloudAPI uses BuildVersion.ToMatchmaking(): major.minor.
 // Keep this one default shared by the relay, preview and scheduled updater.
 // MapBaker.ScenePaths contains Level_0..Level_207 in native rotation order.
-export const DEFAULT_API_VERSION = "3.0";
+export const DEFAULT_API_VERSION = "3.1";
 export const DEFAULT_MAP_COUNT = 208;
-export const DEFAULT_GAME_BUILD_ID = "26155610";
+export const DEFAULT_GAME_BUILD_ID = "26542162";
 export const DAILY_CACHE_MS = 10 * 60_000;
 // Current NextLevelService adds the native integer HoursUntilLevel directly;
 // it is a total hour count, not a 0..23 wall-clock component. Bound the sum to

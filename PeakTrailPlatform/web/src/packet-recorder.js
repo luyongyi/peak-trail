@@ -26,7 +26,8 @@ const ERRORS = Object.freeze({
   rate_limited: "操作过于频繁，请稍候再试。",
   forbidden_origin: "请求来源校验失败，请从本站重新打开录制页面。",
   invalid_request: "填写内容不正确，请检查后重试。",
-  invalid_room_code: "请输入有效的六位联机码。",
+  invalid_room_code: "请输入有效的房间号。新版房间号为 8 位。",
+  current_room_required: "新建导航请使用 8 位房间号；旧 6 位仅用于查询录像。",
   invalid_identity: "请输入有效的联机码和 20 位特征码。",
   upstream_timeout: "录制服务响应超时，请重试查询。",
   upstream_invalid_response: "暂时无法读取录制状态，请稍后重试。",
@@ -97,7 +98,10 @@ const END_NOTES = Object.freeze({
 
 export const normalizeRoom = value => String(value ?? "").trim().toUpperCase();
 export const normalizeFeature = value => String(value ?? "").trim().toUpperCase();
-export const validRoom = value => /^[A-P][A-Z0-9]{5}$/.test(value);
+// Joining the current matchmaking pool and locating a retained recording are
+// separate rules. The older six-character identity remains valid in storage.
+export const validCurrentRoom = value => /^[A-P][A-Z][A-Z2-9]{6}$/.test(value);
+export const validRoom = value => /^(?:[A-P][A-Z0-9]{5}|[A-P][A-Z][A-Z2-9]{6})$/.test(value);
 export const validFeature = value => /^[A-F0-9]{20}$/.test(value);
 export const isActiveCapture = capture => Boolean(capture && ACTIVE.has(capture.status));
 const emptyNavigationAttempt = capture => ["failed", "cancelled", "interrupted"].includes(capture?.status) && capture.events === 0 && !capture.archiveAvailable;
@@ -231,7 +235,7 @@ export class PacketRecorder {
     const roomCode = normalizeRoom(roomInput);
     return this.action(async () => {
       if (!this.state.authenticated) throw new RecorderError("not_authenticated");
-      if (!validRoom(roomCode)) throw new RecorderError("invalid_room_code");
+      if (!validCurrentRoom(roomCode)) throw new RecorderError(validRoom(roomCode) ? "current_room_required" : "invalid_room_code");
       if (this.pendingStart && this.pendingStart.roomCode !== roomCode) throw new RecorderError("pending_start");
       this.pendingStart ??= { roomCode, key: this.makeId() }; this.state.pendingRoom = roomCode;
       try { this.storage?.setItem(this.pendingKey, JSON.stringify(this.pendingStart)); } catch { /* In-memory retries still use the same key. */ }
@@ -285,7 +289,7 @@ export class PacketRecorder {
   restorePending() {
     try {
       const value = JSON.parse(this.storage?.getItem(this.pendingKey) ?? "null");
-      if (value && validRoom(value.roomCode) && typeof value.key === "string" && /^[A-Za-z0-9_-]{16,128}$/.test(value.key)) {
+      if (value && validCurrentRoom(value.roomCode) && typeof value.key === "string" && /^[A-Za-z0-9_-]{16,128}$/.test(value.key)) {
         this.pendingStart = { roomCode: value.roomCode, key: value.key };
         this.state.pendingRoom = value.roomCode;
       }
@@ -418,8 +422,14 @@ export class NavigationClient extends PacketRecorder {
         const selected = active ?? history[0]; this.forgotten.delete(captureKey(selected));
         this.accept(selected); this.state.reused = Boolean(active); return true;
       }
+      // Legacy codes locate retained files only. Never turn an empty old-code
+      // lookup into an admission request in the new matchmaking partition.
+      if (!validCurrentRoom(roomCode)) {
+        this.state.error = "未找到这份旧房间的录像。新导航请使用 8 位房间号。";
+        return true;
+      }
       // A code with retained recordings is read-only until the explicit new
-      // game button is pressed. Only a completely empty lookup may auto-join.
+      // game button is pressed. Only a completely empty current lookup may auto-join.
       this.roomLookup = null; this.state.busy = false;
       return await this.start(roomCode);
     } catch (error) {
@@ -435,7 +445,7 @@ export class NavigationClient extends PacketRecorder {
     const roomCode = normalizeRoom(roomInput);
     return this.action(async () => {
       if (!this.state.configured) throw new RecorderError("navigation_unavailable");
-      if (!validRoom(roomCode)) throw new RecorderError("invalid_room_code");
+      if (!validCurrentRoom(roomCode)) throw new RecorderError(validRoom(roomCode) ? "current_room_required" : "invalid_room_code");
       if (this.pendingStart && this.pendingStart.roomCode !== roomCode) throw new RecorderError("pending_start");
       if (!this.pendingStart && isActiveCapture(this.state.capture) && this.state.capture.roomCode === roomCode) {
         this.forgotten.delete(`${this.state.capture.roomCode}.${this.state.capture.featureCode}`);
@@ -645,7 +655,7 @@ export function mountNavigation(document, window) {
     byId("navigationRoomHistoryCode").textContent = result?.roomCode ?? "";
     byId("navigationRoomHistoryMore").hidden = !result?.hasMore;
     renderRows(byId("navigationRoomHistoryList"), result?.history ?? []);
-    byId("navigationNewGame").hidden = !result?.history.length || Boolean(result?.active);
+    byId("navigationNewGame").hidden = !result?.history.length || Boolean(result?.active) || !validCurrentRoom(result?.roomCode);
     byId("navigationNewGame").disabled = state.busy || Boolean(state.pendingRoom);
     byId("navigationNewGameHint").hidden = byId("navigationNewGame").hidden;
     const capture = state.capture;

@@ -27,11 +27,11 @@ test("resolver uses the verified native matchmaking version and timestamps the r
       now += 4000;
       return response(payload());
     } });
-  assert.equal(DEFAULT_API_VERSION, "3.0");
+  assert.equal(DEFAULT_API_VERSION, "3.1");
   assert.equal(DEFAULT_MAP_COUNT, 208);
   assert.equal(daily.gameBuildId, DEFAULT_GAME_BUILD_ID);
   assert.equal(daily.mapCount, 208);
-  assert.match(requested, /VersionCheck\?version=3\.0$/);
+  assert.match(requested, /VersionCheck\?version=3\.1$/);
   assert.equal(daily.versionOkay, true);
   assert.equal(daily.levelIndex, 479);
   assert.equal(daily.mapSlot, 63);
@@ -46,12 +46,16 @@ test("new rotation wraps at 208 while explicit older versions keep their own poo
       fetchImpl: async () => response(payload({ LevelIndex: levelIndex })) });
     assert.equal(daily.mapSlot, mapSlot);
     assert.equal(daily.sceneName, `Level_${mapSlot}`);
-    assert.equal(daily.gameBuildId, "26155610");
+    assert.equal(daily.gameBuildId, "26542162");
   }
   const previous = await resolveDaily({ apiVersion: "2.6", mapCount: 21, now: () => START,
     fetchImpl: async () => response(payload()) });
   assert.equal(previous.mapSlot, 17);
   assert.equal(previous.gameBuildId, undefined, "custom/old pools cannot claim the current build");
+  const previous301 = await resolveDaily({ apiVersion: "3.0", mapCount: 208, now: () => START,
+    fetchImpl: async () => response(payload()) });
+  assert.equal(previous301.gameBuildId, undefined, "a configured 3.0 request must not inherit the 3.1 build");
+  assert.equal(previous301.apiVersion, "3.0");
 });
 
 test("rejected versions and malformed countdowns cannot become valid observations", async () => {
@@ -203,10 +207,10 @@ test("scheduled updater shares the resolver version and preserves the old snapsh
     const currentPath = join(directory, "data/daily/current.json");
     const previous = '{"sceneName":"Level_8","fetchedAtUtc":"2026-09-27T20:07:47Z"}\n';
     await writeFile(currentPath, previous);
-    const env = { PEAK_DAILY_ENDPOINT: `${origin}/VersionCheck?version=3.0`, PEAK_API_VERSION: "", PEAK_MAP_COUNT: "" };
+    const env = { PEAK_DAILY_ENDPOINT: `${origin}/VersionCheck?version=3.1`, PEAK_API_VERSION: "", PEAK_MAP_COUNT: "" };
     const rejected = await runUpdater(join(directory, "tools/update-daily.mjs"), env);
     assert.notEqual(rejected.code, 0);
-    assert.match(rejected.output, /rejected API version 3\.0/);
+    assert.match(rejected.output, /rejected API version 3\.1/);
     assert.equal(await readFile(currentPath, "utf8"), previous);
     okay = true;
     const accepted = await runUpdater(join(directory, "tools/update-daily.mjs"), env);
@@ -214,7 +218,7 @@ test("scheduled updater shares the resolver version and preserves the old snapsh
     const current = JSON.parse(await readFile(currentPath, "utf8"));
     assert.equal(current.apiVersion, DEFAULT_API_VERSION);
     assert.equal(current.sceneName, "Level_63");
-    assert.equal(requestVersion, "3.0");
+    assert.equal(requestVersion, "3.1");
     const historyPath = join(directory, "data/daily/history.json");
     await writeFile(historyPath, JSON.stringify({ schemaVersion: 1, observations: [{
       observedAtUtc: new Date(Date.now() - 86400_000).toISOString(),

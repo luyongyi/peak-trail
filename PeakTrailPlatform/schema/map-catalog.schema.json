@@ -14,6 +14,17 @@
         { "type": "null" }
       ]
     },
+    "playerVisualization": {
+      "description": "Explicit marker-only navigation publication; no character-model equivalence is claimed.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "gameBuildId", "receiptSha256"],
+      "properties": {
+        "mode": { "const": "markers" },
+        "gameBuildId": { "const": "26542162" },
+        "receiptSha256": { "const": "621994e6322473283a100a30e83a4d0849a0fbad72afbca9fb247324b10c77ed" }
+      }
+    },
     "mapPacks": {
       "type": "array",
       "items": {

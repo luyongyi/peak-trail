@@ -1,5 +1,5 @@
 const API = "/api/navigation";
-const ROOM = /^[A-P][A-Z0-9]{5}$/;
+const ROOM = /^(?:[A-P][A-Z0-9]{5}|[A-P][A-Z][A-Z2-9]{6})$/;
 const FEATURE = /^[A-F0-9]{20}$/;
 const ARTWORK = "/data/game-assets/26155610/icons/Guidebook-resources-assets-841.png";
 const ERRORS = Object.freeze({

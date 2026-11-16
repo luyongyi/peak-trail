@@ -55,15 +55,33 @@ async function readNativeMapLootSource(directory, build) {
   } };
 }
 
-/** A receipt authorizes exactly one reuse hop; source survey checksums remain authoritative. */
+/** Ordinary receipts authorize one hop. The audited 3.1 receipt can name one exact pinned parent. */
 async function readVerifiedMapLootSource(directory, build) {
   const verified = await readVerifiedMapBuild(build, { mapsDirectory: directory });
   if (!verified) return null;
   const { plan, proof } = verified;
   const sourceBuild = plan.sourceGameBuildId;
-  // Never follow another verified-build entry in place of a native survey.
-  const original = await readNativeMapLootSource(directory, sourceBuild);
-  if (!original) throw new Error("Verified supply reuse requires a native source survey; chains are unsupported");
+  let original = await readNativeMapLootSource(directory, sourceBuild), parent = null;
+  if (!original) {
+    // This fixed two-hop path is the only non-native source authorization.
+    // Never recurse through arbitrary catalog edges or accept a caller depth.
+    const transitive = proof.transitiveVerification;
+    if (build !== "26542162" || sourceBuild !== "26155610" || transitive?.parentTargetBuildId !== "26155610"
+      || transitive.originalSourceBuildId !== "26134529")
+      throw new Error("Verified supply reuse requires a native source survey; chains are unsupported");
+    parent = await readVerifiedMapBuild("26155610", { mapsDirectory: directory });
+    if (!parent || parent.plan.sourceGameBuildId !== "26134529"
+      || transitive.parentReceiptSha256 !== parent.receiptSha256 || transitive.parentPlanSha256 !== parent.planSha256)
+      throw new Error("Verified supply transitive parent proof binding mismatch");
+    const native = await readNativeMapLootSource(directory, "26134529");
+    if (!native) throw new Error("Verified supply reuse requires a native source survey; chains are unsupported");
+    original = bindVerifiedMapLootSource(parent, native, "26155610");
+  }
+  return bindVerifiedMapLootSource(verified, original, build, parent);
+}
+
+function bindVerifiedMapLootSource(verified, original, build, parent = null) {
+  const { plan, proof } = verified;
   const mappings = new Map(), identities = [];
   if (plan.packs.length > 512) throw new Error("Verified supply survey exceeds map limit");
   for (const entry of plan.packs) {
@@ -73,6 +91,11 @@ async function readVerifiedMapLootSource(directory, build) {
     if (sourceRows.length !== 1 || receipts.length !== 1 || source.sceneName !== receipt.sceneName
         || source.mapSlot !== receipt.mapSlot || source.sourceSceneSha256 !== receipt.sourceSceneSha256)
       throw new Error("Verified supply survey source scene identity mismatch");
+    if (parent) {
+      const parentEntries = parent.plan.packs.filter(item => item.mapPackId === entry.sourceMapPackId);
+      if (parentEntries.length !== 1 || parentEntries[0].manifestSha256 !== receipt.sourceManifestSha256)
+        throw new Error("Verified supply source manifest does not match the pinned parent");
+    }
     mappings.set(entry.mapPackId, { entry, receipt });
     identities.push({ mapPackId: entry.mapPackId, sceneName: source.sceneName, mapSlot: source.mapSlot,
       sourceSceneSha256: source.sourceSceneSha256 });
@@ -81,6 +104,11 @@ async function readVerifiedMapLootSource(directory, build) {
     const mapping = mappings.get(mapPackId);
     if (!mapping) return null;
     const manifest = await readVerifiedMapManifest(verified, mapPackId);
+    if (parent) {
+      const previous = await readVerifiedMapManifest(parent, mapping.entry.sourceMapPackId);
+      if (!isDeepStrictEqual(manifest.layers, previous.layers))
+        throw new Error("Verified supply transitive layer bytes differ from the pinned parent");
+    }
     const sourceRaw = await original.readMap(mapping.entry.sourceMapPackId);
     const matches = sourceRaw?.maps?.filter(row => row.mapPackId === mapping.entry.sourceMapPackId) || [];
     const source = matches[0], receipt = mapping.receipt;
