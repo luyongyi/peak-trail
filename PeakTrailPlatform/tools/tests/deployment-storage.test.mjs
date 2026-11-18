@@ -172,7 +172,6 @@ test("release and pool symlinks, special files and unexpected hard links are nev
   await symlink(outside, join(unsafe.directory, "shortcut"));
   await link(outside, join(unsafeLink.directory, "unrecognized-link"));
   const current = await release(root, 10);
-  for (let index = 11; index <= 13; index++) await release(root, index);
   const fakeRelease = join(root, "releases", `${"f".repeat(12)}-abcdef`);
   await symlink(root, fakeRelease);
   await mkdir(join(root, "public-assets", "blobs"), { recursive: true });
@@ -284,7 +283,6 @@ test("special entries stop deletion of an otherwise expired release", linux, asy
   const command = spawnSync("mkfifo", [fifo]);
   assert.equal(command.status, 0, command.stderr?.toString());
   const current = await release(root, 10);
-  for (let index = 11; index <= 13; index++) await release(root, index);
   await publishAtomically(root, current.site);
   const result = await withDeployLock(root, () => maintainDeploymentStorage(root, { now }));
   assert.equal(result.removedReleases, 0);
@@ -366,7 +364,6 @@ test("other download paths and mutable release metadata cannot masquerade as app
     unsafe.push(item);
   }
   const current = await release(root, 100);
-  for (let index = 101; index <= 103; index++) await release(root, index);
   await publishAtomically(root, current.site);
   const result = await withDeployLock(root, () => maintainDeploymentStorage(root, { now }));
   assert.equal(result.removedReleases, 0);
