@@ -33,6 +33,7 @@ const ERRORS = Object.freeze({
   upstream_invalid_response: "暂时无法读取录制状态，请稍后重试。",
   capture_worker_busy: "服务暂时无法接入这个房间，请稍后重试。",
   capture_capacity: "同时导航的房间数已满，请稍后重试；已在导航的房间仍可共享。",
+  capture_disk_capacity: "录像空间不足，暂缓启动新录像。已有导航和录像仍可查看。",
   capture_busy: "采集器正在使用中，请稍后再试。",
   idempotency_conflict: "这次请求与之前的录制不一致，请刷新页面后查询录像。",
   room_full: "房间已满，请预留一个玩家名额后重新录制。",

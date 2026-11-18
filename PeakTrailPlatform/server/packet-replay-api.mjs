@@ -12,7 +12,7 @@ const FEATURE = /^[A-F0-9]{20}$/;
 const STATES = new Set(["connecting", "recording", "stopping", "completed", "cancelled", "failed", "interrupted", "expired"]);
 const CODES = new Set([
   "invalid_room_code", "invalid_identity", "idempotency_key_required", "idempotency_conflict",
-  "capture_worker_busy", "capture_busy", "capture_capacity", "capture_configuration_invalid", "capture_failed", "capture_storage_unavailable",
+  "capture_worker_busy", "capture_busy", "capture_capacity", "capture_disk_capacity", "capture_configuration_invalid", "capture_failed", "capture_storage_unavailable",
   "capture_not_active", "capture_in_progress", "invalid_feature_code", "service_stopping", "archive_unreadable",
   "capture_not_found", "not_found", "capture_not_completed", "archive_not_ready", "archive_unavailable", "archive_missing",
   "capture_unavailable", "capture_interrupted", "archive_finalization_failed", "unexpected_end", "local_error",
@@ -25,7 +25,7 @@ const CODES = new Set([
   "steam_session_busy", "steam_login_required", "steam_broker_timeout", "steam_broker_ended", "steam_broker_protocol",
   "steam_ticket_reused", "steam_ticket_capacity",
   "archive_expired", "capture_expired", "game_ended", "live_unavailable", "metadata_write_failed", "process_interrupted", "idempotency_capacity",
-  "invalid_download_receipt", "download_receipt_too_large", "download_receipt_busy",
+  "invalid_download_receipt", "download_receipt_too_large", "download_receipt_busy", "disk_pressure",
 ]);
 const MAX_FILE_BYTES = 256 * 1024 * 1024;
 const MAX_ZIP_BYTES = MAX_FILE_BYTES + 1024 * 1024;
@@ -244,6 +244,17 @@ function zipDisposition(capture, room, feature) {
   return `attachment; filename="${room}-${feature}.zip"; filename*=UTF-8''${encoded}`;
 }
 
+function storageDto(raw) {
+  const { availableBytes, floorBytes, recordingBytes, bytesPerCaptureEstimate, sampleCount,
+    estimatedCapturesRemaining, canStart } = raw;
+  if (![availableBytes, floorBytes, recordingBytes, bytesPerCaptureEstimate, sampleCount, estimatedCapturesRemaining]
+    .every(value => Number.isSafeInteger(value) && value >= 0) || bytesPerCaptureEstimate < 1 || typeof canStart !== "boolean") {
+    throw new Error("upstream_invalid_response");
+  }
+  return { availableBytes, reserveBytes: floorBytes, recordingBytes, averageCaptureBytes: bytesPerCaptureEstimate,
+    sampleSize: sampleCount, estimatedRemainingCaptures: estimatedCapturesRemaining, canStart };
+}
+
 /** Operator sessions stay in memory; Steam credentials and the collector key never reach the browser. */
 export function createPacketReplayApi(options = {}) {
   const env = options.env ?? process.env;
@@ -260,6 +271,7 @@ export function createPacketReplayApi(options = {}) {
   const sessions = new Map(), attempts = new Map(), navigationAttempts = new Map(), activeRequests = new Set();
   let navigationGlobal = [];
   let globalAttempts = [], closed = false;
+  let storageCache = null, pendingStorage = null;
 
   function secure(req) {
     return Boolean(req.socket.encrypted || options.trustedProxy && localAddress(req.socket.remoteAddress) && req.headers["x-forwarded-proto"] === "https");
@@ -308,6 +320,32 @@ export function createPacketReplayApi(options = {}) {
         navigationAttempts.size >= 1000 && !navigationAttempts.has(address)) return true;
     recent.push(time); navigationAttempts.set(address, recent); navigationGlobal.push(time);
     return false;
+  }
+
+  async function fetchStorage() {
+    const controller = new AbortController();
+    activeRequests.add(controller);
+    const timer = setTimeout(() => controller.abort(), requestTimeoutMs);
+    timer.unref?.();
+    try {
+      const response = await fetch(`${origin}/api/v1/storage`, {
+        headers: { authorization: `Bearer ${apiKey}` }, redirect: "error", signal: controller.signal,
+      });
+      if (response.status !== 200) { await response.body?.cancel(); return null; }
+      return storageDto(await upstreamJson(response, 8192));
+    } catch { return null; }
+    finally { clearTimeout(timer); activeRequests.delete(controller); }
+  }
+
+  function storageSnapshot() {
+    if (storageCache && now() < storageCache.expires) return Promise.resolve(storageCache.value);
+    if (!pendingStorage) {
+      pendingStorage = fetchStorage().then(value => {
+        if (!closed) storageCache = { value, expires: now() + (value ? 15000 : 5000) };
+        return value;
+      }).finally(() => { pendingStorage = null; });
+    }
+    return pendingStorage;
   }
 
   async function proxy(req, res, path, { body, room, feature, file = false, zip = false, list = false, live = false, navigationStart = false, roomLookup = false, replaySearch = null, downloadReceipt = false } = {}) {
@@ -411,6 +449,13 @@ export function createPacketReplayApi(options = {}) {
           responseJson(res, 200, { configured: configured && !closed, captures: [] }); return true;
         }
         if (closed || !configured) { fail(res, 503, "collector_unavailable"); return true; }
+        if (rawPath === `${NAVIGATION}/storage`) {
+          if (req.method !== "GET") { fail(res, 405, "method_not_allowed"); return true; }
+          const capacity = await storageSnapshot();
+          if (capacity) responseJson(res, 200, capacity);
+          else fail(res, 503, "capture_storage_unavailable");
+          return true;
+        }
         if (rawPath === `${NAVIGATION}/replays/search` && req.method === "POST") {
           if (!sameOrigin(req)) { fail(res, 403, "forbidden_origin"); return true; }
           const body = await requestJson(req), name = searchName(body.hostName);
@@ -514,6 +559,6 @@ export function createPacketReplayApi(options = {}) {
     } catch { fail(res, 400, "invalid_request"); }
     return true;
   }
-  return { handle, get configured() { return configured && !closed; }, close() { closed = true; sessions.clear(); attempts.clear(); navigationAttempts.clear(); navigationGlobal = [];
+  return { handle, get configured() { return configured && !closed; }, close() { closed = true; storageCache = null; sessions.clear(); attempts.clear(); navigationAttempts.clear(); navigationGlobal = [];
     for (const request of activeRequests) request.abort(); activeRequests.clear(); } };
 }

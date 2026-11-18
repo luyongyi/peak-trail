@@ -145,6 +145,37 @@ test("public download receipt forwards a bounded ZIP checksum for the exact arch
   assert.equal(f.calls[0].headers["idempotency-key"], undefined);
 });
 
+test("navigation storage shares bounded read-only estimates and drops collector-private fields", async t => {
+  let time = 10000;
+  const raw = { availableBytes: 25000000000, floorBytes: 16106127360, reservedBytes: 0,
+    recordingBytes: 220000000, bytesPerCaptureEstimate: 80000000, sampleCount: 4,
+    estimatedCapturesRemaining: 111, canStart: true, privateDataDirectory: "/private/recordings" };
+  const f = await fixture((req, res) => write(res, 200, raw), { now: () => time });
+  t.after(() => f.close());
+  const get = () => fetch(f.base + "/api/navigation/storage");
+  const responses = await Promise.all([get(), get(), get()]);
+  for (const response of responses) {
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("cache-control"), "no-store");
+    assert.deepEqual(await response.json(), { availableBytes: 25000000000, reserveBytes: 16106127360,
+      recordingBytes: 220000000, averageCaptureBytes: 80000000, sampleSize: 4,
+      estimatedRemainingCaptures: 111, canStart: true });
+  }
+  assert.equal(f.calls.length, 1);
+  assert.equal(f.calls[0].method, "GET");
+  assert.equal(f.calls[0].path, "/api/v1/storage");
+  assert.equal(f.calls[0].headers.authorization, `Bearer ${API_KEY}`);
+  assert.equal((await fetch(f.base + "/api/navigation/storage", { method: "POST" })).status, 405);
+  raw.sampleCount = -1;
+  time += 15000;
+  const invalid = await get();
+  assert.equal(invalid.status, 503);
+  assert.equal((await invalid.json()).code, "capture_storage_unavailable");
+  assert.equal(f.calls.length, 2);
+  assert.equal((await get()).status, 503);
+  assert.equal(f.calls.length, 2);
+});
+
 test("authenticated start preserves idempotency and uses only server-side authorization", async () => {
   const seen = new Map();
   const f = await fixture((req, res, call) => {

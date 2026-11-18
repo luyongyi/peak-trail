@@ -7,6 +7,7 @@
     <title>Peak导航服务 · PEAK Trail</title>
     <link rel="stylesheet" href="./record.css" />
     <script type="module" src="./src/packet-recorder.js"></script>
+    <script type="module" src="./src/navigation-storage.js"></script>
     <script type="module" src="./src/replay-search.js"></script>
   </head>
   <body>
@@ -30,6 +31,11 @@
             <div class="input-row"><input id="navigationRoom" class="code-input" placeholder="DYILUS97" maxlength="8" pattern="(?:[A-Pa-p][A-Za-z0-9]{5}|[A-Pa-p][A-Za-z][A-Za-z2-9]{6})" autocomplete="off" autocapitalize="characters" spellcheck="false" required aria-describedby="navigationHint" /><button id="navigationStart" type="submit" disabled>查询房间</button></div>
             <p id="navigationHint" class="field-note">同房共享导航。请征得队友同意，并预留 1 个玩家名额。</p>
           </form>
+          <div class="navigation-storage" id="navigationStorage" role="status" hidden>
+            <span class="navigation-storage-label">录像空间</span>
+            <strong id="navigationStorageEstimate"></strong>
+            <span id="navigationStorageUsed" class="navigation-storage-used"></span>
+          </div>
         </section>
         <section id="navigationCapture" class="panel capture-panel navigation-session" aria-labelledby="navigationCaptureHeading" hidden>
           <div class="panel-heading"><h2 id="navigationCaptureHeading">当前导航</h2></div>
