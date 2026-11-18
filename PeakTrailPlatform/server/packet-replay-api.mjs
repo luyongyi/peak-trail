@@ -27,8 +27,6 @@ const CODES = new Set([
   "archive_expired", "capture_expired", "game_ended", "live_unavailable", "metadata_write_failed", "process_interrupted", "idempotency_capacity",
   "invalid_download_receipt", "download_receipt_too_large", "download_receipt_busy", "disk_pressure",
 ]);
-const MAX_FILE_BYTES = 256 * 1024 * 1024;
-const MAX_ZIP_BYTES = MAX_FILE_BYTES + 1024 * 1024;
 const digest = value => createHash("sha256").update(value).digest();
 const localAddress = address => address === "127.0.0.1" || address === "::1" || address === "::ffff:127.0.0.1";
 const object = value => value !== null && typeof value === "object" && !Array.isArray(value);
@@ -89,7 +87,7 @@ async function upstreamJson(response, maxBytes = 32768) {
 
 function captureDto(value, expectedRoom = null, expectedFeature = null) {
   if (!object(value) || !ROOM.test(value.roomCode) || !FEATURE.test(value.featureCode) || !STATES.has(value.status) ||
-    value.coverage !== "from-join" || !Number.isSafeInteger(value.bytes) || value.bytes < 0 || value.bytes > MAX_FILE_BYTES ||
+    value.coverage !== "from-join" || !Number.isSafeInteger(value.bytes) || value.bytes < 0 ||
     !Number.isSafeInteger(value.events) || value.events < 0 ||
     (expectedRoom && value.roomCode !== expectedRoom) || (expectedFeature && value.featureCode !== expectedFeature))
     throw new Error("upstream_invalid_response");
@@ -103,7 +101,7 @@ function captureDto(value, expectedRoom = null, expectedFeature = null) {
     hostKey: typeof value.hostKey === "string" && /^[A-Za-z0-9:_-]{1,160}$/.test(value.hostKey) ? value.hostKey : null,
     hostName: typeof value.hostName === "string" ? value.hostName.replace(/[\u0000-\u001f\u007f-\u009f]/g, "").slice(0, 100) : null,
     archiveAvailable: value.archiveAvailable === true,
-    zipBytes: Number.isSafeInteger(value.zipBytes) && value.zipBytes >= 0 && value.zipBytes <= MAX_ZIP_BYTES ? value.zipBytes : 0,
+    zipBytes: Number.isSafeInteger(value.zipBytes) && value.zipBytes >= 0 ? value.zipBytes : 0,
     expiresUtc: date(value.expiresUtc),
     photonReturnCode: Number.isInteger(value.photonReturnCode) && Math.abs(value.photonReturnCode) <= 2147483647 ? value.photonReturnCode : null,
     errors: errorCode ? ["采集未正常完成，请根据错误代码检查认证、房间或服务状态。"] : [],
@@ -378,21 +376,39 @@ export function createPacketReplayApi(options = {}) {
       }
       if (file && (response.status === 200 || response.status === 206)) {
         const length = response.headers.get("content-length"), range = response.headers.get("content-range");
-        const contentType = zip ? "application/zip" : "application/octet-stream", maximum = zip ? MAX_ZIP_BYTES : MAX_FILE_BYTES;
+        const contentType = zip ? "application/zip" : "application/octet-stream";
+        const knownSize = archiveCapture?.zipBytes || null;
+        const rangeParts = /^bytes (\d+)-(\d+)\/(\d+)$/.exec(range ?? "")?.slice(1).map(Number);
+        const [first, last, size] = rangeParts ?? [];
+        const validRange = rangeParts?.every(Number.isSafeInteger) && first <= last && last < size &&
+          (knownSize === null || size === knownSize);
+        const expected = response.status === 206 ? (validRange ? last - first + 1 : null) : knownSize;
+        const declared = length !== null && /^\d+$/.test(length) ? Number(length) : null;
         if (response.headers.get("content-type")?.split(";")[0] !== contentType ||
-          length !== null && (!/^\d+$/.test(length) || Number(length) > maximum) ||
-          response.status === 206 && (!range || !/^bytes \d+-\d+\/\d+$/.test(range))) {
+          length !== null && (!Number.isSafeInteger(declared) || declared <= 0 || expected !== null && declared !== expected) ||
+          response.status === 206 && !validRange) {
           await response.body?.cancel(); throw new Error("upstream_invalid_response");
         }
+        const transferSize = declared ?? expected;
         const outputHeaders = { "content-type": contentType, "cache-control": "no-store", "x-content-type-options": "nosniff",
           "content-disposition": zip ? zipDisposition(archiveCapture, room, feature) : `attachment; filename="${room}-${feature}.peaknet"`, "accept-ranges": "bytes" };
-        if (length !== null) outputHeaders["content-length"] = length;
+        if (transferSize !== null) outputHeaders["content-length"] = String(transferSize);
         if (response.status === 206) outputHeaders["content-range"] = range;
         let total = 0;
-        const limit = new Transform({ transform(chunk, encoding, done) { total += chunk.length; done(total > maximum ? new Error("file_limit") : null, chunk); } });
+        const lengthCheck = new Transform({
+          transform(chunk, encoding, done) {
+            total += chunk.length;
+            timer.refresh();
+            done(transferSize !== null && total > transferSize ? new Error("unexpected_file_length") : null, chunk);
+          },
+          flush(done) {
+            done(transferSize !== null && total !== transferSize ? new Error("unexpected_file_length") : null);
+          },
+        });
         if (!response.body) throw new Error("upstream_invalid_response");
+        timer.refresh();
         res.writeHead(response.status, outputHeaders);
-        await pipeline(Readable.fromWeb(response.body), limit, res, { signal: controller.signal });
+        await pipeline(Readable.fromWeb(response.body), lengthCheck, res, { signal: controller.signal });
         return;
       }
       if (file && response.status === 416) {

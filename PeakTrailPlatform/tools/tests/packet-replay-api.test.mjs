@@ -404,6 +404,29 @@ test("expired and missing archives fail without fetching a ZIP and live errors r
   } finally { await f.close(); }
 });
 
+test("multi-gigabyte recording metadata and a late ZIP range pass without buffering the archive", async () => {
+  const size = 5 * 1024 ** 3, bytes = Buffer.from([1, 2, 3]);
+  const completed = { ...SNAPSHOT, status: "completed", archiveAvailable: true,
+    bytes: size + 100, zipBytes: size, completedUtc: "2026-10-29T00:00:00Z" };
+  const f = await fixture((req, res) => {
+    if (req.url.startsWith("/api/v1/captures/")) return write(res, 200, completed);
+    res.writeHead(206, { "content-type": "application/zip", "content-length": bytes.length,
+      "content-range": `bytes ${size - 3}-${size - 1}/${size}` });
+    res.end(bytes);
+  });
+  try {
+    await f.login();
+    const status = await (await f.send(`/captures/DRXPTJAB/${FEATURE}`)).json();
+    assert.equal(status.bytes, completed.bytes);
+    assert.equal(status.zipBytes, size);
+    const response = await f.send(`/replays/DRXPTJAB/${FEATURE}/archive.zip`, {
+      headers: { range: `bytes=${size - 3}-` },
+    });
+    assert.equal(response.status, 206);
+    assert.deepEqual(Buffer.from(await response.arrayBuffer()), bytes);
+  } finally { await f.close(); }
+});
+
 test("public navigation starts with a room code and exposes only the exact recording capability", async () => {
   const f = await fixture((req, res) => write(res, req.method === "POST" ? 202 : 200,
     { ...SNAPSHOT, status: req.method === "POST" ? "connecting" : "recording", secret: API_KEY }));

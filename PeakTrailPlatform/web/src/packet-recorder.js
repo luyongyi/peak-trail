@@ -16,7 +16,7 @@ const STATUS = Object.freeze({
   cancelled: ["已取消", "加入房间前已取消，没有生成录像。"],
   failed: ["录制失败", "本次未生成可下载的完整文件。"],
   interrupted: ["录制中断", "服务中断，本次没有可下载的完整文件。"],
-  expired: ["录像已清理", "这份录像已超过保留期限，或已被该房主更新的录像替换。"],
+  expired: ["录像已清理", "这份录像已按保留规则清理。"],
 });
 const ERRORS = Object.freeze({
   not_authenticated: "管理登录已过期，请重新输入访问码。",
@@ -94,6 +94,7 @@ const END_NOTES = Object.freeze({
   disconnected: "房间连接已断开。",
   left_room: "已离开房间。",
   size_limit: "录像已达大小上限。",
+  disk_pressure: "服务器空间不足，已结束录制。",
   service_shutdown: "服务已停止。",
 });
 
@@ -621,7 +622,7 @@ export function mountNavigation(document, window) {
       started.textContent = startedLabel(item.startedUtc);
       if (item.startedUtc) started.dateTime = item.startedUtc;
       const status = document.createElement("span"); status.className = "navigation-history-status";
-      status.textContent = item.status === "expired" ? "录像已到期清理" : item.status === "unavailable" ? "录像已不存在或暂不可用"
+      status.textContent = item.status === "expired" ? "录像已清理" : item.status === "unavailable" ? "录像已不存在或暂不可用"
         : item.status === "recording" ? "导航进行中" : item.status === "connecting" ? "正在接入" : capturePresentation(item, { operator: false }).title;
       meta.append(status, started); info.append(name, meta); content.append(info);
       const actions = document.createElement("div"); actions.className = "history-actions navigation-record-actions";
