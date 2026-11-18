@@ -20,10 +20,7 @@ jobs:
           node-version: 24
           package-manager-cache: false
       - name: Check code and synthetic fixtures without private assets
-        run: |
-          npm --prefix PeakTrailPlatform/web run check
-          npm --prefix PeakTrailPlatform/web test
-          node --test PeakTrailPlatform/tools/tests/*.test.mjs
+        run: node PeakTrailPlatform/tools/web-release-check.mjs check
       - name: Test one-time deployment migration
         run: python3 PeakTrailPlatform/tools/tests/test_unified_web_migration.py
       - name: Verify published Windows replay package

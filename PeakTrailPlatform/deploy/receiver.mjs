@@ -394,19 +394,20 @@ export async function maintainDeploymentStorage(stateRoot, { now = Date.now(), g
     catch { skippedReleases.push(entry.name); }
   }
   const newest = (left, right) => right.time - left.time || left.name.localeCompare(right.name);
-  const retained = new Set([currentRelease]);
-  for (const item of identities.filter(item => item.state === "successful" && item.release !== currentRelease).sort(newest).slice(0, 3)) retained.add(item.release);
-  for (const item of identities.filter(item => item.state === "failed").sort(newest).slice(0, 1)) retained.add(item.release);
+  // The previous publication is needed only through health verification and
+  // rollback. Keep a recent failure briefly for inspection after recovery.
+  const recentFailure = identities.filter(item => item.state === "failed" && now - item.time < graceMs).sort(newest)[0];
   const removedReleases = [];
   let protectedExpiredReleases = 0;
   for (const item of identities) {
-    if (retained.has(item.release) || item.state === "building") continue;
+    if (item.release === currentRelease || item === recentFailure || item.state === "building") continue;
     try {
       // Recheck immediately before deletion; never follow a changed current or directory.
       if (await currentPublishedSite(stateRoot) !== currentSite) throw new Error("Current publication changed during storage maintenance");
       const confirmed = await releaseIdentity(stateRoot, item.name);
       if (confirmed.commit !== item.commit || confirmed.state !== item.state) throw new Error("Release identity changed during storage maintenance");
       await inspectReleaseTree(item.release, pool.inodes);
+      if (await currentPublishedSite(stateRoot) !== currentSite) throw new Error("Current publication changed during storage maintenance");
       await rm(managedReleasePath(stateRoot, item.release), { recursive: true, force: false });
       removedReleases.push(item.name);
     } catch (error) { protectedExpiredReleases++; console.warn(`Storage cleanup retained ${item.name}: ${error.message}`); }

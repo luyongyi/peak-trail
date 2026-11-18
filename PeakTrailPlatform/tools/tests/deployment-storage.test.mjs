@@ -65,7 +65,7 @@ test("release markers reject root, outside, nested, mismatched commit and invali
   assert.equal(marker.state, "failed");
 });
 
-test("retention pins current plus three successful rollbacks and one failed release; building and unknown stay", linux, async t => {
+test("retention keeps only current as successful and briefly keeps one failure; building and unknown stay", linux, async t => {
   const root = await temporary(t);
   const successes = [];
   for (let index = 1; index <= 7; index++) successes.push(await release(root, index));
@@ -75,17 +75,21 @@ test("retention pins current plus three successful rollbacks and one failed rele
   const unknown = join(root, "releases", "operator-review");
   await mkdir(unknown);
   await writeFile(join(unknown, "evidence.txt"), "retain");
-  await publishAtomically(root, successes[0].site); // Deliberately older than the rollback candidates.
+  await publishAtomically(root, successes[0].site); // Current need not have the newest timestamp.
   const result = await withDeployLock(root, () => maintainDeploymentStorage(root, { now }));
-  assert.equal(result.retainedSuccessful, 4);
+  assert.equal(result.retainedSuccessful, 1);
   assert.equal(result.retainedFailed, 1);
   assert.equal(result.retainedBuilding, 1);
-  assert.equal(result.removedReleases, 5);
+  assert.equal(result.removedReleases, 8);
   assert.equal(result.skippedReleases, 1);
-  for (const item of [successes[0], ...successes.slice(4), failures[2], building]) assert.ok(await exists(item.directory));
-  for (const item of [...successes.slice(1, 4), ...failures.slice(0, 2)]) assert.equal(await exists(item.directory), false);
+  for (const item of [successes[0], failures[2], building]) assert.ok(await exists(item.directory));
+  for (const item of [...successes.slice(1), ...failures.slice(0, 2)]) assert.equal(await exists(item.directory), false);
   assert.equal(await realpath(join(root, "current")), successes[0].site);
   assert.equal(await readFile(join(unknown, "evidence.txt"), "utf8"), "retain");
+  const later = await withDeployLock(root, () => maintainDeploymentStorage(root, { now: now + 61 * 60 * 1000 }));
+  assert.equal(later.retainedFailed, 0);
+  assert.equal(later.removedReleases, 1);
+  assert.equal(await exists(failures[2].directory), false);
 });
 
 test("legacy receipts require matching detached HEAD, directory prefix and publication commit", linux, async t => {
@@ -134,25 +138,28 @@ test("pool GC deletes only old unlinked blobs and strict old temporary names", l
   assert.ok(result.releaseLogicalBytes + result.poolLogicalBytes > result.managedUniqueBytes);
 });
 
-test("pruned release links are removed before old orphan pool GC, while rollback and building links survive", linux, async t => {
+test("retired publication links are removed before old orphan GC while current and building links survive", linux, async t => {
   const root = await temporary(t);
   const oldest = await release(root, 1);
   const oldBlob = await blob(root, "only pruned release uses this");
   await pooledAsset(oldest, oldBlob);
-  const items = [];
-  for (let index = 2; index <= 5; index++) items.push(await release(root, index));
+  const previous = await release(root, 2);
   const rollbackBlob = await blob(root, "rollback resource");
-  await pooledAsset(items[0], rollbackBlob);
+  await pooledAsset(previous, rollbackBlob);
+  const current = await release(root, 3);
+  const currentBlob = await blob(root, "current resource");
+  await pooledAsset(current, currentBlob);
   const building = await release(root, 6, "building");
   const buildingBlob = await blob(root, "pending resource");
   await pooledAsset(building, buildingBlob);
-  await publishAtomically(root, items[3].site);
+  await publishAtomically(root, current.site);
   const result = await withDeployLock(root, () => maintainDeploymentStorage(root, { now }));
-  assert.equal(result.removedReleases, 1);
-  assert.equal(result.removedBlobs, 1);
+  assert.equal(result.removedReleases, 2);
+  assert.equal(result.removedBlobs, 2);
   assert.equal(await exists(oldest.directory), false);
   assert.equal(await exists(oldBlob), false);
-  assert.ok(await exists(rollbackBlob));
+  assert.equal(await exists(rollbackBlob), false);
+  assert.ok(await exists(currentBlob));
   assert.ok(await exists(buildingBlob));
 });
 
@@ -229,6 +236,22 @@ test("failed activation never starts retention, and later publication is not ove
   assert.ok(await exists(candidate.directory));
 });
 
+test("previous publication survives activation and is pruned after the replacement is healthy", linux, async t => {
+  const root = await temporary(t);
+  const previous = await release(root, 1);
+  const candidate = await release(root, 2, "building");
+  await writeFile(join(candidate.site, "release.json"), JSON.stringify({ commit: candidate.commit, deployedAtUtc: new Date(now).toISOString() }));
+  await publishAtomically(root, previous.site);
+  await withDeployLock(root, () => publishReleaseAndMaintain(root, candidate.directory, candidate.commit, async target => {
+    assert.equal(target, candidate.site);
+    assert.equal(await realpath(join(root, "current")), candidate.site);
+    assert.equal(await readFile(join(previous.site, "index.html"), "utf8"), "release 1");
+  }));
+  assert.equal(await realpath(join(root, "current")), candidate.site);
+  assert.equal(await exists(previous.directory), false);
+  assert.equal(JSON.parse(await readFile(join(candidate.directory, ".deployment-state.json"), "utf8")).state, "successful");
+});
+
 test("cleanup failure leaves a healthy publication successful and current", linux, async t => {
   const root = await temporary(t);
   const candidate = await release(root, 1, "building");
@@ -285,7 +308,7 @@ test("stale atomic-publication temporary hard links are unlinked without touchin
   assert.equal(await lstat(linked).then(entry => entry.nlink), 2);
 });
 
-test("pinned DLL and static model JSON pool links survive current and rollbacks while an expired release is removed", linux, async t => {
+test("pinned DLL and static model JSON pool links survive in the sole healthy publication", linux, async t => {
   const root = await temporary(t);
   const memories = await blob(root, "MZ verified memories assembly");
   const recorder = await blob(root, "MZ verified recorder assembly");
@@ -304,18 +327,16 @@ test("pinned DLL and static model JSON pool links survive current and rollbacks 
   }
   await publishAtomically(root, items[4].site);
   const result = await withDeployLock(root, () => maintainDeploymentStorage(root, { now }));
-  assert.equal(result.removedReleases, 1);
+  assert.equal(result.removedReleases, 4);
   assert.equal(result.protectedExpiredReleases, 0);
-  assert.equal(result.retainedSuccessful, 4);
-  assert.equal(await exists(items[0].directory), false);
-  for (const item of items.slice(1)) {
-    assert.equal(await readFile(join(item.site, "downloads/memories/0.8.35/PeakReplayLab.dll"), "utf8"), "MZ verified memories assembly");
-    assert.equal(await readFile(join(item.site, "downloads/recorder/1.2.3/PeakTrailRecorder.dll"), "utf8"), "MZ verified recorder assembly");
-  }
-  assert.equal((await lstat(memories)).nlink, 5);
-  assert.equal((await lstat(recorder)).nlink, 5);
-  assert.equal((await lstat(model)).nlink, 5);
-  assert.equal((await lstat(itemModel)).nlink, 5);
+  assert.equal(result.retainedSuccessful, 1);
+  for (const item of items.slice(0, -1)) assert.equal(await exists(item.directory), false);
+  assert.equal(await readFile(join(items[4].site, "downloads/memories/0.8.35/PeakReplayLab.dll"), "utf8"), "MZ verified memories assembly");
+  assert.equal(await readFile(join(items[4].site, "downloads/recorder/1.2.3/PeakTrailRecorder.dll"), "utf8"), "MZ verified recorder assembly");
+  assert.equal((await lstat(memories)).nlink, 2);
+  assert.equal((await lstat(recorder)).nlink, 2);
+  assert.equal((await lstat(model)).nlink, 2);
+  assert.equal((await lstat(itemModel)).nlink, 2);
 });
 
 test("other download paths and mutable release metadata cannot masquerade as approved DLL pool links", linux, async t => {

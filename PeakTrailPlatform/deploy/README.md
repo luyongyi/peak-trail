@@ -100,9 +100,12 @@ Do not grant this key to pull-request jobs or untrusted branches.
 
 There is one deployment lock. If a process is killed, an administrator checks for
 active deployments before manually removing the empty `.deploy-lock` directory.
-After a healthy publication, automatic retention keeps `current`, the three newest
-other successful releases and the newest failed release. Cleanup runs under that
-same lock. New releases have a private `.deployment-state.json` receipt outside
+After a healthy publication, automatic retention keeps `current` as the sole
+successful release. The previous site stays available during activation so the
+receiver can restore it if health checks fail. The next successful deployment
+also removes verified failed releases, except for the newest failure if it is less
+than an hour old. Cleanup runs under the same lock. New releases have a private
+`.deployment-state.json` receipt outside
 `site-dist`; building, failed and successful states are recorded atomically. A
 successful legacy release is recognized only when its receiver-generated name,
 detached `.git/HEAD` and public `release.json` commit all agree. Unknown directories,
@@ -116,10 +119,10 @@ the release identity, ownership and canonical tree. Symlinks, special entries an
 unexpected hard links prevent deletion. Only public resource links to an inode in
 the fixed pool are accepted. Shared source assets and private route/upload storage
 are never cleanup targets. Current anomalies or activation/rollback failure prevent
-cleanup. A cleanup error, or a successful-state receipt write error after health
-has passed, warns without rolling back the healthy publication; a receipt error
-also skips maintenance. For rollback, an administrator can atomically change
-`current` to a previously verified release while no deployment runs.
+cleanup. A cleanup error warns and leaves the healthy publication in place. A
+successful-state receipt write error also skips maintenance. After a healthy
+deployment has pruned the previous release, revert the source changes on `main`
+and deploy again to restore the previous version.
 
 ### Shared public resources and storage accounting
 

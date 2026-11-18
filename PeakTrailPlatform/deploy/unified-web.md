@@ -2,6 +2,18 @@
 
 日常发布只有一个入口：提交到 `main`。GitHub Actions 完成代码、接口、制品和迁移测试后，由受限部署账号构建新版本，原子切换 `current`，重启 Web 服务并检查健康；检查失败则恢复上一版。
 
+## 本地验证后发布
+
+每台开发机在仓库根目录安装一次推送检查，需要 Node.js 24、Git 和 `tar`。
+
+```powershell
+node PeakTrailPlatform/tools/web-release-check.mjs install
+```
+
+改页面时先用 `npm --prefix PeakTrailPlatform/web start` 打开本地预览，走一遍改动涉及的页面和交互。提交后推送 Web 相关改动到 `main` 时，Git hook 会从待推送提交取得干净的源码副本，再运行页面静态检查、网页测试、站点构建样例和本机 HTTP 接口测试。失败时 Git 会中止这次推送。开发中可随时运行 `node PeakTrailPlatform/tools/web-release-check.mjs check`。
+
+Actions 会独立重跑这些检查，并验证 Linux 部署和下载包。安装了精简保留策略的服务器会在新版本通过健康检查后回收退役发布。如果上线后发现问题，回退对应 Git 提交并按同样流程重新部署。
+
 | 更新内容 | 发布来源 |
 | --- | --- |
 | 地图页面、直播跟随、导航页、导航历史 | `web/` |
