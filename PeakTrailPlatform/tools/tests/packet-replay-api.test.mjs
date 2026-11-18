@@ -112,6 +112,39 @@ test("bounded login rate limit and missing-Origin CSRF reject before upstream", 
   } finally { await f.close(); }
 });
 
+test("public download receipt forwards a bounded ZIP checksum for the exact archive", async t => {
+  const path = `/api/navigation/replays/${SNAPSHOT.roomCode}/${FEATURE}/downloaded`;
+  const sha256 = "a".repeat(64);
+  const f = await fixture((req, res) => {
+    if (req.url.endsWith('/downloaded')) return res.writeHead(204).end();
+    write(res, 500, { code: "unexpected_end" });
+  }, { navigationStartsPerMinute: 1 });
+  t.after(() => f.close());
+  const send = (body, origin = f.base, url = path) => fetch(f.base + url, {
+    method: "POST", headers: { origin, "content-type": "application/json", "idempotency-key": "client-value", authorization: "Bearer client-value" },
+    body: JSON.stringify(body),
+  });
+
+  assert.equal((await send({ sha256 }, "https://unrelated.invalid")).status, 403);
+  assert.equal((await fetch(f.base + path)).status, 405);
+  assert.equal((await send({ sha256: "A".repeat(64) })).status, 400);
+  assert.equal((await send({ sha256, unrelated: "z".repeat(256) })).status, 400);
+  assert.equal((await send({ sha256 }, f.base, path.replace(FEATURE, "invalid"))).status, 400);
+  assert.equal(f.calls.length, 0);
+
+  const accepted = await send({ sha256 });
+  assert.equal(accepted.status, 204);
+  assert.equal(await accepted.text(), "");
+  assert.equal(accepted.headers.get("cache-control"), "no-store");
+  assert.equal((await send({ sha256 })).status, 429);
+  assert.equal(f.calls.length, 1);
+  assert.equal(f.calls[0].method, "POST");
+  assert.equal(f.calls[0].path, `/api/v1/replays/${SNAPSHOT.roomCode}/${FEATURE}/downloaded`);
+  assert.deepEqual(JSON.parse(f.calls[0].body), { sha256 });
+  assert.equal(f.calls[0].headers.authorization, `Bearer ${API_KEY}`);
+  assert.equal(f.calls[0].headers["idempotency-key"], undefined);
+});
+
 test("authenticated start preserves idempotency and uses only server-side authorization", async () => {
   const seen = new Map();
   const f = await fixture((req, res, call) => {

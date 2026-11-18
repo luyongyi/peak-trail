@@ -25,6 +25,7 @@ const CODES = new Set([
   "steam_session_busy", "steam_login_required", "steam_broker_timeout", "steam_broker_ended", "steam_broker_protocol",
   "steam_ticket_reused", "steam_ticket_capacity",
   "archive_expired", "capture_expired", "game_ended", "live_unavailable", "metadata_write_failed", "process_interrupted", "idempotency_capacity",
+  "invalid_download_receipt", "download_receipt_too_large", "download_receipt_busy",
 ]);
 const MAX_FILE_BYTES = 256 * 1024 * 1024;
 const MAX_ZIP_BYTES = MAX_FILE_BYTES + 1024 * 1024;
@@ -49,13 +50,13 @@ function responseJson(res, status, body, headers = {}) {
 }
 function fail(res, status, code) { responseJson(res, status, { code, error: code, message: "采集请求未完成，请检查状态后重试。" }); }
 
-async function requestJson(req) {
+async function requestJson(req, maximum = 4096) {
   if (!/^application\/json(?:\s*;|$)/i.test(req.headers["content-type"] ?? "")) throw new Error("invalid_request");
   let size = 0;
   const chunks = [];
   for await (const chunk of req) {
     size += chunk.length;
-    if (size > 4096) throw new Error("invalid_request");
+    if (size > maximum) throw new Error("invalid_request");
     chunks.push(chunk);
   }
   const value = JSON.parse(Buffer.concat(chunks).toString("utf8"));
@@ -309,7 +310,7 @@ export function createPacketReplayApi(options = {}) {
     return false;
   }
 
-  async function proxy(req, res, path, { body, room, feature, file = false, zip = false, list = false, live = false, navigationStart = false, roomLookup = false, replaySearch = null } = {}) {
+  async function proxy(req, res, path, { body, room, feature, file = false, zip = false, list = false, live = false, navigationStart = false, roomLookup = false, replaySearch = null, downloadReceipt = false } = {}) {
     const controller = new AbortController();
     activeRequests.add(controller);
     const timer = setTimeout(() => controller.abort(), file ? downloadTimeoutMs : requestTimeoutMs);
@@ -327,11 +328,16 @@ export function createPacketReplayApi(options = {}) {
         archiveCapture = captureDto(await upstreamJson(metadata), room, feature);
         if (!archiveCapture.archiveAvailable) return fail(res, 410, "archive_unavailable");
       }
-      if (body !== undefined) { headers["content-type"] = "application/json"; headers["idempotency-key"] = req.headers["idempotency-key"]; }
+      if (body !== undefined) headers["content-type"] = "application/json";
+      if (body !== undefined && req.headers["idempotency-key"] && !downloadReceipt) headers["idempotency-key"] = req.headers["idempotency-key"];
       if (file && req.headers.range) headers.range = req.headers.range;
       const response = await fetch(`${origin}/api/v1${path}`, { method: roomLookup || replaySearch ? "GET" : req.method, headers,
         ...(body !== undefined ? { body: JSON.stringify(body) } : {}), redirect: "error", signal: controller.signal });
       if (response.status === 401 || response.status === 403) { await response.body?.cancel(); return fail(res, 502, "collector_auth_failed"); }
+      if (downloadReceipt && response.status === 204) {
+        if (!res.destroyed && !res.writableEnded) res.writeHead(204, { "cache-control": "no-store" }).end();
+        return;
+      }
       if (file && (response.status === 200 || response.status === 206)) {
         const length = response.headers.get("content-length"), range = response.headers.get("content-range");
         const contentType = zip ? "application/zip" : "application/octet-stream", maximum = zip ? MAX_ZIP_BYTES : MAX_FILE_BYTES;
@@ -361,6 +367,7 @@ export function createPacketReplayApi(options = {}) {
         const status = [400, 404, 409, 410, 413, 429, 503].includes(response.status) ? response.status : 502;
         return fail(res, status, CODES.has(value.code) ? value.code : "collector_unavailable");
       }
+      if (downloadReceipt) throw new Error("upstream_invalid_response");
       if (![200, 202].includes(response.status) || file) throw new Error("upstream_invalid_response");
       if (replaySearch) {
         if (response.status !== 200) throw new Error("upstream_invalid_response");
@@ -429,6 +436,21 @@ export function createPacketReplayApi(options = {}) {
           }
           if (navigationLimited(req)) { fail(res, 429, "rate_limited"); return true; }
           await proxy(req, res, "/captures", { body: { roomCode: room }, room, navigationStart: true }); return true;
+        }
+        const receipt = rawPath.slice(NAVIGATION.length).match(/^\/replays\/([^/]+)\/([^/]+)\/downloaded$/);
+        if (receipt) {
+          const [, room, feature] = receipt;
+          if (req.method !== "POST") { fail(res, 405, "method_not_allowed"); return true; }
+          if (!sameOrigin(req)) { fail(res, 403, "forbidden_origin"); return true; }
+          if (!ROOM.test(room) || !FEATURE.test(feature)) { fail(res, 400, "invalid_identity"); return true; }
+          let body;
+          try { body = await requestJson(req, 128); }
+          catch { fail(res, 400, "invalid_download_receipt"); return true; }
+          if (Object.keys(body).length !== 1 || typeof body.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(body.sha256)) {
+            fail(res, 400, "invalid_download_receipt"); return true;
+          }
+          if (navigationLimited(req)) { fail(res, 429, "rate_limited"); return true; }
+          await proxy(req, res, `/replays/${room}/${feature}/downloaded`, { body: { sha256: body.sha256 }, downloadReceipt: true }); return true;
         }
         const match = rawPath.slice(NAVIGATION.length).match(/^\/(captures|replays)\/([A-P][A-Z0-9]{5}|[A-P][A-Z][A-Z2-9]{6})\/([A-F0-9]{20})(\/live|\/archive\.zip)?$/);
         if (match) {
