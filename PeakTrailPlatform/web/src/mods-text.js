@@ -2,7 +2,8 @@ import { UI_TEXT } from "./ui-text.js";
 import { initLanguageControls } from "./i18n-dom.js";
 
 const pairs = [
-  ["安装 BepInEx 和回放组件后，在游戏主菜单按房主昵称查找录像，下载后直接播放。", "Install BepInEx and the replay component, then find recordings by host name from the game menu. Download and play in game."],
+  ["输入 8 位房间号查看队伍位置与路线。同一房间的玩家共享导航。", "Enter an 8-character room code to see your team's positions and route. Everyone in the same room shares one navigation session."],
+  ["游戏内回放目前支持 PEAK 3.0.1 录像。PEAK 3.1 录像可以先下载保存。", "The in-game player supports PEAK 3.0.1 recordings. You can download PEAK 3.1 recordings to keep for later."],
   ["在游戏内查找录像", "Find recordings in game"],
   ["按录制时的房主昵称查找，也可打开本地录像 ZIP。", "Search using the host name from the recording, or open a local recording ZIP."],
   ["安装 BepInEx 和回放组件后，正常启动 PEAK，在主菜单选择录像 ZIP。", "Install BepInEx and the replay component, start PEAK normally, then choose a recording ZIP from the main menu."],

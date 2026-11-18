@@ -4,7 +4,7 @@ export const UI_TEXT_PAIRS = Object.freeze([
   ["Peak导航服务 ↗", "PEAK navigation ↗"],
   ["Windows 回放组件", "Windows replay player"],
   ["输入房间号使用导航", "Enter a room code to navigate"],
-  ["Peak导航服务：输入房间号共享3.0.1地图与路线，下载Windows组件回放本次录像。", "PEAK navigation: enter a room code to share 3.0.1 maps and routes, and download the Windows player to replay your recording."],
+  ["用 PEAK 3.1 的 8 位房间号在网页查看队伍位置和路线。", "Enter a PEAK 3.1 room code with 8 characters to view your team's live positions and route."],
   ["全屏", "Fullscreen"],
   ["进入全屏", "Enter fullscreen"],
   ["退出全屏", "Exit fullscreen"],
