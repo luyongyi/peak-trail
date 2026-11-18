@@ -3,21 +3,30 @@ import { createHash } from "node:crypto";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { deflateRawSync } from "node:zlib";
 import test from "node:test";
 import { resolvePublishedReplay, updateReplayRelease } from "../update-packet-replay-release.mjs";
 
 const version = "2026.11.08.1", previousVersion = "2026.10.31.2";
 const filename = "peak-packet-replay-windows.zip";
+const previousGame = { gameVersion: "3.0.1", gameBuildId: "26155610" };
+const currentGame = { gameVersion: "3.1.0", gameBuildId: "26542162" };
 const required = ["README.zh-CN.txt", "release.json", "BepInEx/patchers/PeakPacketReplay.Loader.dll",
   "BepInEx/plugins/PeakPacketReplay/PeakPacketReplay.dll"];
-function zip(extra = []) {
+function zip(extra = [], game = previousGame, toolsetVersion = version) {
   const local = [], central = [], names = [...required, ...extra];
   let offset = 0;
   for (const item of names) {
     const name = Buffer.from(`peak-packet-replay-windows/${item}`), header = Buffer.alloc(30), entry = Buffer.alloc(46);
-    header.writeUInt32LE(0x04034b50); header.writeUInt16LE(name.length, 26);
-    entry.writeUInt32LE(0x02014b50); entry.writeUInt16LE(name.length, 28); entry.writeUInt32LE(offset, 42);
-    local.push(header, name); central.push(entry, name); offset += header.length + name.length;
+    const manifest = item === "release.json" ? Buffer.from(JSON.stringify({ schema: 2, installation: "bepinex5-in-game",
+      platform: "windows-x64", toolsetVersion, ...game })) : Buffer.alloc(0);
+    const contents = manifest.length ? deflateRawSync(manifest) : manifest;
+    const method = manifest.length ? 8 : 0;
+    header.writeUInt32LE(0x04034b50); header.writeUInt16LE(method, 8); header.writeUInt32LE(contents.length, 18);
+    header.writeUInt32LE(manifest.length, 22); header.writeUInt16LE(name.length, 26);
+    entry.writeUInt32LE(0x02014b50); entry.writeUInt16LE(method, 10); entry.writeUInt32LE(contents.length, 20);
+    entry.writeUInt32LE(manifest.length, 24); entry.writeUInt16LE(name.length, 28); entry.writeUInt32LE(offset, 42);
+    local.push(header, name, contents); central.push(entry, name); offset += header.length + name.length + contents.length;
   }
   const directory = Buffer.concat(central), end = Buffer.alloc(22);
   end.writeUInt32LE(0x06054b50); end.writeUInt16LE(names.length, 8); end.writeUInt16LE(names.length, 10);
@@ -25,8 +34,8 @@ function zip(extra = []) {
   return Buffer.concat([...local, directory, end]);
 }
 const bytes = zip();
-function descriptor(selected = version, body = bytes) {
-  return { schemaVersion: 1, version: selected, gameVersion: "3.0.1", gameBuildId: "26155610", platform: "windows-x64",
+function descriptor(selected = version, body = bytes, game = previousGame) {
+  return { schemaVersion: 1, version: selected, ...game, platform: "windows-x64",
     filename, downloadPath: `downloads/${filename}`, bytes: body.length, sha256: createHash("sha256").update(body).digest("hex"),
     artifactUrl: `https://github.com/luyongyi/peak-trail/releases/download/packet-replay-windows-${selected}/${filename}` };
 }
@@ -63,6 +72,19 @@ test("publisher takes only an exact version and downloads anonymously from the f
   for (const value of ["latest", "../other", "https://example.test/archive.zip", "2026.11.08.1\n", "2026.11.08.1; echo bad", undefined]) {
     await assert.rejects(resolvePublishedReplay(value, { fetchImpl: () => assert.fail("invalid input must not reach the network") }), /existing Windows replay version/);
   }
+});
+
+test("publisher requires the embedded PEAK build and package version to match the selected release", async () => {
+  const current = zip([], currentGame);
+  const expected = descriptor(version, current, currentGame);
+  const gameVersion = currentGame.gameVersion;
+  assert.deepEqual(await resolvePublishedReplay(version, { gameVersion, fetchImpl: source({ release: expected, body: current }) }), expected);
+  await assert.rejects(resolvePublishedReplay(version, { gameVersion, fetchImpl: source() }), /does not match/);
+  await assert.rejects(resolvePublishedReplay(version, { gameVersion: "3.2.0",
+    fetchImpl: () => assert.fail("unsupported game builds must not reach the network") }), /supported PEAK game version/);
+  const wrongVersion = zip([], currentGame, previousVersion);
+  await assert.rejects(resolvePublishedReplay(version, { gameVersion,
+    fetchImpl: source({ release: descriptor(version, wrongVersion, currentGame), body: wrongVersion }) }), /does not match/);
 });
 
 test("publisher refuses wrong, draft, ambiguous, incomplete or redirected Release assets", async () => {

@@ -12,7 +12,7 @@ test("all public navigation and download entrypoints use the current Windows pac
   for (const page of [mods, guide, record]) {
     assert.ok(page.includes(release.downloadPath));
     assert.match(page, /Windows/);
-    assert.match(page, /3\.0\.1/);
+    assert.match(page, /PEAK 3\.1\.0/);
     for (const match of page.matchAll(/href="([^"#]+)"/g)) {
       if (match[1].includes("downloads/")) assert.equal(match[1].replace(/^\.?\//, ""), release.downloadPath);
     }
@@ -25,7 +25,9 @@ test("navigation instructions keep room consent, retention and native replay pre
   assert.match(record, /征得队友同意/);
   assert.match(record, /每位房主最近 2 份 · 最长 7 天/);
   assert.match(guide, /Windows x64/);
-  assert.match(guide, /正版 PEAK 3\.0\.1/);
+  assert.match(guide, /正版 PEAK 3\.1\.0/);
+  assert.match(guide, /3\.0\.1 录像需要 PEAK 3\.0\.1 和对应的旧版组件/);
+  assert.ok(guide.includes('href="https://github.com/luyongyi/peak-trail/releases/download/packet-replay-windows-2026.11.09.2/peak-packet-replay-windows.zip"'));
   assert.match(guide, /保持 Steam 登录/);
   assert.match(guide, /退出游戏/);
   assert.match(guide, /BepInEx 5/);

@@ -63,7 +63,10 @@ test("in-game packages reject external launchers, stale tools, game assemblies a
 
 test("Windows ZIP manifest pins exact repository, version, filename, platform and digest", () => {
   assert.deepEqual(validatePacketReplayRelease(release), release);
+  const current = { ...inGameDescriptor(bytes), gameVersion: "3.1.0", gameBuildId: "26542162" };
+  assert.deepEqual(validatePacketReplayRelease(current), current);
   for (const change of [{ version: "latest" }, { gameBuildId: "26134529" }, { gameVersion: "3.0" }, { platform: "linux" },
+    { gameVersion: current.gameVersion }, { gameBuildId: current.gameBuildId },
     { filename: "Assembly-CSharp.dll" }, { downloadPath: "../private.zip" }, { bytes: 0 }, { bytes: 128 * 1024 * 1024 + 1 },
     { sha256: "invalid" }, { privateKey: "not-public" }, { artifactUrl: release.artifactUrl.replace("luyongyi", "other") }])
     assert.throws(() => validatePacketReplayRelease({ ...release, ...change }), /manifest/);

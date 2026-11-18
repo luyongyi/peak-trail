@@ -3,11 +3,13 @@ import { initLanguageControls } from "./i18n-dom.js";
 
 const pairs = [
   ["输入 8 位房间号查看队伍位置与路线。同一房间的玩家共享导航。", "Enter an 8-character room code to see your team's positions and route. Everyone in the same room shares one navigation session."],
-  ["游戏内回放目前支持 PEAK 3.0.1 录像。PEAK 3.1 录像可以先下载保存。", "The in-game player supports PEAK 3.0.1 recordings. You can download PEAK 3.1 recordings to keep for later."],
+  ["在 Windows 上用 PEAK 3.1.0 回放同版本录像。", "Play PEAK 3.1.0 recordings in the matching game version on Windows."],
+  ["下载 PEAK 3.1.0 回放组件 ↓", "Download the PEAK 3.1.0 replay player ↓"],
+  ["安装说明与 3.0.1 旧版组件 ↗", "Installation guide and the PEAK 3.0.1 player ↗"],
   ["在游戏内查找录像", "Find recordings in game"],
   ["按录制时的房主昵称查找，也可打开本地录像 ZIP。", "Search using the host name from the recording, or open a local recording ZIP."],
   ["安装 BepInEx 和回放组件后，正常启动 PEAK，在主菜单选择录像 ZIP。", "Install BepInEx and the replay component, start PEAK normally, then choose a recording ZIP from the main menu."],
-  ["复用本机正版 PEAK 3.0.1 的场景、光照与角色。", "Uses the scenes, lighting and characters from your installed copy of PEAK 3.0.1."],
+  ["复用游戏场景、光照与角色。", "Uses the game's scenes, lighting and characters."],
   ["自由飞行或跟随玩家，拖动时间轴跳转。", "Fly freely or follow a player, and drag the timeline to seek."],
   ["在游戏内打开录像", "Open recordings in game"],
   ["直接选择下载的录像 ZIP；安装步骤见组件内 README。", "Select the downloaded recording ZIP directly. See the included README for installation."],

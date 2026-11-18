@@ -7,6 +7,13 @@ on:
         description: Existing packet-replay-windows-<version> Release (e.g. 2026.11.08.1)
         required: true
         type: string
+      game_version:
+        description: PEAK version supported by that package
+        required: true
+        type: choice
+        options:
+          - '3.1.0'
+          - '3.0.1'
 
 permissions:
   contents: read
@@ -32,9 +39,10 @@ jobs:
           node-version: 24
           package-manager-cache: false
       - name: Verify the existing public Release and update its descriptor
-        run: node PeakTrailPlatform/tools/update-packet-replay-release.mjs --version "$REPLAY_VERSION"
+        run: node PeakTrailPlatform/tools/update-packet-replay-release.mjs --version "$REPLAY_VERSION" --game-version "$GAME_VERSION"
         env:
           REPLAY_VERSION: ${{ inputs.version }}
+          GAME_VERSION: ${{ inputs.game_version }}
       - name: Commit only the verified download descriptor
         shell: bash
         run: |

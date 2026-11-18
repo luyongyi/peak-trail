@@ -44,20 +44,20 @@ Windows 下载包暂保留 `2026.11.09.2`，仅支持 PEAK 3.0.1。3.1 的录像
 
 1. 在构建机使用私有项目的 `tools/Publish-InGamePlayer.ps1` 生成并验证 Windows 分发包，使用新版本号，例如 `2026.11.08.1`。新包只含游戏内回放 DLL、说明和许可证，不再分发 CMD、PowerShell 启动器或独立游戏副本工具。
 2. 发布到本仓库的 `packet-replay-windows-<版本>` Release，资产名保持 `peak-packet-replay-windows.zip`；不要覆盖旧版本资产。
-3. 打开 GitHub Actions 的 **Publish Windows replay download**，选择 `main`，填入版本号并运行。
-4. 工作流从固定仓库、标签和文件名读取公开 Release，依据 GitHub 提供的大小与 SHA-256 下载验证，再检查 ZIP 内容。通过后自动更新 `data/packet-replay/release.json` 并提交到 `main`。
+3. 打开 GitHub Actions 的 **Publish Windows replay download**，选择 `main`，填入分发包版本号，选择它支持的 PEAK 游戏版本并运行。
+4. 工作流依据 GitHub 提供的大小与 SHA-256 验证下载，并核对 ZIP 内声明的游戏版本与 build。通过后自动更新 `data/packet-replay/release.json` 并提交到 `main`。
 5. 工作流显式启动 **Check PEAK Trail code**；完整检查通过后，现有部署流程将网页、API 和选定下载包一起发布到网站。后一个工作流成功才表示上线成功。
 
 重复填写当前版本也会重新验证并触发检查与部署，不产生多余提交。同版本资产被替换时会拒绝更新；应使用新版本号。若提交时 `main` 已被其他更新推进，正常 push 会安全失败，不强推，重新运行即可。
 
-该入口发布的是已经构建好的 ZIP，不在公开 Actions 中读取本机游戏 DLL 或编译回放组件。当前验证器限定 PEAK 3.0.1 / build 26155610；新游戏版本需要先完成兼容更新。`GITHUB_TOKEN` 提交不会自动触发 push 工作流，因此这里使用显式 dispatch，避免“描述符更新了，网站没发布”。
+该入口发布构建机生成的 ZIP。当前验证器接受 PEAK 3.0.1 / build 26155610 和 PEAK 3.1.0 / build 26542162。提交描述符后，工作流显式触发网站检查与部署。
 
 新包固定包含 `BepInEx/patchers/PeakPacketReplay.Loader.dll` 和 `BepInEx/plugins/PeakPacketReplay/PeakPacketReplay.dll`。玩家先安装 BepInEx 5，再合并组件文件夹，正常启动游戏，从主菜单选择录像 ZIP。验证器仅为已发布的 `2026.10.31.2` 保留旧格式读取；后续版本必须使用游戏内 DLL 格式。网页说明与新下载描述符须一同发布。
 
 需要在本机预检时，可运行：
 
 ```sh
-node PeakTrailPlatform/tools/update-packet-replay-release.mjs --version 2026.11.08.1
+node PeakTrailPlatform/tools/update-packet-replay-release.mjs --version 2026.11.08.1 --game-version 3.0.1
 ```
 
 它仅验证已有公开制品并更新本地描述符，不提交、不部署。
