@@ -31,8 +31,8 @@ test("navigation instructions keep room consent, retention and native replay pre
   assert.match(guide, /保持 Steam 登录/);
   assert.match(guide, /退出游戏/);
   assert.match(guide, /BepInEx 5/);
-  assert.match(guide, /主菜单打开“录像回放”/);
-  assert.match(guide, /选择下载的录像 ZIP/);
+  assert.match(guide, /主菜单按 F8/);
+  assert.match(guide, /浏览本地 ZIP/);
   for (const page of [mods, guide, record]) assert.doesNotMatch(page, /Play-Replay\.cmd|独立回放副本|复制本机游戏资源/);
 });
 
