@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "version": "2026.11.18.3",
+  "version": "2026.11.18.4",
   "gameVersion": "3.1.0",
   "gameBuildId": "26542162",
   "platform": "windows-x64",
   "filename": "peak-packet-replay-windows.zip",
   "downloadPath": "downloads/peak-packet-replay-windows.zip",
-  "bytes": 285052,
-  "sha256": "66df7f642649c850821eadbb1b85eb2430c536b29184baaa868bb161a763f903",
-  "artifactUrl": "https://github.com/luyongyi/peak-trail/releases/download/packet-replay-windows-2026.11.18.3/peak-packet-replay-windows.zip"
+  "bytes": 288339,
+  "sha256": "71f41d40d8d7923a88152062eebf82ede6c514445c4b33d9a147fa3fb4f7749a",
+  "artifactUrl": "https://github.com/luyongyi/peak-trail/releases/download/packet-replay-windows-2026.11.18.4/peak-packet-replay-windows.zip"
 }
