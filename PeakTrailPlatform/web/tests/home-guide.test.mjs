@@ -8,7 +8,11 @@ const [home, mods, guide, record, css] = await Promise.all(
 const release = JSON.parse(await read("../../data/packet-replay/release.json"));
 
 test("all public navigation and download entrypoints use the current Windows package", () => {
-  assert.match(home, /href="\.\/record\.html"/);
+  const header = home.match(/<header class="home-header">[\s\S]*?<\/header>/)?.[0];
+  const tools = home.match(/<footer class="home-footer">[\s\S]*?<nav class="home-footer-tools"[^>]*>([\s\S]*?)<\/nav>[\s\S]*?<\/footer>/)?.[1];
+  assert.doesNotMatch(header, /href="\.\/(?:record|mods)\.html"/);
+  assert.match(tools, /href="\.\/record\.html"/);
+  assert.match(tools, /href="\.\/mods\.html"/);
   for (const page of [mods, guide, record]) {
     assert.ok(page.includes(release.downloadPath));
     assert.match(page, /Windows/);

@@ -32,7 +32,6 @@
           <span><strong>PEAK TRAIL</strong><small>每日地图与玩家线路</small></span>
         </div>
         <nav class="home-actions" aria-label="回忆录与地图工具">
-          <a class="home-nav-link" href="./record.html">Peak导航服务 ↗</a>
           <details class="home-watch-entry" hidden>
             <summary class="home-nav-link">观看直播 ↗</summary>
             <form id="watchJoinForm" class="watch-join-form">
@@ -42,7 +41,6 @@
             </form>
           </details>
           <button class="language-toggle" data-language-toggle type="button" aria-label="切换为英语" title="切换为英语" lang="en"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c5 5 5 13 0 18-5-5-5-13 0-18Z" /></svg><span data-language-label>English</span></button>
-          <a class="home-nav-link" href="./mods.html">Windows 回放组件 <span aria-hidden="true">↓</span></a>
           <button class="home-live is-empty" id="gateLive" type="button" aria-controls="gateLiveList" aria-expanded="false" hidden>
             <i aria-hidden="true"></i><span>现场观测</span><span class="home-live-count" id="homeLiveCount">—</span>
           </button>
@@ -136,7 +134,15 @@
             </div>
           </section>
         </section>
-        <footer class="home-footer"><span>非官方粉丝工具 · 与 Landfall / Aggro Crab 无关联</span><details hidden><summary>开发工具</summary><button class="gate-debug" id="gateDebug" type="button">演示直播（非真实对局）</button></details><span>回忆录可主动上传精简轨迹</span></footer>
+        <footer class="home-footer">
+          <span>非官方粉丝工具 · 与 Landfall / Aggro Crab 无关联</span>
+          <details hidden><summary>开发工具</summary><button class="gate-debug" id="gateDebug" type="button">演示直播（非真实对局）</button></details>
+          <span>回忆录可主动上传精简轨迹</span>
+          <nav class="home-footer-tools" aria-label="导航与回放">
+            <a href="./record.html">Peak导航服务 <span aria-hidden="true">↗</span></a>
+            <a href="./mods.html">Windows 回放组件 <span aria-hidden="true">↗</span></a>
+          </nav>
+        </footer>
       </div>
     </div>
 
