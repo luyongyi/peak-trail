@@ -9,10 +9,17 @@ const release = JSON.parse(await read("../../data/packet-replay/release.json"));
 
 test("all public navigation and download entrypoints use the current Windows package", () => {
   const header = home.match(/<header class="home-header">[\s\S]*?<\/header>/)?.[0];
-  const tools = home.match(/<footer class="home-footer">[\s\S]*?<nav class="home-footer-tools"[^>]*>([\s\S]*?)<\/nav>[\s\S]*?<\/footer>/)?.[1];
+  const services = home.match(/<nav class="home-services"[^>]*>([\s\S]*?)<\/nav>/);
   assert.doesNotMatch(header, /href="\.\/(?:record|mods)\.html"/);
-  assert.match(tools, /href="\.\/record\.html"/);
-  assert.match(tools, /href="\.\/mods\.html"/);
+  assert.ok(services);
+  assert.ok(home.indexOf('id="homeLandscape"') < services.index);
+  assert.ok(services.index < home.indexOf('<footer class="home-footer">'));
+  for (const page of ["record", "mods"]) {
+    const link = [...services[1].matchAll(/<a[^>]+href="\.\/([a-z]+)\.html"[^>]*>([\s\S]*?)<\/a>/g)].find(match => match[1] === page);
+    assert.ok(link, `Missing ${page} homepage link`);
+    assert.match(link[2], /class="home-service-icon" aria-hidden="true">\s*<svg\b/);
+  }
+  assert.match(home, /<section class="home-route"[^>]*aria-labelledby="homeTitle">\s*<header class="home-intro">[\s\S]*?<h1[^>]+id="homeTitle">今日地图<\/h1>[\s\S]*?id="homeLandscape"/);
   for (const page of [mods, guide, record]) {
     assert.ok(page.includes(release.downloadPath));
     assert.match(page, /Windows/);
