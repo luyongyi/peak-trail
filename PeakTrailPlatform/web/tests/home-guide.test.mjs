@@ -14,12 +14,13 @@ test("all public navigation and download entrypoints use the current Windows pac
   assert.ok(services);
   assert.ok(home.indexOf('id="homeLandscape"') < services.index);
   assert.ok(services.index < home.indexOf('<footer class="home-footer">'));
-  for (const page of ["record", "mods"]) {
-    const link = [...services[1].matchAll(/<a[^>]+href="\.\/([a-z]+)\.html"[^>]*>([\s\S]*?)<\/a>/g)].find(match => match[1] === page);
-    assert.ok(link, `Missing ${page} homepage link`);
-    assert.match(link[2], /class="home-service-icon" aria-hidden="true">\s*<svg\b/);
-  }
-  assert.match(home, /<section class="home-route"[^>]*aria-labelledby="homeTitle">\s*<header class="home-intro">[\s\S]*?<h1[^>]+id="homeTitle">今日地图<\/h1>[\s\S]*?id="homeLandscape"/);
+  assert.deepEqual([...services[1].matchAll(/<a[^>]+href="([^"]+)"/g)].map(match => match[1]), ["./record.html"]);
+  assert.match(services[1], /class="home-service-icon" aria-hidden="true">\s*<svg\b/);
+  assert.doesNotMatch(home, /href="(?:\.\/mods\.html|[^"]*peak-packet-replay-windows\.zip)"/);
+  assert.match(header, /class="gate-brand"[\s\S]*?id="homeTitle">今日地图<\/h1>[\s\S]*?class="home-actions"/);
+  assert.match(home, /<section class="home-route"[^>]*aria-labelledby="homeTitle">/);
+  assert.match(record, /<header class="record-header">[\s\S]*?href="#windowsReplay"[\s\S]*?返回地图[\s\S]*?<\/header>/);
+  assert.match(record, /<div class="record-tools">[\s\S]*?id="navigationForm"[\s\S]*?id="replaySearchForm"[\s\S]*?id="windowsReplay"[\s\S]*?href="\/downloads\/peak-packet-replay-windows\.zip"[\s\S]*?id="replaySearchResults"[\s\S]*?id="navigationHistoryPanel"/);
   for (const page of [mods, guide, record]) {
     assert.ok(page.includes(release.downloadPath));
     assert.match(page, /Windows/);
