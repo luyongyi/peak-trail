@@ -2,7 +2,7 @@ import * as i18n from "../src/i18n.js";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { layoutPortraitLabels, clusterPlayerEntries, portraitScreenSize } from "../src/portrait-layout.js";
+import { layoutPortraitLabels, clusterPlayerEntries, portraitScreenSize, layoutNavigationPortraits } from "../src/portrait-layout.js";
 import { latestLifeEventBefore, MARKER_LIFE_EVENT_TYPES } from "../src/protocol.js";
 import { chooseRecordedInteriorPose, isInteriorLayer } from "../src/camera-placement.js";
 import { ReplayCamera } from "../src/replay-camera.js";
@@ -37,8 +37,8 @@ function model() {
 function fixture(selected = 0) {
   const requests = [];
   const load = (layer, signal, gameBuildId) => new Promise((resolve, reject) => requests.push({ layer: layer.id, signal, gameBuildId, resolve, reject }));
-  const TrailScene = new Function("THREE", "loadGameGeometry", "cancelAnimationFrame", "layoutPortraitLabels", "clusterPlayerEntries", "portraitScreenSize", "latestLifeEventBefore", "MARKER_LIFE_EVENT_TYPES", "isInteriorLayer", "chooseRecordedInteriorPose", "nadirCameraBounds", "nadirCameraParts", "collectCameraParts", "selectCameraSubjectParts", "tr", "formatNumber", `${source}\nreturn TrailScene;`)(
-    THREE, load, () => {}, layoutPortraitLabels, clusterPlayerEntries, portraitScreenSize, latestLifeEventBefore, MARKER_LIFE_EVENT_TYPES, isInteriorLayer, chooseRecordedInteriorPose, nadirCameraBounds, nadirCameraParts, collectCameraParts, selectCameraSubjectParts, i18n.tr, i18n.formatNumber,
+  const TrailScene = new Function("THREE", "loadGameGeometry", "cancelAnimationFrame", "layoutPortraitLabels", "clusterPlayerEntries", "portraitScreenSize", "layoutNavigationPortraits", "latestLifeEventBefore", "MARKER_LIFE_EVENT_TYPES", "isInteriorLayer", "chooseRecordedInteriorPose", "nadirCameraBounds", "nadirCameraParts", "collectCameraParts", "selectCameraSubjectParts", "tr", "formatNumber", `${source}\nreturn TrailScene;`)(
+    THREE, load, () => {}, layoutPortraitLabels, clusterPlayerEntries, portraitScreenSize, layoutNavigationPortraits, latestLifeEventBefore, MARKER_LIFE_EVENT_TYPES, isInteriorLayer, chooseRecordedInteriorPose, nadirCameraBounds, nadirCameraParts, collectCameraParts, selectCameraSubjectParts, i18n.tr, i18n.formatNumber,
   );
   const layers = [
     { id: "A", segment: 0, biome: "shore" },
@@ -322,16 +322,20 @@ test("players within 4 recorded metres and overlapping in the real camera share 
 
 test("rewinding to unknown appearance removes the image instead of retaining the future face", () => {
   const { scene } = fixture();
-  const label = { url: null, image: { hidden: true, removeAttribute() { delete this.src; } }, fallback: { hidden: false } };
+  const classes = new Set();
+  const label = { url: null, element: { classList: { toggle(name, enabled) { if (enabled) classes.add(name); else classes.delete(name); } } },
+    image: { hidden: true, removeAttribute() { delete this.src; } }, fallback: { hidden: false } };
   scene.playerPortraits = new Map();
   scene.playerLabels = new Map([["qa", label]]);
   scene.setPlayerPortrait("qa", "data:image/png;base64,fixture");
   assert.equal(label.image.hidden, false);
   assert.equal(label.fallback.hidden, true);
+  assert.ok(classes.has("has-player-portrait"));
   scene.setPlayerPortrait("qa", null);
   assert.equal(label.image.hidden, true);
   assert.equal(label.fallback.hidden, false);
   assert.equal(label.image.src, undefined);
+  assert.equal(classes.size, 0);
   assert.equal(scene.playerPortraits.size, 0);
 });
 

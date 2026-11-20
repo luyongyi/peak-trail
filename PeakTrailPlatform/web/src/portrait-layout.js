@@ -40,6 +40,31 @@ export function portraitScreenSize(depth, viewportHeight, { fov = 38, zoom = 1 }
   return clamp(pixels, 14, 32);
 }
 
+/** Keep natural overlaps and fan out near-identical pixels so every portrait
+ * still has a visible edge. Player positions and camera anchors are untouched. */
+export function layoutNavigationPortraits(entries, { width, height }) {
+  const stacks = new Map();
+  for (const entry of entries) {
+    const key = `${Math.round(entry.x / 4)}:${Math.round(entry.y / 4)}`;
+    const stack = stacks.get(key);
+    if (stack) stack.push(entry);
+    else stacks.set(key, [entry]);
+  }
+  return [...stacks.values()].flatMap(stack => {
+    const maxSize = Math.max(...stack.map(entry => entry.size));
+    const span = Math.min(24, (stack.length - 1) * 8, Math.max(0, width - maxSize));
+    const center = stack.reduce((sum, entry) => sum + entry.x, 0) / stack.length;
+    const inset = (maxSize + span) / 2;
+    const stackCenter = width < 2 * inset ? width / 2 : clamp(center, inset, width - inset);
+    return stack.sort((a, b) => a.id.localeCompare(b.id)).map((entry, index) => ({
+      ...entry,
+      left: clamp(stackCenter + (stack.length > 1 ? span * (index / (stack.length - 1) - .5) : 0) - entry.size / 2,
+        0, Math.max(0, width - entry.size)),
+      top: clamp(entry.y - entry.size / 2, 0, Math.max(0, height - entry.size)),
+    }));
+  });
+}
+
 /** Deterministic, small-group label layout. Anchors stay untouched for leader lines. */
 export function layoutPortraitLabels(anchors, viewport, { gap = 6, padding = 4, anchorGap = 8, maxDisplacement = Infinity } = {}) {
   const width = Math.max(1, finite(viewport?.width, 1));

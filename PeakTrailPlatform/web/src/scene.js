@@ -4,7 +4,7 @@ import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { loadGameGeometry, updateRecordedMineVisibility, updateMapFogSurfaceVisibility } from "./geometry-loader.js";
-import { layoutPortraitLabels, clusterPlayerEntries, portraitScreenSize } from "./portrait-layout.js";
+import { layoutPortraitLabels, clusterPlayerEntries, portraitScreenSize, layoutNavigationPortraits } from "./portrait-layout.js";
 import { ReplayCamera, REPLAY_CAMERA_HELP } from "./replay-camera.js";
 import { chooseRecordedInteriorPose, isInteriorLayer } from "./camera-placement.js";
 import { WorldRenderer } from "./world-renderer.js";
@@ -889,7 +889,7 @@ export class TrailScene {
       }));
       occludedLine.renderOrder = 8;
 
-      const marker = this.createPlayerMarker(color);
+      const marker = this.navigationPortraits ? new THREE.Object3D() : this.createPlayerMarker(color);
       const group = new THREE.Group();
       group.add(occludedLine, outline, line, marker);
       group.userData.playerId = participant.id;
@@ -945,12 +945,17 @@ export class TrailScene {
     return root;
   }
 
+  get navigationPortraits() {
+    return this.trace?.manifest?.positionAuthority === "photon-character-hip";
+  }
+
   setPlayerPortrait(playerId, url) {
     if (url) this.playerPortraits.set(playerId, url);
     else this.playerPortraits.delete(playerId);
     const label = this.playerLabels.get(playerId);
     if (!label || label.url === (url || null)) return;
     label.url = url || null;
+    label.element.classList.toggle("has-player-portrait", Boolean(url));
     label.image.hidden = !url;
     label.fallback.hidden = Boolean(url);
     if (url) label.image.src = url;
@@ -959,15 +964,19 @@ export class TrailScene {
 
   rebuildPlayerLabels() {
     this.labelOverlay.replaceChildren();
+    this.labelOverlay.classList.toggle("is-navigation", this.navigationPortraits);
     this.playerLabels.clear();
     this.playerGroups.clear();
     for (const participant of this.trace?.participants || []) {
       if (!this.playerObjects.has(participant.id)) continue;
       const label = document.createElement("div");
-      const leader = document.createElement("div");
-      leader.className = "trail-player-leader";
-      leader.style.setProperty("--player-color", this.getPlayerColor(participant.id));
-      leader.hidden = true;
+      const leader = this.navigationPortraits ? null : document.createElement("div");
+      if (leader) {
+        leader.className = "trail-player-leader";
+        leader.style.setProperty("--player-color", this.getPlayerColor(participant.id));
+        leader.hidden = true;
+        this.labelOverlay.append(leader);
+      }
       label.className = "trail-player-label";
       label.style.setProperty("--player-color", this.getPlayerColor(participant.id));
       label.hidden = true;
@@ -984,7 +993,7 @@ export class TrailScene {
       name.textContent = participant.nickname || participant.id;
       label.title = name.textContent;
       label.append(portrait, name);
-      this.labelOverlay.append(leader, label);
+      this.labelOverlay.append(label);
       this.playerLabels.set(participant.id, { element: label, leader, image, fallback, url: null });
       this.setPlayerPortrait(participant.id, this.playerPortraits.get(participant.id));
     }
@@ -996,24 +1005,34 @@ export class TrailScene {
     const entries = [];
     for (const [id, label] of this.playerLabels) {
       const object = this.playerObjects.get(id);
-      let visible = Boolean(object?.group.visible && object?.marker.visible);
+      let visible = Boolean(object?.group.visible && (this.navigationPortraits ? object.marker.userData.replayVisible : object.marker.visible));
       if (visible) {
         object.marker.getWorldPosition(this.labelPosition);
         // Marker-local metres preserve the real separation, including ghost poses;
         // its parents may exaggerate height or mirror the rendered map.
-        const pos = object.marker.position.toArray();
         this.labelPosition.applyMatrix4(this.camera.matrixWorldInverse);
-        const size = portraitScreenSize(-this.labelPosition.z, height, this.camera);
+        const projectedSize = portraitScreenSize(-this.labelPosition.z, height, this.camera);
+        const size = this.navigationPortraits ? Math.max(22, projectedSize) : projectedSize;
         this.labelPosition.applyMatrix4(this.camera.projectionMatrix);
         const { x, y, z } = this.labelPosition;
         visible = Number.isFinite(x + y + z) && z >= -1 && z <= 1 && Math.abs(x) < 1 && Math.abs(y) < 1;
         if (visible) {
-          entries.push({ id, x: (x + 1) * width / 2, y: (1 - y) * height / 2, pos, size, label });
+          entries.push({ id, x: (x + 1) * width / 2, y: (1 - y) * height / 2,
+            pos: this.navigationPortraits ? null : object.marker.position.toArray(), size, label });
           continue;
         }
       }
       label.element.hidden = true;
       if (label.leader) label.leader.hidden = true;
+    }
+
+    if (this.navigationPortraits) {
+      for (const { label, size, left, top } of layoutNavigationPortraits(entries, { width, height })) {
+        label.element.hidden = false;
+        label.element.style.setProperty("--portrait-size", `${size}px`);
+        label.element.style.transform = `translate(${left}px, ${top}px)`;
+      }
+      return;
     }
 
     // Merge only genuinely nearby players whose projected portraits crowd each other.

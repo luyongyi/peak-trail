@@ -588,6 +588,7 @@ function updateAppearance(row, playerState, context) {
   }
 
   const isLocalCurrent = String(appearance.source || "").toLowerCase() === "local-current";
+  const isNavigationCosmetics = appearance.source === "photon-persistent-cosmetics";
   panel.classList.toggle("is-local-current", isLocalCurrent);
   badge.textContent = isLocalCurrent ? tr("本地当前 · 非历史", "Current local outfit · Not historical") : tr("本局记录", "Recorded this run");
   if (context.assetStatus === "loading") {
@@ -646,12 +647,14 @@ function updateAppearance(row, playerState, context) {
     placeholder.hidden = true;
     panel.classList.remove("is-partial", "is-syncing");
     panel.classList.add("is-ready");
-    badge.textContent = isLocalCurrent ? tr("本地当前 · 非历史", "Current local outfit · Not historical") : form.known ? form.label : tr("装扮头像 · 形态未知", "Outfit portrait · Form unknown");
+    badge.textContent = isLocalCurrent ? tr("本地当前 · 非历史", "Current local outfit · Not historical")
+      : isNavigationCosmetics ? tr("本局装扮", "In-game cosmetics") : form.known ? form.label : tr("装扮头像 · 形态未知", "Outfit portrait · Form unknown");
     title.textContent = form.transformed ? form.label : appearance.outfitName || assets?.components.fit?.entry?.name || tr("本局游戏头像", "Portrait from this run");
     meta.textContent = [
       rendered.portraitScope === "whole-form-no-head" ? tr("此形态无头部 · 使用游戏原模型图标", "This form has no head · Showing the game model icon")
         : rendered.portraitScope === "whole-form-no-separate-head" ? tr("原生幽灵模型 · 使用实际所属玩家的脸部装扮", "Original ghost model with its owner's recorded face")
-        : form.transformed ? tr("游戏原生变形头部", "Game transformation head") : form.known ? tr("原始头部、眼睛与嘴型", "Original head, eyes and mouth") : tr("装扮已记录；旧日志未记录途中变形", "Outfit recorded. This older log has no transformation history"),
+        : form.transformed ? tr("游戏原生变形头部", "Game transformation head")
+          : form.known || isNavigationCosmetics ? tr("原始头部、眼睛与嘴型", "Original head, eyes and mouth") : tr("装扮已记录；旧日志未记录途中变形", "Outfit recorded. This older log has no transformation history"),
       ...(rendered.visualStates?.includes("petrification") ? [tr("石化材质为静态近似", "Petrification uses a static material approximation")] : []),
       rendered.hatName,
     ].filter(Boolean).join(" · ");

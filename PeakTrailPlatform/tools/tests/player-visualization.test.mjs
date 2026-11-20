@@ -2,15 +2,26 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { requirePublishedCharacterAssets, MARKER_ONLY_PLAYER_PUBLICATION } from "../lib/player-visualization.mjs";
+import { requirePublishedCharacterAssets, MARKER_ONLY_PLAYER_PUBLICATION, HEAD_PLAYER_PUBLICATION } from "../lib/player-visualization.mjs";
 
 const mapsDirectory = fileURLToPath(new URL("../../data/maps/", import.meta.url));
 const catalog = JSON.parse(await readFile(new URL("../../data/maps/catalog.json", import.meta.url)));
 const noCharacters = { characterBuilds: new Set() };
+const markerCatalog = { ...catalog, playerVisualization: MARKER_ONLY_PLAYER_PUBLICATION };
 
 test("only the complete pinned 3.1 map publication can omit its character models", async () => {
-  assert.deepEqual(catalog.playerVisualization, MARKER_ONLY_PLAYER_PUBLICATION);
-  await requirePublishedCharacterAssets(noCharacters, catalog, { mapsDirectory });
+  await requirePublishedCharacterAssets(noCharacters, markerCatalog, { mapsDirectory });
+});
+
+test("live head portraits require the exact active build's assets", async () => {
+  assert.deepEqual(catalog.playerVisualization, HEAD_PLAYER_PUBLICATION);
+  await assert.rejects(requirePublishedCharacterAssets(noCharacters, catalog, { mapsDirectory }), /Missing character assets/);
+  await assert.rejects(requirePublishedCharacterAssets({ characterBuilds: new Set(["26155610"]) }, catalog, { mapsDirectory }), /Missing character assets/);
+  await requirePublishedCharacterAssets({ characterBuilds: new Set(["26542162"]) }, catalog, { mapsDirectory });
+  for (const declaration of [{ ...HEAD_PLAYER_PUBLICATION, gameBuildId: "26155610" },
+    { ...HEAD_PLAYER_PUBLICATION, aliasBuild: "26155610" }]) {
+    await assert.rejects(requirePublishedCharacterAssets(noCharacters, { ...catalog, playerVisualization: declaration }, { mapsDirectory }), /Player visualization:/);
+  }
 });
 
 test("ordinary active builds still require their own character resources", async () => {
@@ -31,6 +42,6 @@ for (const [name, mutate] of [
   ["target version changed", value => { value.mapPacks.find(entry => String(entry.gameBuildId) === "26542162").gameVersion = "3.2.0"; }],
   ["target disabled", value => { value.mapPacks.find(entry => String(entry.gameBuildId) === "26542162").enabled = false; }],
 ]) test(`marker-only publication refuses ${name}`, async () => {
-  const value = structuredClone(catalog); mutate(value);
+  const value = structuredClone(markerCatalog); mutate(value);
   await assert.rejects(requirePublishedCharacterAssets(noCharacters, value, { mapsDirectory }), /Player visualization:/);
 });

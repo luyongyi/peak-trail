@@ -55,8 +55,11 @@ export class PacketWatchClient {
     const status = ACTIVE.has(capture.status) ? "live" : "ended";
     const projection = live ?? { sceneEpoch: 0, manifest: null, records: [], lastSequence: 0 };
     const { sceneEpoch: epoch, manifest, records, lastSequence } = projection;
+    const appearances = projection.appearanceBaselines ?? [];
     if (!Number.isSafeInteger(epoch) || epoch < 0 || !Number.isSafeInteger(lastSequence) || lastSequence < 0 ||
-      !Array.isArray(records) || records.length > 10000 || manifest !== null && (typeof manifest !== "object" || Array.isArray(manifest) || typeof manifest.sceneName !== "string" || !manifest.sceneName.trim())) throw new Error("Invalid projection");
+      !Array.isArray(records) || records.length > 10000 || !Array.isArray(appearances) || appearances.length > 1024 ||
+      appearances.some(record => record?.type !== "appearance" || typeof record.playerId !== "string" || !Number.isFinite(record.t) || record.t < 0) ||
+      manifest !== null && (typeof manifest !== "object" || Array.isArray(manifest) || typeof manifest.sceneName !== "string" || !manifest.sceneName.trim())) throw new Error("Invalid projection");
     let previous = 0;
     for (const entry of records) {
       if (!Number.isSafeInteger(entry?.sequence) || entry.sequence <= previous || entry.sequence > lastSequence || !entry.record || typeof entry.record !== "object" || Array.isArray(entry.record)) throw new Error("Invalid record");
@@ -72,7 +75,10 @@ export class PacketWatchClient {
       lastSeq: lastSequence, lastRecordAt: this.lastRecordAt ?? null };
     if (rebuild) {
       this.onSnapshot({ ...metadata, snapshotSeq: lastSequence,
-        snapshot: { records: manifest ? records.map(entry => ({ seq: entry.sequence, record: entry.record })) : [] } });
+        snapshot: { records: manifest ? [
+          ...appearances.map(record => ({ record })),
+          ...records.map(entry => ({ seq: entry.sequence, record: entry.record })),
+        ] : [] } });
     } else if (manifest) {
       for (const entry of records) if (entry.sequence > this.seq)
         this.onRecord({ epoch, seq: entry.sequence, record: entry.record });

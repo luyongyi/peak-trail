@@ -85,8 +85,37 @@ re-exporting a build still rewrites that build's derived catalog, so rerun addit
 steps before publishing. Raw Unity files, player captures and extraction caches
 are not part of this bundle.
 
-The bundled current-build pack is 26134529; 25739797 remains available for
-historical recordings. The new pack was re-exported from the installed 3.0 build,
+The live-navigation 3.1 pack is **26542162**, with the `head-portraits` profile.
+It was freshly extracted from the installed build, rather than relabeled from
+3.0.1. Its source evidence records assembly SHA-256
+`a3643f11dc444d86491270b224c0a0caf9126a10b26731feb97fc85ad1d82038`
+and the five serialized input/texture-stream fingerprints. It contains 226
+allowlisted files (13,472,140 bytes): the independent head and face cards, 9 skin
+colors, 18 eye choices, 19 mouth choices, 21 accessories, all 47 hat renderers,
+and 34 outfit entries containing only hat material/override metadata. It does
+not contain outfit/body meshes, item models, world objects, or player data.
+Chosen cosmetics can be rendered with unknown runtime form; this package does
+not claim captured transformations, stone, blindness or ghost state.
+
+Reproduce it into a new ignored extraction directory using the repository's
+configured Python environment:
+
+```powershell
+& local/python/.venv/Scripts/python.exe PeakTrailPlatform/tools/game-assets/export-head-assets.py --build 26542162 --output local/head-assets-26542162
+& local/python/.venv/Scripts/python.exe PeakTrailPlatform/tools/game-assets/test_head_assets.py
+```
+
+This profile decodes face masks directly and needs no outfit-preview step.
+Before bundling, `readGameAssets()` from `tools/lib/game-assets.mjs` verifies the
+catalog and complete recursive model/material dependency allowlist. Copy only
+that build's `catalog.json` and its declared `assets`, then append its exact
+build entry to `data/avatar-assets/catalog.json`. The source files are never
+copied. `web/tests/head-pack-310.test.mjs` verifies all recorded cosmetic indices
+and inherited/overridden hat combinations using the actual browser render-plan
+functions. The map catalog's `playerVisualization: { mode: "heads", gameBuildId:
+"26542162" }` requires this exact build's character assets when staging.
+
+The historical 26134529 pack was re-exported from the installed 3.0 build,
 including all 194 canonical items and world models, 192 available native icons,
 34 outfits, 47 native hat renderers, the three transformations, ghost and
 independent state layers. ClimbingChalk and ScoutmasterSoul retain their original

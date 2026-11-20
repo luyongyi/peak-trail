@@ -1,8 +1,25 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { layoutPortraitLabels, clusterPlayerEntries, GROUP_RADIUS_METERS, portraitScreenSize } from "../src/portrait-layout.js";
+import { layoutPortraitLabels, clusterPlayerEntries, GROUP_RADIUS_METERS, portraitScreenSize, layoutNavigationPortraits } from "../src/portrait-layout.js";
 
 const viewport = { width: 640, height: 480 };
+
+test("navigation leaves naturally overlapping heads at their individual map positions", () => {
+  const entries = [{ id: "p1", x: 60, y: 110, size: 24 }, { id: "p2", x: 70, y: 110, size: 24 }];
+  const output = layoutNavigationPortraits(entries, viewport);
+  assert.deepEqual(output.map(item => item.left), [48, 58]);
+  assert.deepEqual(output.map(item => item.top), [98, 98]);
+  assert.equal(output[1].left < output[0].left + output[0].size, true);
+});
+
+test("navigation fans out every head at the same pixel without a group or member cap", () => {
+  const entries = Array.from({ length: 8 }, (_, index) => ({ id: `p${index}`, x: 0, y: 0, size: 24 }));
+  const output = layoutNavigationPortraits(entries, viewport);
+  assert.equal(output.length, entries.length);
+  assert.equal(new Set(output.map(item => item.left)).size, entries.length);
+  assert.ok(output.every(item => item.top === 0 && item.left >= 0 && item.left <= 24));
+  assert.deepEqual(layoutNavigationPortraits([...entries].reverse(), viewport), output);
+});
 function assertInside(placements, bounds = viewport) {
   for (const item of placements) {
     assert.ok(item.left >= 0 && item.top >= 0);

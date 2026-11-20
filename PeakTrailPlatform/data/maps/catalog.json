@@ -2,14 +2,8 @@
   "schemaVersion": 1,
   "activeGameBuildId": "26542162",
   "playerVisualization": {
-    "mode": "markers",
-    "gameBuildId": "26542162",
-    "receiptSha256": "621994e6322473283a100a30e83a4d0849a0fbad72afbca9fb247324b10c77ed"
-  },
-  "playerVisualization": {
-    "mode": "markers",
-    "gameBuildId": "26542162",
-    "receiptSha256": "621994e6322473283a100a30e83a4d0849a0fbad72afbca9fb247324b10c77ed"
+    "mode": "heads",
+    "gameBuildId": "26542162"
   },
   "mapPacks": [
     {

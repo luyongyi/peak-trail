@@ -186,8 +186,21 @@ const finite = (value, maximum) => typeof value === "number" && Number.isFinite(
 const LIVE_WARNINGS = new Set(["unsupported_game_fingerprint", "unverified_resource_fingerprint", "room_host_identity_unavailable",
   "non_monotonic_packet_time", "invalid_packet_payload", "unsupported_record_kind", "invalid_room_snapshot",
   "character_delta_without_baseline", "character_payload_invalid", "actor_limit", "view_limit"]);
+const APPEARANCE_BUILDS = new Set(["26155610", "26542162"]);
+const APPEARANCE_FIELDS = ["skinIndex", "eyesIndex", "mouthIndex", "accessoryIndex", "outfitIndex", "hatIndex"];
 
-// Only the audited position projection crosses this boundary. Raw Photon objects,
+function liveAppearance(value) {
+  if (!object(value) || !APPEARANCE_FIELDS.every(key => count(value[key], 255))) return null;
+  return { ...Object.fromEntries(APPEARANCE_FIELDS.map(key => [key, value[key]])), ready: true, source: "photon-persistent-cosmetics" };
+}
+
+function publicAppearanceRecord(playerId, t, value) {
+  const appearance = liveAppearance(value);
+  if (appearance) return { type: "appearance", playerId, t, appearance };
+  return value === null ? { type: "appearance", playerId, t, appearance: null, appearanceReady: false } : null;
+}
+
+// Only the audited position and appearance projections cross this boundary. Raw Photon objects,
 // Steam IDs, authentication fields and arbitrary upstream metadata never do.
 function liveDto(value, room, feature) {
   const capture = captureDto(value?.capture, room, feature), raw = value?.live;
@@ -195,14 +208,24 @@ function liveDto(value, room, feature) {
   if (!object(raw) || raw.roomCode !== room || !count(raw.sceneEpoch, 2147483647) || !count(raw.lastSequence) ||
       !Array.isArray(raw.records) || raw.records.length > 10000 || !Array.isArray(raw.players) || raw.players.length > 1024 ||
       raw.coordinateSpace !== "unity-world-meters" || raw.timeUnit !== "milliseconds") throw new Error("upstream_invalid_response");
+  const players = raw.players.filter(player => object(player) && !player.isCollector && playerId(player.playerId));
+  const appearanceActors = new Set(APPEARANCE_BUILDS.has(raw.gameBuildId) ? players.map(player => player.playerId) : []);
+  const retainedAppearances = new Set();
   let previous = 0;
-  const records = raw.records.map(entry => {
+  const records = [];
+  for (const entry of raw.records) {
     if (!object(entry) || !count(entry.sequence) || entry.sequence <= previous || entry.sequence > raw.lastSequence ||
-        entry.sceneEpoch !== raw.sceneEpoch || !["participant", "sample"].includes(entry.type) ||
+        entry.sceneEpoch !== raw.sceneEpoch || !["participant", "sample", "appearance"].includes(entry.type) ||
         !playerId(entry.playerId) || !finite(entry.t, 1e12) || entry.t < 0) throw new Error("upstream_invalid_response");
     previous = entry.sequence;
-    const record = { type: entry.type, t: entry.t, playerId: entry.playerId };
+    let record = { type: entry.type, t: entry.t, playerId: entry.playerId };
     if (entry.type === "participant") record.nickname = displayName(entry.nickname) || entry.playerId;
+    else if (entry.type === "appearance") {
+      if (!appearanceActors.has(entry.playerId)) continue;
+      record = publicAppearanceRecord(entry.playerId, entry.t, entry.appearance);
+      if (!record) continue;
+      retainedAppearances.add(entry.playerId);
+    }
     else {
       if (!Array.isArray(entry.pos) || entry.pos.length !== 3 || !entry.pos.every(number => finite(number, 1e7)))
         throw new Error("upstream_invalid_response");
@@ -211,10 +234,25 @@ function liveDto(value, room, feature) {
       if (Number.isInteger(entry.activeSegment) && entry.activeSegment >= -1 && entry.activeSegment <= 1000)
         record.activeSegment = entry.activeSegment;
     }
-    return { sequence: entry.sequence, record };
-  });
-  const participants = raw.players.filter(player => object(player) && !player.isCollector && playerId(player.playerId))
-    .map(player => ({ playerId: player.playerId, nickname: displayName(player.name) || player.playerId }));
+    records.push({ sequence: entry.sequence, record });
+  }
+  const participants = players.map(player => ({ playerId: player.playerId, nickname: displayName(player.name) || player.playerId }));
+  const baselines = new Map();
+  if (Array.isArray(raw.appearanceBaselines) && raw.appearanceBaselines.length <= 1024) {
+    for (const entry of raw.appearanceBaselines) {
+      if (entry?.type !== "appearance" || entry.sceneEpoch !== raw.sceneEpoch || !appearanceActors.has(entry.playerId) ||
+          !count(entry.sequence, raw.lastSequence) || !finite(entry.t, 1e12) || entry.t < 0 ||
+          (baselines.get(entry.playerId)?.t ?? -1) >= entry.t) continue;
+      const record = publicAppearanceRecord(entry.playerId, entry.t, entry.appearance);
+      if (record) baselines.set(entry.playerId, record);
+    }
+  }
+  for (const player of players) {
+    if (!appearanceActors.has(player.playerId) || retainedAppearances.has(player.playerId) || baselines.has(player.playerId) ||
+        !finite(player.appearanceTime, 1e12) || player.appearanceTime < 0 || !object(player.appearance)) continue;
+    const record = publicAppearanceRecord(player.playerId, player.appearanceTime, player.appearance);
+    if (record) baselines.set(player.playerId, record);
+  }
   const sceneName = typeof raw.sceneName === "string" && /^(?:Airport|MainMenu|(?:Level|Map)_[0-9]{1,6})$/.test(raw.sceneName) ? raw.sceneName : null;
   const gameBuildId = typeof raw.gameBuildId === "string" && /^[0-9]{1,20}$/.test(raw.gameBuildId) ? raw.gameBuildId : null;
   const gameVersion = typeof raw.gameVersion === "string" && /^[0-9][A-Za-z0-9.+_-]{0,39}$/.test(raw.gameVersion) ? raw.gameVersion : null;
@@ -227,6 +265,7 @@ function liveDto(value, room, feature) {
     startedAtUtc: capture.startedUtc, participants,
   } : null;
   return { capture, live: { sceneEpoch: raw.sceneEpoch, lastSequence: raw.lastSequence, records, manifest,
+    ...(manifest && baselines.size ? { appearanceBaselines: [...baselines.values()] } : {}),
     sceneName, gameBuildId, hostName: capture.hostName, positionProjectionSupported: raw.positionProjectionSupported === true,
     positionSamples: count(raw.positionSamples) ? raw.positionSamples : 0,
     lastPacketSeconds: finite(raw.lastPacketSeconds, 1e9) && raw.lastPacketSeconds >= 0 ? raw.lastPacketSeconds : null,

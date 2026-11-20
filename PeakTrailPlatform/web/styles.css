@@ -1638,6 +1638,14 @@ button:disabled {
   overflow: hidden;
 }
 .trail-player-portrait img { width: 100%; height: 100%; object-fit: contain; }
+.trail-player-labels.is-navigation .trail-player-label.has-player-portrait .trail-player-portrait {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+.trail-player-labels.is-navigation .trail-player-portrait img { filter: drop-shadow(0 1px 2px #000b); }
 .trail-player-name {
   display: none;
   max-width: min(90px, calc(var(--portrait-size, 30px) * 3));

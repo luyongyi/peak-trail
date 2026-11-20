@@ -349,6 +349,40 @@ test("unknown build and Airport never invent a level map manifest", async () => 
   } finally { await f.close(); }
 });
 
+test("navigation exposes only validated choices for players and preserves reset and window baselines", async () => {
+  const observed = { skinIndex: 2, eyesIndex: 5, mouthIndex: 7, accessoryIndex: 3, outfitIndex: 2, hatIndex: 1, steamId: API_KEY };
+  const publicChoice = { skinIndex: 2, eyesIndex: 5, mouthIndex: 7, accessoryIndex: 3,
+    outfitIndex: 2, hatIndex: 1, ready: true, source: "photon-persistent-cosmetics" };
+  const record = (sequence, playerId, appearance) => ({ sequence, sceneEpoch: 2, type: "appearance", t: sequence * 100, playerId, appearance });
+  let live = { ...LIVE, gameVersion: "3.1.0", gameBuildId: "26542162", lastSequence: 15,
+    players: [...LIVE.players.map(player => ({ ...player, appearance: observed, appearanceTime: 240 })),
+      { playerId: "p3", name: "Retained teammate", appearance: observed, appearanceTime: 340 },
+      { playerId: "p4", name: "Invalid cosmetic", appearance: { ...observed, eyesIndex: -1 }, appearanceTime: 100 }],
+    appearanceBaselines: [{ ...record(1, "p1", observed), t: 40 },
+      { ...record(1, "p4", observed), sceneEpoch: 1 }, record(2, "p2", observed)],
+    records: [...LIVE.records, record(11, "p1", observed), record(12, "p2", observed),
+      record(13, "p4", { ...observed, eyesIndex: 256 }), record(14, "p1", null), record(15, "p99", observed)] };
+  const f = await fixture((req, res) => write(res, 200, { capture: SNAPSHOT, live }));
+  try {
+    await f.login();
+    const response = await f.send(`/captures/DRXPTJAB/${FEATURE}/live`);
+    assert.equal(response.status, 200);
+    const value = await response.json();
+    assert.deepEqual(value.live.records.map(entry => entry.sequence), [9, 10, 11, 14]);
+    assert.deepEqual(value.live.records[2].record.appearance, publicChoice);
+    assert.deepEqual(value.live.records[3].record, { type: "appearance", playerId: "p1", t: 1400, appearance: null, appearanceReady: false });
+    assert.deepEqual(value.live.appearanceBaselines, [
+      { type: "appearance", playerId: "p1", t: 40, appearance: publicChoice },
+      { type: "appearance", playerId: "p3", t: 340, appearance: publicChoice },
+    ]);
+    assert.ok(!JSON.stringify(value).includes(API_KEY));
+    live = { ...live, gameBuildId: "99999" };
+    const unknown = await (await f.send(`/captures/DRXPTJAB/${FEATURE}/live`)).json();
+    assert.equal(unknown.live.appearanceBaselines, undefined);
+    assert.deepEqual(unknown.live.records.map(entry => entry.sequence), [9, 10]);
+  } finally { await f.close(); }
+});
+
 test("live projection rejects mixed scene records, invalid coordinates, ordering and oversized buffers", async () => {
   let live;
   const f = await fixture((req, res) => write(res, 200, { capture: SNAPSHOT, live }));

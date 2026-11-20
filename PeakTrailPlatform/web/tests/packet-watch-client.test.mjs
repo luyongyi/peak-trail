@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { PacketWatchClient, parseCaptureId } from "../src/packet-watch-client.js";
-import { createLiveTrace, appendLiveRecord, finalizeLiveFlush } from "../src/protocol.js";
+import { createLiveTrace, appendLiveRecord, finalizeLiveFlush, tracePlayerStateAtTime } from "../src/protocol.js";
 
 const id = "DRXPTJ.3CA5E6878769B9C53304";
 const manifest = { schemaVersion: 1, sceneName: "Level_84", gameBuildId: "26155610", projectionVersion: 1,
@@ -54,6 +54,26 @@ test("scene changes and retention gaps rebuild rather than append across unrelat
   f.client.consume(payload({ sceneEpoch: 2, manifest: { ...manifest, sceneName: "Level_85" }, records: [entry(200)], lastSequence: 200 }));
   assert.equal(f.snapshots.length, 3); assert.equal(f.records.length, 0);
   assert.equal(f.snapshots[2].snapshot.records[0].seq, 200);
+});
+
+test("late navigation opens with retained appearances and later clears the correct player", () => {
+  const host = { type: "appearance", playerId: "p1", t: 1000, appearance: { eyesIndex: 7, mouthIndex: 11, ready: true } };
+  const teammate = { type: "appearance", playerId: "p2", t: 1500, appearance: { eyesIndex: 4, mouthIndex: 2, ready: true } };
+  const clear = { type: "appearance", playerId: "p2", t: 4000, appearanceReady: false, appearance: null };
+  const f = fixture();
+  f.client.consume(payload({ appearanceBaselines: [host], records: [entry(9, teammate), entry(10)], lastSequence: 10 }));
+  const snapshot = f.snapshots[0], trace = createLiveTrace({ ...snapshot.manifest, sessionId: snapshot.sessionId });
+  for (const { record } of snapshot.snapshot.records) appendLiveRecord(trace, record);
+  finalizeLiveFlush(trace);
+  assert.equal(tracePlayerStateAtTime(trace, "p1", 2).appearance.eyesIndex, 7);
+  assert.equal(tracePlayerStateAtTime(trace, "p2", 1).appearance, null);
+  assert.equal(tracePlayerStateAtTime(trace, "p2", 2).appearance.mouthIndex, 2);
+  f.client.consume(payload({ appearanceBaselines: [host], records: [entry(9, teammate), entry(10), entry(11, clear)], lastSequence: 11 }));
+  assert.deepEqual(f.records.map(value => value.record), [clear]);
+  appendLiveRecord(trace, f.records[0].record);
+  finalizeLiveFlush(trace);
+  assert.equal(tracePlayerStateAtTime(trace, "p2", 4).appearance.ready, false);
+  assert.equal(tracePlayerStateAtTime(trace, "p1", 4).appearance.eyesIndex, 7);
 });
 
 test("unknown scene supplies a null snapshot, never a made-up manifest or daily map", () => {
