@@ -4,6 +4,7 @@ Only reads installed Unity files. No game process, Steam calls or game-state cha
 Uses serialized Item.UIData.icon and Customization array order, never filename guesses.
 """
 import argparse
+import colorsys
 import hashlib
 import json
 import os
@@ -16,6 +17,56 @@ import UnityPy
 from UnityPy.classes import PPtr
 from UnityPy.helpers.TypeTreeGenerator import TypeTreeGenerator
 from UnityPy.helpers.MeshHelper import MeshHandler
+
+
+# Audited W/Character bytecode and M_CrabHat are identical in builds 26155610
+# and 26542162. A different source must be audited before this bake is reused.
+CRAB_MATERIAL_SHA256 = "936fdee28de161984266a506148d2f27e8efaa70ab56652f2daa1d7e6f17ae34"
+CHARACTER_SHADER_SHA256 = "1c35605dc84db7077d1217f0a49d95b7d07533a578e4b167bb18685cc35a4d28"
+
+
+def srgb_to_linear(values):
+    values = np.asarray(values, dtype=float)
+    return np.where(values <= .04045, values / 12.92, ((values + .055) / 1.055) ** 2.4)
+
+
+def linear_to_srgb(values):
+    values = np.asarray(values, dtype=float)
+    return np.where(values <= .0031308, values * 12.92, 1.055 * np.maximum(values, 0) ** (1 / 2.4) - .055)
+
+
+def crab_layer_color(colors, layer_samples):
+    """The verified static fragment path, before MainTex and the hue shift.
+
+    W/Character starts with BaseColor, lerps each masked Color1..4 in order,
+    then multiplies Tint. These are HDR properties already stored in linear RGB.
+    Crab uses only layers 1/2; both sample TEXCOORD1, which its mesh lacks.
+    """
+    color = np.array([colors["_BaseColor"][key] for key in "rgb"], dtype=float)
+    weights = []
+    for i, sample in enumerate(layer_samples, 1):
+        remap, layer = colors[f"_Remap{i}"], colors[f"_Color{i}"]
+        x = np.clip((sample - remap["r"]) / (remap["g"] - remap["r"]), 0, 1)
+        weight = float(x * x * (3 - 2 * x) * layer["a"])
+        color += (np.array([layer[key] for key in "rgb"]) - color) * weight
+        weights.append(weight)
+    color *= [colors["_Tint"][key] for key in "rgb"]
+    hue_delta = sum(weight * colors["_HueShifts"][key] for weight, key in zip(weights, "rg"))
+    return color, weights, hue_delta
+
+
+def bake_crab_pixels(pixels, layer_color, hue_delta, hue_strength):
+    """Bake albedo only; retain the native alpha and leave lighting to the viewer."""
+    result = np.array(pixels, dtype=np.uint8, copy=True)
+    rgb = srgb_to_linear(result[:, :, :3] / 255) * layer_color
+    flat = rgb.reshape(-1, 3)
+    shifted = np.empty_like(flat)
+    for i, pixel in enumerate(flat):
+        h, s, v = colorsys.rgb_to_hsv(*pixel)
+        shifted[i] = colorsys.hsv_to_rgb((h + hue_delta) % 1, s, v)
+    rgb += (shifted.reshape(rgb.shape) - rgb) * hue_strength
+    result[:, :, :3] = np.rint(np.clip(linear_to_srgb(rgb), 0, 1) * 255).astype(np.uint8)
+    return result
 
 
 def slug(value):
@@ -123,6 +174,47 @@ class Exporter:
             result["skinColor"]=[colors["_SkinColor"][k] for k in "rgba"]
         return result
 
+    def bake_hat_material(self, origin, pointer, handler, material):
+        """Repair only the source-verified Crab albedo, never a generic tint guess."""
+        if self.build not in ("26155610", "26542162"): return material
+        obj = self.resolve(origin, pointer)
+        if obj is None or material.get("name") != "M_CrabHat": return material
+        shader = obj.read().m_Shader.deref()
+        if (hashlib.sha256(obj.get_raw_data()).hexdigest() != CRAB_MATERIAL_SHA256
+                or hashlib.sha256(shader.get_raw_data()).hexdigest() != CHARACTER_SHADER_SHA256):
+            raise ValueError("Crab source material/shader changed; audit its albedo before export")
+        if handler.m_UV1 or handler.m_Colors:
+            raise ValueError("Crab mesh gained secondary UVs/vertex colors; static albedo bake is not valid")
+        props = obj.read_typetree()["m_SavedProperties"]
+        colors, floats, textures = (dict(props[key]) for key in ("m_Colors", "m_Floats", "m_TexEnvs"))
+        samples, sources = [], []
+        for i in (1, 2):
+            texture = self.resolve(obj, textures[f"_Texture{i}"]["m_Texture"])
+            data = texture.read()
+            settings = data.m_TextureSettings
+            if (data.m_ColorSpace, settings.m_FilterMode, settings.m_WrapU, settings.m_WrapV) != (1, 1, 0, 0):
+                raise ValueError("Crab layer sampler changed; expected bilinear repeat sRGB")
+            pixels = np.array(data.image.convert("RGBA"))
+            # At UV=(0,0), repeat bilinear filtering averages all four corners.
+            # sRGB is decoded before filtering, exactly as the source GPU sampler.
+            samples.append(float(srgb_to_linear(pixels[np.array([0, 0, -1, -1]), np.array([0, -1, 0, -1]), 0] / 255).mean()))
+            sources.append({"property": f"_Texture{i}", "assetFile": texture.assets_file.name,
+                "pathId": texture.path_id, "sampleLinear": samples[-1]})
+        layer_color, weights, hue_delta = crab_layer_color(colors, samples)
+        source_texture = material["texture"]
+        source_pixels = np.array(Image.open(self.root / source_texture).convert("RGBA"))
+        path = str(Path(source_texture).with_name(Path(source_texture).stem + "-character-albedo-v1.png")).replace("\\", "/")
+        Image.fromarray(bake_crab_pixels(source_pixels, layer_color, hue_delta, floats["_HueStr"])).save(self.root / path)
+        return {**material, "color": [1, 1, 1, material["color"][3]], "colorSpace": "linear", "texture": path,
+            "sourceProperties": {"shader": "W/Character", "materialAsset": obj.assets_file.name,
+                "materialPathId": obj.path_id, "materialSha256": CRAB_MATERIAL_SHA256,
+                "shaderSha256": CHARACTER_SHADER_SHA256,
+                "textures": [{"property": "_MainTex", "asset": source_texture}],
+                "albedoBake": "character-crab-static-uv1-v1", "layerUv": [0, 0], "layerSamples": sources,
+                "layerWeights": weights, "hueDelta": hue_delta, "hueStrength": floats["_HueStr"],
+                "baseColor": [colors["_BaseColor"][key] for key in "rgba"],
+                "tint": [colors["_Tint"][key] for key in "rgba"]}}
+
     def transform(self, obj):
         key=(obj.assets_file.name,obj.path_id)
         if key in self.matrices: return self.matrices[key]
@@ -164,6 +256,9 @@ class Exporter:
         else: verts=(self.transform(trans)@v4.T).T[:,:3]
         # Return Unity coordinates unchanged; the web renderer uses the same axes.
         materials=material_overrides or [self.material(obj,{"m_FileID":p.m_FileID,"m_PathID":p.m_PathID},role) for p in d.m_Materials]
+        if role == "hat" and not material_overrides:
+            materials = [self.bake_hat_material(obj, {"m_FileID":p.m_FileID,"m_PathID":p.m_PathID}, handler, material)
+                for p, material in zip(d.m_Materials, materials)]
         return {"name":go.m_Name,"role":role,"positions":np.round(verts,6).reshape(-1).tolist(),
                 "uv":np.round(np.array(handler.m_UV0 or [[0,0]]*len(verts))[:,:2],6).reshape(-1).tolist(),
                 "groups":[{"indices":np.array(tris,dtype=int).reshape(-1).tolist(),"material":materials[min(i,len(materials)-1)]}

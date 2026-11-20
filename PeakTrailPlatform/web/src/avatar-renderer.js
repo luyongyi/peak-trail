@@ -29,7 +29,8 @@ function getThree() {
 
 async function fetchJson(url) {
   if (!jsonCache.has(url)) {
-    const task = fetch(url, { cache: "force-cache" }).then(async (response) => {
+    // A corrected material can be published at the same build-specific model URL.
+    const task = fetch(url, { cache: "no-cache" }).then(async (response) => {
       if (!response.ok) throw new Error(`模型读取失败（${response.status}）`);
       return response.json();
     });
