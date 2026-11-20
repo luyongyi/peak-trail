@@ -188,3 +188,37 @@ test("water alone receives scene depth without requiring a fog volume", () => {
   assert.equal(fog.fogMaterial.uniforms.hasSceneDepth.value, true);
   pass.dispose();
 });
+
+test("distant swamp depth uses a precise projection and keeps close effects and the main camera at the original near plane", () => {
+  const { pass, options, fog, camera, renderer, solid } = fixture();
+  camera.position.z = 2000;
+  camera.far = 8000;
+  camera.setViewOffset(1600, 1000, 100, 200, 900, 600);
+  const originalProjection = camera.projectionMatrix.clone();
+  options.depthEntries = [{ group: fog.group, depthMaterial: fog.fogMaterial }];
+  options.fogEntries = [];
+  let rendered;
+  renderer.render = (_scene, depthCamera) => { rendered = depthCamera; };
+  assert.equal(pass.render(options), true);
+  assert.notEqual(rendered, camera);
+  assert.equal(rendered.near, 10);
+  assert.ok(rendered.matrixWorld.equals(camera.matrixWorld));
+  const point = new THREE.Vector3(100, -20, 4);
+  const screen = point.clone().project(rendered);
+  const main = point.clone().project(camera);
+  assert.ok(Math.abs(screen.x - main.x) + Math.abs(screen.y - main.y) < 1e-9);
+  const uniforms = fog.fogMaterial.uniforms;
+  const world = screen.clone().applyMatrix4(uniforms.projectionInverse.value).applyMatrix4(uniforms.cameraWorld.value);
+  assert.ok(world.distanceTo(point) < 1e-6);
+  assert.equal(camera.near, 0.05);
+  assert.ok(camera.projectionMatrix.equals(originalProjection));
+  solid.position.z = 1999;
+  assert.equal(pass.render(options), true);
+  assert.notEqual(rendered, camera, "foreground solids still depth-test in the main pass");
+  assert.ok(new THREE.Vector3(0, 0, 1999).project(camera).z > -1);
+  solid.visible = false;
+  fog.group.position.z = 2000;
+  assert.equal(pass.render(options), true);
+  assert.equal(rendered, camera, "retain the near projection inside the effect");
+  pass.dispose();
+});

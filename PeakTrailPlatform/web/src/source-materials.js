@@ -26,7 +26,7 @@ const effects = {
   'FogSurface void': {kind: 'fog', shader: 'GD/FogSurface', pathId: 20, property: '_Color', flags: 0,
     rgba: [0.7095718383789062, 0.6693217754364014, 0.8396226167678833, 1], opacity: 0.22100000083446503},
   FogSurface: {kind: 'fog', shader: 'GD/FogSurface', pathId: 21, property: '_Color', flags: 0,
-    rgba: [0.2705881893634796, 0.45098042488098145, 0.9058824181556702, 1], opacity: 0.4169999957084656},
+    rgba: [0.2705881893634796, 0.45098042488098145, 0.9058824181556702, 1], opacity: 0.4169999957084656, surfaceDepth: 4},
   AntiSphere: {kind: 'antisphere', shader: 'AntiSphere', asset: 'resources.assets', pathId: 13,
     property: null, flags: null, rgba: [1, 1, 1, 1], depthWrite: true,
     power: 0.25, softInverse: 0.5, borderLight: 0},
@@ -72,18 +72,26 @@ const effects = {
     tint: [0.7490195631980896, 0.7490195631980896, 0.7490195631980896, 1], tintFlags: 16},
 };
 
+// The 3.1 Gloom entries are bound to the material and shader hashes in
+// data/maps/verified-builds/26542162/equivalence.json (externalMaterials).
+const registries = new Map([
+  ['25306743', effects], ['25739797', effects25739797], ['26134529', effects26134529],
+  ['26155610', effects26134529],
+  ['26542162', { FogSurface: effects26134529.FogSurface, M_Water_swamp: effects26134529.M_Water_swamp }],
+]);
+
+export function supportsSourceEffect(buildId, materialName, shader) {
+  const registry = registries.get(String(buildId));
+  return Boolean(registry && Object.hasOwn(registry, materialName) && registry[materialName].shader === shader);
+}
+
 function linearComponent(value) {
   return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
 }
 
 export function getSourceEffectMaterial(buildId, materialName, shader) {
-  // Build 26155610 retains these audited map material/shader bytes; see
-  // data/maps/game-build.26155610.json. Keep the original evidence build explicit.
-  const registry = String(buildId) === '25306743' ? effects : String(buildId) === '25739797' ? effects25739797
-    : ['26134529', '26155610'].includes(String(buildId)) ? effects26134529 : null;
-  if (!registry || !Object.hasOwn(registry, materialName)) return null;
-  const effect = registry[materialName];
-  if (effect.shader !== shader) return null;
+  if (!supportsSourceEffect(buildId, materialName, shader)) return null;
+  const effect = registries.get(String(buildId))[materialName];
   const primaryRgb = effect.rgba.slice(0, 3).map(v => effect.flags & 16 ? v : linearComponent(v));
   const tintRgb = effect.tint?.slice(0, 3).map(v => effect.tintFlags & 16 ? v : linearComponent(v));
   const rgb = tintRgb ? primaryRgb.map((v, i) => v * tintRgb[i]) : primaryRgb;
@@ -123,13 +131,14 @@ export function getSourceEffectMaterial(buildId, materialName, shader) {
         depth: effect.depth,
         shallowStored: [...effect.waterDepth.shallow], tintStored: [...effect.waterDepth.tint],
         propertyFlags: effect.waterDepth.flags,
-        shaderEvidenceBuildId: ['26134529', '26155610'].includes(String(buildId)) ? 26134529 : 25739797,
-        crossBuildShaderIdentityVerified: ['26134529', '26155610'].includes(String(buildId)),
-        sameBuildShaderEvidence: ['25739797', '26134529'].includes(String(buildId)),
+        shaderEvidenceBuildId: effect.evidenceBuildId ?? 25739797,
+        crossBuildShaderIdentityVerified: effect.evidenceBuildId === 26134529,
+        sameBuildShaderEvidence: effect.evidenceBuildId === Number(buildId),
         formula: 'smoothstep(0, 1, min(10 * min(abs(sceneEyeDepth - surfaceEyeDepth) / _Depth, 1), 1))',
         approximation: 'Shallow replaces the missing refracted scene colour; primary branch without noise, secondary colour, foam or waves; native alpha is not reconstructed',
       } : null,
       opacityProperty: effect.opacity === undefined ? null : {_Opacity: effect.opacity},
+      surfaceDepth: effect.surfaceDepth ?? null,
       alphaShape: effect.kind === 'antisphere' ? {_Alpha: 1, _Power: effect.power,
         _SoftInverse: effect.softInverse, _BorderLight: effect.borderLight} : null,
       colorLayers: effect.kind === 'jellyfish' ? {

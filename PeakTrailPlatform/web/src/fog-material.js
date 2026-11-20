@@ -8,6 +8,8 @@ export function createReplayFogMaterial() {
     uniforms: {
       inverseWorld: { value: new THREE.Matrix4() }, worldOrigin: { value: new THREE.Vector3() }, heightScale: { value: 1 },
       fogColor: { value: new THREE.Color('#b698d9') }, sphere: { value: false }, replayTime: { value: 0 },
+      surfaceDepth: { value: 0 }, surfaceOpacity: { value: 0 },
+      useExitFace: { value: false },
       safeCount: { value: 0 }, safeZones: { value: Array.from({ length: 32 }, () => new THREE.Vector4()) },
       hasSceneDepth: { value: false }, sceneDepth: { value: null }, depthResolution: { value: new THREE.Vector2(1, 1) },
       projectionInverse: { value: new THREE.Matrix4() }, cameraWorld: { value: new THREE.Matrix4() },
@@ -16,17 +18,27 @@ export function createReplayFogMaterial() {
       void main(){ vec4 p=modelMatrix*vec4(position,1.0); worldPoint=p.xyz; gl_Position=projectionMatrix*viewMatrix*p; }`,
     fragmentShader: `varying vec3 worldPoint;
       uniform mat4 inverseWorld; uniform vec3 worldOrigin, fogColor;
-      uniform float heightScale, replayTime; uniform bool sphere;
+      uniform float heightScale, replayTime, surfaceDepth, surfaceOpacity; uniform bool sphere, useExitFace;
       uniform int safeCount; uniform vec4 safeZones[32];
       uniform bool hasSceneDepth; uniform sampler2D sceneDepth; uniform vec2 depthResolution;
       uniform mat4 projectionInverse, cameraWorld;
+      vec3 unityPosition(vec3 wp){
+        // The map root mirrors Unity's Z axis and the volume root scales height.
+        return vec3(wp.x,wp.y/heightScale,-wp.z)+worldOrigin;
+      }
+      bool inSafeZone(vec3 unity){
+        for(int j=0;j<32;j++){
+          if(j>=safeCount) break;
+          if(distance(unity,safeZones[j].xyz)<safeZones[j].w) return true;
+        }
+        return false;
+      }
       void main(){
         vec3 worldDirection=normalize(worldPoint-cameraPosition);
         vec3 ro=(inverseWorld*vec4(cameraPosition,1.0)).xyz;
-        bool inside=all(lessThan(abs(ro),vec3(1.0)));
-        if((inside && gl_FrontFacing) || (!inside && !gl_FrontFacing)) discard;
+        if(useExitFace==gl_FrontFacing) discard;
         vec3 rd=(inverseWorld*vec4(worldDirection,0.0)).xyz;
-        vec3 inv=1.0/(rd+vec3(0.000001));
+        vec3 inv=mix(vec3(-1.0),vec3(1.0),step(vec3(0.0),rd))/max(abs(rd),vec3(1e-10));
         vec3 lo=(-vec3(1.0)-ro)*inv, hi=(vec3(1.0)-ro)*inv;
         vec3 nearV=min(lo,hi), farV=max(lo,hi);
         float start=max(0.0,max(nearV.x,max(nearV.y,nearV.z)));
@@ -49,17 +61,30 @@ export function createReplayFogMaterial() {
           vec3 local=ro+rd*t;
           if(sphere && dot(local,local)>1.0) continue;
           vec3 wp=cameraPosition+worldDirection*t;
-          vec3 unity=vec3(wp.x,wp.y/heightScale,wp.z)+worldOrigin;
-          bool safe=false;
-          for(int j=0;j<32;j++){ if(j>=safeCount) break; if(distance(unity,safeZones[j].xyz)<safeZones[j].w) safe=true; }
-          if(safe) continue;
+          vec3 unity=unityPosition(wp);
+          if(inSafeZone(unity)) continue;
           float edge=sphere ? 1.0-length(local) : 1.0-max(abs(local.x),max(abs(local.y),abs(local.z)));
           float noise=0.7+0.18*sin(dot(unity,vec3(0.17,0.11,0.13))+replayTime*0.22)
             +0.12*sin(unity.x*0.34+sin(unity.z*0.26)+unity.y*0.23-replayTime*0.17);
           float density=smoothstep(0.0,0.12,edge)*noise;
           opacity+=(1.0-opacity)*(1.0-exp(-density*stepSize*0.055));
         }
-        gl_FragColor=vec4(fogColor,min(opacity,0.58));
+        opacity=min(opacity,0.58);
+        // Sample the actual top of the Gloom field, which can fall between
+        // volume samples at grazing angles. Use the same clipped ray on either
+        // side of the surface so foreground terrain and lamp clearings stay clear.
+        if(surfaceDepth>0.0 && !sphere && abs(rd.y)>1e-8){
+          float top=(1.0-ro.y)/rd.y;
+          if(top>=0.0 && top>=start-0.001 && top<=end+0.001){
+            vec2 atTop=(ro+rd*top).xz;
+            float edge=smoothstep(0.0,0.12,1.0-max(abs(atTop.x),abs(atTop.y)));
+            float coverage=smoothstep(0.0,surfaceDepth,end-start);
+            if(!inSafeZone(unityPosition(cameraPosition+worldDirection*top))){
+              opacity=max(opacity,surfaceOpacity*edge*coverage);
+            }
+          }
+        }
+        gl_FragColor=vec4(fogColor,opacity);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }`,

@@ -9,6 +9,28 @@ const currentEvidence = JSON.parse(await readFile(new URL("../../tools/offline-m
 const crossplayEvidence = JSON.parse(await readFile(new URL("../../tools/offline-maps/source-effect-materials.26134529.json", import.meta.url), "utf8"));
 const linear = (v) => v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
 
+test("3.1 Gloom surfaces retain their verified material and shader inputs", async () => {
+  const receipt = JSON.parse(await readFile(new URL("../../data/maps/verified-builds/26542162/equivalence.json", import.meta.url)));
+  assert.equal(receipt.verified, true);
+  for (const name of ["FogSurface", "M_Water_swamp"]) {
+    const original = crossplayEvidence.materials.find(material => material.name === name);
+    const verified = receipt.externalMaterials.materials.find(material => material.name === name);
+    assert.equal(verified.equal, true);
+    assert.equal(verified.pathId, original.pathId);
+    assert.equal(verified.shaderObjectSha256, original.shaderObjectSha256);
+    const expected = getSourceEffectMaterial(receipt.sourceBuildId, name, original.shader);
+    expected.source.mapBuildId = Number(receipt.targetBuildId);
+    const effect = getSourceEffectMaterial(receipt.targetBuildId, name, original.shader);
+    assert.deepEqual(effect, expected);
+    if (name === "FogSurface") {
+      assert.equal(effect.source.surfaceDepth, original.floats._SurfaceDepth);
+      assert.equal(effect.opacity, original.floats._Opacity);
+    }
+    assert.equal(getSourceEffectMaterial(26542163, name, original.shader), null);
+    assert.equal(getSourceEffectMaterial(26542162, name, "other"), null);
+  }
+});
+
 test("source-equivalent 3.0.1 maps preserve the audited effect values and their original evidence identity", () => {
   let checked = 0;
   for (const source of crossplayEvidence.materials) {

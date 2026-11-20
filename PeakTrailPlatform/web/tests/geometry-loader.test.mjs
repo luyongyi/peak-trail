@@ -6,7 +6,7 @@ import test from "node:test";
 import * as THREE from "../../vendor/three/0.180.0/build/three.module.js";
 import { decodeGeometryBytes, GEOMETRY_FORMATS, readGeometryResponse, checkGeometryAbort, reportGeometryProgress, yieldGeometryTask } from "../src/geometry-bytes.js";
 import { positiveInstanceTransform } from "../src/geometry-matrices.js";
-import { getSourceEffectMaterial } from "../src/source-materials.js";
+import { getSourceEffectMaterial, supportsSourceEffect } from "../src/source-materials.js";
 import { isExplosiveMineMaterial, recordedHiddenMineIndices } from "../src/mine-visibility.js";
 import { sha256Hex } from "../src/sha256.js";
 import { isProjectionProxyMaterial, shadowOnlyNodeIndices } from "../src/source-render-policy.js";
@@ -18,11 +18,11 @@ const source = (await readFile(new URL("../src/geometry-loader.js", import.meta.
   .replace(/^import .*;\r?\n/gm, "").replace(/^export (?=(?:async )?function )/gm, "");
 const waterSource = (await readFile(new URL("../src/source-water-material.js", import.meta.url), "utf8"))
   .replace(/^import .*;\r?\n/gm, "").replace(/^export (?=function )/gm, "");
-const applySourceWaterDepth = new Function("THREE", `${waterSource}\nreturn applySourceWaterDepth;`)(THREE);
+const applySourceWaterDepth = new Function("THREE", "supportsSourceEffect", `${waterSource}\nreturn applySourceWaterDepth;`)(THREE, supportsSourceEffect);
 const compile = (ports = {}) => new Function(
-  "THREE", "GLTFLoader", "MeshoptDecoder", "decodeGeometryBytes", "GEOMETRY_FORMATS", "positiveInstanceTransform", "getSourceEffectMaterial", "isExplosiveMineMaterial", "recordedHiddenMineIndices", "sha256Hex", "fetch", "crypto", "isProjectionProxyMaterial", "shadowOnlyNodeIndices", "applySourceWaterDepth", "readGeometryResponse", "checkGeometryAbort", "reportGeometryProgress", "yieldGeometryTask", "applySharedTerrainMaterial", "sharedVerifiableTopBlend",
+  "THREE", "GLTFLoader", "MeshoptDecoder", "decodeGeometryBytes", "GEOMETRY_FORMATS", "positiveInstanceTransform", "getSourceEffectMaterial", "supportsSourceEffect", "isExplosiveMineMaterial", "recordedHiddenMineIndices", "sha256Hex", "fetch", "crypto", "isProjectionProxyMaterial", "shadowOnlyNodeIndices", "applySourceWaterDepth", "readGeometryResponse", "checkGeometryAbort", "reportGeometryProgress", "yieldGeometryTask", "applySharedTerrainMaterial", "sharedVerifiableTopBlend",
   `${source}\nreturn { loadGameGeometry, batchStaticMeshes, updateRecordedMineVisibility, updateMapFogSurfaceVisibility, verifiableTopBlend };`,
-)(THREE, ports.GLTFLoader, {}, ports.decode || decodeGeometryBytes, GEOMETRY_FORMATS, positiveInstanceTransform, getSourceEffectMaterial, isExplosiveMineMaterial, recordedHiddenMineIndices, sha256Hex, ports.fetch, ports.crypto || webcrypto, isProjectionProxyMaterial, ports.shadowOnlyNodeIndices || shadowOnlyNodeIndices, applySourceWaterDepth, readGeometryResponse, checkGeometryAbort, reportGeometryProgress, yieldGeometryTask, applySharedTerrainMaterial, sharedVerifiableTopBlend);
+)(THREE, ports.GLTFLoader, {}, ports.decode || decodeGeometryBytes, GEOMETRY_FORMATS, positiveInstanceTransform, getSourceEffectMaterial, supportsSourceEffect, isExplosiveMineMaterial, recordedHiddenMineIndices, sha256Hex, ports.fetch, ports.crypto || webcrypto, isProjectionProxyMaterial, ports.shadowOnlyNodeIndices || shadowOnlyNodeIndices, applySourceWaterDepth, readGeometryResponse, checkGeometryAbort, reportGeometryProgress, yieldGeometryTask, applySharedTerrainMaterial, sharedVerifiableTopBlend);
 
 test("audited shadow-only affine/GPU panels are omitted, same-name solid props remain", () => {
   const { batchStaticMeshes } = compile();
@@ -529,7 +529,7 @@ test("map baseline fog replaces only matching chapter FogSurface batches and res
     const chapter = new THREE.Group(); chapter.userData.mapLayer = { segment }; chapter.add(model); terrain.add(chapter);
     return { mesh: model.children[0], chapter, model };
   };
-  const swamp = add(3), temple = add(4), alreadyHidden = add(4);
+  const swamp = add(3), temple = add(4, "FogSurface", "GD/FogSurface", "26542162"), alreadyHidden = add(4);
   alreadyHidden.mesh.visible = false;
   temple.chapter.visible = false;
   const water = add(4, "M_Water_swamp", "GD/Water-GD"), voidFog = add(4, "FogSurface void");

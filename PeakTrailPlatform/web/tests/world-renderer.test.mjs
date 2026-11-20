@@ -162,10 +162,16 @@ test("fog boxes retain recorded extent and feed only lit protection spheres in U
     shape: "box", size: [80, 40, 60], activity: "emitting", source: "StatusFieldGloom.Drowsy", statusEnabled: false });
   const safe = objectFixture({ objectId: "lamp:1", kind: "fog_safe_zone", pos: [112, 215, 325], radius: 7, activity: "lit" });
   const dark = objectFixture({ objectId: "lamp:2", kind: "fog_safe_zone", pos: [110, 220, 330], radius: 20, active: false, activity: "unlit" });
-  renderer.setData(traceFixture([fog, safe, dark]), assetPack(), origin); renderer.update(3, { heightScale: 2 });
+  const trace = { ...traceFixture([fog, safe, dark]), manifest: { gameBuildId: '26542162' } };
+  renderer.setData(trace, assetPack(), origin); renderer.update(3, { heightScale: 2 });
   const entry = renderer.entries.get(fog.objectId), uniforms = entry.fogMaterial.uniforms, volume = entry.group.children[0];
   nearly(entry.group.position.toArray(), [10, 20, 30]); nearly(entry.group.scale.toArray(), [40, 20, 30]);
   assert.equal(uniforms.sphere.value, false); assert.equal(uniforms.safeCount.value, 1);
+  const source = getSourceEffectMaterial('26542162', 'FogSurface', 'GD/FogSurface');
+  assert.equal(uniforms.surfaceDepth.value, 4);
+  assert.equal(uniforms.surfaceOpacity.value, source.opacity);
+  nearly(uniforms.fogColor.value.toArray(), source.baseColor);
+  assert.ok(volume.renderOrder > 0, 'fog blends over the swamp water');
   nearly(uniforms.safeZones.value[0].toArray(), [112, 215, 325, 7]); nearly(uniforms.worldOrigin.value.toArray(), origin.toArray());
   assert.equal(uniforms.heightScale.value, 2); assert.equal(uniforms.replayTime.value, 3);
   assert.match(entry.text.textContent, /昏睡关闭/); assert.equal(renderer.entries.has(dark.objectId), false);
@@ -180,9 +186,17 @@ test("fog boxes retain recorded extent and feed only lit protection spheres in U
   assert.equal(entry.fogMaterial.depthTest, false, 'inside fog must not vanish behind an underground exit face');
   volume.onBeforeRender(null, null, { position: new THREE.Vector3(1000, 40, 30) });
   assert.equal(entry.fogMaterial.depthTest, true, 'outside view tests the entry surface against foreground geometry');
+  const crossing = new THREE.PerspectiveCamera(60, 1.5, 0.1, 2000);
+  uniforms.hasSceneDepth.value = true;
+  for (const offset of [-0.01, 0, 0.01, 0.3]) {
+    crossing.position.set(10, bounds.max.y + offset, 30);
+    volume.onBeforeRender(null, null, crossing);
+    assert.equal(uniforms.useExitFace.value, offset < 0.3, 'the fog stays visible as its top crosses the near plane');
+    assert.equal(entry.fogMaterial.depthTest, !uniforms.useExitFace.value);
+  }
   assert.match(entry.fogMaterial.fragmentShader, /gl_FrontFacing/);
-  assert.match(entry.fogMaterial.fragmentShader, /wp\.y\/heightScale/);
-  assert.match(entry.fogMaterial.fragmentShader, /if\(safe\) continue/);
+  assert.match(entry.fogMaterial.fragmentShader, /wp\.y\/heightScale,-wp\.z/);
+  assert.match(entry.fogMaterial.fragmentShader, /if\(inSafeZone\(unity\)\) continue/);
   renderer.dispose();
 });
 
@@ -207,7 +221,7 @@ test("old logs display exact source baseline fog without recording fake world st
     mapFog: { ...metadata, schemaVersion: 1, gameBuildId: evidence.gameBuildId, authority: evidence.authority } };
   const { renderer } = createHarness();
   const trace = { events: [] };
-  renderer.setData(trace, null, new THREE.Vector3(0, 700, 1400));
+  renderer.setData(trace, assetPack('other-build'), new THREE.Vector3(0, 700, 1400));
   assert.equal(renderer.setMapFog(mapPack), true);
   renderer.update(50, { segment: 3 });
   assert.equal(renderer.fogState.mode, 'map-baseline'); assert.equal(renderer.fogState.count, 1);

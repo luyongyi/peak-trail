@@ -130,20 +130,40 @@ export class WorldRenderer {
       const material = createReplayFogMaterial();
       material.uniforms.sphere.value = object.shape !== 'box';
       material.uniforms.fogColor.value.set(object.kind === 'sleep_fog' ? '#b698d9' : '#cad77f');
-      if (object.source.includes('StatusFieldGloom')) {
-        const source = getSourceEffectMaterial(this.pack?.gameBuildId || this.mapFog?.gameBuildId, 'FogSurface', 'GD/FogSurface');
-        if (source) material.uniforms.fogColor.value.fromArray(source.baseColor);
+      if (object.kind === 'sleep_fog' && object.source.includes('StatusFieldGloom')) {
+        const build = object.authority === 'map-baseline' ? this.mapFog?.gameBuildId
+          : this.trace?.manifest?.gameBuildId ?? this.pack?.gameBuildId ?? this.mapFog?.gameBuildId;
+        const effect = getSourceEffectMaterial(build, 'FogSurface', 'GD/FogSurface');
+        if (effect) {
+          material.uniforms.fogColor.value.fromArray(effect.baseColor);
+          material.uniforms.surfaceDepth.value = effect.source.surfaceDepth ?? 0;
+          material.uniforms.surfaceOpacity.value = effect.opacity;
+        }
       }
       const volume = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2), material);
+      // Composite the mist above the transparent swamp water regardless of camera angle.
+      if (material.uniforms.surfaceDepth.value > 0) volume.renderOrder = 1;
       const localCamera = new THREE.Vector3();
       volume.onBeforeRender = (_renderer, _scene, camera) => {
-        material.uniforms.inverseWorld.value.copy(volume.matrixWorld).invert();
+        const inverse = material.uniforms.inverseWorld.value.copy(volume.matrixWorld).invert();
         if (camera) {
-          localCamera.copy(camera.position).applyMatrix4(material.uniforms.inverseWorld.value);
-          // Outside: test the front entry surface, not an underground back face.
-          // Inside: exit faces may sit behind terrain. The fragment shader
-          // instead limits integration using the opaque scene-depth prepass.
-          material.depthTest = Math.max(...localCamera.toArray().map(Math.abs)) >= 1;
+          localCamera.copy(camera.position).applyMatrix4(inverse);
+          // The eye can still be outside when the near plane clips the entry face.
+          // In that band (or inside), use the exit face and clip the ray to scene depth.
+          const lens = camera.projectionMatrix?.elements;
+          const margin = lens && material.uniforms.hasSceneDepth.value
+            ? camera.near * Math.hypot(1, 1 / lens[0], 1 / lens[5]) : 0;
+          const m = inverse.elements;
+          let useExitFace = true;
+          for (let axis = 0; axis < 3; axis++) {
+            const localMargin = margin * Math.hypot(m[axis], m[axis + 4], m[axis + 8]);
+            if (Math.abs(localCamera.getComponent(axis)) > 1 + localMargin) {
+              useExitFace = false;
+              break;
+            }
+          }
+          material.uniforms.useExitFace.value = useExitFace;
+          material.depthTest = !useExitFace;
         }
       };
       group.add(volume); entry.fogMaterial = material;

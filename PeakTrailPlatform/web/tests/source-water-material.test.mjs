@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
+import { supportsSourceEffect } from "../src/source-materials.js";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import * as THREE from "../../vendor/three/0.180.0/build/three.module.js";
 
 const source = (await readFile(new URL("../src/source-water-material.js", import.meta.url), "utf8"))
   .replace(/^import .*;\r?\n/gm, "").replace(/^export (?=function )/gm, "");
-const { applySourceWaterDepth, sourceWaterColorAtDepth, sourceWaterDepthGap } = new Function("THREE",
-  `${source}\nreturn { applySourceWaterDepth, sourceWaterColorAtDepth, sourceWaterDepthGap };`)(THREE);
+const { applySourceWaterDepth, sourceWaterColorAtDepth, sourceWaterDepthGap } = new Function("THREE", "supportsSourceEffect",
+  `${source}\nreturn { applySourceWaterDepth, sourceWaterColorAtDepth, sourceWaterDepthGap };`)(THREE, supportsSourceEffect);
 const linear = (value) => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
 const parameters = {
   primaryLinear: [.7053561806678772, .7452830076217651, .28475427627563477].map(linear),
@@ -30,7 +31,7 @@ test("audited swamp tint replaces the full-strength yellow fallback without chan
 });
 
 test("re-audited current build keeps the swamp tint and shared depth uniforms", () => {
-  for (const build of [25739797, 26134529, 26155610]) {
+  for (const build of [25739797, 26134529, 26155610, 26542162]) {
     const value = effect(); value.source.mapBuildId = build;
     const material = new THREE.MeshStandardMaterial();
     assert.equal(applySourceWaterDepth(material, value), true);

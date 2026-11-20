@@ -22,6 +22,9 @@ export class FogDepthPass {
     this.size = new THREE.Vector2();
     this.viewProjection = new THREE.Matrix4();
     this.frustum = new THREE.Frustum();
+    this.depthCamera = new THREE.PerspectiveCamera();
+    this.sourceProjection = new THREE.Matrix4();
+    this.surfaceBounds = new THREE.Sphere();
     this.boundMaterials = new Set();
     this.disposed = false;
   }
@@ -53,14 +56,40 @@ export class FogDepthPass {
     return this.target;
   }
 
-  intersectsVisibleFog(entry, camera) {
-    if (!visibleInHierarchy(entry.group)) return false;
-    let visible = false;
-    entry.group.traverse((object) => {
-      if (visible || !object.isMesh || !visibleInHierarchy(object) || !object.layers.test(camera.layers)) return;
-      if (object.frustumCulled === false || this.frustum.intersectsObject(object)) visible = true;
+  nearestEffectDepth(entry, camera) {
+    if (!visibleInHierarchy(entry.group)) return Infinity;
+    let nearest = Infinity;
+    entry.group.traverseVisible(object => {
+      if (!object.isMesh || !object.layers.test(camera.layers)) return;
+      const bounds = object.boundingSphere === undefined ? object.geometry : object;
+      if (bounds.boundingSphere === null) bounds.computeBoundingSphere();
+      const sphere = this.surfaceBounds.copy(bounds.boundingSphere).applyMatrix4(object.matrixWorld);
+      if (object.frustumCulled && !this.frustum.intersectsSphere(sphere)) return;
+      const depth = -sphere.center.applyMatrix4(camera.matrixWorldInverse).z - sphere.radius;
+      nearest = Math.min(nearest, depth);
     });
-    return visible;
+    return nearest;
+  }
+
+  waterDepthCamera(camera, nearest) {
+    // At 2 km, a 0.05 m near plane quantizes 24-bit depth in metre steps.
+    // The swamp's entire shallow/deep transition is only 1.596 m wide.
+    // Only tighten the prepass if ALL sampled surfaces are farther than 10 m.
+    // A closer solid occludes those surfaces in the main pass's depth test.
+    const near = Math.min(10, camera.far * 0.5);
+    if (!camera.isPerspectiveCamera || nearest <= near || near <= camera.near) return camera;
+    const probe = this.depthCamera;
+    if (!this.sourceProjection.equals(camera.projectionMatrix)) {
+      this.sourceProjection.copy(camera.projectionMatrix);
+      probe.copy(camera, false);
+      probe.matrixAutoUpdate = false;
+      probe.near = near;
+      probe.updateProjectionMatrix();
+    }
+    probe.layers.mask = camera.layers.mask;
+    probe.matrix.copy(camera.matrixWorld);
+    probe.updateMatrixWorld(true);
+    return probe;
   }
 
   render({ renderer, scene, camera, fogEntries = [], depthEntries = [], hiddenRoots = [] }) {
@@ -68,7 +97,7 @@ export class FogDepthPass {
     if (this.disposed) return false;
     const entries = [...fogEntries, ...depthEntries].filter((entry) => entry?.group
       && (entry.fogMaterial || entry.depthMaterial)).map((entry) => ({
-        group: entry.group, material: entry.fogMaterial || entry.depthMaterial,
+        group: entry.group, material: entry.fogMaterial || entry.depthMaterial, water: Boolean(entry.depthMaterial),
       }));
     for (const entry of entries) {
       uniform(entry.material, "hasSceneDepth", false);
@@ -81,7 +110,12 @@ export class FogDepthPass {
     this.viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     this.frustum.setFromProjectionMatrix(this.viewProjection, camera.coordinateSystem,
       Boolean(renderer.capabilities?.reversedDepthBuffer));
-    const visible = entries.filter((entry) => this.intersectsVisibleFog(entry, camera));
+    let nearest = Infinity;
+    const visible = entries.filter(entry => {
+      const depth = this.nearestEffectDepth(entry, camera);
+      nearest = Math.min(nearest, depth);
+      return depth < Infinity;
+    });
     if (!visible.length) return false;
     renderer.getDrawingBufferSize(this.size);
     const width = Math.floor(this.size.x), height = Math.floor(this.size.y);
@@ -93,6 +127,7 @@ export class FogDepthPass {
     const mipLevel = renderer.getActiveMipmapLevel?.() ?? 0;
     const autoClear = renderer.autoClear;
     const visibility = new Map();
+    const depthCamera = visible.some(entry => entry.water) ? this.waterDepthCamera(camera, nearest) : camera;
     for (const root of [...entries.map((entry) => entry.group), ...hiddenRoots]) {
       if (!root || visibility.has(root)) continue;
       visibility.set(root, root.visible);
@@ -104,7 +139,7 @@ export class FogDepthPass {
       renderer.setRenderTarget(target);
       renderer.autoClear = false;
       renderer.clear(true, true, false);
-      renderer.render(scene, camera);
+      renderer.render(scene, depthCamera);
     } finally {
       for (const [root, wasVisible] of visibility) root.visible = wasVisible;
       renderer.autoClear = autoClear;
@@ -116,8 +151,8 @@ export class FogDepthPass {
       uniform(material, "hasSceneDepth", true);
       uniform(material, "sceneDepth", target.depthTexture);
       copyUniform(material, "depthResolution", this.size);
-      copyUniform(material, "projectionInverse", camera.projectionMatrixInverse);
-      copyUniform(material, "cameraWorld", camera.matrixWorld);
+      copyUniform(material, "projectionInverse", depthCamera.projectionMatrixInverse);
+      copyUniform(material, "cameraWorld", depthCamera.matrixWorld);
       this.boundMaterials.add(material);
     }
     return true;

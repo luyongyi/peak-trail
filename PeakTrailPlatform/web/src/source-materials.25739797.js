@@ -32,7 +32,8 @@ export const effects25739797 = {
       1.0
     ],
     "evidenceBuildId": 25739797,
-    "opacity": 0.4169999957084656
+    "opacity": 0.4169999957084656,
+    "surfaceDepth": 4
   },
   "Jelly": {
     "kind": "jellyfish",
