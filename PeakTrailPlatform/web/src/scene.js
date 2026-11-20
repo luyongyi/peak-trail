@@ -21,6 +21,8 @@ import { CommunityRouteOverlay } from "./community-route-overlay.js";
 import { MapLootOverlay } from "./map-loot-overlay.js";
 import { MapLootFocus } from "./map-loot-focus.js";
 import { EnclosureContextRenderer } from "./enclosure-context-renderer.js";
+import { ChapterSupportGeometry } from "./chapter-support-geometry.js";
+import { ChapterHandoff } from "./chapter-handoff.js";
 import { chooseOverviewDirection, fitPerspectivePoints } from "./camera-framing.js";
 import { collectCameraParts, selectCameraSubjectParts } from "./camera-subject.js";
 import { chooseRenderPolicy, renderErrorName } from "./render-policy.js";
@@ -29,7 +31,7 @@ import { tr, formatNumber } from "./i18n.js";
 
 function collectWaterDepthEntries(root, heightScale) {
   const entries = [];
-  root.traverse((mesh) => {
+  for (const group of root.children.filter(child => child.visible !== false)) group.traverse(mesh => {
     if (!mesh.isMesh) return;
     for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
       if (!material?.userData?.peakWaterDepth) continue;
@@ -280,6 +282,9 @@ export class TrailScene {
     this.worldRenderer = new WorldRenderer(canvas);
     this.sourceWater = new SourceWaterRenderer();
     this.enclosureContext = new EnclosureContextRenderer({ THREE, loadGeometry: loadGameGeometry, disposeObject });
+    this.chapterSupport = new ChapterSupportGeometry(THREE);
+    this.chapterHandoff = new ChapterHandoff(this, THREE, disposeObject);
+    this.scene.add(this.chapterSupport.root);
     this.waterDepthEntries = [];
     this.fogDepthPass = new FogDepthPass(THREE);
     this.gameAssetPack = null;
@@ -495,6 +500,7 @@ export class TrailScene {
     this.geometryAbort?.abort();
     this.geometryAbort = new AbortController();
     this.geometryLoads.clear();
+    this.chapterHandoff?.reset();
     this.followTerrain?.setRoots([]);
     this.followTerrainDirty = true;
     this.enclosureContext?.clear();
@@ -774,6 +780,7 @@ export class TrailScene {
               model.position.copy(origin).multiplyScalar(-1);
               group.add(model);
               group.userData.loaded = true;
+              this.followTerrainDirty = true;
             }).catch((error) => {
               if (this.geometryLoads.get(layer.id) === task) this.geometryLoads.delete(layer.id);
               throw error;
@@ -791,6 +798,8 @@ export class TrailScene {
         signal: this.geometryAbort.signal, isCurrent,
       });
       if (!isCurrent()) return;
+      this.applyLayerVisibility();
+      this.setTime(this.currentTime, { geometryChanged: true });
       // A single-chapter view keeps only that chapter's GPU resources resident.
       if (selected !== null) {
         for (const group of this.terrainRoot.children) {
@@ -803,8 +812,6 @@ export class TrailScene {
           this.geometryLoads.delete(group.userData.mapLayer.id);
         }
       }
-      this.applyLayerVisibility();
-      this.setTime(this.currentTime);
       this.emitMapStatus("ready", selected === null ? ["真实网格概览", "Map geometry overview"] : ["本关真实网格已就绪", "Stage geometry ready"], selected);
     } catch (error) {
       if (!isCurrent() || error.name === "AbortError") return;
@@ -1344,12 +1351,7 @@ export class TrailScene {
       return;
     }
 
-    if (this.followTerrainDirty) {
-      this.terrainRoot.updateWorldMatrix(true, true);
-      this.followTerrain.setRoots(this.terrainRoot.children);
-      this.followTerrainDirty = false;
-      this.followRig.invalidate();
-    }
+    this.currentTerrainQuery();
     const context = this.followViewContext();
     const viewMode = context.interior ? "interior" : "exterior";
     if (viewMode !== this.followViewMode) {
@@ -1581,9 +1583,20 @@ export class TrailScene {
     }
   }
 
-  setTime(seconds) {
+  currentTerrainQuery() {
+    if (this.followTerrainDirty) {
+      const visible = this.terrainRoot.children.filter(group => group.visible);
+      this.followTerrain.setRoots(visible);
+      this.followTerrainDirty = false;
+      this.followRig.invalidate();
+    }
+    return this.followTerrain;
+  }
+
+  setTime(seconds, { geometryChanged = false } = {}) {
     const nextTime = Math.max(0, Number(seconds) || 0);
-    if (nextTime < this.currentTime - 0.01 || nextTime > this.currentTime + 1) this.followDiscontinuity = true;
+    const discontinuity = nextTime < this.currentTime - 0.01 || nextTime > this.currentTime + 1;
+    if (discontinuity) this.followDiscontinuity = true;
     this.currentTime = nextTime;
     const worldPlayers = [];
     for (const {
@@ -1629,6 +1642,7 @@ export class TrailScene {
       }
       group.visible = this.playerVisibility.get(group.userData.playerId) ?? true;
     }
+    this.chapterHandoff?.update(worldPlayers, discontinuity || geometryChanged);
     this.worldRenderer.update(this.currentTime, { players: worldPlayers, heightScale: this.heightScale,
       segment: this.activeSegment,
       bounds: this.useMap && this.activeSegment !== null ? this.viewBounds() : null });
@@ -1729,7 +1743,10 @@ export class TrailScene {
   setHeightScale(value) {
     const next = THREE.MathUtils.clamp(Number(value) || 1, 0.2, 5);
     const changed = next !== this.heightScale;
-    if (changed) this.clearMapLootFocus();
+    if (changed) {
+      this.clearMapLootFocus();
+      this.chapterHandoff?.reset();
+    }
     this.heightScale = next;
     this.applyHeightScale();
     if (changed && this.surveyPreset && this.freeCamera.mode === "orbit" && this.followTargetId == null) {
@@ -1777,9 +1794,12 @@ export class TrailScene {
     this.lootFocusTerrain = null;
     this.lootFocusTerrainKey = null;
     this.communityOverlay?.clear();
+    this.chapterHandoff?.reset();
     this.activeSegment = next;
     ++this.geometrySelectionToken;
-    this.enclosureContext?.clear();
+    // At the Citadel entrance the visible exterior is the next chapter's
+    // native shell. Keep it on screen until that chapter mounts its own copy.
+    if (!this.enclosureContext?.root.userData.sourceSegments?.includes(next)) this.enclosureContext?.clear();
     this.applyLayerVisibility();
     if (this.trace) this.buildTracks();
     this.setTime(this.currentTime);
@@ -2101,6 +2121,8 @@ export class TrailScene {
     this.mapLootOverlay?.dispose();
     this.sourceWater?.dispose();
     this.enclosureContext?.dispose();
+    this.chapterHandoff?.reset();
+    this.chapterSupport?.dispose();
     this.waterDepthEntries = [];
     this.fogDepthPass.dispose();
     this.controls.dispose();

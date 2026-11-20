@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFile } from 'node:fs/promises';
 import { normalizeMapEnclosures, enclosureGeometryReference, chapterEnclosures, followLayerAtPosition } from '../src/map-enclosures.js';
 
 const fixture = () => {
@@ -80,7 +81,7 @@ test('single-chapter Swamp reuses the exact adjacent Citadel exterior without re
 });
 
 test('current source build retains the adjacent native Citadel context with the same strict sidecar identity', () => {
-  for (const build of ['25739797', '26134529', '26155610']) {
+  for (const build of ['25739797', '26134529', '26155610', '26542162']) {
     const pack = contextualFixture(); pack.gameBuildId = pack.mapEnclosures.gameBuildId = build;
     const result = chapterEnclosures(pack, pack.layers[0], { includeContext: true });
     assert.equal(result.length, 1);
@@ -107,6 +108,7 @@ test('contextual exterior is restricted to the audited source build, branch, roo
   const mutations = [
     pack => pack.gameBuildId = pack.mapEnclosures.gameBuildId = '25739798',
     pack => pack.gameBuildId = pack.mapEnclosures.gameBuildId = '26155611',
+    pack => pack.gameBuildId = pack.mapEnclosures.gameBuildId = '26542163',
     pack => pack.identityVersion = 2,
     pack => pack.route.authority = 'guessed-calendar',
     pack => pack.route.branch = 'volcano-kiln',
@@ -139,4 +141,65 @@ test('native shells remain supported outside the contextual build while malforme
   assert.equal(chapterEnclosures(pack, pack.layers[1], { includeContext: true }).length, 1);
   pack.mapEnclosures.enclosures.push({ ...pack.mapEnclosures.enclosures[0] });
   assert.deepEqual(chapterEnclosures(pack, pack.layers[1], { includeContext: true }), []);
+});
+
+test('all 208 verified 3.1 maps retain native shells and expose only the 104 adjacent Swamp exits', async () => {
+  const read = async path => JSON.parse(await readFile(new URL(path, import.meta.url), 'utf8'));
+  const [catalog, sidecars, receipt] = await Promise.all([
+    read('../../data/maps/catalog.json'),
+    read('../../data/maps/enclosures.26542162.json'),
+    read('../../data/maps/verified-builds/26542162/equivalence.json'),
+  ]);
+  assert.equal(receipt.verified, true);
+  assert.equal(receipt.targetBuildId, '26542162');
+  const entries = catalog.mapPacks.filter(entry => String(entry.gameBuildId) === '26542162');
+  assert.equal(entries.length, 208);
+  const packs = await Promise.all(entries.map(async entry => {
+    const pack = await read(`../../data/maps/verified-builds/26542162/manifests/${entry.mapPackId}/map-pack.json`);
+    const matched = sidecars.maps.filter(item => item.mapPackId === pack.mapPackId);
+    assert.equal(matched.length, 1, entry.sceneName);
+    pack.mapEnclosures = { ...matched[0], schemaVersion: sidecars.schemaVersion, authority: sidecars.authority };
+    assert.ok(normalizeMapEnclosures(pack.mapEnclosures, pack), entry.sceneName);
+    return pack;
+  }));
+  let swampExits = 0, volcanoExits = 0;
+  for (const pack of packs) {
+    const before = JSON.stringify(pack);
+    const exit = pack.layers.find(layer => layer.segment === 3);
+    const terminal = pack.layers.find(layer => layer.segment === 4);
+    const context = chapterEnclosures(pack, exit, { includeContext: true });
+    assert.deepEqual(chapterEnclosures(pack, exit), [], `${pack.sceneName}: adjacency must be opt-in`);
+    if (pack.route.branch === 'swamp-temple') {
+      swampExits++;
+      assert.equal(context.length, 1, pack.sceneName);
+      assert.equal(context[0].sourceRootName, 'Gloom Temple');
+      assert.equal(context[0].segment, 4);
+      assert.deepEqual(context[0], pack.mapEnclosures.enclosures[0]);
+    } else {
+      assert.equal(pack.route.branch, 'volcano-kiln');
+      volcanoExits++;
+      assert.deepEqual(context, [], `${pack.sceneName}: no inferred Volcano adjacency`);
+    }
+    for (const includeContext of [false, true]) {
+      const own = chapterEnclosures(pack, terminal, { includeContext });
+      assert.equal(own.length, 1, `${pack.sceneName}: terminal keeps one native shell`);
+      assert.deepEqual(own[0], pack.mapEnclosures.enclosures[0]);
+    }
+    const overview = pack.layers.flatMap(layer => chapterEnclosures(pack, layer));
+    assert.equal(overview.length, 1, `${pack.sceneName}: overview never duplicates its shell`);
+    assert.equal(JSON.stringify(pack), before, `${pack.sceneName}: source identity and bounds remain unchanged`);
+  }
+  assert.equal(swampExits, 104);
+  assert.equal(volcanoExits, 104);
+
+  // Live Level_107 stood on this source enclosure at the Swamp campfire,
+  // before the base Temple layer's Z bounds. A chapter switch must not be
+  // required just to draw the existing adjacent entrance platform.
+  const sample = packs.find(pack => pack.sceneName === 'Level_107');
+  const ground = [10.513298, 805.9373, 1977.15759];
+  const terminal = sample.layers.find(layer => layer.segment === 4);
+  assert.ok(ground[2] < terminal.minZ);
+  const [shell] = chapterEnclosures(sample, sample.layers.find(layer => layer.segment === 3), { includeContext: true });
+  assert.equal(shell.geometrySha256, 'c1eaef35acdb037dad2fd2d53fa58dbe0c7a7304dcb24789470ebaaac3240476');
+  assert.ok(ground.every((value, axis) => value >= shell.meshBounds.min[axis] && value <= shell.meshBounds.max[axis]));
 });
