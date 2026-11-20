@@ -461,11 +461,16 @@ async function renderAvatar(pack, appearance, width, height, headOnly = false) {
     const camera = createAvatarCamera(THREE, viewHeight, aspect);
     camera.position.set(0, size.y * 0.02, Math.max(3, size.z + 2.5));
     camera.lookAt(0, size.y * 0.02, 0);
-    scene.add(new THREE.HemisphereLight(0xfff4dc, 0x19313a, 2.2));
-    const key = new THREE.DirectionalLight(0xfff1d0, 2.8);
+    // Neutral light preserves the chosen skin hue at map-marker size, even in shadow.
+    const neutralPortrait = headOnly && !form.transformed && !plan.visuals.length;
+    scene.add(new THREE.HemisphereLight(neutralPortrait ? 0xffffff : 0xfff4dc,
+      neutralPortrait ? 0x909090 : 0x19313a, 2.2));
+    const key = new THREE.DirectionalLight(neutralPortrait ? 0xffffff : 0xfff1d0,
+      neutralPortrait ? 2.4 : 2.8);
     key.position.set(-3, 4, 5);
     scene.add(key);
-    const rim = new THREE.DirectionalLight(0x87cfc8, 1.6);
+    const rim = new THREE.DirectionalLight(neutralPortrait ? 0xffffff : 0x87cfc8,
+      neutralPortrait ? 1.2 : 1.6);
     rim.position.set(4, 2, -3);
     scene.add(rim);
     renderer.render(scene, camera);
