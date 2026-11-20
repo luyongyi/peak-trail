@@ -46,7 +46,7 @@ function fixture() {
   const button = element("BUTTON", { "aria-label": "切换为英语" });
   const icon = element("SVG"), label = element("SPAN");
   button.children.push(icon, label); button.label = label;
-  const action = element("BUTTON", { title: "适配当前视图", "aria-label": "适配当前视图" });
+  const action = element("BUTTON", { title: "自由相机", "aria-label": "自由相机" });
   const actionIcon = element("SVG"); action.children.push(actionIcon);
   const caption = text("  进入地图 \n", action);
   const dynamic = text("等待地图", element("SPAN"));
@@ -71,7 +71,7 @@ test("switching updates static metadata and text without rebuilding icons or ove
     assert.equal(view.title.nodeValue, "PEAK Trail · Maps & Memories");
     assert.match(view.meta.getAttribute("content"), /^Daily PEAK maps/);
     assert.equal(view.caption.nodeValue, "  Explore map \n");
-    assert.equal(view.action.getAttribute("aria-label"), "Fit current view");
+    assert.equal(view.action.getAttribute("aria-label"), "Free camera");
     assert.equal(view.action.getAttribute("title"), "Live camera description");
     assert.equal(view.button.children[0], view.icon);
     assert.equal(view.action.children[0], view.actionIcon);
@@ -82,7 +82,7 @@ test("switching updates static metadata and text without rebuilding icons or ove
     assert.equal(view.script.nodeValue, "地图");
     view.button.listeners.get("click")();
     assert.equal(view.caption.nodeValue, "  进入地图 \n");
-    assert.equal(view.action.getAttribute("aria-label"), "适配当前视图");
+    assert.equal(view.action.getAttribute("aria-label"), "自由相机");
     assert.equal(view.label.textContent, "English");
     dispose();
     setLocale("en");

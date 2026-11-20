@@ -116,10 +116,9 @@ Citadel (`Temple_Segment`) and Kiln (`Volcano_Segment`, not outdoor
 `Caldera_Segment`) prefer an already-recorded in-chapter player position for the
 camera. Without one, the viewer searches actual loaded geometry for a floor and
 ceiling and labels that point as a geometry reference, not a player position.
-Use **进入关内** to reposition, **自由相机 WASD** to toggle, WASD to move, Q/E to
-descend/ascend, Shift for faster movement, mouse-drag to look, and Esc to return
-to the saved orbit view. Keyboard movement requires viewport focus. This is a
-spectator camera without collision physics; the fitted overview remains available.
+Select **Free camera** to explore. Use WASD to move, Q/E to descend or ascend,
+Shift to move faster, and drag to look around. Touch devices have on-screen
+movement controls. Select **Free camera** again or press Esc to exit.
 
 World telemetry and remote-player synchronization still need an in-game 0.6
 multiplayer acceptance run. Automated contracts and synthetic UI fixtures cannot

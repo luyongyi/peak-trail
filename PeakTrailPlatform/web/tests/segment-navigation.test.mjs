@@ -37,8 +37,8 @@ function fixture(branch = "swamp-temple") {
     segmentOptions: [], segmentTimeline: [], selectedSegment: 4, segmentSelectionMode: "manual",
     segmentMapStatuses: new Map(), currentTime: 0, trace: null,
   };
-  const elements = Object.fromEntries(["segmentNavigator", "segmentOrdinal", "segmentName", "segmentOriginalName",
-    "routeSummary", "previousSegmentButton", "nextSegmentButton", "followSegmentButton", "segmentOverviewButton",
+  const elements = Object.fromEntries(["segmentNavigator", "segmentOrdinal", "segmentName", "inspectorStageTools",
+    "routeSummary", "previousSegmentButton", "nextSegmentButton", "followSegmentButton",
     "segmentLoadStatus", "layerSelect"].map((key) => [key, node()]));
   const selected = [];
   const ports = {
@@ -47,11 +47,11 @@ function fixture(branch = "swamp-temple") {
     viewer: { setActiveSegment: (segment) => selected.push(segment), setViewIntent() {} },
     segmentAtTime: () => state.segmentTimeline[0]?.segment ?? null,
     selectedSegmentStatus: () => ({ status: "ready", text: "已就绪" }),
-    updateSceneMeta() {}, markSegmentTransition() {}, updateWorldTelemetry() {}, clearTimeout() {}, setTimeout() {},
+    updateSceneMeta() {}, markSegmentTransition() {}, updateWorldTelemetry() {},
     syncCommunityContext() {},
   };
   const labels = source.match(/const SEGMENT_NAMES_ZH = new Map\(\[[^]*?\]\);/)[0];
-  const api = new Function(...Object.keys(ports), `${labels}\nlet segmentNavLastName = null, segmentNavFlashTimer = 0;\n${names.map(appFunction).join("\n")}\nreturn { ${names.join(",")} };`)(...Object.values(ports));
+  const api = new Function(...Object.keys(ports), `${labels}\n${names.map(appFunction).join("\n")}\nreturn { ${names.join(",")} };`)(...Object.values(ports));
   api.populateSegmentControls();
   return { api, state, elements, selected };
 }
@@ -105,7 +105,7 @@ test("Nadir can be selected and navigated back from while staying outside the mo
   f.api.chooseSegment(5, "manual");
   assert.deepEqual(f.selected, [5]);
   assert.equal(f.elements.segmentName.textContent, "天底");
-  assert.equal(f.elements.segmentOrdinal.textContent, "额外区域 · 天底");
+  assert.equal(f.elements.segmentOrdinal.textContent, "额外区域");
   assert.equal(f.elements.previousSegmentButton.disabled, false);
   assert.equal(f.elements.nextSegmentButton.disabled, true);
   assert.equal(f.api.adjacentSegment(f.state.segmentOptions, 5, -1).segment, 4);

@@ -277,6 +277,8 @@ export class TrailScene {
     this.freeCamera = new ReplayCamera({ THREE, camera: this.camera, controls: this.controls, canvas,
       onModeChange: (mode) => {
         this.surveyPreset = null;
+        this.cameraPlacementLabels = null;
+        this.cameraPlacementNote = "";
         this.canvas.dispatchEvent(new CustomEvent("cameramodechange", { detail: { mode, help: REPLAY_CAMERA_HELP } }));
       } });
     this.worldRenderer = new WorldRenderer(canvas);
@@ -2091,25 +2093,14 @@ export class TrailScene {
   surveyCameraFrame() {
     const viewport = this.canvas.getBoundingClientRect?.();
     if (!(viewport?.height > 0)) return undefined;
-    // Reserve the persistent controls above the terrain. Popovers and expanded
-    // navigation are temporary overlays and must not push the map farther away.
+    // Fit below the visible toolbar and chapter controls, including their touch layout.
     const controls = this.canvas.parentElement?.querySelectorAll?.(".viewport-toolbar, .segment-navigator") || [];
-    const landscapePhone = this.canvas.ownerDocument?.defaultView?.matchMedia?.(
-      "(min-width: 480px) and (max-width: 950px) and (max-height: 500px) and (orientation: landscape)",
-    ).matches;
     let topInset = 0;
     for (const control of controls) {
       const rect = control.getBoundingClientRect();
-      // Navigation briefly expands on chapter changes. Reserve only its
-      // collapsed capsule (35 px desktop / 55 px touch / 46 px sideways phone),
-      // not that flash. Sideways phones keep the capsule on their toolbar row.
-      const bottom = control.matches?.(".segment-navigator")
-        ? landscapePhone ? viewport.top + 6 + 46
-          : viewport.width >= 744 ? viewport.top + 16 + 35 : rect.top + Math.min(rect.height, 55)
-        : rect.bottom;
       if (rect.width > 0 && rect.height > 0 && rect.right > viewport.left && rect.left < viewport.right
-          && bottom > viewport.top && rect.top < viewport.bottom) {
-        topInset = Math.max(topInset, bottom - viewport.top + 4);
+          && rect.bottom > viewport.top && rect.top < viewport.bottom) {
+        topInset = Math.max(topInset, rect.bottom - viewport.top + 4);
       }
     }
     return { left: -1, right: 1, bottom: -1, top: 1 - 2 * Math.min(topInset, viewport.height * 0.35) / viewport.height };

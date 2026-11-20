@@ -107,7 +107,7 @@ function watchNodes() {
   const nodes = new Map(), classes = new Set();
   const $ = id => { if (!nodes.has(id)) nodes.set(id, { dataset: {}, classList: { toggle() {} }, setAttribute() {} }); return nodes.get(id); };
   const appShell = { classList: { add(...names) { names.forEach(name => classes.add(name)); }, remove(...names) { names.forEach(name => classes.delete(name)); }, toggle(name, value) { if (value) classes.add(name); else classes.delete(name); } } };
-  return { $, classes, elements: { appShell, playButton: $('play'), segmentNavigator: $('navigator') } };
+  return { $, classes, elements: { appShell, playButton: $('play'), segmentNavigator: $('navigator'), inspectorStageTools: $('stageTools') } };
 }
 
 function watchMapFixture(locale = 'zh-CN') {
@@ -241,6 +241,7 @@ test('empty waiting renders clear the old scene without mounting or requesting a
   assert.equal(state.mapPack, cached, 'cached metadata can later be matched against the real manifest');
   assert.equal(state.usingCompatibleMap, false); assert.deepEqual(state.segmentOptions, []);
   assert.equal(f.elements.segmentNavigator.hidden, true);
+  assert.equal(f.elements.inspectorStageTools.hidden, true);
 });
 
 test('empty snapshots invalidate an old map selection without constructing a trace or loading a map', async () => {

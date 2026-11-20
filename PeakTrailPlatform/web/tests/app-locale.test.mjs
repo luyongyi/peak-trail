@@ -67,42 +67,35 @@ test("language repaint preserves chapter, camera, playback and the selected reco
   } finally { dispose(); i18n.setLocale("zh-CN", { persist: false }); }
 });
 
-test("language round trips keep a collapsed navigator closed while real chapter and map changes still flash", () => {
-  const collapsed = new Set(["is-collapsed"]);
-  const timers = [];
+test("chapter arrows and the noninteractive chapter label update in place on language and stage changes", () => {
   function node() {
     return { textContent: "", value: "", setAttribute() {}, classList: { toggle() {} } };
   }
   const elements = Object.fromEntries(["segmentNavigator", "routeSummary", "segmentOrdinal", "segmentName",
-    "segmentOriginalName", "previousSegmentButton", "nextSegmentButton", "followSegmentButton", "segmentOverviewButton",
+    "inspectorStageTools", "previousSegmentButton", "nextSegmentButton", "followSegmentButton",
     "segmentLoadStatus", "compatibilityText", "layerSelect"].map(name => [name, node()]));
-  elements.segmentNavigator.classList = { contains: name => collapsed.has(name),
-    remove: name => collapsed.delete(name), add: name => collapsed.add(name) };
+  elements.segmentNavigator = { hidden: true };
   const state = { mapPack: { mapPackId: "map-a" }, selectedSegment: 0, workspaceMode: "explore",
     segmentSelectionMode: "manual", segmentOptions: [{ segment: 0, biome: "shore" }, { segment: 1, biome: "roots" }] };
   const ports = { ...i18n, state, elements, segmentDisplayName: entry => i18n.biomeName(entry.biome),
-    selectedSegmentStatus: () => ({ status: "ready", text: i18n.tr("已就绪", "Ready") }),
-    setTimeout(callback, delay) { timers.push({ callback, delay }); return timers.length; }, clearTimeout() {} };
-  const render = new Function(...Object.keys(ports), `let segmentNavLastName = null, segmentNavFlashTimer = 0;\n${appFunction("adjacentSegment")}\n${appFunction("renderSegmentNavigation")}\nreturn renderSegmentNavigation;`)(...Object.values(ports));
+    selectedSegmentStatus: () => ({ status: "ready", text: i18n.tr("已就绪", "Ready") }) };
+  const render = new Function(...Object.keys(ports), `${appFunction("adjacentSegment")}\n${appFunction("renderSegmentNavigation")}\nreturn renderSegmentNavigation;`)(...Object.values(ports));
   render();
   const dispose = i18n.onLocaleChange(render);
   try {
     i18n.setLocale("en", { persist: false });
     assert.equal(elements.segmentName.textContent, "SHORE");
+    assert.equal(elements.segmentOrdinal.textContent, "Stage 1 / 2");
+    assert.equal(elements.previousSegmentButton.disabled, true);
+    assert.equal(elements.nextSegmentButton.disabled, false);
     i18n.setLocale("zh-CN", { persist: false });
     assert.equal(elements.segmentName.textContent, "海岸");
-    assert.equal(collapsed.has("is-collapsed"), true);
-    assert.equal(timers.length, 0);
     state.selectedSegment = 1;
     render();
-    assert.equal(collapsed.has("is-collapsed"), false);
-    assert.equal(timers.length, 1);
-    assert.equal(timers[0].delay, 2600);
-    timers[0].callback();
-    state.mapPack = { mapPackId: "map-b" };
-    render();
-    assert.equal(collapsed.has("is-collapsed"), false);
-    assert.equal(timers.length, 2);
+    assert.equal(elements.segmentOrdinal.textContent, "第 2 / 2 关");
+    assert.equal(elements.previousSegmentButton.disabled, false);
+    assert.equal(elements.nextSegmentButton.disabled, true);
+    assert.equal(elements.segmentNavigator.hidden, false);
   } finally { dispose(); i18n.setLocale("zh-CN", { persist: false }); }
 });
 

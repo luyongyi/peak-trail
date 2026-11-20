@@ -102,13 +102,10 @@ const elements = {
   nextSegmentButton: $("nextSegmentButton"),
   segmentOrdinal: $("segmentOrdinal"),
   segmentName: $("segmentName"),
-  segmentOriginalName: $("segmentOriginalName"),
+  inspectorStageTools: $("inspectorStageTools"),
   routeSummary: $("routeSummary"),
   followSegmentButton: $("followSegmentButton"),
-  segmentOverviewButton: $("segmentOverviewButton"),
   segmentLoadStatus: $("segmentLoadStatus"),
-  heightScale: $("heightScale"),
-  heightScaleValue: $("heightScaleValue"),
   trackToggle: $("trackToggle"),
   markerToggle: $("markerToggle"),
   playerCount: $("playerCount"),
@@ -125,11 +122,8 @@ const elements = {
   totalTime: $("totalTime"),
   speedSelect: $("speedSelect"),
   phonePanelButton: $("phonePanelButton"),
-  topViewButton: $("topViewButton"),
-  fitViewButton: $("fitViewButton"),
   freeCameraButton: $("freeCameraButton"),
   cinematicButton: $("cinematicButton"),
-  interiorViewButton: $("interiorViewButton"),
   cameraHelp: $("cameraHelp"),
   cameraTouchControls: $("cameraTouchControls"),
   cameraPlacement: $("cameraPlacement"),
@@ -461,12 +455,11 @@ function selectedSegmentStatus() {
   return { status: "muted", text: tr("概览会按需加载所有关", "Overview loads stages as needed"), message: "" };
 }
 
-let segmentNavLastName = null;
-let segmentNavFlashTimer = 0;
 function renderSegmentNavigation() {
   const options = state.segmentOptions;
   const chapters = options.filter((option) => !option.isVoid);
   elements.segmentNavigator.hidden = options.length === 0;
+  elements.inspectorStageTools.hidden = options.length === 0;
   if (!options.length) return;
 
   const activeIndex = chapters.findIndex((option) => option.segment === state.selectedSegment);
@@ -475,24 +468,8 @@ function renderSegmentNavigation() {
   elements.routeSummary.textContent = [state.historicalRoute?.title, state.routeView?.message || tr("关卡分支未确认", "Route unconfirmed")].filter(Boolean).join(" · ");
   elements.segmentOrdinal.textContent = isOverview
     ? tr(`共 ${chapters.length} 关`, `${formatNumber(chapters.length)} stages`)
-    : active?.isVoid ? tr("额外区域 · 天底", "Extra area · NADIR") : tr(`第 ${activeIndex + 1} / ${chapters.length} 关`, `Stage ${formatNumber(activeIndex + 1)} / ${formatNumber(chapters.length)}`);
+    : active?.isVoid ? tr("额外区域", "Extra area") : tr(`第 ${activeIndex + 1} / ${chapters.length} 关`, `Stage ${formatNumber(activeIndex + 1)} / ${formatNumber(chapters.length)}`);
   elements.segmentName.textContent = isOverview ? tr("所有关概览", "All chapters") : segmentDisplayName(active);
-  elements.segmentOriginalName.textContent = isOverview
-    ? tr("仅在手动选择时加载", "Loads when selected")
-    : `${active?.name || tr("未知", "Unknown")} · Segment ${active?.segment ?? "?"}`;
-
-  // 收起状态下换关：短暂展开提示 2.6s 再收起（用户手动展开过则保持）。
-  const navName = JSON.stringify([state.mapPack?.mapPackId ?? null, state.selectedSegment ?? "overview"]);
-  if (segmentNavLastName !== null && segmentNavLastName !== navName
-    && elements.segmentNavigator.classList.contains("is-collapsed")
-    ) {
-    elements.segmentNavigator.classList.remove("is-collapsed");
-    clearTimeout(segmentNavFlashTimer);
-    segmentNavFlashTimer = setTimeout(() => {
-      elements.segmentNavigator.classList.add("is-collapsed");
-    }, 2600);
-  }
-  segmentNavLastName = navName;
 
   const previous = adjacentSegment(options, state.selectedSegment, -1);
   const next = adjacentSegment(options, state.selectedSegment, 1);
@@ -505,8 +482,6 @@ function renderSegmentNavigation() {
   elements.nextSegmentButton.setAttribute("aria-label", elements.nextSegmentButton.title);
   elements.followSegmentButton.classList.toggle("is-active", state.segmentSelectionMode === "auto");
   elements.followSegmentButton.setAttribute("aria-pressed", String(state.segmentSelectionMode === "auto"));
-  elements.segmentOverviewButton.classList.toggle("is-active", isOverview);
-  elements.segmentOverviewButton.setAttribute("aria-pressed", String(isOverview));
 
   const status = selectedSegmentStatus();
   elements.segmentLoadStatus.className = `segment-load-status is-${status.status}`;
@@ -2037,6 +2012,7 @@ async function renderDataNow() {
     state.routeView = resolveReplayRoute(null, null);
     state.segmentOptions = [];
     elements.segmentNavigator.hidden = true;
+    elements.inspectorStageTools.hidden = true;
     if (viewer && state.lastRenderSignature !== "watch-empty") {
       if (state.watch?.active) liveCameraController.checkpoint(viewer, { runId: state.trace?.manifest?.sessionId });
       await viewer.setData({ mapPack: null, trace: null, useMap: false, activeSegment: null });
@@ -2073,7 +2049,6 @@ async function renderDataNow() {
     }
     viewer.setGameAssetPack(state.gameAssetPack);
     viewer.setWorldVisibility(elements.worldToggle.checked);
-    viewer.setHeightScale(elements.heightScale.value);
     viewer.setTrackVisibility(elements.trackToggle.checked);
     viewer.setMarkerVisibility(elements.markerToggle.checked);
     viewer.setTime(state.currentTime);
@@ -2514,14 +2489,6 @@ function playbackLoop(timestamp) {
   requestAnimationFrame(playbackLoop);
 }
 
-function updateRangeFill(input) {
-  const min = Number(input.min);
-  const max = Number(input.max);
-  const value = Number(input.value);
-  const percent = ((value - min) / (max - min)) * 100;
-  input.style.background = `linear-gradient(90deg, var(--accent) ${percent}%, rgba(255, 255, 255, 0.11) ${percent}%)`;
-}
-
 /** Daily rotation stays available independently of the hidden live feature. */
 function dailySources() {
   return dailySourceUrls({ location, relayUrl: defaultRelayUrl() });
@@ -2895,7 +2862,9 @@ if (FEATURES.liveVisible) setInterval(() => {
 }, 5000);
 // 侧栏手风琴：标题点击折叠/展开
 document.querySelectorAll(".inspector-section:not(.community-section) .section-heading").forEach((heading) => {
-  heading.addEventListener("click", () => heading.closest(".inspector-section")?.classList.toggle("is-collapsed"));
+  heading.addEventListener("click", (event) => {
+    if (!event.target.closest("button")) heading.closest(".inspector-section")?.classList.toggle("is-collapsed");
+  });
 });
 // 玩家卡默认极简：点击卡片展开完整细节（按钮/开关除外）
 elements.playerList.addEventListener("click", (event) => {
@@ -2922,9 +2891,10 @@ elements.playerList.addEventListener("click", (event) => {
 // ===== 跟随相机：HUD + 快捷键 =====
 function syncFollowHud(detail) {
   const active = Boolean(detail?.active ?? (viewer?.followTargetId != null));
+  const auto = active && (detail?.autoRotate ?? viewer?.followAutoRotate ?? false);
+  elements.cinematicButton.setAttribute("aria-pressed", String(auto));
   elements.followHud.hidden = !active;
   if (active) {
-    const auto = detail?.autoRotate ?? viewer?.followAutoRotate ?? false;
     const viewMode = detail?.viewMode ?? viewer?.followViewMode;
     const name = detail?.name ?? (viewer?.followTargetId != null ? participantName(viewer.followTargetId) : "");
     elements.followHudText.textContent = state.watch?.active ? tr(`跟随 · ${name}`, `Following · ${name}`)
@@ -2940,23 +2910,13 @@ function syncFollowHud(detail) {
 elements.sceneCanvas.addEventListener("peaktrail-follow-status", (event) => syncFollowHud(event.detail));
 elements.cinematicButton.addEventListener("click", () => {
   if (!viewer) return;
-  if (viewer.followTargetId !== null) {
+  if (viewer.followTargetId != null && viewer.followAutoRotate) {
     viewer.setFollowTarget(null);
   } else {
     viewer.startAutoFollow();
   }
 });
 
-// ===== 关卡导航条：收起/展开 =====
-elements.segmentNavigator.addEventListener("click", (event) => {
-  // 面板内的功能按钮照常工作；点其它区域切换收起/展开。
-  if (event.target.closest("button")) return;
-  elements.segmentNavigator.classList.toggle("is-collapsed");
-});
-document.addEventListener("click", (event) => {
-  if (event.target.closest("#segmentNavigator")) return;
-  elements.segmentNavigator.classList.add("is-collapsed");
-});
 window.addEventListener("keydown", (event) => {
   if (gateOpen()) return;
   if (!viewer) return;
@@ -2966,10 +2926,8 @@ window.addEventListener("keydown", (event) => {
   } else if (event.key === "Escape" && viewer.followTargetId !== null) {
     event.preventDefault();
     viewer.setFollowTarget(null);
-  } else if (event.key === "Tab" && !state.watch?.active && !event.ctrlKey && !event.altKey && !event.metaKey) {
-    const target = event.target;
-    if (target && (target.tagName === "INPUT" || target.tagName === "SELECT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
-    if (!state.trace) return;
+  } else if (event.key === "Tab" && event.target === elements.sceneCanvas && viewer.followTargetId != null
+    && state.trace && !state.watch?.active && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
     event.preventDefault();
     viewer.cycleFollowTarget();
   }
@@ -3166,9 +3124,10 @@ async function copyWatchShare(kind = "code") {
 $("watchShare").addEventListener("click", () => void copyWatchShare());
 $("watchShareLink").addEventListener("click", () => void copyWatchShare("link"));
 window.addEventListener("scroll", updatePhonePanelButton, { passive: true, capture: true });
-elements.topViewButton.addEventListener("click", () => viewer?.topView());
-elements.fitViewButton.addEventListener("click", () => viewer?.fitView());
-elements.freeCameraButton.addEventListener("click", () => viewer?.toggleFreeCamera());
+elements.freeCameraButton.addEventListener("click", () => {
+  watchChrome.closeMenu();
+  viewer?.toggleFreeCamera();
+});
 function bindMapLootFocusUi({ canvas, card, name, restoreButton, menu, getViewer }) {
   if (!canvas || !card || !name || !restoreButton) return () => {};
   let active = false;
@@ -3216,7 +3175,6 @@ const disposeCameraTouch = bindCameraTouchControls({
   root: elements.cameraTouchControls, canvas: elements.sceneCanvas,
   getCamera: () => viewer?.freeCamera,
 });
-elements.interiorViewButton.addEventListener("click", () => viewer?.enterInteriorView());
 elements.worldToggle.addEventListener("change", () => {
   viewer?.setWorldVisibility(elements.worldToggle.checked);
   updateWorldTelemetry();
@@ -3225,16 +3183,11 @@ elements.sceneCanvas.addEventListener("cameramodechange", (event) => {
   const free = event.detail.mode === "free";
   elements.freeCameraButton.setAttribute("aria-pressed", String(free));
   elements.cameraHelp.hidden = !free;
-  elements.cameraHelp.textContent = event.detail.help;
+  elements.cameraPlacement.textContent = viewer?.cameraPlacementNote || "";
   elements.cameraTouchControls.hidden = !free;
   elements.sceneCanvas.setAttribute("aria-label", free ? event.detail.help : tr("地图回放，可切换自由相机", "Map replay · free camera available"));
 });
 elements.sceneCanvas.addEventListener("cameraplacement", (event) => { elements.cameraPlacement.textContent = event.detail.note; });
-elements.heightScale.addEventListener("input", () => {
-  elements.heightScaleValue.textContent = `${Number(elements.heightScale.value).toFixed(1)}×`;
-  updateRangeFill(elements.heightScale);
-  viewer?.setHeightScale(elements.heightScale.value);
-});
 elements.layerSelect.addEventListener("change", () => {
   chooseSegment(elements.layerSelect.value === "all" ? null : Number(elements.layerSelect.value), "manual");
 });
@@ -3250,7 +3203,6 @@ elements.followSegmentButton.addEventListener("click", () => {
   state.segmentSelectionMode = "auto";
   chooseSegment(defaultSegment(), "auto");
 });
-elements.segmentOverviewButton.addEventListener("click", () => chooseSegment(null, "manual"));
 elements.sceneCanvas.addEventListener("peaktrail-map-status", (event) => {
   const detail = event.detail || {};
   const segment = detail.segment === "all" ? null : asSegment(detail.segment);
@@ -3395,7 +3347,6 @@ async function bootstrap() {
   else if (watchId) void startWatch(watchId, { replaceUrl: false });
   else showGate();
   updateCompatibilityUI();
-  updateRangeFill(elements.heightScale);
   requestAnimationFrame(playbackLoop);
   if (!watchId && !captureId) {
     await bootstrapMapFromQuery();

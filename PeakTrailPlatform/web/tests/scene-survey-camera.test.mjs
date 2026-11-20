@@ -207,27 +207,18 @@ test("survey presets keep the complete subject below persistent viewport control
   }
 });
 
-test("a temporary expanded navigator cannot enlarge the reserved camera area", () => {
+test("chapter framing follows the navigator's actual row in desktop, portrait and landscape layouts", () => {
   const { scene } = fixture();
-  let width = 1024, top = 138, height = 240;
+  let width = 1024, top = 72, height = 50;
   scene.canvas.getBoundingClientRect = () => ({ left: 0, right: width, top: 56, bottom: 816, width, height: 760 });
   scene.canvas.parentElement.querySelectorAll = () => [{
-    matches: (selector) => selector === ".segment-navigator",
     getBoundingClientRect: () => ({ left: 16, right: width - 16, top, bottom: top + height, width: width - 32, height }),
   }];
-  const desktop = scene.surveyCameraFrame();
-  top = 72; height = 35;
-  assert.deepEqual(scene.surveyCameraFrame(), desktop, "tablet chapter flash uses its collapsed top-row footprint");
-  width = 375; top = 148; height = 240;
-  const phone = scene.surveyCameraFrame();
-  height = 55;
-  assert.deepEqual(scene.surveyCameraFrame(), phone, "phone chapter flash keeps the collapsed capsule height");
-  width = 844; top = 122; height = 240;
-  scene.canvas.ownerDocument = { defaultView: { matchMedia: () => ({ matches: true }) } };
-  const landscape = scene.surveyCameraFrame();
-  height = 46;
-  assert.deepEqual(scene.surveyCameraFrame(), landscape, "sideways phones use their collapsed toolbar row");
-  assert.equal(landscape.top, 1 - 2 * (6 + 46 + 4) / 760);
+  assert.equal(scene.surveyCameraFrame().top, 1 - 2 * (16 + 50 + 4) / 760);
+  width = 375; top = 118;
+  assert.equal(scene.surveyCameraFrame().top, 1 - 2 * (62 + 50 + 4) / 760);
+  width = 844; top = 64;
+  assert.equal(scene.surveyCameraFrame().top, 1 - 2 * (8 + 50 + 4) / 760);
 });
 
 test("map-only citadel entry keeps the complete model in view", async () => {

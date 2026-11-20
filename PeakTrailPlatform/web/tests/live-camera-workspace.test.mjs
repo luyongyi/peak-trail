@@ -49,7 +49,7 @@ function fixture() {
         await new Promise(resolve => { gate.resolve = resolve; });
       }
     },
-    setGameAssetPack() {}, setWorldVisibility() {}, setHeightScale() {}, setTrackVisibility() {}, setMarkerVisibility() {},
+    setGameAssetPack() {}, setWorldVisibility() {}, setTrackVisibility() {}, setMarkerVisibility() {},
   };
   let finishMap = null;
   const liveCameraController = createLiveCameraController();
@@ -59,7 +59,7 @@ function fixture() {
     LIVE_TRAIL_S: 0.3, TELEMETRY_UPDATE_INTERVAL_MS: 125, performance,
     elements: { appShell: { classList: { add() {}, remove() {} } }, eventList: { scrollTop: 0 },
       timeline: { min: "0", max: "0", style: {} }, currentTime: {}, totalTime: {}, sampleCount: {},
-      worldToggle: {}, heightScale: { value: "1" }, trackToggle: {}, markerToggle: {} },
+      worldToggle: {}, trackToggle: {}, markerToggle: {} },
     watchText: value => value, tr: value => value, formatTime: String, formatNumber: String,
     resetSegmentNavigation() {}, setPlaying() {}, syncGameAssetsForTrace() {},
     syncMapForTrace: () => finishMap ? new Promise(resolve => { finishMap.resolve = resolve; }) : Promise.resolve(),
