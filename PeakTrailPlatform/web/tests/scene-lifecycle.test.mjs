@@ -8,6 +8,7 @@ import { chooseRecordedInteriorPose, isInteriorLayer } from "../src/camera-place
 import { ReplayCamera } from "../src/replay-camera.js";
 import { nadirCameraBounds, nadirCameraParts } from "../src/nadir-camera-bounds.js";
 import { collectCameraParts, selectCameraSubjectParts } from "../src/camera-subject.js";
+import { retainNativeCampfire } from "../src/native-campfire.js";
 import * as THREE from "../../vendor/three/0.180.0/build/three.module.js";
 
 // Exercise the actual scene methods without a browser/WebGL context. Only the
@@ -36,9 +37,9 @@ function model() {
 
 function fixture(selected = 0) {
   const requests = [];
-  const load = (layer, signal, gameBuildId) => new Promise((resolve, reject) => requests.push({ layer: layer.id, signal, gameBuildId, resolve, reject }));
-  const TrailScene = new Function("THREE", "loadGameGeometry", "cancelAnimationFrame", "layoutPortraitLabels", "clusterPlayerEntries", "portraitScreenSize", "layoutNavigationPortraits", "latestLifeEventBefore", "MARKER_LIFE_EVENT_TYPES", "isInteriorLayer", "chooseRecordedInteriorPose", "nadirCameraBounds", "nadirCameraParts", "collectCameraParts", "selectCameraSubjectParts", "tr", "formatNumber", `${source}\nreturn TrailScene;`)(
-    THREE, load, () => {}, layoutPortraitLabels, clusterPlayerEntries, portraitScreenSize, layoutNavigationPortraits, latestLifeEventBefore, MARKER_LIFE_EVENT_TYPES, isInteriorLayer, chooseRecordedInteriorPose, nadirCameraBounds, nadirCameraParts, collectCameraParts, selectCameraSubjectParts, i18n.tr, i18n.formatNumber,
+  const load = (layer, signal, gameBuildId, context) => new Promise((resolve, reject) => requests.push({ layer: layer.id, signal, gameBuildId, context, resolve, reject }));
+  const TrailScene = new Function("THREE", "loadGameGeometry", "cancelAnimationFrame", "layoutPortraitLabels", "clusterPlayerEntries", "portraitScreenSize", "layoutNavigationPortraits", "latestLifeEventBefore", "MARKER_LIFE_EVENT_TYPES", "isInteriorLayer", "chooseRecordedInteriorPose", "nadirCameraBounds", "nadirCameraParts", "collectCameraParts", "selectCameraSubjectParts", "tr", "formatNumber", "retainNativeCampfire", `${source}\nreturn TrailScene;`)(
+    THREE, load, () => {}, layoutPortraitLabels, clusterPlayerEntries, portraitScreenSize, layoutNavigationPortraits, latestLifeEventBefore, MARKER_LIFE_EVENT_TYPES, isInteriorLayer, chooseRecordedInteriorPose, nadirCameraBounds, nadirCameraParts, collectCameraParts, selectCameraSubjectParts, i18n.tr, i18n.formatNumber, retainNativeCampfire,
   );
   const layers = [
     { id: "A", segment: 0, biome: "shore" },
@@ -64,6 +65,51 @@ function fixture(selected = 0) {
 }
 
 const flush = () => new Promise((resolve) => setImmediate(resolve));
+
+test("chapter selection keeps the original campfire batch on advance and replaces it when rewinding", async () => {
+  const { scene, requests } = fixture(0);
+  scene.origin = new THREE.Vector3();
+  const prev = new THREE.Group();
+  prev.userData = { ...scene.terrainRoot.children[0].userData, loaded: true, campfire: {} };
+  scene.terrainRoot.children[0] = prev;
+  const complete = new THREE.Group();
+  const retained = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial());
+  retained.userData.nativeCampfire = true;
+  const removed = retained.clone(); removed.userData.nativeCampfire = false;
+  complete.add(retained, removed); prev.add(complete);
+  scene.setActiveSegment(1);
+  assert.equal(prev.userData.campOnly, true);
+  assert.deepEqual(complete.children, [retained]);
+  requests[0].resolve(model()); await flush();
+  assert.deepEqual(requests.map(r => r.layer), ["B"]);
+  assert.equal(prev.visible, true);
+  scene.setActiveSegment(0);
+  assert.deepEqual(complete.children, [retained], "visible until its replacement arrives");
+  const full = new THREE.Group(); full.add(new THREE.Mesh());
+  requests[1].resolve(full); await flush();
+  assert.deepEqual(prev.children, [full]);
+  assert.equal(prev.userData.campOnly, false);
+  assert.equal(prev.userData.loaded, true);
+});
+
+test("only an actually visible, identical adjacent shell suppresses the native campfire", () => {
+  const { scene } = fixture(0);
+  const [source, dest] = scene.terrainRoot.children;
+  source.userData.campfire = { includedInNextEnclosure: true, enclosureSha256: "matching-glb" };
+  source.userData.loaded = true;
+  const fire = group(); fire.userData.nativeCampfire = true;
+  source.add(fire);
+  scene.enclosureContext = { root: { visible: true }, entries: [{ geometrySha256: "different-glb" }] };
+  scene.applyLayerVisibility(); assert.equal(fire.visible, true);
+  scene.enclosureContext.entries[0].geometrySha256 = "matching-glb";
+  scene.applyLayerVisibility(); assert.equal(fire.visible, false);
+  scene.enclosureContext.root.visible = false;
+  scene.applyLayerVisibility(); assert.equal(fire.visible, true);
+  scene.activeSegment = null;
+  const destModel = group(), shell = group(); shell.userData.sourceEnclosureDigest = "matching-glb";
+  destModel.add(shell); dest.add(destModel); dest.userData.loaded = true;
+  scene.applyLayerVisibility(); assert.equal(fire.visible, false);
+});
 
 test("a stale chapter completing after the selected chapter is disposed, not cached or attached", async () => {
   const { scene, requests } = fixture();

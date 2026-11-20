@@ -82,6 +82,33 @@ test("mixed meshes retain ordinary groups but never raycast against decal volume
   batched.children.forEach((mesh) => { mesh.geometry.dispose(); mesh.dispose(); });
 });
 
+test("full and cold campfire loads select the same intact instances of a multi-primitive node", () => {
+  const { batchStaticMeshes } = compile();
+  const geometry = new THREE.BoxGeometry(), material = new THREE.MeshStandardMaterial();
+  const matcher = { includesNode: node => node === 23, matches: (node, i) => node === 23 && i === 1 };
+  function build(campOnly) {
+    const scene = new THREE.Group(), sourceNode = new THREE.Group();
+    for (let i = 0; i < 2; i++) {
+      const primitive = new THREE.InstancedMesh(geometry, material, 3);
+      for (let j = 0; j < 3; j++) primitive.setMatrixAt(j, new THREE.Matrix4().makeTranslation(j * 10, i, -5));
+      sourceNode.add(primitive);
+    }
+    scene.add(sourceNode);
+    return batchStaticMeshes(scene, "26542162", new Set(), new Map([[sourceNode, { nodes: 23 }]]),
+      { campfire: matcher, campOnly });
+  }
+  const full = build(false), cold = build(true);
+  assert.equal(full.children.filter(mesh => !mesh.userData.nativeCampfire).reduce((n, mesh) => n + mesh.count, 0), 4);
+  assert.equal(cold.children.length, 1);
+  const warm = full.children.find(mesh => mesh.userData.nativeCampfire);
+  const held = cold.children[0];
+  assert.equal(held.userData.nativeCampfire, true);
+  assert.equal(held.count, 2);
+  assert.equal(held.geometry, geometry);
+  assert.equal(held.material, material);
+  assert.deepEqual(held.instanceMatrix.array, warm.instanceMatrix.array);
+});
+
 test("pit fade boxes are excluded from rendering and terrain raycasts without hiding real cubes", () => {
   const { batchStaticMeshes } = compile();
   const geometry = new THREE.BoxGeometry();

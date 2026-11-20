@@ -21,8 +21,8 @@ import { CommunityRouteOverlay } from "./community-route-overlay.js";
 import { MapLootOverlay } from "./map-loot-overlay.js";
 import { MapLootFocus } from "./map-loot-focus.js";
 import { EnclosureContextRenderer } from "./enclosure-context-renderer.js";
-import { ChapterSupportGeometry } from "./chapter-support-geometry.js";
-import { ChapterHandoff } from "./chapter-handoff.js";
+import { nativeCampfireSpec, createNativeCampfireMatcher, retainNativeCampfire } from "./native-campfire.js";
+import { loadCampfireSourceData } from "./campfire-source-data.js";
 import { chooseOverviewDirection, fitPerspectivePoints } from "./camera-framing.js";
 import { collectCameraParts, selectCameraSubjectParts } from "./camera-subject.js";
 import { chooseRenderPolicy, renderErrorName } from "./render-policy.js";
@@ -282,9 +282,6 @@ export class TrailScene {
     this.worldRenderer = new WorldRenderer(canvas);
     this.sourceWater = new SourceWaterRenderer();
     this.enclosureContext = new EnclosureContextRenderer({ THREE, loadGeometry: loadGameGeometry, disposeObject });
-    this.chapterSupport = new ChapterSupportGeometry(THREE);
-    this.chapterHandoff = new ChapterHandoff(this, THREE, disposeObject);
-    this.scene.add(this.chapterSupport.root);
     this.waterDepthEntries = [];
     this.fogDepthPass = new FogDepthPass(THREE);
     this.gameAssetPack = null;
@@ -442,6 +439,7 @@ export class TrailScene {
       maxTextureSize: this.renderLimits?.maxTextureSize ?? null,
       maxRenderbufferSize: this.renderLimits?.maxRenderbufferSize ?? null,
       contextLost: this.contextLost, contextLossCount: this.contextLossCount, contextRestoreCount: this.contextRestoreCount,
+      campfireIndexError: this.campfireIndexError ?? null,
       geometryCount: renderer?.info?.memory?.geometries ?? null, textureCount: renderer?.info?.memory?.textures ?? null,
       programCount: renderer?.info?.programs?.length ?? null,
       fogDepthWidth: this.fogDepthPass?.target?.width ?? 0, fogDepthHeight: this.fogDepthPass?.target?.height ?? 0 };
@@ -500,7 +498,7 @@ export class TrailScene {
     this.geometryAbort?.abort();
     this.geometryAbort = new AbortController();
     this.geometryLoads.clear();
-    this.chapterHandoff?.reset();
+    this.campfireIndexError = null;
     this.followTerrain?.setRoots([]);
     this.followTerrainDirty = true;
     this.enclosureContext?.clear();
@@ -581,9 +579,19 @@ export class TrailScene {
 
   async buildTerrain(token) {
     if (this.mapPack.identityVersion === 3) {
-      for (const layer of this.mapPack.layers) {
+      const pack = this.mapPack;
+      let source;
+      try { source = await loadCampfireSourceData(pack); }
+      catch (error) {
+        // Keep the primary map usable if this optional metadata is offline.
+        if (token === this.buildToken) this.campfireIndexError = error.name || "Error";
+      }
+      if (token !== this.buildToken) return;
+      for (const layer of pack.layers) {
         const group = new THREE.Group();
-        group.userData = { layerId: layer.id, segment: layer.segment, mapLayer: layer, loaded: false };
+        const spec = nativeCampfireSpec(source, pack, layer);
+        group.userData = { layerId: layer.id, segment: layer.segment, mapLayer: layer, loaded: false,
+          campOnly: false, campfire: spec ? createNativeCampfireMatcher(spec) : null };
         this.terrainRoot.add(group);
       }
       await this.ensureGeometryLayers(token);
@@ -720,12 +728,29 @@ export class TrailScene {
       : layer.segment === this.activeSegment);
   }
 
-  async loadChapterGeometry(layer, signal, gameBuildId) {
-    const enclosures = (this.mapPack.mapEnclosures?.enclosures || []).filter(entry => entry.segment === layer.segment);
+  geometryRole(group) {
+    if (this.isGeometryLayerRequested(group.userData.mapLayer)) return "chapter";
+    if (this.useMap && group.userData.campfire && this.activeSegment === group.userData.segment + 1
+        && !this.campfireCoveredByShell(group)) return "campfire";
+    return null;
+  }
+
+  campfireCoveredByShell(group) {
+    const camp = group.userData.campfire;
+    if (!camp?.includedInNextEnclosure) return false;
+    if (this.enclosureContext?.root?.visible &&
+        this.enclosureContext.entries.some(entry => entry.geometrySha256 === camp.enclosureSha256)) return true;
+    const next = this.terrainRoot.children.find(g => g.userData.segment === group.userData.segment + 1);
+    if (!next?.userData.loaded || !this.isGeometryLayerRequested(next.userData.mapLayer)) return false;
+    return next.children.some(model => model.children.some(part => part.userData.sourceEnclosureDigest === camp.enclosureSha256));
+  }
+
+  async loadChapterGeometry(layer, signal, gameBuildId, campfire, campOnly = false) {
+    const enclosures = campOnly ? [] : (this.mapPack.mapEnclosures?.enclosures || []).filter(entry => entry.segment === layer.segment);
     const token = this.buildToken;
     const context = { chapterLayer: layer, route: this.mapPack.route,
       onProgress: progress => this.emitGeometryProgress(layer, progress, token) };
-    const model = await loadGameGeometry(layer, signal, gameBuildId, context);
+    const model = await loadGameGeometry(layer, signal, gameBuildId, { ...context, campfire, campOnly });
     try {
       // The exact-source siblings were missed by the original root traversal.
       // Load them into the same chapter, including its terrain collision query.
@@ -733,6 +758,7 @@ export class TrailScene {
         signal?.throwIfAborted?.();
         const shell = await loadGameGeometry({ ...enclosure, id: enclosure.objectId }, signal, gameBuildId, context);
         shell.userData.sourceEnclosure = enclosure.objectId;
+        shell.userData.sourceEnclosureDigest = enclosure.geometrySha256;
         model.add(shell);
       }
       return model;
@@ -753,33 +779,55 @@ export class TrailScene {
     const selected = this.activeSegment;
     const isCurrent = () => token === this.buildToken && selectionToken === this.geometrySelectionToken;
     const groups = this.terrainRoot.children.filter((group) => this.isGeometryLayerRequested(group.userData.mapLayer));
+    if (!groups.length) return;
+    // Render the selected chapter first. Cold entry loads only the original
+    // campfire draws from its predecessor; the overview already owns them.
+    const camp = this.terrainRoot.children.find(group => this.geometryRole(group) === "campfire");
+    if (camp) groups.push(camp);
     this.emitMapStatus("loading", ["正在加载本关真实网格…", "Loading this stage's geometry…"], selected);
     try {
       // Sequential parsing limits memory spikes in the explicitly requested overview.
       for (const group of groups) {
         if (!isCurrent()) return;
         const layer = group.userData.mapLayer;
+        const role = this.geometryRole(group);
+        if (!role) continue; // The selected chapter's own shell now supplies this campfire.
+        const ready = () => role === "campfire" ? group.userData.campOnly : group.userData.loaded;
         // A round can await a task that settles without mounting anything (a
         // stale task from an aborted round disposes its model and removes
         // itself). Retry with a fresh request instead of leaving the chapter
         // silently unloaded; genuine failures still surface as errors.
         let attempts = 0;
-        while (!group.userData.loaded && attempts < 3) {
+        while (!ready() && attempts < 3) {
           attempts += 1;
           if (!isCurrent()) return;
           if (!this.geometryLoads.has(layer.id)) {
             const origin = this.origin.clone();
-            const task = this.loadChapterGeometry(layer, this.geometryAbort.signal, this.mapPack.gameBuildId).then((model) => {
+            const task = this.loadChapterGeometry(layer, this.geometryAbort.signal, this.mapPack.gameBuildId,
+              group.userData.campfire, role === "campfire").then((model) => {
               // A shared request can still serve A -> B -> A. Its ownership is
               // the current build/layer, not the selection that first started it.
-              if (token !== this.buildToken || !this.isGeometryLayerRequested(layer)) {
+              const wanted = this.geometryRole(group);
+              if (token !== this.buildToken || !wanted || role === "campfire" && wanted === "chapter") {
                 disposeObject(model);
                 if (this.geometryLoads.get(layer.id) === task) this.geometryLoads.delete(layer.id);
                 return;
               }
+              if (wanted === "campfire" && role === "chapter") retainNativeCampfire(model);
+              if (wanted === "campfire" && !model.children.length) {
+                disposeObject(model);
+                throw new Error(tr("营火共享地形与底图不匹配", "Shared campfire geometry does not match this chapter"));
+              }
               model.position.copy(origin).multiplyScalar(-1);
+              // A backward seek or overview upgrades the camp to its complete
+              // chapter atomically. The two reads own independent resources.
+              if (group.userData.campOnly) disposeObject(group);
               group.add(model);
-              group.userData.loaded = true;
+              delete group.userData.cameraSubjectParts;
+              delete group.userData.campfireHiddenByShell;
+              group.userData.loaded = wanted === "chapter";
+              group.userData.campOnly = wanted === "campfire";
+              if (group.userData.campOnly && this.geometryLoads.get(layer.id) === task) this.geometryLoads.delete(layer.id);
               this.followTerrainDirty = true;
             }).catch((error) => {
               if (this.geometryLoads.get(layer.id) === task) this.geometryLoads.delete(layer.id);
@@ -790,7 +838,7 @@ export class TrailScene {
           await this.geometryLoads.get(layer.id);
           if (!isCurrent()) return;
         }
-        if (!group.userData.loaded) throw new Error(tr(`第 ${layer.segment} 关真实网格未能就绪`, `Geometry for stage ${formatNumber(layer.segment)} did not load`));
+        if (!ready()) throw new Error(tr(`第 ${layer.segment} 关真实网格未能就绪`, `Geometry for stage ${formatNumber(layer.segment)} did not load`));
       }
       if (!isCurrent()) return;
       await this.enclosureContext?.setSelection(this.mapPack, this.selectedLayer(), {
@@ -799,13 +847,13 @@ export class TrailScene {
       });
       if (!isCurrent()) return;
       this.applyLayerVisibility();
-      this.setTime(this.currentTime, { geometryChanged: true });
-      // A single-chapter view keeps only that chapter's GPU resources resident.
+      this.setTime(this.currentTime);
       if (selected !== null) {
         for (const group of this.terrainRoot.children) {
-          if (group.userData.segment === selected || !group.userData.loaded) continue;
+          if (this.geometryRole(group) || !group.userData.loaded && !group.userData.campOnly) continue;
           disposeObject(group);
           group.userData.loaded = false;
+          group.userData.campOnly = false;
           delete group.userData.cameraSubjectParts;
           delete group.userData.nadirCameraBounds;
           delete group.userData.nadirCameraParts;
@@ -1586,6 +1634,7 @@ export class TrailScene {
   currentTerrainQuery() {
     if (this.followTerrainDirty) {
       const visible = this.terrainRoot.children.filter(group => group.visible);
+      if (this.enclosureContext?.root?.visible && this.enclosureContext.root.userData.loaded) visible.push(this.enclosureContext.root);
       this.followTerrain.setRoots(visible);
       this.followTerrainDirty = false;
       this.followRig.invalidate();
@@ -1593,7 +1642,7 @@ export class TrailScene {
     return this.followTerrain;
   }
 
-  setTime(seconds, { geometryChanged = false } = {}) {
+  setTime(seconds) {
     const nextTime = Math.max(0, Number(seconds) || 0);
     const discontinuity = nextTime < this.currentTime - 0.01 || nextTime > this.currentTime + 1;
     if (discontinuity) this.followDiscontinuity = true;
@@ -1642,7 +1691,6 @@ export class TrailScene {
       }
       group.visible = this.playerVisibility.get(group.userData.playerId) ?? true;
     }
-    this.chapterHandoff?.update(worldPlayers, discontinuity || geometryChanged);
     this.worldRenderer.update(this.currentTime, { players: worldPlayers, heightScale: this.heightScale,
       segment: this.activeSegment,
       bounds: this.useMap && this.activeSegment !== null ? this.viewBounds() : null });
@@ -1743,10 +1791,7 @@ export class TrailScene {
   setHeightScale(value) {
     const next = THREE.MathUtils.clamp(Number(value) || 1, 0.2, 5);
     const changed = next !== this.heightScale;
-    if (changed) {
-      this.clearMapLootFocus();
-      this.chapterHandoff?.reset();
-    }
+    if (changed) this.clearMapLootFocus();
     this.heightScale = next;
     this.applyHeightScale();
     if (changed && this.surveyPreset && this.freeCamera.mode === "orbit" && this.followTargetId == null) {
@@ -1794,7 +1839,6 @@ export class TrailScene {
     this.lootFocusTerrain = null;
     this.lootFocusTerrainKey = null;
     this.communityOverlay?.clear();
-    this.chapterHandoff?.reset();
     this.activeSegment = next;
     ++this.geometrySelectionToken;
     // At the Citadel entrance the visible exterior is the next chapter's
@@ -1828,13 +1872,28 @@ export class TrailScene {
 
   applyLayerVisibility() {
     this.syncMapLootContext();
+    this.followTerrain?.dispose?.();
     this.followTerrainDirty = true;
     this.sourceWater?.setSegment(this.activeSegment);
-    for (const mesh of this.terrainRoot.children) {
-      const isVoid = String(mesh.userData.mapLayer?.biome).toLowerCase() === "void";
-      mesh.visible = this.activeSegment === null
-        ? !isVoid
-        : mesh.userData.segment === this.activeSegment;
+    for (const group of this.terrainRoot.children) {
+      if (group.userData.campfire && this.geometryRole(group) === "campfire" && group.userData.loaded) {
+        const retained = retainNativeCampfire(group);
+        group.userData.campOnly = retained.batches > 0;
+        group.userData.loaded = false;
+        delete group.userData.cameraSubjectParts;
+        this.geometryLoads.delete(group.userData.mapLayer.id);
+      }
+      const isVoid = String(group.userData.mapLayer?.biome).toLowerCase() === "void";
+      group.visible = this.activeSegment === null ? !isVoid : group.userData.segment === this.activeSegment
+        || Boolean(group.userData.campOnly && this.geometryRole(group) === "campfire");
+      if (group.visible && group.userData.campfire?.includedInNextEnclosure) {
+        const covered = this.campfireCoveredByShell(group);
+        if (group.userData.campfireHiddenByShell !== covered) {
+          group.traverse(mesh => { if (mesh.userData.nativeCampfire) mesh.visible = !covered; });
+          group.userData.campfireHiddenByShell = covered;
+          delete group.userData.cameraSubjectParts;
+        }
+      }
     }
     // Rebuild only on geometry/selection changes; no per-frame scene traversal.
     this.waterDepthEntries = collectWaterDepthEntries(this.terrainRoot, this.heightScale);
@@ -1897,8 +1956,9 @@ export class TrailScene {
 
   cameraSubjectParts() {
     if (!this.useMap || this.mapPack?.identityVersion !== 3) return null;
-    const groups = this.terrainRoot.children.filter((group) => this.isGeometryLayerRequested(group.userData.mapLayer));
-    if (!groups.length || groups.some((group) => !group.userData.loaded)) return null;
+    const groups = this.terrainRoot.children.filter((group) => this.isGeometryLayerRequested(group.userData.mapLayer)
+      || group.visible && group.userData.campOnly);
+    if (!groups.length || groups.some((group) => !group.userData.loaded && !group.userData.campOnly)) return null;
     return groups.flatMap((group) => {
       if (!group.userData.cameraSubjectParts) {
         const parts = collectCameraParts(THREE, group, this.origin);
@@ -1906,7 +1966,7 @@ export class TrailScene {
         // Interior shells stay connected to their subject; only isolated tiny
         // fragments far outside that subject may stop controlling the camera.
         const layer = group.userData.mapLayer;
-        group.userData.cameraSubjectParts = String(layer.biome).toLowerCase() === "void" ? parts
+        group.userData.cameraSubjectParts = group.userData.campOnly || String(layer.biome).toLowerCase() === "void" ? parts
           : selectCameraSubjectParts(parts, { interior: isInteriorLayer(layer, this.mapPack.route) });
       }
       return group.userData.cameraSubjectParts;
@@ -2121,8 +2181,6 @@ export class TrailScene {
     this.mapLootOverlay?.dispose();
     this.sourceWater?.dispose();
     this.enclosureContext?.dispose();
-    this.chapterHandoff?.reset();
-    this.chapterSupport?.dispose();
     this.waterDepthEntries = [];
     this.fogDepthPass.dispose();
     this.controls.dispose();

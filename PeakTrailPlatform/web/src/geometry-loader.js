@@ -184,7 +184,7 @@ async function batchStaticMeshesAsync(scene, build, shadowOnly, associations, co
 
 /** Keep every visible source triangle; share repeated rocks/trees and preserve full
  * matrixWorld, including shear that glTF's TRS instancing cannot represent. */
-function* buildStaticMeshes(scene, gameBuildId, shadowOnlyNodes = new Set(), associations = new Map()) {
+function* buildStaticMeshes(scene, gameBuildId, shadowOnlyNodes = new Set(), associations = new Map(), context = {}) {
   scene.updateMatrixWorld(true);
   const batches = new Map();
   const instance = new THREE.Matrix4();
@@ -212,12 +212,16 @@ function* buildStaticMeshes(scene, gameBuildId, shadowOnlyNodes = new Set(), ass
     if (!object.isMesh || object.isSkinnedMesh) continue objects;
     // Multi-primitive glTF nodes can own child meshes. Resolve their associated
     // node before batching; hidden panels must not affect camera/trail raycasts.
+    let nodeIndex;
     for (let owner = object; owner && owner !== scene; owner = owner.parent) {
-      if (shadowOnlyNodes.has(associations.get(owner)?.nodes)) {
+      const node = associations.get(owner)?.nodes;
+      if (Number.isInteger(node)) nodeIndex ??= node;
+      if (shadowOnlyNodes.has(node)) {
         omittedShadowOnlyInstances += object.isInstancedMesh ? object.count : 1;
         continue objects;
       }
     }
+    if (context.campOnly && !context.campfire?.includesNode(nodeIndex)) continue;
     const materials = Array.isArray(object.material) ? object.material : [object.material];
     const proxyMaterials = materials.map((material) => isProjectionProxyMaterial(gameBuildId, material));
     let geometry = object.geometry;
@@ -248,10 +252,12 @@ function* buildStaticMeshes(scene, gameBuildId, shadowOnlyNodes = new Set(), ass
         prepared.add(material);
       }
     }
-    const addMatrix = (worldMatrix) => {
+    const addMatrix = (worldMatrix, instanceIndex) => {
+      const campfire = context.campfire?.matches(nodeIndex, instanceIndex) === true;
+      if (context.campOnly && !campfire) return;
       const transform = positiveInstanceTransform(worldMatrix.elements);
-      const key = `${geometry.uuid}:${materials.map((material) => material.uuid).join(":")}:${transform.reflected}`;
-      if (!batches.has(key)) batches.set(key, { geometry, material: object.material, reflected: transform.reflected, matrices: [], mines: [] });
+      const key = `${geometry.uuid}:${materials.map((material) => material.uuid).join(":")}:${transform.reflected}:${campfire}`;
+      if (!batches.has(key)) batches.set(key, { geometry, material: object.material, reflected: transform.reflected, campfire, matrices: [], mines: [] });
       const batch = batches.get(key);
       batch.matrices.push(new THREE.Matrix4().fromArray(transform.matrix));
       if (mineBounds) {
@@ -265,15 +271,16 @@ function* buildStaticMeshes(scene, gameBuildId, shadowOnlyNodes = new Set(), ass
     if (object.isInstancedMesh) {
       for (let index = 0; index < object.count; index++) {
         object.getMatrixAt(index, instance);
-        addMatrix(new THREE.Matrix4().multiplyMatrices(object.matrixWorld, instance));
+        addMatrix(new THREE.Matrix4().multiplyMatrices(object.matrixWorld, instance), index);
         if ((index & 127) === 127) yield;
       }
-    } else addMatrix(object.matrixWorld);
+    } else addMatrix(object.matrixWorld, 0);
     yield;
   }
   const root = new THREE.Group();
   for (const batch of batches.values()) {
     const mesh = new THREE.InstancedMesh(batch.geometry, batch.material, batch.matrices.length);
+    if (batch.campfire) mesh.userData.nativeCampfire = true;
     mesh.scale.x = batch.reflected ? -1 : 1;
     batch.matrices.forEach((matrix, index) => mesh.setMatrixAt(index, matrix));
     if (batch.mines.length) mesh.userData.peakRecordedMines = batch.mines.map((mine) => ({
@@ -382,7 +389,22 @@ export async function loadGameGeometry(layer, signal, gameBuildId, context = {})
   assertEmbeddedGlb(bytes);
   reportGeometryProgress(progress, "parse", bytes.byteLength, bytes.byteLength);
   await yieldGeometryTask(signal);
-  const gltf = await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).parseAsync(bytes, "");
+  const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+  if (context.campOnly) {
+    // The signed chapter GLBs store independently placed nodes as scene
+    // roots. Keep original node indices for loader associations. A nested
+    // root is left intact and its individual draws are filtered in batching.
+    loader.register(parser => ({
+      name: "PeakNativeCampfire",
+      beforeRoot() {
+        for (const scene of parser.json.scenes) {
+          scene.nodes = (scene.nodes || []).filter(index =>
+            parser.json.nodes[index]?.children?.length || context.campfire.includesNode(index));
+        }
+      },
+    }));
+  }
+  const gltf = await loader.parseAsync(bytes, "");
   checkGeometryAbort(signal);
   reportGeometryProgress(progress, "batch");
   await yieldGeometryTask(signal);
