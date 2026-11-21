@@ -73,6 +73,36 @@ test("an exterior shell can be hidden without dropping the interior shaft, cross
   assert.equal(core.visible, true); assert.equal(originalStair.visible, true);
 });
 
+test("removing either facade leaves the original walking surface under the entrance passage", () => {
+  const { batchStaticMeshes, sourceFacade } = compile();
+  for (const sample of [
+    { root: "Gloom Temple", model: "Temple Structure Outer", x: 3.505, y: 114.328, z: 0.78025064,
+      floor: [[4.50848389, 111.40821075, 0.61593628], [4.50848389, 116.2855072, 0.89041138], [0, 113.84629059, 0.75314224]] },
+    { root: "VolcanoModel", model: "Pipe", x: 0, y: 8, z: -1.85819150,
+      floor: [[0.00024396, 8.02425671, -1.86827517], [-0.00199413, 7.98607206, -1.85335374], [0.01259902, 8.02140236, -1.86072874]] },
+  ]) {
+    // Exact source triangles in model space (local Z up). The Citadel sample
+    // is under a recorded player in Level_107, more than 114m from its axis.
+    const layer = { objectId: "map-enclosure:fixture", segment: 4, sourceRootName: sample.root, sourceModelName: sample.model,
+      sourceOriginalRendererEnabled: false, sourceActiveSplitRenderers: 1 };
+    const facade = sourceFacade(layer, "26542162", { nodes: [{ mesh: 0 }], meshes: [{ name: "Generated mesh 0,0,0" }] });
+    const geometry = new THREE.BufferGeometry(), stone = new THREE.MeshStandardMaterial();
+    stone.userData.peakTerrain = { sourceColors: { cull: 2 } };
+    const roof = sample.floor.map(([x, y, z]) => [x, y, z + 25]);
+    geometry.setAttribute("position", new THREE.Float32BufferAttribute([...sample.floor.flat(), ...roof.flat()], 3));
+    geometry.setIndex([0, 1, 2, 3, 4, 5, 2, 1, 0]); // Floor, upper roof, downward-facing stone.
+    const mesh = new THREE.Mesh(geometry, stone), scene = new THREE.Group();
+    scene.add(mesh);
+    const root = batchStaticMeshes(scene, "26542162", new Set(), new Map([[mesh, { nodes: 0 }]]), { facade });
+    const peeled = root.children.filter(draw => !draw.userData.exteriorFacade);
+    assert.equal(peeled.length, 1);
+    assert.deepEqual([...peeled[0].geometry.index.array], [0, 1, 2]);
+    const ray = new THREE.Raycaster(new THREE.Vector3(sample.x, sample.y, sample.z + 1), new THREE.Vector3(0, 0, -1));
+    const [hit] = ray.intersectObjects(peeled);
+    assert.ok(hit && Math.abs(hit.point.z - sample.z) < 0.00001, sample.root);
+  }
+});
+
 test("audited shadow-only affine/GPU panels are omitted, same-name solid props remain", () => {
   const { batchStaticMeshes } = compile();
   const geometry = new THREE.PlaneGeometry();

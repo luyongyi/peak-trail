@@ -165,20 +165,23 @@ function indexedBounds(geometry, useGroups = false) {
 // 64 world metres), and r=60 for Temple Structure Outer (60 world metres).
 // Bind these measurements to the audited source mesh, never to a chapter-wide
 // material: real stairs, platforms and mechanisms can use the same rock.
+const CITADEL_PASSAGE = { coreRadius: 60, floorMin: [-28, 0, -4], floorMax: [28, 185, 6] };
+const KILN_PASSAGE = { coreRadius: 3.25, floorMin: [-4.2, 1.1, -6], floorMax: [2, 14.3, -0.8] };
+
 function sourceFacade(layer, build, document) {
   if (!["25306743", "25739797", "26134529", "26155610", "26542162"].includes(String(build))
       || layer?.segment !== 4 || !layer.objectId?.startsWith("map-enclosure:")
       || layer.sourceOriginalRendererEnabled !== false || !Number.isInteger(layer.sourceActiveSplitRenderers)
       || layer.sourceActiveSplitRenderers <= 0) return null;
-  let coreRadius;
-  if (layer.sourceRootName === "VolcanoModel" && layer.sourceModelName === "Pipe") coreRadius = 3.25;
-  else if (layer.sourceRootName === "Gloom Temple" && layer.sourceModelName === "Temple Structure Outer") coreRadius = 60;
+  let passage;
+  if (layer.sourceRootName === "VolcanoModel" && layer.sourceModelName === "Pipe") passage = KILN_PASSAGE;
+  else if (layer.sourceRootName === "Gloom Temple" && layer.sourceModelName === "Temple Structure Outer") passage = CITADEL_PASSAGE;
   else return null;
   const nodes = new Set();
   document.nodes?.forEach((node, index) => {
     if (/^Generated mesh \d+,\d+,\d+$/.test(document.meshes?.[node.mesh]?.name)) nodes.add(index);
   });
-  return nodes.size === layer.sourceActiveSplitRenderers ? { coreRadius, nodes } : null;
+  return nodes.size === layer.sourceActiveSplitRenderers ? { ...passage, nodes } : null;
 }
 
 function edgeTouchesCore(ax, ay, bx, by, radiusSquared) {
@@ -192,18 +195,29 @@ function edgeTouchesCore(ax, ay, bx, by, radiusSquared) {
 // A triangle crossing the core stays whole, including large floors/bridges
 // whose three corners may all lie outside the cylinder. The original indices,
 // attributes and winding are retained. CPU work occurs once per geometry load.
-function partitionFacade(geometry, radius) {
+function partitionFacade(geometry, { coreRadius, floorMin, floorMax }) {
   const index = geometry.index, pos = geometry.getAttribute("position");
   if (!index || !pos || geometry.groups.length || geometry.drawRange.start !== 0
       || geometry.drawRange.count < index.count || index.count % 3) return [{ geometry }];
-  const inside = [], outside = [], r2 = radius * radius;
+  const inside = [], outside = [], r2 = coreRadius * coreRadius;
   for (let i = 0; i < index.count; i += 3) {
     const a = index.getX(i), b = index.getX(i+1), c = index.getX(i+2);
     const ax = pos.getX(a), ay = pos.getY(a), bx = pos.getX(b), by = pos.getY(b), cx = pos.getX(c), cy = pos.getY(c);
     const ab = ax * by - ay * bx, bc = bx * cy - by * cx, ca = cx * ay - cy * ax;
     const containsAxis = (ab > 0 && bc > 0 && ca > 0) || (ab < 0 && bc < 0 && ca < 0);
-    const keep = containsAxis || edgeTouchesCore(ax, ay, bx, by, r2) || edgeTouchesCore(bx, by, cx, cy, r2)
+    let keep = containsAxis || edgeTouchesCore(ax, ay, bx, by, r2) || edgeTouchesCore(bx, by, cx, cy, r2)
       || edgeTouchesCore(cx, cy, ax, ay, r2);
+    // The authored +Y entrance extends beyond the shaft in both models. Keep
+    // its upward-facing floor and adjoining landing even when the walls are
+    // hidden. The Citadel ramp spans y=39..163, z=0..5; the Kiln passage
+    // descends into the mountain. The roof and tunnel ceiling are separate
+    // faces. Keep whole triangles at the edges of the measured footprint.
+    if (!keep && floorMin && ab + bc + ca > 0
+        && Math.min(ax, bx, cx) <= floorMax[0] && Math.max(ax, bx, cx) >= floorMin[0]
+        && Math.min(ay, by, cy) <= floorMax[1] && Math.max(ay, by, cy) >= floorMin[1]) {
+      const az = pos.getZ(a), bz = pos.getZ(b), cz = pos.getZ(c);
+      keep = Math.min(az, bz, cz) >= floorMin[2] && Math.max(az, bz, cz) <= floorMax[2];
+    }
     (keep ? inside : outside).push(a, b, c);
   }
   if (!outside.length) return [{ geometry, core: true }];
@@ -314,7 +328,7 @@ function* buildStaticMeshes(scene, gameBuildId, shadowOnlyNodes = new Set(), ass
     }
     let parts = [{ geometry }];
     if (context.facade?.nodes.has(nodeIndex) && !Array.isArray(object.material)) {
-      if (!facadePartitions.has(geometry)) facadePartitions.set(geometry, partitionFacade(geometry, context.facade.coreRadius));
+      if (!facadePartitions.has(geometry)) facadePartitions.set(geometry, partitionFacade(geometry, context.facade));
       parts = facadePartitions.get(geometry);
     }
     // The shaft's wall faces point into the shaft. Use the source's Cull Back
