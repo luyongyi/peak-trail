@@ -330,10 +330,12 @@ test("opening and restoring the facade changes follow geometry and distance whil
     scene.setFollowTarget("inside");
     scene.updateFollowCamera(1 / 60);
     assert.equal(f.rigCalls.at(-1).options.interior, false);
-    assert.equal(scene.followDistance, FOLLOW_DISTANCE);
+    assert.equal(scene.followDistance, 36);
+    assert.equal(f.rigCalls.at(-1).options.followWindowFloorY, scene.followAnchor.y + 0.15);
     scene.facadeState.visible = true;
     scene.updateFollowCamera(1 / 60);
     assert.equal(f.rigCalls.at(-1).options.interior, true);
+    assert.equal(f.rigCalls.at(-1).options.followWindowFloorY, undefined);
     assert.equal(scene.followDistance, FOLLOW_INTERIOR_DISTANCE);
     scene.followUserOrbit = true; scene.followAzimuth = 0.8; scene.followDistance = 21;
     scene.facadeState.visible = false;
@@ -342,6 +344,40 @@ test("opening and restoring the facade changes follow geometry and distance whil
     assert.equal(f.rigCalls.at(-1).options.azimuth, 0.8);
     assert.equal(scene.followDistance, 21);
     assert.equal(scene.followTargetId, "inside");
+  } finally { f.cleanup(); }
+});
+
+test("the foreground window tracks the real player in framebuffer pixels and clears when follow loses ownership", () => {
+  const f = fixture(), { scene } = f;
+  try {
+    scene.activeSegment = 4;
+    scene.facadeState = { available: true, visible: false };
+    scene.followWindow = { value: new THREE.Vector4(0, 0, 0, 0), supportY: { value: 0 } };
+    scene.viewportWidth = 600; scene.viewportHeight = 400;
+    scene.canvas.width = 900; scene.canvas.height = 600;
+    f.player("inside", { segment: 4 }); scene.setTime(1); scene.setFollowTarget("inside");
+    // Simulate the damped aim trailing the current player during movement.
+    scene.followRig.update = anchor => ({ position: anchor.clone().add(new THREE.Vector3(-3, -2, 36)),
+      target: anchor.clone().add(new THREE.Vector3(-3, -2, 0)), azimuth: 0, pitch: 0 });
+    scene.updateFollowCamera(1 / 60);
+    const projected = scene.followAnchor.clone().project(scene.camera), circle = scene.followWindow.value;
+    assert.ok(circle.x > 450 && circle.y > 300, "window follows the actual player above and to the right of the aim");
+    assert.ok(Math.abs(circle.x - (projected.x + 1) * 450) < 1e-8);
+    assert.ok(Math.abs(circle.y - (projected.y + 1) * 300) < 1e-8);
+    assert.equal(circle.z, 108);
+    assert.ok(Math.abs(circle.w - 35.85) < 1e-8);
+    assert.equal(scene.followWindow.supportY.value, scene.followAnchor.y + 0.15);
+    scene.facadeState.visible = true; scene.updateFollowCamera(1 / 60);
+    assert.equal(circle.w, 0);
+    scene.facadeState.visible = false; scene.updateFollowCamera(1 / 60);
+    assert.ok(circle.w > 0);
+    scene.toggleFreeCamera();
+    assert.equal(circle.w, 0);
+    scene.setFollowTarget("inside"); scene.updateFollowCamera(1 / 60);
+    assert.ok(circle.w > 0);
+    scene.playerObjects.get("inside").marker.userData.followable = false;
+    scene.updateFollowCamera(1 / 60);
+    assert.equal(circle.w, 0);
   } finally { f.cleanup(); }
 });
 

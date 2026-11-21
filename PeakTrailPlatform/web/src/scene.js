@@ -53,6 +53,8 @@ const PLAYER_COLORS = [
   "#e69b62",
 ];
 
+const OPEN_FINALE_FOLLOW_DISTANCE = 36;
+
 const DISCONTINUITY_EVENTS = new Set([
   "warp",
   "death",
@@ -204,9 +206,11 @@ export class TrailScene {
     this.followChangeRevision = null;
     this.followAnchor = new THREE.Vector3();
     this.followTmp = new THREE.Vector3();
+    this.followWindow = { value: new THREE.Vector4(0, 0, 0, 0), supportY: { value: 0 } };
     this.followAzimuth = 0.6;
     this.followPitch = 0.22;
     this.followDistance = FOLLOW_DISTANCE;
+    this.followDefaultDistance = FOLLOW_DISTANCE;
     this.followUserOrbit = false;
     this.followAutoRotate = false;
     this.followAutoSwitchAt = 0;
@@ -364,6 +368,8 @@ export class TrailScene {
     try {
       const delta = this.lastFrameTime === null ? 0 : (timestamp - this.lastFrameTime) / 1000;
       this.lastFrameTime = timestamp;
+      // Only an actual follow-camera update in this frame may open the terrain.
+      if (this.followWindow) this.followWindow.value.w = 0;
       if (this.mapLootFocus?.update(timestamp)) { /* The close-up flight owns the camera this frame. */ }
       else if (this.freeCamera.mode === "free") this.freeCamera.update(delta);
       else if (this.followTargetId !== null) this.updateFollowCamera(delta);
@@ -755,6 +761,8 @@ export class TrailScene {
     const token = this.buildToken;
     const context = { chapterLayer: layer, route: this.mapPack.route,
       onProgress: progress => this.emitGeometryProgress(layer, progress, token) };
+    if (!campOnly && layer.segment === 4 && isInteriorLayer(layer, this.mapPack.route))
+      context.followWindow = this.followWindow;
     const model = await loadGameGeometry(layer, signal, gameBuildId, { ...context, campfire, campOnly });
     try {
       // The exact-source siblings were missed by the original root traversal.
@@ -1251,6 +1259,7 @@ export class TrailScene {
     if (next === null ? this.followTargetId == null : next === this.followTargetId) return;
     this.clearMapLootFocus();
     this.followTargetId = next;
+    if (this.followWindow) this.followWindow.value.w = 0;
     this.surveyPreset = null;
     ++this.cameraSelectionRevision;
     this.followChangeReason = reason;
@@ -1267,7 +1276,7 @@ export class TrailScene {
       const offset = this.followTmp.copy(this.camera.position).sub(this.followAnchor);
       const context = this.followViewContext();
       this.followViewMode = context.interior ? "interior" : "exterior";
-      this.followDistance = context.interior ? FOLLOW_INTERIOR_DISTANCE : FOLLOW_DISTANCE;
+      this.followDistance = this.followDefaultDistance = context.defaultDistance;
       this.followAzimuth = Math.atan2(offset.x, offset.z);
       this.followPitch = 0.22;
       this.camera.up.set(0, 1, 0);
@@ -1384,7 +1393,8 @@ export class TrailScene {
     const interior = !openFacade && isInteriorLayer(layer, this.mapPack?.route);
     const enclosure = interior ? this.mapPack?.mapEnclosures?.enclosures?.find(entry => entry.segment === layer.segment) : null;
     const center = enclosure?.interiorReference;
-    return { layer, interior, interiorReference: center ? { center: [center[0] - this.origin.x,
+    const defaultDistance = openFacade ? OPEN_FINALE_FOLLOW_DISTANCE : interior ? FOLLOW_INTERIOR_DISTANCE : FOLLOW_DISTANCE;
+    return { layer, interior, openFacade, defaultDistance, interiorReference: center ? { center: [center[0] - this.origin.x,
       (center[1] - this.origin.y) * this.heightScale, -(center[2] - this.origin.z)] } : null };
   }
 
@@ -1409,15 +1419,14 @@ export class TrailScene {
     this.currentTerrainQuery();
     const context = this.followViewContext();
     const viewMode = context.interior ? "interior" : "exterior";
-    if (viewMode !== this.followViewMode) {
-      const wasInterior = this.followViewMode === "interior";
-      const keepZoom = this.facadeState?.available
-        && this.followDistance !== (wasInterior ? FOLLOW_INTERIOR_DISTANCE : FOLLOW_DISTANCE);
+    if (viewMode !== this.followViewMode || context.defaultDistance !== this.followDefaultDistance) {
+      const keepZoom = this.facadeState?.available && this.followDistance !== this.followDefaultDistance;
       this.followViewMode = viewMode;
+      this.followDefaultDistance = context.defaultDistance;
       this.followDistance = keepZoom ? THREE.MathUtils.clamp(this.followDistance,
         context.interior ? FOLLOW_INTERIOR_MIN_DISTANCE : FOLLOW_MIN_DISTANCE,
         context.interior ? FOLLOW_INTERIOR_MAX_DISTANCE : FOLLOW_MAX_DISTANCE)
-        : context.interior ? FOLLOW_INTERIOR_DISTANCE : FOLLOW_DISTANCE;
+        : context.defaultDistance;
       if (!this.facadeState?.available) this.followUserOrbit = false;
       this.followRig.reset();
       this.emitFollowStatus();
@@ -1428,10 +1437,12 @@ export class TrailScene {
     const preferredAzimuth = bounds ? Math.atan2(
       this.followAnchor.x - ((bounds.min[0] + bounds.max[0]) / 2 - this.origin.x),
       this.followAnchor.z + ((bounds.min[2] + bounds.max[2]) / 2 - this.origin.z)) : this.followAzimuth;
+    const followWindowFloorY = context.openFacade ? this.followAnchor.y + 0.15 : undefined;
     const result = this.followRig.update(this.followAnchor, deltaSeconds, {
       cameraPosition: this.camera.position, distance: this.followDistance,
       azimuth: this.followAzimuth, pitch: this.followPitch, manual: this.followUserOrbit,
       preferredAzimuth, interior: context.interior, interiorReference: context.interiorReference,
+      followWindowFloorY,
       discontinuity: this.followDiscontinuity,
     });
     this.followDiscontinuity = false;
@@ -1441,6 +1452,27 @@ export class TrailScene {
     this.camera.lookAt(result.target);
     // OrbitControls 目标同步：退出跟随时无缝交还。
     this.controls.target.copy(result.target);
+    this.updateFollowWindow(followWindowFloorY);
+  }
+
+  updateFollowWindow(supportY) {
+    if (!this.followWindow) return;
+    const circle = this.followWindow.value;
+    circle.w = 0;
+    if (!Number.isFinite(supportY) || !this.viewportWidth || !this.viewportHeight) return;
+    this.camera.updateMatrixWorld();
+    const projected = this.followTmp.copy(this.followAnchor).applyMatrix4(this.camera.matrixWorldInverse);
+    const cutoff = -projected.z - 0.15;
+    projected.applyMatrix4(this.camera.projectionMatrix);
+    if (!(cutoff > this.camera.near && projected.z <= 1
+      && Math.abs(projected.x) <= 1 && Math.abs(projected.y) <= 1)) return;
+    // The shader samples gl_FragCoord. Map CSS radius to the actual framebuffer,
+    // including Safari's resolution cap, and project the real player rather than the damped look target.
+    const width = this.canvas.width, height = this.canvas.height;
+    const cssRadius = THREE.MathUtils.clamp(Math.min(this.viewportWidth, this.viewportHeight) * 0.18, 44, 144);
+    this.followWindow.supportY.value = supportY;
+    circle.set((projected.x + 1) * width * 0.5, (projected.y + 1) * height * 0.5,
+      cssRadius * height / this.viewportHeight, cutoff);
   }
 
   /** Respect terrain depth; camera placement, not an opaque x-ray marker,
@@ -1931,6 +1963,7 @@ export class TrailScene {
     const visible = available && this.exteriorVisible === true;
     if (Boolean(this.facadeState?.available) === available && Boolean(this.facadeState?.visible) === visible) return;
     this.facadeState = { available, visible };
+    if ((!available || visible) && this.followWindow) this.followWindow.value.w = 0;
     // Follow and loot terrain queries read object visibility on each cast.
     // Only the chosen follow direction needs a new occlusion probe.
     this.followRig?.invalidate();

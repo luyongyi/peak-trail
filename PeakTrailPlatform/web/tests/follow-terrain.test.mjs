@@ -75,6 +75,23 @@ test("nearest real triangle wins independent of root order and a far box does no
   close(query.cast(vec(0, 0, 10), vec(0, 0, -1), 30).distance, 30);
 });
 
+test("foreground follow placement looks through eligible rock slots but still collides with the next prop and the floor", () => {
+  const rock = material(); rock.userData.peakFollowWindow = true;
+  const mesh = triangle({ indexed: false, material: [rock, material()] });
+  mesh.geometry.setAttribute("position", new THREE.Float32BufferAttribute([
+    -2, -2, 2, 2, -2, 2, 0, 2, 2, -2, -2, 7, 2, -2, 7, 0, 2, 7,
+  ], 3));
+  mesh.geometry.addGroup(0, 3, 0); mesh.geometry.addGroup(3, 3, 1);
+  const floor = triangle({ material: rock });
+  floor.rotation.x = -Math.PI / 2; floor.position.y = -1;
+  const query = new FollowTerrainQuery(THREE).setRoots([mesh, floor]);
+  const origin = vec(0, 0, 0);
+  close(query.cast(origin, vec(0, 0, 1), 10).distance, 2);
+  close(query.cast(origin, vec(0, 0, 1), 10, 0.15).distance, 7);
+  close(query.cast(origin, vec(0, -1, 0), 10, 0.15).distance, 1);
+  close(query.cast(origin, vec(0, 0, 1), 10).distance, 2, 1e-8);
+});
+
 test("all ancestor visibility and material visibility are checked dynamically without rebuilding", () => {
   const outer = new THREE.Group(), inner = new THREE.Group(), mesh = triangle();
   outer.add(inner); inner.add(mesh);

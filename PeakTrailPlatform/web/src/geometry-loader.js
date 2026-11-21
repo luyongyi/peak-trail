@@ -9,6 +9,8 @@ import { applySourceWaterDepth } from "./source-water-material.js";
 import { isExplosiveMineMaterial, recordedHiddenMineIndices } from "./mine-visibility.js";
 import { sha256Hex } from "./sha256.js";
 import { isProjectionProxyMaterial, shadowOnlyNodeIndices } from "./source-render-policy.js";
+import { followWindowMaterial } from "./follow-window-material.js";
+import { isInteriorLayer } from "./camera-placement.js";
 
 function assertEmbeddedGlb(bytes) {
   const view = new DataView(bytes);
@@ -167,9 +169,10 @@ function indexedBounds(geometry, useGroups = false) {
 // material: real stairs, platforms and mechanisms can use the same rock.
 const CITADEL_PASSAGE = { coreRadius: 60, floorMin: [-28, 0, -4], floorMax: [28, 185, 6] };
 const KILN_PASSAGE = { coreRadius: 3.25, floorMin: [-4.2, 1.1, -6], floorMax: [2, 14.3, -0.8] };
+const auditedFinaleBuilds = new Set(["25306743", "25739797", "26134529", "26155610", "26542162"]);
 
 function sourceFacade(layer, build, document) {
-  if (!["25306743", "25739797", "26134529", "26155610", "26542162"].includes(String(build))
+  if (!auditedFinaleBuilds.has(String(build))
       || layer?.segment !== 4 || !layer.objectId?.startsWith("map-enclosure:")
       || layer.sourceOriginalRendererEnabled !== false || !Number.isInteger(layer.sourceActiveSplitRenderers)
       || layer.sourceActiveSplitRenderers <= 0) return null;
@@ -263,6 +266,7 @@ function* buildStaticMeshes(scene, gameBuildId, shadowOnlyNodes = new Set(), ass
   const instance = new THREE.Matrix4();
   const prepared = new Set();
   const facadePartitions = new Map(), coreMaterials = new Map();
+  const windowMaterials = new Map();
   const boundsCache = new Map(), groupBoundsCache = new Map(), preciseBoundsCache = new Map();
   const cachedBounds = (geometry, grouped = false, precise = false) => {
     const cache = grouped ? groupBoundsCache : precise ? preciseBoundsCache : boundsCache;
@@ -346,12 +350,20 @@ function* buildStaticMeshes(scene, gameBuildId, shadowOnlyNodes = new Set(), ass
       }
       coreMaterial = coreMaterials.get(coreMaterial);
     }
+    let drawMaterial = object.material;
+    const sourceMesh = context.windowMeshNames?.[nodeIndex];
+    if (sourceMesh) {
+      const adapt = material => followWindowMaterial(material, sourceMesh, context.facade?.nodes.has(nodeIndex) === true,
+        context.followWindow, windowMaterials);
+      drawMaterial = Array.isArray(drawMaterial) ? drawMaterial.map(adapt) : adapt(drawMaterial);
+      coreMaterial = coreMaterial === object.material ? drawMaterial : adapt(coreMaterial);
+    }
     const addMatrix = (worldMatrix, instanceIndex) => {
       const campfire = context.campfire?.matches(nodeIndex, instanceIndex) === true;
       if (context.campOnly && !campfire) return;
       const transform = positiveInstanceTransform(worldMatrix.elements);
       for (const part of parts) {
-        const material = part.core ? coreMaterial : object.material;
+        const material = part.core ? coreMaterial : drawMaterial;
         const materialKey = Array.isArray(material) ? material.map(item => item.uuid).join(":") : material.uuid;
         const key = `${part.geometry.uuid}:${materialKey}:${transform.reflected}:${campfire}:${part.exterior === true}`;
         if (!batches.has(key)) batches.set(key, { geometry: part.geometry, material, exterior: part.exterior,
@@ -508,9 +520,13 @@ export async function loadGameGeometry(layer, signal, gameBuildId, context = {})
   reportGeometryProgress(progress, "batch");
   await yieldGeometryTask(signal);
   preserveAffineMatrices(gltf);
+  const document = gltf.parser.json, facade = sourceFacade(layer, gameBuildId, document);
+  const terminalFollow = context.followWindow && !context.campOnly && auditedFinaleBuilds.has(String(gameBuildId))
+    && layer.segment === 4 && (facade || (layer === context.chapterLayer && isInteriorLayer(layer, context.route)));
+  const windowMeshNames = terminalFollow ? document.nodes?.map(node => document.meshes?.[node.mesh]?.name) : null;
   const root = await batchStaticMeshesAsync(gltf.scene, gameBuildId,
     shadowOnlyNodeIndices(gameBuildId, digest), gltf.parser.associations,
-    { ...context, geometryLayer: layer, facade: sourceFacade(layer, gameBuildId, gltf.parser.json) }, signal);
+    { ...context, geometryLayer: layer, facade, windowMeshNames }, signal);
   reportGeometryProgress(progress, "ready");
   return root;
 }

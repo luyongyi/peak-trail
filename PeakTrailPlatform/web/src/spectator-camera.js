@@ -58,9 +58,9 @@ export class SpectatorCamera {
 
   // Sphere-like camera clearance, tested at the centre and four near-plane
   // offsets. Only exact triangle intersections shorten the boom, never AABBs.
-  clearance(origin, direction, distance, wide = false) {
+  clearance(origin, direction, distance, wide = false, followWindowFloorY) {
     const padding = 0.8;
-    const hit = this.query?.cast(origin, direction, distance + padding);
+    const hit = this.query?.cast(origin, direction, distance + padding, followWindowFloorY);
     let allowed = hit ? Math.max(0.15, hit.distance - padding) : distance;
     if (wide && allowed > 1) {
       this.right.set(direction.z, 0, -direction.x).normalize();
@@ -69,7 +69,7 @@ export class SpectatorCamera {
         this.end.y += vertical;
         const length = this.end.length();
         this.end.divideScalar(length);
-        const side = this.query?.cast(origin, this.end, length + padding);
+        const side = this.query?.cast(origin, this.end, length + padding, followWindowFloorY);
         if (side) allowed = Math.min(allowed, Math.max(0.15, (side.distance - padding) * distance / length));
       }
     }
@@ -308,7 +308,9 @@ export class SpectatorCamera {
     // A cached opening can close as the player walks around a corner. Re-query
     // in the same frame, using the same wide clearance as final placement.
     this.directionAt(this.azimuth, this.pitch);
-    let currentSafe = this.clearance(this.anchor, this.direction, distance, true);
+    // Prefer a physically open view when selecting the orbit. Only placement
+    // may look through the foreground rocks the renderer can actually cut.
+    let currentSafe = this.clearance(this.anchor, this.direction, distance, true, options.followWindowFloorY);
     if (!manual && currentSafe < distance * .65 && solution.distance > distance * .7 && this.probeIn < .28) {
       solution = this.solution = this.selectView({ distance, azimuth: this.azimuth,
         pitch: initialPitch, preferredAzimuth: options.preferredAzimuth, interior: options.interior, manual });
@@ -320,7 +322,7 @@ export class SpectatorCamera {
     let nextAzimuth = this.azimuth + angleDelta(solution.azimuth, this.azimuth) * turn;
     let nextPitch = this.pitch + (solution.pitch - this.pitch) * turn;
     this.directionAt(nextAzimuth, nextPitch);
-    let safe = this.clearance(this.anchor, this.direction, distance, true);
+    let safe = this.clearance(this.anchor, this.direction, distance, true, options.followWindowFloorY);
     let relocated = false;
     if (!manual && !first && currentSafe > distance * .85 && safe < currentSafe * .8) {
       // Do not abandon an open view to begin an obstructed orbit transition.
@@ -331,7 +333,7 @@ export class SpectatorCamera {
     // This is only an automatic emergency transition, never manual orbit.
     if (!manual && safe < distance * .3 && solution.distance > distance * .7) {
       this.directionAt(solution.azimuth, solution.pitch);
-      const safeDestination = this.clearance(this.anchor, this.direction, distance, true);
+      const safeDestination = this.clearance(this.anchor, this.direction, distance, true, options.followWindowFloorY);
       if (safeDestination > distance * 0.65) {
         nextAzimuth = solution.azimuth; nextPitch = solution.pitch;
         safe = safeDestination; relocated = true;

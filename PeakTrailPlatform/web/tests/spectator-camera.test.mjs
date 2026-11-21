@@ -63,6 +63,21 @@ test("a manual orbit retains its chosen side, but cannot put the camera through 
   assert.ok(Math.abs(result.position.x) < 0.001);
 });
 
+test("terminal follow keeps its readable orbit through a cuttable cliff and restores hard collision when closed", () => {
+  const rock = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), new THREE.MeshBasicMaterial());
+  rock.material.userData.peakFollowWindow = true; rock.position.z = 2;
+  const query = new FollowTerrainQuery(THREE).setRoots([rock]);
+  const rig = new SpectatorCamera({ THREE, query });
+  const orbit = { manual: true, azimuth: 0, pitch: 0, distance: 36 };
+  const open = rig.update(v(), 1 / 60, { ...orbit, followWindowFloorY: 0.15 });
+  assert.ok(Math.abs(open.distance - 36) < 0.01);
+  const closed = rig.update(v(), 1 / 60, orbit);
+  assert.ok(closed.distance > 1 && closed.distance < 1.3);
+  const reopening = rig.update(v(), 1 / 60, { ...orbit, followWindowFloorY: 0.15 });
+  assert.ok(reopening.distance > closed.distance && reopening.distance < 5, "ordinary orbit expansion is damped");
+  assert.equal(reopening.relocated, false);
+});
+
 test("clear-space movement is smooth and approximately frame-rate independent", () => {
   function run(hz) {
     const rig = new SpectatorCamera({ THREE, query: planes([]) });
