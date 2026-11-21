@@ -321,6 +321,30 @@ test("overview follows a spatially unique interior player without inventing a ce
   } finally { f.cleanup(); }
 });
 
+test("opening and restoring the facade changes follow geometry and distance while retaining the player and manual orbit", () => {
+  const f = fixture(), { scene } = f;
+  try {
+    scene.activeSegment = 4;
+    f.player("inside", { segment: 4 }); scene.setTime(1);
+    scene.facadeState = { available: true, visible: false };
+    scene.setFollowTarget("inside");
+    scene.updateFollowCamera(1 / 60);
+    assert.equal(f.rigCalls.at(-1).options.interior, false);
+    assert.equal(scene.followDistance, FOLLOW_DISTANCE);
+    scene.facadeState.visible = true;
+    scene.updateFollowCamera(1 / 60);
+    assert.equal(f.rigCalls.at(-1).options.interior, true);
+    assert.equal(scene.followDistance, FOLLOW_INTERIOR_DISTANCE);
+    scene.followUserOrbit = true; scene.followAzimuth = 0.8; scene.followDistance = 21;
+    scene.facadeState.visible = false;
+    scene.updateFollowCamera(1 / 60);
+    assert.equal(f.rigCalls.at(-1).options.manual, true);
+    assert.equal(f.rigCalls.at(-1).options.azimuth, 0.8);
+    assert.equal(scene.followDistance, 21);
+    assert.equal(scene.followTargetId, "inside");
+  } finally { f.cleanup(); }
+});
+
 test("touch pinch changes followed-camera distance and lifting a finger resumes one-finger orbit", () => {
   const f = fixture();
   try {

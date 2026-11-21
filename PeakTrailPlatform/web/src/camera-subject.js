@@ -147,7 +147,7 @@ function localIndexedBounds(THREE, geometry) {
  * Indexed draw ranges are essential: Unity static batches can share a position
  * buffer containing unrelated geometry far outside the primitive being drawn.
  */
-export function collectCameraParts(THREE, group, origin) {
+export function collectCameraParts(THREE, group, origin, { includeExteriorFacade = false } = {}) {
   if (!group?.updateWorldMatrix || !group?.traverseVisible) return [];
   group.updateWorldMatrix(true, true);
   if (!Number.isFinite(group.matrixWorld.determinant()) || group.matrixWorld.determinant() === 0) return [];
@@ -156,7 +156,7 @@ export function collectCameraParts(THREE, group, origin) {
   const local = new THREE.Matrix4(), instance = new THREE.Matrix4(), relative = new THREE.Matrix4();
   const corner = new THREE.Vector3();
   const parts = [];
-  group.traverseVisible((mesh) => {
+  const collect = mesh => {
     if (!mesh.isMesh) return;
     const sourceMaterials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
     if (sourceMaterials.length && sourceMaterials.every((material) => material?.visible === false)) return;
@@ -178,7 +178,17 @@ export function collectCameraParts(THREE, group, origin) {
       for (const x of [bounds.min.x, bounds.max.x]) for (const y of [bounds.min.y, bounds.max.y]) for (const z of [bounds.min.z, bounds.max.z]) {
         points.push(corner.set(x, y, z).applyMatrix4(relative).add(offset).toArray());
       }
-      parts.push({ bounds: result, points, materials });
+      const part = { bounds: result, points, materials };
+      if (mesh.userData.exteriorFacade === true) part.exteriorFacade = true;
+      parts.push(part);
+    }
+  };
+  group.traverseVisible(node => {
+    collect(node);
+    // Classify the terminal building as a whole even in open view. Include
+    // only tagged wall batches under visible parents, never hidden chapters.
+    if (includeExteriorFacade) for (const child of node.children) {
+      if (!child.visible && child.userData.exteriorFacade === true) collect(child);
     }
   });
   return parts;

@@ -15,6 +15,8 @@ export const UI_TEXT_PAIRS = Object.freeze([
   ["靠近记录位置", "View recorded location"],
   ["查看使用点", "View use point"],
   ["今日地图", "Today’s maps"],
+  ["外墙", "Exterior"],
+  ["显示建筑外墙", "Show exterior walls"],
   ["下载路线 MOD", "Download Route MODs"],
   ["点击地图标记，靠近查看；再次点击返回", "Click a map marker for a closer look; click it again to return."],
   ["标记特写", "Marker close-up"],

@@ -159,6 +159,65 @@ function indexedBounds(geometry, useGroups = false) {
   return bounds;
 }
 
+// Both source structures have a vertical local Z axis. Their pre-split meshes
+// include the interior shaft as well as the surrounding facade. In model units
+// the gap between the shaft and the exterior contains r=3.25 for Pipe (about
+// 64 world metres), and r=60 for Temple Structure Outer (60 world metres).
+// Bind these measurements to the audited source mesh, never to a chapter-wide
+// material: real stairs, platforms and mechanisms can use the same rock.
+function sourceFacade(layer, build, document) {
+  if (!["25306743", "25739797", "26134529", "26155610", "26542162"].includes(String(build))
+      || layer?.segment !== 4 || !layer.objectId?.startsWith("map-enclosure:")
+      || layer.sourceOriginalRendererEnabled !== false || !Number.isInteger(layer.sourceActiveSplitRenderers)
+      || layer.sourceActiveSplitRenderers <= 0) return null;
+  let coreRadius;
+  if (layer.sourceRootName === "VolcanoModel" && layer.sourceModelName === "Pipe") coreRadius = 3.25;
+  else if (layer.sourceRootName === "Gloom Temple" && layer.sourceModelName === "Temple Structure Outer") coreRadius = 60;
+  else return null;
+  const nodes = new Set();
+  document.nodes?.forEach((node, index) => {
+    if (/^Generated mesh \d+,\d+,\d+$/.test(document.meshes?.[node.mesh]?.name)) nodes.add(index);
+  });
+  return nodes.size === layer.sourceActiveSplitRenderers ? { coreRadius, nodes } : null;
+}
+
+function edgeTouchesCore(ax, ay, bx, by, radiusSquared) {
+  const dx = bx - ax, dy = by - ay;
+  const lengthSquared = dx * dx + dy * dy;
+  const t = lengthSquared ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / lengthSquared)) : 0;
+  const x = ax + t * dx, y = ay + t * dy;
+  return x * x + y * y <= radiusSquared;
+}
+
+// A triangle crossing the core stays whole, including large floors/bridges
+// whose three corners may all lie outside the cylinder. The original indices,
+// attributes and winding are retained. CPU work occurs once per geometry load.
+function partitionFacade(geometry, radius) {
+  const index = geometry.index, pos = geometry.getAttribute("position");
+  if (!index || !pos || geometry.groups.length || geometry.drawRange.start !== 0
+      || geometry.drawRange.count < index.count || index.count % 3) return [{ geometry }];
+  const inside = [], outside = [], r2 = radius * radius;
+  for (let i = 0; i < index.count; i += 3) {
+    const a = index.getX(i), b = index.getX(i+1), c = index.getX(i+2);
+    const ax = pos.getX(a), ay = pos.getY(a), bx = pos.getX(b), by = pos.getY(b), cx = pos.getX(c), cy = pos.getY(c);
+    const ab = ax * by - ay * bx, bc = bx * cy - by * cx, ca = cx * ay - cy * ax;
+    const containsAxis = (ab > 0 && bc > 0 && ca > 0) || (ab < 0 && bc < 0 && ca < 0);
+    const keep = containsAxis || edgeTouchesCore(ax, ay, bx, by, r2) || edgeTouchesCore(bx, by, cx, cy, r2)
+      || edgeTouchesCore(cx, cy, ax, ay, r2);
+    (keep ? inside : outside).push(a, b, c);
+  }
+  if (!outside.length) return [{ geometry, core: true }];
+  if (!inside.length) return [{ geometry, exterior: true }];
+  function subset(indices) {
+    const result = new THREE.BufferGeometry();
+    for (const [name, attribute] of Object.entries(geometry.attributes)) result.setAttribute(name, attribute);
+    result.setIndex(indices);
+    result.boundingBox = indexedBounds(result);
+    return result;
+  }
+  return [{ geometry: subset(inside), core: true }, { geometry: subset(outside), exterior: true }];
+}
+
 // Keep the synchronous entry for offline geometry audits. The browser drains
 // the same builder cooperatively, without dropping triangles or instances.
 function batchStaticMeshes(...args) {
@@ -189,6 +248,7 @@ function* buildStaticMeshes(scene, gameBuildId, shadowOnlyNodes = new Set(), ass
   const batches = new Map();
   const instance = new THREE.Matrix4();
   const prepared = new Set();
+  const facadePartitions = new Map(), coreMaterials = new Map();
   const boundsCache = new Map(), groupBoundsCache = new Map(), preciseBoundsCache = new Map();
   const cachedBounds = (geometry, grouped = false, precise = false) => {
     const cache = grouped ? groupBoundsCache : precise ? preciseBoundsCache : boundsCache;
@@ -252,20 +312,45 @@ function* buildStaticMeshes(scene, gameBuildId, shadowOnlyNodes = new Set(), ass
         prepared.add(material);
       }
     }
+    let parts = [{ geometry }];
+    if (context.facade?.nodes.has(nodeIndex) && !Array.isArray(object.material)) {
+      if (!facadePartitions.has(geometry)) facadePartitions.set(geometry, partitionFacade(geometry, context.facade.coreRadius));
+      parts = facadePartitions.get(geometry);
+    }
+    // The shaft's wall faces point into the shaft. Use the source's Cull Back
+    // on those faces so the observer sees the far wall and climbing surfaces.
+    // Its same-material exterior, stairs and other props keep their own draws.
+    let coreMaterial = object.material;
+    if (parts.some(part => part.core) && coreMaterial.userData?.peakTerrain?.sourceColors?.cull === 2
+        && coreMaterial.side !== THREE.FrontSide) {
+      if (!coreMaterials.has(coreMaterial)) {
+        const clone = coreMaterial.clone();
+        clone.onBeforeCompile = coreMaterial.onBeforeCompile;
+        clone.customProgramCacheKey = coreMaterial.customProgramCacheKey;
+        clone.side = THREE.FrontSide;
+        coreMaterials.set(coreMaterial, clone);
+      }
+      coreMaterial = coreMaterials.get(coreMaterial);
+    }
     const addMatrix = (worldMatrix, instanceIndex) => {
       const campfire = context.campfire?.matches(nodeIndex, instanceIndex) === true;
       if (context.campOnly && !campfire) return;
       const transform = positiveInstanceTransform(worldMatrix.elements);
-      const key = `${geometry.uuid}:${materials.map((material) => material.uuid).join(":")}:${transform.reflected}:${campfire}`;
-      if (!batches.has(key)) batches.set(key, { geometry, material: object.material, reflected: transform.reflected, campfire, matrices: [], mines: [] });
-      const batch = batches.get(key);
-      batch.matrices.push(new THREE.Matrix4().fromArray(transform.matrix));
-      if (mineBounds) {
-        // Record original Unity-world bounds BEFORE reflection factoring and
-        // before scene.js subtracts its display origin from the loaded root.
-        const bounds = mineBounds.clone().applyMatrix4(worldMatrix);
-        batch.mines.push({ index: batch.matrices.length - 1, center: bounds.getCenter(new THREE.Vector3()).toArray(),
-          min: bounds.min.toArray(), max: bounds.max.toArray() });
+      for (const part of parts) {
+        const material = part.core ? coreMaterial : object.material;
+        const materialKey = Array.isArray(material) ? material.map(item => item.uuid).join(":") : material.uuid;
+        const key = `${part.geometry.uuid}:${materialKey}:${transform.reflected}:${campfire}:${part.exterior === true}`;
+        if (!batches.has(key)) batches.set(key, { geometry: part.geometry, material, exterior: part.exterior,
+          reflected: transform.reflected, campfire, matrices: [], mines: [] });
+        const batch = batches.get(key);
+        batch.matrices.push(new THREE.Matrix4().fromArray(transform.matrix));
+        if (mineBounds) {
+          // Record original Unity-world bounds BEFORE reflection factoring and
+          // before scene.js subtracts its display origin from the loaded root.
+          const bounds = mineBounds.clone().applyMatrix4(worldMatrix);
+          batch.mines.push({ index: batch.matrices.length - 1, center: bounds.getCenter(new THREE.Vector3()).toArray(),
+            min: bounds.min.toArray(), max: bounds.max.toArray() });
+        }
       }
     };
     if (object.isInstancedMesh) {
@@ -281,6 +366,7 @@ function* buildStaticMeshes(scene, gameBuildId, shadowOnlyNodes = new Set(), ass
   for (const batch of batches.values()) {
     const mesh = new THREE.InstancedMesh(batch.geometry, batch.material, batch.matrices.length);
     if (batch.campfire) mesh.userData.nativeCampfire = true;
+    if (batch.exterior) mesh.userData.exteriorFacade = true;
     mesh.scale.x = batch.reflected ? -1 : 1;
     batch.matrices.forEach((matrix, index) => mesh.setMatrixAt(index, matrix));
     if (batch.mines.length) mesh.userData.peakRecordedMines = batch.mines.map((mine) => ({
@@ -409,7 +495,8 @@ export async function loadGameGeometry(layer, signal, gameBuildId, context = {})
   await yieldGeometryTask(signal);
   preserveAffineMatrices(gltf);
   const root = await batchStaticMeshesAsync(gltf.scene, gameBuildId,
-    shadowOnlyNodeIndices(gameBuildId, digest), gltf.parser.associations, { ...context, geometryLayer: layer }, signal);
+    shadowOnlyNodeIndices(gameBuildId, digest), gltf.parser.associations,
+    { ...context, geometryLayer: layer, facade: sourceFacade(layer, gameBuildId, gltf.parser.json) }, signal);
   reportGeometryProgress(progress, "ready");
   return root;
 }

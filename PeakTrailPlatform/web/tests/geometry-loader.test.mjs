@@ -21,8 +21,57 @@ const waterSource = (await readFile(new URL("../src/source-water-material.js", i
 const applySourceWaterDepth = new Function("THREE", "supportsSourceEffect", `${waterSource}\nreturn applySourceWaterDepth;`)(THREE, supportsSourceEffect);
 const compile = (ports = {}) => new Function(
   "THREE", "GLTFLoader", "MeshoptDecoder", "decodeGeometryBytes", "GEOMETRY_FORMATS", "positiveInstanceTransform", "getSourceEffectMaterial", "supportsSourceEffect", "isExplosiveMineMaterial", "recordedHiddenMineIndices", "sha256Hex", "fetch", "crypto", "isProjectionProxyMaterial", "shadowOnlyNodeIndices", "applySourceWaterDepth", "readGeometryResponse", "checkGeometryAbort", "reportGeometryProgress", "yieldGeometryTask", "applySharedTerrainMaterial", "sharedVerifiableTopBlend",
-  `${source}\nreturn { loadGameGeometry, batchStaticMeshes, updateRecordedMineVisibility, updateMapFogSurfaceVisibility, verifiableTopBlend };`,
+  `${source}\nreturn { loadGameGeometry, batchStaticMeshes, sourceFacade, updateRecordedMineVisibility, updateMapFogSurfaceVisibility, verifiableTopBlend };`,
 )(THREE, ports.GLTFLoader, {}, ports.decode || decodeGeometryBytes, GEOMETRY_FORMATS, positiveInstanceTransform, getSourceEffectMaterial, supportsSourceEffect, isExplosiveMineMaterial, recordedHiddenMineIndices, sha256Hex, ports.fetch, ports.crypto || webcrypto, isProjectionProxyMaterial, ports.shadowOnlyNodeIndices || shadowOnlyNodeIndices, applySourceWaterDepth, readGeometryResponse, checkGeometryAbort, reportGeometryProgress, yieldGeometryTask, applySharedTerrainMaterial, sharedVerifiableTopBlend);
+
+test("only the verified original split shell participates in facade removal", () => {
+  const { sourceFacade } = compile();
+  const template = { segment: 4, objectId: "map-enclosure:BuildPlayer-Level_1:16118", sourceRootName: "Gloom Temple",
+    sourceModelName: "Temple Structure Outer", sourceOriginalRendererEnabled: false, sourceActiveSplitRenderers: 2 };
+  const document = { nodes: [{ mesh: 2 }, { mesh: 0 }, { mesh: 1 }, { mesh: 3 }, { mesh: 4 }],
+    meshes: ["Generated mesh 0,0,0", "Generated mesh 3,2,1", "Stair large", "TempleCampfire", "Arrow Shooter"].map(name => ({ name })) };
+  const result = sourceFacade(template, "26542162", document);
+  assert.deepEqual([...result.nodes], [1, 2]);
+  assert.equal(result.coreRadius, 60);
+  assert.equal(sourceFacade({ ...template, sourceRootName: "VolcanoModel", sourceModelName: "Pipe" }, "26542162", document).coreRadius, 3.25);
+  for (const override of [{ segment: 3 }, { objectId: "chapter" }, { sourceRootName: "Other" },
+    { sourceModelName: "Stair large" }, { sourceActiveSplitRenderers: 3 }, { sourceOriginalRendererEnabled: true }]) {
+    assert.equal(sourceFacade({ ...template, ...override }, "26542162", document), null);
+  }
+  assert.equal(sourceFacade(template, "unknown", document), null);
+});
+
+test("an exterior shell can be hidden without dropping the interior shaft, crossing floor, or a same-material stair", () => {
+  const { batchStaticMeshes } = compile();
+  const scene = new THREE.Group(), split = new THREE.Group(), geometry = new THREE.BufferGeometry();
+  const position = new THREE.Float32BufferAttribute([
+    0, 0, 0, 1, 0, 0, 0, 1, 1,            // inside the shaft
+    -20, -10, 0, 20, -10, 0, 0, 20, 0,     // floor spanning the shaft, all edges outside
+    -5, 0, 1, 5, 0, 1, -5, 3, 1,           // crossing ledge
+    9, 0, 0, 10, 0, 0, 9, 1, 1,            // separate exterior wall panel
+  ], 3);
+  geometry.setAttribute("position", position);
+  geometry.setIndex([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+  const stone = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide });
+  stone.userData.peakTerrain = { sourceColors: { cull: 2 } };
+  split.add(new THREE.Mesh(geometry, stone)); split.position.set(0, 818, 2050);
+  const stair = new THREE.Mesh(geometry, stone);
+  const associations = new Map([[split, { nodes: 3 }], [stair, { nodes: 4 }]]);
+  scene.add(split, stair);
+  const root = batchStaticMeshes(scene, "26542162", new Set(), associations, { facade: { nodes: new Set([3]), coreRadius: 2 } });
+  assert.equal(root.children.length, 3);
+  const exterior = root.children.find(mesh => mesh.userData.exteriorFacade), originalStair = root.children.find(mesh => mesh.geometry === geometry);
+  const core = root.children.find(mesh => mesh !== exterior && mesh !== originalStair);
+  assert.deepEqual([...exterior.geometry.index.array], [9, 10, 11]);
+  assert.deepEqual([...core.geometry.index.array], [0, 1, 2, 3, 4, 5, 6, 7, 8]);
+  assert.equal(core.geometry.getAttribute("position"), position);
+  assert.equal(exterior.geometry.getAttribute("position"), position);
+  assert.equal(core.material.side, THREE.FrontSide);
+  assert.equal(exterior.material, stone); assert.equal(originalStair.material, stone); assert.equal(stone.side, THREE.DoubleSide);
+  assert.deepEqual(exterior.boundingBox.min.toArray(), [9, 818, 2050]);
+  exterior.visible = false;
+  assert.equal(core.visible, true); assert.equal(originalStair.visible, true);
+});
 
 test("audited shadow-only affine/GPU panels are omitted, same-name solid props remain", () => {
   const { batchStaticMeshes } = compile();

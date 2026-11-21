@@ -2341,6 +2341,8 @@ button:disabled {
 .camera-text-button { border: 1px solid #6a89816e; background: #152422eb; color: #dcebe6; border-radius: 9px; padding: 8px 10px; cursor: pointer; font: inherit; font-size: 11px; }
 .camera-text-button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
 .free-camera-button { min-height: 34px; white-space: nowrap; pointer-events: auto; }
+.facade-control { display: inline-flex; align-items: center; gap: 5px; min-height: 34px; white-space: nowrap; pointer-events: auto; }
+.facade-control input { width: 14px; height: 14px; margin: 0; accent-color: var(--accent); cursor: pointer; }
 .free-camera-button[aria-pressed="true"] { background: #26382e; }
 .camera-help { position: absolute; left: 22px; bottom: 77px; z-index: 5; max-width: calc(100% - 44px); display: grid; gap: 5px; background: #11211fdf; border: 1px solid #789a7855; border-radius: 10px; padding: 10px 14px; pointer-events: none; font-size: 11px; color: #d1e7da; }
 .camera-help strong { color: var(--accent); }
@@ -3253,6 +3255,7 @@ body:has(.app-shell[data-workspace-mode="watch"]) { overflow: hidden; }
 .app-shell[data-workspace-mode="watch"] .follow-hud small { display: none; }
 .app-shell[data-workspace-mode="watch"] .watch-menu-panel .map-loot-menu { position: static; min-width: 0; }
 .app-shell[data-workspace-mode="watch"] .watch-menu-panel .free-camera-button,
+.app-shell[data-workspace-mode="watch"] .watch-menu-panel .facade-control,
 .app-shell[data-workspace-mode="watch"] .watch-menu-panel .map-loot-menu > summary {
   min-height: 44px; justify-content: flex-start; text-align: left; padding: 8px 10px; font-size: 12px;
 }
@@ -3545,4 +3548,17 @@ body.map-expanded .camera-help { bottom: calc(76px + env(safe-area-inset-bottom,
   .app-shell[data-workspace-mode="explore"] .daily-card { display: none; }
   .app-shell[data-workspace-mode="explore"] .segment-navigator,
   body.map-expanded .app-shell:not([data-workspace-mode="watch"]) .segment-navigator { top: 8px; max-width: calc(100% - 360px); }
+}
+
+/* Keep chapter arrows clear of the extra map layer control on tablets. */
+@media (min-width: 744px) and (max-width: 980px) {
+  .app-shell .viewport-toolbar:has(.facade-control:not([hidden])) ~ .segment-navigator { top: 66px; }
+}
+@media (max-width: 374px) {
+  .viewport-toolbar:has(.facade-control:not([hidden])) .compatibility-pill.is-neutral {
+    width: 10px; min-width: 0; min-height: 44px; padding: 0; border: 0; background: transparent;
+  }
+  .viewport-toolbar:has(.facade-control:not([hidden])) .compatibility-pill.is-neutral #compatibilityText {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%);
+  }
 }

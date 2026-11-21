@@ -484,7 +484,8 @@ test("manual interior exploration still finds a real floor and ceiling without a
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(20, 20), material);
   floor.rotation.x = -Math.PI / 2; floor.position.set(10, 0, -10);
   const ceiling = floor.clone(); ceiling.position.y = 10;
-  root.add(floor, ceiling);
+  const hiddenFacade = floor.clone(); hiddenFacade.position.y = 1.5; hiddenFacade.visible = false;
+  root.add(floor, ceiling, hiddenFacade);
   const placements = []; let focuses = 0;
   Object.assign(scene, { terrainRoot: root, origin: new THREE.Vector3(), heightScale: 1,
     currentTime: 5, trace: { manifest: { sampleHz: 5 }, events: [], tracks: new Map() },
@@ -530,6 +531,47 @@ test("a chapter is ready only after its exact-source enclosure is loaded into th
   scene.setActiveSegment(1); requests[2].resolve(model()); await flush();
   requests[3].resolve(model()); await flush();
   assert.equal(terrain.disposed, 1); assert.equal(shell.disposed, 1);
+});
+
+test("terminal chapters open the classified exterior once mounted, preserve props and restore the shell in other views", async () => {
+  const { scene, requests } = fixture(4);
+  const layer = { id: "D", name: "Temple_Segment", segment: 4, biome: "Swamp" };
+  scene.mapPack.layers.push(layer);
+  const terminal = group(layer);
+  scene.terrainRoot.children.push(terminal);
+  scene.mapPack.mapEnclosures = { enclosures: [{ segment: 4, objectId: "verified-shell" }] };
+  const notifications = [];
+  scene.canvas = new EventTarget();
+  scene.canvas.addEventListener("peaktrail-facade-change", event => notifications.push(event.detail));
+  const pending = scene.ensureGeometryLayers(), base = model(), shell = new THREE.Group();
+  const wall = new THREE.Mesh(), stair = new THREE.Mesh(wall.geometry, wall.material);
+  wall.userData.exteriorFacade = true;
+  shell.add(wall, stair);
+  requests[0].resolve(base); await flush();
+  assert.deepEqual(notifications, []);
+  requests[1].resolve(shell); await pending;
+  assert.equal(wall.visible, false); assert.equal(stair.visible, true);
+  assert.deepEqual(notifications, [{ available: true, visible: false }]);
+
+  let refits = 0;
+  scene.surveyPreset = "overview"; scene.applySurveyPreset = () => refits++;
+  const acceptedSubject = terminal.userData.cameraSubjectParts = [];
+  scene.setExteriorVisible(true); scene.setExteriorVisible(true);
+  assert.equal(wall.visible, true); assert.equal(stair.visible, true);
+  assert.equal(terminal.userData.cameraSubjectParts, acceptedSubject); assert.equal(refits, 1);
+  scene.freeCamera.mode = "free"; scene.setExteriorVisible(false);
+  assert.equal(refits, 1, "a manual camera keeps its position");
+
+  scene.activeSegment = null; scene.applyLayerVisibility();
+  assert.equal(wall.visible, true);
+  assert.deepEqual(notifications.at(-1), { available: false, visible: false });
+  scene.activeSegment = 4; scene.applyLayerVisibility(); assert.equal(wall.visible, false);
+  scene.setViewIntent("summit"); assert.equal(wall.visible, true);
+  scene.setViewIntent(null); assert.equal(wall.visible, false);
+  const before = scene.cameraSelectionRevision;
+  scene.enterInteriorView(false, { reason: "data" });
+  assert.equal(scene.cameraSelectionRevision, before + 1, "arrival in an open chapter uses the external survey");
+  wall.geometry.dispose(); wall.material.dispose();
 });
 
 test("failed enclosure loads dispose their base model and do not show a deceptively wall-less ready chapter", async () => {

@@ -172,6 +172,8 @@ export class TrailScene {
     this.trace = null;
     this.useMap = false;
     this.activeSegment = null;
+    this.exteriorVisible = false;
+    this.facadeState = { available: false, visible: false };
     this.currentTime = 0;
     this.heightScale = 1;
     this.showTracks = true;
@@ -506,6 +508,7 @@ export class TrailScene {
     this.enclosureContext?.clear();
     this.waterDepthEntries = [];
     disposeObject(this.terrainRoot);
+    this.syncExteriorVisibility();
     disposeObject(this.trailRoot);
     this.playerObjects.clear();
     this.labelOverlay.replaceChildren();
@@ -829,6 +832,7 @@ export class TrailScene {
               delete group.userData.campfireHiddenByShell;
               group.userData.loaded = wanted === "chapter";
               group.userData.campOnly = wanted === "campfire";
+              if (wanted === "chapter" && layer.segment === 4) this.syncExteriorVisibility();
               if (group.userData.campOnly && this.geometryLoads.get(layer.id) === task) this.geometryLoads.delete(layer.id);
               this.followTerrainDirty = true;
             }).catch((error) => {
@@ -1376,7 +1380,8 @@ export class TrailScene {
     const point = [this.followAnchor.x + this.origin.x,
       this.followAnchor.y / this.heightScale + this.origin.y, -this.followAnchor.z + this.origin.z];
     const layer = followLayerAtPosition(this.mapPack, this.activeSegment, point);
-    const interior = isInteriorLayer(layer, this.mapPack?.route);
+    const openFacade = this.facadeState?.available && !this.facadeState.visible && layer?.segment === this.activeSegment;
+    const interior = !openFacade && isInteriorLayer(layer, this.mapPack?.route);
     const enclosure = interior ? this.mapPack?.mapEnclosures?.enclosures?.find(entry => entry.segment === layer.segment) : null;
     const center = enclosure?.interiorReference;
     return { layer, interior, interiorReference: center ? { center: [center[0] - this.origin.x,
@@ -1405,9 +1410,15 @@ export class TrailScene {
     const context = this.followViewContext();
     const viewMode = context.interior ? "interior" : "exterior";
     if (viewMode !== this.followViewMode) {
+      const wasInterior = this.followViewMode === "interior";
+      const keepZoom = this.facadeState?.available
+        && this.followDistance !== (wasInterior ? FOLLOW_INTERIOR_DISTANCE : FOLLOW_DISTANCE);
       this.followViewMode = viewMode;
-      this.followDistance = context.interior ? FOLLOW_INTERIOR_DISTANCE : FOLLOW_DISTANCE;
-      this.followUserOrbit = false;
+      this.followDistance = keepZoom ? THREE.MathUtils.clamp(this.followDistance,
+        context.interior ? FOLLOW_INTERIOR_MIN_DISTANCE : FOLLOW_MIN_DISTANCE,
+        context.interior ? FOLLOW_INTERIOR_MAX_DISTANCE : FOLLOW_MAX_DISTANCE)
+        : context.interior ? FOLLOW_INTERIOR_DISTANCE : FOLLOW_DISTANCE;
+      if (!this.facadeState?.available) this.followUserOrbit = false;
       this.followRig.reset();
       this.emitFollowStatus();
     }
@@ -1866,6 +1877,7 @@ export class TrailScene {
   setViewIntent(intent, { reason = "manual" } = {}) {
     this.clearMapLootFocus();
     this.viewIntent = intent === "summit" ? "summit" : null;
+    this.syncExteriorVisibility();
     if (this.followTargetId == null) {
       this.fitView({ reason });
       if (this.trace && !this.viewIntent && isInteriorLayer(this.selectedLayer(), this.mapPack?.route)) this.enterInteriorView(false, { reason });
@@ -1897,8 +1909,41 @@ export class TrailScene {
         }
       }
     }
+    this.syncExteriorVisibility();
     // Rebuild only on geometry/selection changes; no per-frame scene traversal.
     this.waterDepthEntries = collectWaterDepthEntries(this.terrainRoot, this.heightScale);
+  }
+
+  syncExteriorVisibility() {
+    let available = false;
+    for (const group of this.terrainRoot.children) {
+      const layer = group.userData.mapLayer;
+      if (!group.userData.loaded || layer?.segment !== 4 || !isInteriorLayer(layer, this.mapPack?.route)) continue;
+      const selected = this.useMap && this.activeSegment === layer.segment && this.viewIntent !== "summit";
+      const visible = !selected || this.exteriorVisible === true;
+      group.traverse(mesh => {
+        if (mesh.userData.exteriorFacade !== true) return;
+        if (selected) available = true;
+        if (mesh.visible === visible) return;
+        mesh.visible = visible;
+      });
+    }
+    const visible = available && this.exteriorVisible === true;
+    if (Boolean(this.facadeState?.available) === available && Boolean(this.facadeState?.visible) === visible) return;
+    this.facadeState = { available, visible };
+    // Follow and loot terrain queries read object visibility on each cast.
+    // Only the chosen follow direction needs a new occlusion probe.
+    this.followRig?.invalidate();
+    this.canvas.dispatchEvent(new CustomEvent("peaktrail-facade-change", { detail: { available, visible } }));
+  }
+
+  setExteriorVisible(visible) {
+    if (!this.facadeState?.available || this.exteriorVisible === visible) return;
+    this.exteriorVisible = Boolean(visible);
+    this.syncExteriorVisibility();
+    if (this.surveyPreset && this.freeCamera.mode === "orbit" && this.followTargetId == null) {
+      this.applySurveyPreset(this.surveyPreset);
+    }
   }
 
   getPlayerColor(playerId) {
@@ -1966,14 +2011,17 @@ export class TrailScene {
     if (!groups.length || groups.some((group) => !group.userData.loaded && !group.userData.campOnly)) return null;
     return groups.flatMap((group) => {
       if (!group.userData.cameraSubjectParts) {
-        const parts = collectCameraParts(THREE, group, this.origin);
-        // Each chapter keeps its own subject, even in the mountain overview.
-        // Interior shells stay connected to their subject; only isolated tiny
-        // fragments far outside that subject may stop controlling the camera.
         const layer = group.userData.mapLayer;
+        const interior = isInteriorLayer(layer, this.mapPack.route);
+        const parts = collectCameraParts(THREE, group, this.origin, { includeExteriorFacade: interior });
+        // Each chapter keeps its own subject, even in the mountain overview.
+        // Keep the shell in the clustering input: removing it first can make
+        // the old 1.8 km distant rock fragments dominate the interior's frame.
         group.userData.cameraSubjectParts = group.userData.campOnly || String(layer.biome).toLowerCase() === "void" ? parts
-          : selectCameraSubjectParts(parts, { interior: isInteriorLayer(layer, this.mapPack.route) });
+          : selectCameraSubjectParts(parts, { interior });
       }
+      if (this.facadeState?.available && !this.facadeState.visible && group.userData.segment === this.activeSegment)
+        return group.userData.cameraSubjectParts.filter(part => !part.exteriorFacade);
       return group.userData.cameraSubjectParts;
     });
   }
@@ -2005,6 +2053,10 @@ export class TrailScene {
   }
 
   enterInteriorView(focus = true, { reason = "manual" } = {}) {
+    if (!focus && this.facadeState?.available && !this.facadeState.visible) {
+      this.fitView({ reason });
+      return;
+    }
     const pose = chooseRecordedInteriorPose(this.trace, this.currentTime, this.viewBounds(), { playerVisibility: this.playerVisibility });
     // Lighting a campfire advances the shared chapter before players enter it.
     // Keep an overview until an actual interior visit has been recorded. The
@@ -2031,7 +2083,8 @@ export class TrailScene {
       const bounds = this.viewBounds();
       let point = null;
       this.terrainRoot.updateMatrixWorld(true);
-      const meshes = this.terrainRoot.children.filter((group) => group.visible);
+      const meshes = [];
+      this.terrainRoot.traverseVisible(mesh => { if (mesh.isMesh) meshes.push(mesh); });
       const ray = new THREE.Raycaster(), probe = new THREE.Vector3();
       for (const h of [0.25, 0.4, 0.55, 0.7]) {
         for (const [x, z] of [[0.5, 0.5], [0.35, 0.5], [0.65, 0.5], [0.5, 0.3], [0.5, 0.7]]) {
@@ -2040,9 +2093,9 @@ export class TrailScene {
             (THREE.MathUtils.lerp(bounds.min[1], bounds.max[1], h) - this.origin.y) * this.heightScale,
             -(worldZ - this.origin.z));
           ray.set(probe, new THREE.Vector3(0, -1, 0));
-          const floor = ray.intersectObjects(meshes, true)[0];
+          const floor = ray.intersectObjects(meshes, false)[0];
           ray.set(probe, new THREE.Vector3(0, 1, 0));
-          const ceiling = ray.intersectObjects(meshes, true)[0];
+          const ceiling = ray.intersectObjects(meshes, false)[0];
           if (floor && ceiling && ceiling.point.y - floor.point.y > 2.4 * this.heightScale) {
             point = floor.point.clone(); point.y += 1.6 * this.heightScale; break;
           }
