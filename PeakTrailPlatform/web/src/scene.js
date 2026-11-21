@@ -16,7 +16,7 @@ import { SpectatorCamera, FOLLOW_DISTANCE, FOLLOW_MIN_DISTANCE, FOLLOW_MAX_DISTA
 import { followLayerAtPosition } from "./map-enclosures.js";
 import { FollowTerrainQuery } from "./follow-terrain.js";
 import { SourceWaterRenderer } from "./source-water-renderer.js";
-import { nadirCameraBounds, nadirCameraParts } from "./nadir-camera-bounds.js";
+import { nadirCameraBounds, nadirCameraParts, supportsNadirCameraBuild } from "./nadir-camera-bounds.js";
 import { CommunityRouteOverlay } from "./community-route-overlay.js";
 import { MapLootOverlay } from "./map-loot-overlay.js";
 import { MapLootFocus } from "./map-loot-focus.js";
@@ -1925,8 +1925,7 @@ export class TrailScene {
 
   nadirGeometryBounds() {
     const layer = this.selectedLayer();
-    // Build 26155610 source equivalence: data/maps/game-build.26155610.json.
-    if (!this.useMap || !["25306743", "25739797", "26134529", "26155610"].includes(String(this.mapPack?.gameBuildId)) || String(layer?.biome).toLowerCase() !== "void") return null;
+    if (!this.useMap || String(layer?.biome).toLowerCase() !== "void" || !supportsNadirCameraBuild(this.mapPack?.gameBuildId)) return null;
     const group = this.terrainRoot.children.find((entry) => entry.userData.mapLayer === layer && entry.userData.loaded);
     if (!group) return null;
     if (Object.hasOwn(group.userData, "nadirCameraBounds")) return group.userData.nadirCameraBounds;
@@ -1944,16 +1943,20 @@ export class TrailScene {
     return this.terrainRoot.children.find((entry) => entry.userData.mapLayer === this.selectedLayer())?.userData.nadirCameraParts || null;
   }
 
-  cameraFitBounds() {
-    const bounds = this.summitCameraBounds() || this.nadirGeometryBounds() || this.viewBounds();
+  cameraContextBounds() {
     const context = this.useMap && this.enclosureContext?.bounds;
-    if (!context) return bounds;
-    // Camera framing includes the exit landmark. Player/trail clipping still
-    // uses viewBounds and the recorded chapter's original source coordinates.
-    return {
-      min: bounds.min.map((value, axis) => Math.min(value, context.min[axis])),
-      max: bounds.max.map((value, axis) => Math.max(value, context.max[axis])),
-    };
+    if (!context) return null;
+    // The neighboring Citadel remains fully rendered. Only its overlap with the
+    // current chapter belongs to this preset; its upper floors have their own view.
+    const chapter = this.viewBounds();
+    if (!chapter) return null;
+    const min = context.min.map((v, axis) => Math.max(v, chapter.min[axis]));
+    const max = context.max.map((v, axis) => Math.min(v, chapter.max[axis]));
+    return min.every((v, axis) => v <= max[axis]) ? { min, max } : null;
+  }
+
+  cameraFitBounds() {
+    return this.summitCameraBounds() || this.nadirGeometryBounds() || this.viewBounds();
   }
 
   cameraSubjectParts() {
@@ -1983,7 +1986,7 @@ export class TrailScene {
     const boxes = parts?.length ? parts.slice() : bounds ? [{ bounds }] : [];
     // Adjacent exit landmarks are display context outside the chapter group.
     // Include them separately without restoring the outliers omitted above.
-    const context = this.useMap && this.enclosureContext?.bounds;
+    const context = this.cameraContextBounds();
     if (context) boxes.push({ bounds: context });
     const points = [];
     for (const part of boxes) {

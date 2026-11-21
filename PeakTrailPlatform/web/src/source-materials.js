@@ -72,12 +72,19 @@ const effects = {
     tint: [0.7490195631980896, 0.7490195631980896, 0.7490195631980896, 1], tintFlags: 16},
 };
 
-// The 3.1 Gloom entries are bound to the material and shader hashes in
+// The 3.1 surface entries are bound to the material and shader hashes in
 // data/maps/verified-builds/26542162/equivalence.json (externalMaterials).
 const registries = new Map([
   ['25306743', effects], ['25739797', effects25739797], ['26134529', effects26134529],
   ['26155610', effects26134529],
-  ['26542162', { FogSurface: effects26134529.FogSurface, M_Water_swamp: effects26134529.M_Water_swamp }],
+  ['26542162', {
+    FogSurface: effects26134529.FogSurface,
+    M_Water_swamp: effects26134529.M_Water_swamp,
+    M_Lava: effects26134529.M_Lava,
+    'M_Void Water': effects26134529['M_Void Water'],
+    AntiSphere: effects26134529.AntiSphere,
+    AntiSphereInterior: effects26134529.AntiSphereInterior,
+  }],
 ]);
 
 export function supportsSourceEffect(buildId, materialName, shader) {

@@ -9,10 +9,10 @@ const currentEvidence = JSON.parse(await readFile(new URL("../../tools/offline-m
 const crossplayEvidence = JSON.parse(await readFile(new URL("../../tools/offline-maps/source-effect-materials.26134529.json", import.meta.url), "utf8"));
 const linear = (v) => v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
 
-test("3.1 Gloom surfaces retain their verified material and shader inputs", async () => {
+test("3.1 Gloom, lava and Nadir surfaces retain their verified material and shader inputs", async () => {
   const receipt = JSON.parse(await readFile(new URL("../../data/maps/verified-builds/26542162/equivalence.json", import.meta.url)));
   assert.equal(receipt.verified, true);
-  for (const name of ["FogSurface", "M_Water_swamp"]) {
+  for (const name of ["FogSurface", "M_Water_swamp", "M_Lava", "M_Void Water", "AntiSphere", "AntiSphereInterior"]) {
     const original = crossplayEvidence.materials.find(material => material.name === name);
     const verified = receipt.externalMaterials.materials.find(material => material.name === name);
     assert.equal(verified.equal, true);

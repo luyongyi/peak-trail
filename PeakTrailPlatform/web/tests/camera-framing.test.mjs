@@ -195,6 +195,19 @@ test("a symmetric footprint retains the established overview instead of rotating
   }
 });
 
+test("a broad valley uses the screen's long dimension without cutting off its entrance", () => {
+  const points = [...corners([-300, 730, -600], [300, 890, 610]), ...corners([-165, 660, -600], [180, 910, -260])];
+  for (const aspect of [0.46, 1.78]) {
+    const options = { aspect, padding: 1.02, frame: { left: -1, right: 1, bottom: -1, top: 0.86 } };
+    const direction = chooseOverviewDirection(points, options);
+    const azimuth = Math.atan2(direction[0], direction[2]) * 180 / Math.PI;
+    assert.ok(aspect < 1 ? azimuth < 20 : azimuth > 50);
+    const before = verifyFrame(points, { ...options, direction: originalOverview });
+    const after = verifyFrame(points, { ...options, direction });
+    assert.ok(after.frame.distance < before.frame.distance * 0.9);
+  }
+});
+
 test("unusable overview inputs retain the established direction safely", () => {
   for (const points of [null, [], [[1, 2, 3]], [[1, 2, 3], null, [4, 5, 6]], [[0, 0, 0], [1, NaN, 1], [2, 2, 2]]]) {
     assert.deepEqual(chooseOverviewDirection(points), originalOverview);

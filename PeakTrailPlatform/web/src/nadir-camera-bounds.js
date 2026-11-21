@@ -1,13 +1,17 @@
-// Audited builds 25306743, 25739797, 26134529 and 26155610 use M_Void Water / GD/Water-GD.
-// Build 26155610 source equivalence: data/maps/game-build.26155610.json.
+// The 3.1 GLBs and M_Void Water shader match 3.0.1 (see
+// data/maps/verified-builds/26542162/equivalence.json, externalMaterials).
 // Its 5 km square is retained in the scene; only camera fitting omits it.
 // source-materials.js gives this exact water an opaque black color substitute.
 // Fully submerged geometry inside its footprint cannot contribute to the
 // visible subject (including the lower fog surface and floor in these maps).
 // Keep original entries so their oriented fit points survive the exclusion.
 // A null result leaves the caller's normal camera subject unchanged.
+export function supportsNadirCameraBuild(gameBuildId) {
+  return ["25306743", "25739797", "26134529", "26155610", "26542162"].includes(String(gameBuildId));
+}
+
 export function nadirCameraParts(layer, gameBuildId, parts) {
-  if (!["25306743", "25739797", "26134529", "26155610"].includes(String(gameBuildId)) || String(layer?.biome).toLowerCase() !== "void") return null;
+  if (!supportsNadirCameraBuild(gameBuildId) || String(layer?.biome).toLowerCase() !== "void") return null;
   const candidates = [], waterPlanes = [];
   for (const part of parts) {
     const bounds = part?.bounds;

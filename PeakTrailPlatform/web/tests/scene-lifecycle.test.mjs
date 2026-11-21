@@ -6,7 +6,7 @@ import { layoutPortraitLabels, clusterPlayerEntries, portraitScreenSize, layoutN
 import { latestLifeEventBefore, MARKER_LIFE_EVENT_TYPES } from "../src/protocol.js";
 import { chooseRecordedInteriorPose, isInteriorLayer } from "../src/camera-placement.js";
 import { ReplayCamera } from "../src/replay-camera.js";
-import { nadirCameraBounds, nadirCameraParts } from "../src/nadir-camera-bounds.js";
+import { nadirCameraBounds, nadirCameraParts, supportsNadirCameraBuild } from "../src/nadir-camera-bounds.js";
 import { collectCameraParts, selectCameraSubjectParts } from "../src/camera-subject.js";
 import { retainNativeCampfire } from "../src/native-campfire.js";
 import * as THREE from "../../vendor/three/0.180.0/build/three.module.js";
@@ -38,8 +38,8 @@ function model() {
 function fixture(selected = 0) {
   const requests = [];
   const load = (layer, signal, gameBuildId, context) => new Promise((resolve, reject) => requests.push({ layer: layer.id, signal, gameBuildId, context, resolve, reject }));
-  const TrailScene = new Function("THREE", "loadGameGeometry", "cancelAnimationFrame", "layoutPortraitLabels", "clusterPlayerEntries", "portraitScreenSize", "layoutNavigationPortraits", "latestLifeEventBefore", "MARKER_LIFE_EVENT_TYPES", "isInteriorLayer", "chooseRecordedInteriorPose", "nadirCameraBounds", "nadirCameraParts", "collectCameraParts", "selectCameraSubjectParts", "tr", "formatNumber", "retainNativeCampfire", `${source}\nreturn TrailScene;`)(
-    THREE, load, () => {}, layoutPortraitLabels, clusterPlayerEntries, portraitScreenSize, layoutNavigationPortraits, latestLifeEventBefore, MARKER_LIFE_EVENT_TYPES, isInteriorLayer, chooseRecordedInteriorPose, nadirCameraBounds, nadirCameraParts, collectCameraParts, selectCameraSubjectParts, i18n.tr, i18n.formatNumber, retainNativeCampfire,
+  const TrailScene = new Function("THREE", "loadGameGeometry", "cancelAnimationFrame", "layoutPortraitLabels", "clusterPlayerEntries", "portraitScreenSize", "layoutNavigationPortraits", "latestLifeEventBefore", "MARKER_LIFE_EVENT_TYPES", "isInteriorLayer", "chooseRecordedInteriorPose", "nadirCameraBounds", "nadirCameraParts", "supportsNadirCameraBuild", "collectCameraParts", "selectCameraSubjectParts", "tr", "formatNumber", "retainNativeCampfire", `${source}\nreturn TrailScene;`)(
+    THREE, load, () => {}, layoutPortraitLabels, clusterPlayerEntries, portraitScreenSize, layoutNavigationPortraits, latestLifeEventBefore, MARKER_LIFE_EVENT_TYPES, isInteriorLayer, chooseRecordedInteriorPose, nadirCameraBounds, nadirCameraParts, supportsNadirCameraBuild, collectCameraParts, selectCameraSubjectParts, i18n.tr, i18n.formatNumber, retainNativeCampfire,
   );
   const layers = [
     { id: "A", segment: 0, biome: "shore" },
@@ -561,12 +561,14 @@ test("chapter ready waits for its background landmark and context stays outside 
   assert.equal(scene.statuses.at(-1)[0], "ready");
 });
 
-test("background landmark expands camera framing without changing route clipping bounds", () => {
+test("adjacent Citadel frames its entrance in Gloom while keeping the full exterior in the scene", () => {
   const { scene } = fixture();
   scene.mapPack.layers[0] = { ...scene.mapPack.layers[0], minX: -50, minY: 600, minZ: 1600, maxX: 50, maxY: 908, maxZ: 1900 };
   scene.enclosureContext = { bounds: { min: [-100, 805, 1800], max: [100, 1226, 2300] } };
   const original = JSON.stringify(scene.mapPack.layers);
-  assert.deepEqual(scene.cameraFitBounds(), { min: [-100, 600, 1600], max: [100, 1226, 2300] });
+  assert.deepEqual(scene.cameraContextBounds(), { min: [-50, 805, 1800], max: [50, 908, 1900] });
+  assert.deepEqual(scene.cameraFitBounds(), scene.viewBounds());
+  assert.deepEqual(scene.enclosureContext.bounds.max, [100, 1226, 2300]);
   assert.deepEqual(scene.viewBounds(), { min: [-50, 600, 1600], max: [50, 908, 1900] });
   assert.equal(JSON.stringify(scene.mapPack.layers), original);
 });

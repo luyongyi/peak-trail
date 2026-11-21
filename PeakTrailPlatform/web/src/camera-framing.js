@@ -37,9 +37,9 @@ function polygonArea(points) {
 /**
  * Choose a readable front-side overview without changing its subject. All points
  * participate in the direction comparison and must still go through the exact
- * fit below afterwards. Pitch never changes; cameras stay within 50 degrees of
- * rendered +Z (the approach to the mountain), rather than turning behind it or
- * looking vertically down just to obtain a short camera distance.
+ * fit below afterwards. Pitch never changes. Broad, low terrain can be seen
+ * from farther to the side in landscape, or along its length in portrait.
+ * Steep or narrow routes keep their established front-side approach.
  *
  * Each candidate uses two linear scans, not the exact fit's iterative centering.
  * Its score uses projected silhouette area and depth legibility, not distance.
@@ -79,9 +79,14 @@ export function chooseOverviewDirection(points, {
   let axisX = Math.cos(axisAngle), axisZ = Math.sin(axisAngle);
   if (axisZ < 0) { axisX = -axisX; axisZ = -axisZ; }
   const routeAzimuth = Math.atan2(axisX, axisZ);
-  const candidates = [OVERVIEW_AZIMUTH, ...[0, 15, 25, 35, 50].map(radians),
+  const width = max[0] - min[0], relief = max[1] - min[1], depth = max[2] - min[2];
+  // A valley wider than its rise stays legible along its axis. Check the PCA
+  // width too: a thin diagonal corridor can have a wide axis-aligned box.
+  const broad = relief < Math.min(width, depth) && major < minor * 9;
+  const angles = broad ? [0, 15, 25, 35, 50, 65, 75] : [0, 15, 25, 35, 50];
+  const candidates = [OVERVIEW_AZIMUTH, ...angles.map(radians),
     routeAzimuth - radians(25), routeAzimuth + radians(25)];
-  const unique = candidates.filter((angle, index) => Number.isFinite(angle) && angle >= 0 && angle <= radians(50)
+  const unique = candidates.filter((angle, index) => Number.isFinite(angle) && angle >= 0 && angle <= radians(angles.at(-1))
     && candidates.findIndex((other) => Math.abs(other - angle) < radians(0.1)) === index);
   const tanV = Math.tan(fov * Math.PI / 360), tanH = tanV * aspect;
   if (!(tanV > 0 && tanH > 0 && Number.isFinite(tanH))) return fallback();
@@ -135,7 +140,7 @@ export function chooseOverviewDirection(points, {
     // Avoid aiming straight down a long corridor/route even when that happens
     // to shorten its projection. The existing viewpoint is always an option.
     const axisAlignment = Math.abs(axisX * Math.sin(azimuth) + axisZ * Math.cos(azimuth));
-    if (axisAlignment > Math.cos(radians(20)) && azimuth !== OVERVIEW_AZIMUTH) continue;
+    if (!broad && axisAlignment > Math.cos(radians(20)) && azimuth !== OVERVIEW_AZIMUTH) continue;
     const candidateScore = score(azimuth);
     if (candidateScore > bestScore) { selected = azimuth; bestScore = candidateScore; }
   }

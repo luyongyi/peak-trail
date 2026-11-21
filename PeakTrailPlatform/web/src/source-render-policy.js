@@ -13,8 +13,9 @@ export function isSourceProjectionProxy(gameBuildId, materialName, shader) {
     return true;
   // Re-audited exact current materials and transparent Decal pass; the legacy
   // digest-bound ShadowsOnly node table below remains limited to its own build.
-  // Build 26155610 source equivalence: data/maps/game-build.26155610.json.
-  return ["25306743", "25739797", "26134529", "26155610"].includes(build) && shader === "Decal"
+  // The 3.1 material and shader hashes for both decals are recorded in
+  // data/maps/verified-builds/26542162/equivalence.json (externalMaterials).
+  return ["25306743", "25739797", "26134529", "26155610", "26542162"].includes(build) && shader === "Decal"
     && PROJECTED_DECALS.has(materialName);
 }
 

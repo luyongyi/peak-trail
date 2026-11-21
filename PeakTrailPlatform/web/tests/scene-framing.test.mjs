@@ -7,7 +7,7 @@ import { ReplayCamera } from "../src/replay-camera.js";
 import { chooseOverviewDirection, fitPerspectivePoints } from "../src/camera-framing.js";
 import { collectCameraParts, selectCameraSubjectParts } from "../src/camera-subject.js";
 import { isInteriorLayer } from "../src/camera-placement.js";
-import { nadirCameraBounds, nadirCameraParts } from "../src/nadir-camera-bounds.js";
+import { nadirCameraBounds, nadirCameraParts, supportsNadirCameraBuild } from "../src/nadir-camera-bounds.js";
 import { chooseRenderPolicy } from "../src/render-policy.js";
 
 // Use the bundled controller and production scene methods unchanged except for
@@ -18,7 +18,7 @@ const orbitSource = (await readFile(new URL("../../vendor/three/0.180.0/examples
 const OrbitControls = new Function(...Object.keys(THREE), `${orbitSource}\nreturn OrbitControls;`)(...Object.values(THREE));
 const source = (await readFile(new URL("../src/scene.js", import.meta.url), "utf8"))
   .replace(/^import .*;\r?\n/gm, "").replace("export class TrailScene", "class TrailScene");
-const ports = { ...i18n, THREE, chooseOverviewDirection, fitPerspectivePoints, collectCameraParts, selectCameraSubjectParts, isInteriorLayer, nadirCameraBounds, nadirCameraParts, chooseRenderPolicy };
+const ports = { ...i18n, THREE, chooseOverviewDirection, fitPerspectivePoints, collectCameraParts, selectCameraSubjectParts, isInteriorLayer, nadirCameraBounds, nadirCameraParts, supportsNadirCameraBuild, chooseRenderPolicy };
 const TrailScene = new Function(...Object.keys(ports), `${source}\nreturn TrailScene;`)(...Object.values(ports));
 
 class Surface extends EventTarget {
@@ -251,7 +251,7 @@ test("a preset drains real OrbitControls drag damping before setting the new cam
   }
 });
 
-for (const build of ["25739797", "26155610"]) test(`Void presets for build ${build} fit oriented terrain vertices while retaining the audited 5km water and source bounds`, (t) => {
+for (const build of ["25739797", "26155610", "26542162"]) test(`Void presets for build ${build} fit oriented terrain vertices while retaining the audited 5km water and source bounds`, (t) => {
   const { scene } = fixture(t, { width: 1800, height: 600 });
   const layer = { segment: 5, biome: "Void", name: "Void_Segment",
     minX: -2400, maxX: 2600, minY: 702.6, maxY: 1100, minZ: -2300, maxZ: 2700 };
