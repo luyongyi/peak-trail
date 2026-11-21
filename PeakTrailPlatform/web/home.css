@@ -153,14 +153,28 @@ html:lang(en) .home-biome-en { display: none; }
 .home-source-links small { font-size: 9px; letter-spacing: .1em; color: #7f9482; }
 .home-source-links b { font-weight: 400; color: #bcbb8f; }
 .home-services { margin-top: 12px; }
-.home-service { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 15px; border: 1px solid #e8d3a0; border-radius: 8px; background: #dfcb96; color: #282015; text-decoration: none; transition: background .18s; }
-.home-service:hover { background: #f3e0ae; color: #282015; }
-.home-service-icon { flex: 0 0 auto; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 6px; background: #46351916; }
+.home-service {
+  display: grid;
+  grid-template-columns: minmax(24px, 1fr) auto minmax(24px, 1fr);
+  align-items: center;
+  gap: 14px;
+  min-height: 56px;
+  padding: 7px 14px;
+  border: 1px solid #637865;
+  border-radius: 10px;
+  background: #1a2923;
+  color: #e9ede0;
+  text-align: center;
+  text-decoration: none;
+  transition: background .18s, border-color .18s;
+}
+.home-service:hover, .home-service:focus-visible { background: #23362e; border-color: #9baa87; color: #e9ede0; }
+.home-service-icon { display: grid; justify-self: end; place-items: center; color: #dbcb93; }
 .home-service-icon svg { display: block; width: 22px; height: 22px; }
-.home-service-copy { flex: 1 1 auto; min-width: 0; display: grid; gap: 3px; line-height: 1.25; overflow-wrap: anywhere; }
-.home-service-copy strong { font-size: 15px; font-weight: 650; }
-.home-service-copy small { font-size: 11px; color: #51442a; }
-.home-service-arrow { flex: 0 0 auto; font-size: 16px; color: #51442a; }
+.home-service-copy { min-width: 0; display: grid; gap: 2px; line-height: 1.25; overflow-wrap: anywhere; }
+.home-service-copy strong { font-size: 17px; font-weight: 600; letter-spacing: .035em; }
+.home-service-copy small { font-size: 11px; color: #acbdad; }
+.home-service-arrow { justify-self: start; font-size: 18px; color: #dbcb93; }
 .home-footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 18px; padding: 12px 0 14px; color: #819388; font-size: 10px; line-height: 1.5; }
 .home-footer details { margin-right: auto; }
 .home-footer summary { cursor: pointer; list-style: none; }
@@ -273,10 +287,8 @@ html:lang(en) .home-biome-en { display: none; }
   .home-source-links small { font-size: 9px; }
   .home-services { margin-top: 9px; }
   .home-service { min-height: 54px; gap: 8px; padding: 7px 9px; }
-  .home-service-icon { width: 30px; height: 30px; }
   .home-service-icon svg { width: 19px; height: 19px; }
-  .home-service-copy strong { font-size: 13px; }
-  .home-service-arrow { font-size: 14px; }
+  .home-service-copy strong { font-size: 16px; }
   .home-footer { gap: 3px 14px; padding: 9px 0 10px; }
   .home-footer details { order: 1; width: 100%; }
   .home-footer summary { display: flex; align-items: center; }

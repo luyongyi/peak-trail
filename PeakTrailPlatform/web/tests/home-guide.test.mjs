@@ -15,6 +15,8 @@ test("all public navigation and download entrypoints use the current Windows pac
   assert.ok(home.indexOf('id="homeLandscape"') < services.index);
   assert.ok(services.index < home.indexOf('<footer class="home-footer">'));
   assert.deepEqual([...services[1].matchAll(/<a[^>]+href="([^"]+)"/g)].map(match => match[1]), ["./record.html"]);
+  assert.match(services[0], /aria-labelledby="homeNavigationName"/);
+  assert.match(services[1], /id="homeNavigationName">Peak导航<\/strong>/);
   assert.match(services[1], /class="home-service-icon" aria-hidden="true">\s*<svg\b/);
   assert.doesNotMatch(home, /href="(?:\.\/mods\.html|[^"]*peak-packet-replay-windows\.zip)"/);
   assert.match(header, /class="gate-brand"[\s\S]*?id="homeTitle">今日地图<\/h1>[\s\S]*?class="home-actions"/);

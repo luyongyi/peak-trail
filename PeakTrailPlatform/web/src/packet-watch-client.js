@@ -29,11 +29,11 @@ export class PacketWatchClient {
       if (this.closed || generation !== this.generation) return;
       if ([401, 403].includes(response.status)) {
         this.stop(); this.onConnection("unauthorized", this.operator
-          ? "管理登录已过期，请回 Peak导航服务的管理员入口解锁。"
-          : "这份导航链接暂不可用，请检查完整链接或返回 Peak导航服务。"); return;
+          ? "管理登录已过期，请回 Peak导航的管理员入口解锁。"
+          : "这份导航链接暂不可用，请检查完整链接或返回 Peak导航。"); return;
       }
       if ([404, 410].includes(response.status)) {
-        this.stop(); this.onConnection("error", "这次导航不存在或已过期，请返回 Peak导航服务。"); return;
+        this.stop(); this.onConnection("error", "这次导航不存在或已过期，请返回 Peak导航。"); return;
       }
       if (!response.ok) throw new Error("Unavailable");
       const value = await response.json();

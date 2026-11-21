@@ -1,7 +1,7 @@
 // Website UI copy. Game names (PEAK/NADIR) and BACK retain the exact runtime
 // terms from SerializedTermsData; map, sharing, and replay explanations are ours.
 export const UI_TEXT_PAIRS = Object.freeze([
-  ["Peak导航服务", "PEAK navigation"],
+  ["Peak导航", "Peak Navigation"],
   ["用房间号查看队伍路线", "Follow your team with a room code"],
   ["输入房间号使用导航", "Enter a room code to navigate"],
   ["用 PEAK 3.1 的 8 位房间号在网页查看队伍位置和路线。", "Enter a PEAK 3.1 room code with 8 characters to view your team's live positions and route."],

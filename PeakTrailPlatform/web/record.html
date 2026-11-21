@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="referrer" content="same-origin" />
-    <title>Peak导航服务 · PEAK Trail</title>
+    <title>Peak导航 · PEAK Trail</title>
     <link rel="stylesheet" href="./record.css" />
     <script type="module" src="./src/packet-recorder.js"></script>
     <script type="module" src="./src/navigation-storage.js"></script>
@@ -13,7 +13,11 @@
   <body>
     <div class="record-page" data-packet-recorder>
       <header class="record-header">
-        <a class="record-brand" href="./" aria-label="PEAK Trail 首页"><span class="brand-symbol" aria-hidden="true">△</span>PEAK TRAIL</a>
+        <a class="record-brand" href="./" aria-label="PEAK Trail 首页">
+          <span class="brand-symbol" aria-hidden="true"><svg viewBox="0 0 32 32"><path fill="currentColor" d="m3 25 9-18 5 9 4-6 8 15H3Z"/><path fill="none" stroke="#f2f7f5" stroke-width="1.6" d="M9 25c5-5 10-5 15 0"/></svg></span>
+          PEAK TRAIL
+        </a>
+        <h1 class="record-title">Peak导航</h1>
         <nav class="record-header-actions" aria-label="快捷入口">
           <a class="record-replay-shortcut" href="#windowsReplay">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -25,10 +29,7 @@
         </nav>
       </header>
       <main>
-        <div class="record-intro">
-          <h1>Peak导航服务</h1>
-          <p id="navigationStatus" class="connection-status" role="status">正在连接 Peak导航服务…</p>
-        </div>
+        <p id="navigationStatus" class="connection-status" role="status">正在连接 Peak导航…</p>
         <p id="navigationError" class="notice error" role="alert" hidden></p>
         <div class="record-tools">
           <section class="panel record-tool navigation-entry" aria-labelledby="navigationHeading">
@@ -162,7 +163,7 @@
           </section>
         </div>
         </details>
-        <noscript><p class="notice">请启用 JavaScript 使用 Peak导航服务。</p></noscript>
+        <noscript><p class="notice">请启用 JavaScript 使用 Peak导航。</p></noscript>
       </main>
       <footer>支持多房间 · 同房共享 · 关闭网页后继续导航</footer>
     </div>

@@ -1588,7 +1588,7 @@ function updateWatchStatus() {
   $("watchRetry").hidden = !["error", "reconnecting"].includes(watch.connection);
   $("watchUnlock").hidden = watch.kind !== "packet" || watch.connection !== "unauthorized";
   $("watchUnlock").href = `./record.html?room=${watch.kind === "packet" ? watch.id.split(".")[0] : ""}${watch.operator ? "&operator=1#managementPanel" : ""}`;
-  $("watchUnlock").textContent = watch.operator ? tr("返回导航管理解锁", "Unlock navigation management") : tr("返回 Peak导航服务", "Return to Peak navigation");
+  $("watchUnlock").textContent = watch.operator ? tr("返回导航管理解锁", "Unlock navigation management") : tr("返回 Peak导航", "Return to Peak Navigation");
   const behind = Math.max(0, (watch.trace?.duration || 0) - state.currentTime);
   $("watchTimeStatus").textContent = empty ? "" : watch.status === "ended"
     ? watch.kind === "packet" ? tr("导航已结束 · 可回看保留的路径", "Navigation ended · Retained paths are available") : watchText("直播已结束 · 可回看保留的路径")
@@ -1768,7 +1768,7 @@ async function startWatch(id, { replaceUrl = true, watchCode = null, capture = f
   syncWorkspaceState();
   dismissGate();
   void renderData();
-  elements.modeChip.textContent = capture ? "Peak导航服务" : watchText("观战");
+  elements.modeChip.textContent = watchText(capture ? "Peak导航" : "观战");
   for (const key of ["watchStatus", "watchShare", "watchCamera", "watchTimebar"]) $(key).hidden = false;
   if (replaceUrl) {
     const url = new URL(location.href);
@@ -2076,7 +2076,7 @@ function syncWorkspaceState() {
   shell.dataset.replayState = replayEmpty ? "empty" : state.trace ? "ready" : "explore";
   if (state.workspaceMode === "explore") elements.modeChip.textContent = state.historicalRoute
     ? state.historicalRoute.inspectionId ? tr("验收预览", "Review preview") : state.historicalRoute.teamId ? tr("团队路线", "Team route") : tr("历史路线", "Historical route") : tr("地图", "Map");
-  else if (state.workspaceMode === "watch") elements.modeChip.textContent = state.watch.kind === "packet" ? "Peak导航服务" : tr("观战", "Watch");
+  else if (state.workspaceMode === "watch") elements.modeChip.textContent = watchText(state.watch.kind === "packet" ? "Peak导航" : "观战");
   else elements.modeChip.textContent = state.workspaceMode === "live" ? tr("直播", "Live")
     : FEATURES.legacyReplayVisible ? tr("回放", "Replay") : tr("地图", "Map");
   syncCommunityContext();

@@ -638,7 +638,7 @@ export function mountNavigation(document, window) {
   };
   let storage = null; try { storage = window.localStorage; } catch { }
   const client = new NavigationClient({ storage, onChange: state => {
-    byId("navigationStatus").textContent = state.checking ? "正在连接 Peak导航服务…"
+    byId("navigationStatus").textContent = state.checking ? "正在连接 Peak导航…"
       : !state.configured ? "导航服务暂不可用，请稍后再试。" : "输入房间号查询导航或录像";
     byId("navigationStatus").hidden = !state.checking && state.configured;
     byId("navigationError").hidden = !state.error; byId("navigationError").textContent = state.error;

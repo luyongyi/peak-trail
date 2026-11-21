@@ -652,7 +652,7 @@ test("stage enriches exact-pack sidecars, deduplicates enclosures, allowlists as
       filename: "peak-packet-replay-windows.zip", downloadPath: "downloads/peak-packet-replay-windows.zip",
       bytes: zipBytes.length, sha256: sha256(zipBytes),
       artifactUrl: "https://github.com/luyongyi/peak-trail/releases/download/packet-replay-windows-2026.11.08.1/peak-packet-replay-windows.zip" };
-    const navigationFiles = { "record.html": '<!doctype html><title>Peak导航服务</title><a href="./downloads/peak-packet-replay-windows.zip">Windows replay</a>',
+    const navigationFiles = { "record.html": '<!doctype html><title>Peak导航</title><a href="./downloads/peak-packet-replay-windows.zip">Windows replay</a>',
       "record.css": ".navigation-card{display:flex}", "src/packet-recorder.js": "export const navigation = true;",
       "src/packet-watch-client.js": "export const packetWatch = true;", "src/app.js": "export const app = 'unified';" };
     await mkdir(resolve(platform, "data", "packet-replay"));
