@@ -168,7 +168,9 @@ function indexedBounds(geometry, useGroups = false) {
 // Bind these measurements to the audited source mesh, never to a chapter-wide
 // material: real stairs, platforms and mechanisms can use the same rock.
 const CITADEL_PASSAGE = { coreRadius: 60, floorMin: [-28, 0, -4], floorMax: [28, 185, 6] };
-const KILN_PASSAGE = { coreRadius: 3.25, floorMin: [-4.2, 1.1, -6], floorMax: [2, 14.3, -0.8] };
+// The open-air hillside is part of Pipe too. Its floor exemption ends a few
+// metres beyond the mouth (local y≈10.9), at the original entrance lip.
+const KILN_PASSAGE = { coreRadius: 3.25, floorMin: [-1.7, 1.1, -2.25], floorMax: [1.65, 11.3, -0.8], kilnOuterSkin: true };
 const auditedFinaleBuilds = new Set(["25306743", "25739797", "26134529", "26155610", "26542162"]);
 
 function sourceFacade(layer, build, document) {
@@ -195,10 +197,27 @@ function edgeTouchesCore(ax, ay, bx, by, radiusSquared) {
   return x * x + y * y <= radiusSquared;
 }
 
+// Past the inner shaft, Pipe has a second bore running along model +Y.
+// Cross-sections of the source mesh put its lining in this narrow X/Z range.
+// At the flared mouth the outside mountain enters the same box: only keep
+// faces oriented into the bore there. The entrance floor is handled separately.
+function kilnTunnelLining(pos, a, b, c) {
+  const ay = pos.getY(a), by = pos.getY(b), cy = pos.getY(c), y = (ay + by + cy) / 3;
+  if (y < 2.9 || y > 11.3) return false;
+  const ax = pos.getX(a), bx = pos.getX(b), cx = pos.getX(c), x = (ax + bx + cx) / 3;
+  if (x < -1.7 || x > 1.65) return false;
+  const az = pos.getZ(a), bz = pos.getZ(b), cz = pos.getZ(c), z = (az + bz + cz) / 3;
+  if (z < -2.25 || z > 1.5) return false;
+  if (y < 10.25) return true;
+  const nx = (by - ay) * (cz - az) - (bz - az) * (cy - ay);
+  const nz = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
+  return nx * (-0.1 - x) + nz * (-0.7 - z) > 0;
+}
+
 // A triangle crossing the core stays whole, including large floors/bridges
 // whose three corners may all lie outside the cylinder. The original indices,
 // attributes and winding are retained. CPU work occurs once per geometry load.
-function partitionFacade(geometry, { coreRadius, floorMin, floorMax }) {
+function partitionFacade(geometry, { coreRadius, floorMin, floorMax, kilnOuterSkin }) {
   const index = geometry.index, pos = geometry.getAttribute("position");
   if (!index || !pos || geometry.groups.length || geometry.drawRange.start !== 0
       || geometry.drawRange.count < index.count || index.count % 3) return [{ geometry }];
@@ -224,7 +243,8 @@ function partitionFacade(geometry, { coreRadius, floorMin, floorMax }) {
         continue;
       }
     }
-    (keep ? inside : outside).push(a, b, c);
+    const lining = keep || (kilnOuterSkin && kilnTunnelLining(pos, a, b, c));
+    (lining ? inside : outside).push(a, b, c);
   }
   function subset(indices) {
     if (indices.length === index.count) return geometry;
@@ -398,7 +418,10 @@ function* buildStaticMeshes(scene, gameBuildId, shadowOnlyNodes = new Set(), ass
   for (const batch of batches.values()) {
     const mesh = new THREE.InstancedMesh(batch.geometry, batch.material, batch.matrices.length);
     if (batch.campfire) mesh.userData.nativeCampfire = true;
-    if (batch.exterior) mesh.userData.exteriorFacade = true;
+    if (batch.exterior) {
+      mesh.userData.exteriorFacade = true;
+      if (context.facade?.kilnOuterSkin) mesh.userData.kilnOuterSkin = true;
+    }
     mesh.scale.x = batch.reflected ? -1 : 1;
     batch.matrices.forEach((matrix, index) => mesh.setMatrixAt(index, matrix));
     if (batch.mines.length) mesh.userData.peakRecordedMines = batch.mines.map((mine) => ({

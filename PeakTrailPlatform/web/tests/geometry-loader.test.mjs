@@ -99,17 +99,50 @@ test("both native entrance ramps keep their whole walking surface on either side
     const sectionPlane = { value: new THREE.Vector4(0, 1, 0, 1), footing: { value: new THREE.Vector4() } };
     const root = batchStaticMeshes(scene, "26542162", new Set(), new Map([[mesh, { nodes: 0 }]]),
       { facade, sectionPlane, sectionMeshNames: ["Generated mesh 0,0,0"] });
-    const peeled = root.children.filter(draw => !draw.userData.exteriorFacade);
-    assert.equal(peeled.length, 1);
-    assert.deepEqual([...peeled[0].geometry.index.array], [0, 1, 2]);
-    assert.notEqual(peeled[0].material.userData.peakSectionPlane, true);
+    const floor = root.children.filter(draw => !draw.userData.exteriorFacade && !draw.material.userData.peakSectionPlane);
+    assert.equal(floor.length, 1);
+    assert.deepEqual([...floor[0].geometry.index.array], [0, 1, 2]);
     const shell = root.children.find(draw => draw.userData.exteriorFacade);
     assert.equal(shell.visible, true);
+    assert.equal(shell.userData.kilnOuterSkin === true, sample.model === "Pipe");
+    assert.notEqual(floor[0].userData.kilnOuterSkin, true);
     assert.equal(shell.material.userData.peakSectionPlane, true);
     const ray = new THREE.Raycaster(new THREE.Vector3(sample.x, sample.y, sample.z + 1), new THREE.Vector3(0, 0, -1));
-    const [hit] = ray.intersectObjects(peeled);
+    const [hit] = ray.intersectObjects(floor);
     assert.ok(hit && Math.abs(hit.point.z - sample.z) < 0.00001, sample.root);
   }
+});
+
+test("the Kiln entrance lining stays with the shaft even where the outer mountainside nearly touches it", () => {
+  const { batchStaticMeshes, sourceFacade } = compile();
+  const name = "Generated mesh 1,0,3", document = { nodes: [{ mesh: 0 }], meshes: [{ name }] };
+  const facade = sourceFacade({ objectId: "map-enclosure:fixture", segment: 4, sourceRootName: "VolcanoModel",
+    sourceModelName: "Pipe", sourceOriginalRendererEnabled: false, sourceActiveSplitRenderers: 1 }, "26542162", document);
+  const geometry = new THREE.BufferGeometry(), rock = new THREE.MeshStandardMaterial();
+  rock.userData.peakTerrain = { sourceMaterial: "M_Rock_Volcano", sourceColors: { shader: "W/Peak_Rock", cull: 2 } };
+  // Original Pipe faces. At (0, 10.77) the mouth ceiling and the overlying
+  // mountain are just 0.317 model units apart and use the same rock material.
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute([
+    .01952, 5.31445, -.21670, .01333, 5.22687, -.19084, -.00135, 5.22587, -.19439,
+    -.02428, 10.79116, .95163, .02495, 10.79666, .94058, -.00742, 10.70792, .80480,
+    .08658, 10.71294, 1.36210, .06275, 10.86562, 1.05493, -.07376, 10.81156, 1.11876,
+    // Pixel probes on the original doorway lip and the outdoor slope below it.
+    -.796, 11.097, -1.591, -.771, 11.107, -1.615, -.804, 11.179, -1.662,
+    -3.083, 12.702, -4.238, -3.365, 13.193, -4.833, -3.982, 12.825, -4.734,
+    -.016, 12.98, -3.049, -.078, 12.798, -2.988, -.003, 12.807, -3.009,
+  ], 3));
+  geometry.setIndex(Array.from({ length: 18 }, (_, i) => i));
+  const scene = new THREE.Group(), mesh = new THREE.Mesh(geometry, rock);
+  scene.add(mesh);
+  const sectionPlane = { value: new THREE.Vector4(), footing: { value: new THREE.Vector4() } };
+  const root = batchStaticMeshes(scene, "26542162", new Set(), new Map([[mesh, { nodes: 0 }]]),
+    { facade, sectionPlane, sectionMeshNames: [name] });
+  const skin = root.children.find(draw => draw.userData.kilnOuterSkin);
+  const lining = root.children.find(draw => !draw.userData.exteriorFacade && draw.material.userData.peakSectionPlane);
+  const doorway = root.children.find(draw => !draw.userData.exteriorFacade && !draw.material.userData.peakSectionPlane);
+  assert.deepEqual([...lining.geometry.index.array], [0, 1, 2, 3, 4, 5]);
+  assert.deepEqual([...doorway.geometry.index.array], [9, 10, 11]);
+  assert.deepEqual([...skin.geometry.index.array], [6, 7, 8, 12, 13, 14, 15, 16, 17]);
 });
 
 test("only verified original structural draws use the shared section plane, even for shared stone", () => {

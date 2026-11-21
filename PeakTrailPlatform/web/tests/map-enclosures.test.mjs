@@ -143,7 +143,7 @@ test('native shells remain supported outside the contextual build while malforme
   assert.deepEqual(chapterEnclosures(pack, pack.layers[1], { includeContext: true }), []);
 });
 
-test('all 208 verified 3.1 maps retain native shells and expose only the 104 adjacent Swamp exits', async () => {
+test('all 208 verified 3.1 exits expose exactly their own adjacent terminal shell', async () => {
   const read = async path => JSON.parse(await readFile(new URL(path, import.meta.url), 'utf8'));
   const [catalog, sidecars, receipt] = await Promise.all([
     read('../../data/maps/catalog.json'),
@@ -178,7 +178,10 @@ test('all 208 verified 3.1 maps retain native shells and expose only the 104 adj
     } else {
       assert.equal(pack.route.branch, 'volcano-kiln');
       volcanoExits++;
-      assert.deepEqual(context, [], `${pack.sceneName}: no inferred Volcano adjacency`);
+      assert.deepEqual(context, [pack.mapEnclosures.enclosures[0]], pack.sceneName);
+      assert.equal(context[0].sourceRootName, 'VolcanoModel');
+      assert.equal(context[0].sourceModelName, 'Pipe');
+      assert.deepEqual(context[0].sourceHierarchy, ['Map', 'Biome_4', 'Caldera', 'VolcanoModel']);
     }
     for (const includeContext of [false, true]) {
       const own = chapterEnclosures(pack, terminal, { includeContext });
@@ -191,6 +194,18 @@ test('all 208 verified 3.1 maps retain native shells and expose only the 104 adj
   }
   assert.equal(swampExits, 104);
   assert.equal(volcanoExits, 104);
+
+  const kiln = packs.find(pack => pack.route.branch === 'volcano-kiln');
+  const caldera = kiln.layers.find(layer => layer.segment === 3);
+  for (const mutate of [
+    shell => { shell.sourceModelName = 'other'; }, shell => { shell.sourceRootName = 'inactive volcano'; },
+    shell => { shell.sourceHierarchy = ['Map', 'Caldera', 'VolcanoModel']; },
+    shell => { shell.sourceHierarchy = 'Map/Biome_4/Caldera/VolcanoModel'; },
+  ]) {
+    const invalid = structuredClone(kiln);
+    mutate(invalid.mapEnclosures.enclosures[0]);
+    assert.deepEqual(chapterEnclosures(invalid, caldera, { includeContext: true }), []);
+  }
 
   // Live Level_107 stood on this source enclosure at the Swamp campfire,
   // before the base Temple layer's Z bounds. A chapter switch must not be

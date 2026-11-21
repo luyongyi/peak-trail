@@ -251,9 +251,9 @@ test("a preset drains real OrbitControls drag damping before setting the new cam
   }
 });
 
-test("the full-height rotating half-shell keeps the same survey framing without distant outliers", t => {
+for (const kiln of [false, true]) test(`${kiln ? "Kiln" : "Citadel"} frames its surviving walls after excluding distant outliers`, t => {
   const { scene } = fixture(t);
-  const layer = { segment: 4, name: "Volcano_Segment", biome: "Volcano" };
+  const layer = { segment: 4, name: kiln ? "Volcano_Segment" : "Temple_Segment", biome: kiln ? "Volcano" : "Swamp" };
   scene.mapPack = { identityVersion: 3, layers: [layer], mapEnclosures: { enclosures: [{ segment: 4, interiorReference: [0, 0, 0] }] } };
   scene.activeSegment = 4;
   const chapter = new THREE.Group();
@@ -262,15 +262,17 @@ test("the full-height rotating half-shell keeps the same survey framing without 
   const material = new THREE.MeshBasicMaterial();
   const exterior = new THREE.InstancedMesh(new THREE.BoxGeometry(100, 100, 100), material, 48);
   exterior.userData.exteriorFacade = true;
+  if (kiln) exterior.userData.kilnOuterSkin = true;
   const floor = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 4), material);
   const distant = new THREE.InstancedMesh(floor.geometry, material, 9);
   distant.position.x = 1800;
   chapter.add(exterior, floor, distant);
   scene.syncExteriorVisibility();
-  assert.equal(exterior.visible, true);
-  assert.equal(scene.cameraSubjectParts().length, 49, "the floor and far wall fit without the nine distant rocks");
+  assert.equal(exterior.visible, !kiln);
+  const expected = kiln ? 1 : 49;
+  assert.equal(scene.cameraSubjectParts().length, expected, "only the visible subject contributes, never the nine distant rocks");
   scene.setExteriorVisible(true);
-  assert.equal(scene.cameraSubjectParts().length, 49, "full exterior returns without the outliers");
+  assert.equal(scene.cameraSubjectParts().length, expected, "the section toggle keeps this chapter's framing");
   const before = scene.cameraSubjectParts();
   scene.setExteriorVisible(false);
   assert.deepEqual(scene.cameraSubjectParts(), before);

@@ -180,6 +180,7 @@ export function collectCameraParts(THREE, group, origin, { includeExteriorFacade
       }
       const part = { bounds: result, points, materials };
       if (mesh.userData.exteriorFacade === true) part.exteriorFacade = true;
+      if (mesh.userData.kilnOuterSkin === true) part.kilnOuterSkin = true;
       parts.push(part);
     }
   };

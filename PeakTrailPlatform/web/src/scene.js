@@ -1885,7 +1885,10 @@ export class TrailScene {
     ++this.geometrySelectionToken;
     // At the Citadel entrance the visible exterior is the next chapter's
     // native shell. Keep it on screen until that chapter mounts its own copy.
-    if (!this.enclosureContext?.root.userData.sourceSegments?.includes(next)) this.enclosureContext?.clear();
+    const adjacent = this.enclosureContext;
+    if (!adjacent?.root.userData.sourceSegments?.includes(next)
+        || adjacent.entries?.some(entry => entry.segment === next && entry.sourceRootName === "VolcanoModel"))
+      adjacent?.clear();
     this.applyLayerVisibility();
     if (this.trace) this.buildTracks();
     this.setTime(this.currentTime);
@@ -1949,9 +1952,17 @@ export class TrailScene {
     for (const group of this.terrainRoot.children) {
       const layer = group.userData.mapLayer;
       if (!group.userData.loaded || layer?.segment !== 4 || !isInteriorLayer(layer, this.mapPack?.route)) continue;
-      if (this.useMap && this.activeSegment === layer.segment && this.viewIntent !== "summit" && center) {
-        group.traverse(mesh => { if (mesh.userData.exteriorFacade === true) available = true; });
-      }
+      const selected = Boolean(this.useMap && this.activeSegment === layer.segment && this.viewIntent !== "summit" && center);
+      if (!selected && !group.userData.kilnSkinHidden) continue;
+      group.userData.kilnSkinHidden = false;
+      group.traverse(mesh => {
+        if (selected && mesh.userData.exteriorFacade === true) available = true;
+        if (mesh.userData.kilnOuterSkin !== true) return;
+        // The mountain is the exterior landmark viewed from Caldera. In the
+        // Kiln, full and section views both show the actual inside of the pipe.
+        mesh.visible = !selected;
+        if (selected) group.userData.kilnSkinHidden = true;
+      });
     }
     if (available && this.sectionPlane) {
       this.sectionPlane.axisX = center[0] - this.origin.x;
@@ -2016,6 +2027,9 @@ export class TrailScene {
   cameraContextBounds() {
     const context = this.useMap && this.enclosureContext?.bounds;
     if (!context) return null;
+    // The Kiln mountain is Caldera's backdrop. Fit the playable terrain as
+    // before; an extra bounding box around this bulk would pull the camera out.
+    if (this.enclosureContext.entries?.some(entry => entry.sourceRootName === "VolcanoModel")) return null;
     // The neighboring Citadel remains fully rendered. Only its overlap with the
     // current chapter belongs to this preset; its upper floors have their own view.
     const chapter = this.viewBounds();
@@ -2045,8 +2059,8 @@ export class TrailScene {
         group.userData.cameraSubjectParts = group.userData.campOnly || String(layer.biome).toLowerCase() === "void" ? parts
           : selectCameraSubjectParts(parts, { interior });
       }
-      // The retained wall still spans the building's full height. Use the
-      // same cluster in both modes so the whole section fits as it rotates.
+      if (group.userData.kilnSkinHidden) return group.userData.cameraSubjectParts.filter(part => !part.kilnOuterSkin);
+      // The Citadel's retained wall spans the full height in both modes.
       return group.userData.cameraSubjectParts;
     });
   }

@@ -574,6 +574,34 @@ test("terminal chapters open the classified exterior once mounted, preserve prop
   wall.geometry.dispose(); wall.material.dispose();
 });
 
+test("entering the Kiln drops the adjacent mountain immediately; full interior and free view never bring its skin back", async () => {
+  const { scene, requests } = fixture(3);
+  const caldera = { id: "caldera", name: "Caldera_Segment", segment: 3, biome: "Volcano" };
+  const kiln = { id: "kiln", name: "Volcano_Segment", segment: 4, biome: "Volcano" };
+  const source = { segment: 4, objectId: "verified-volcano", sourceRootName: "VolcanoModel", interiorReference: [0, 884, 2047] };
+  scene.mapPack.layers.push(caldera, kiln); scene.mapPack.mapEnclosures = { enclosures: [source] };
+  scene.terrainRoot.children.push(group(caldera), group(kiln));
+  const context = scene.enclosureContext = { root: { visible: true, userData: { sourceSegments: [4] } }, entries: [source],
+    clear() { this.root.visible = false; this.root.userData.sourceSegments = []; this.entries = []; },
+    async setSelection() {} };
+  scene.canvas = new EventTarget();
+  scene.setActiveSegment(4);
+  assert.equal(context.root.visible, false, "the full neighboring exterior is already gone while the Kiln is loading");
+  assert.deepEqual(requests.map(request => request.layer), ["kiln"]);
+  requests[0].resolve(model()); await flush();
+  const shell = new THREE.Group(), skin = new THREE.Mesh(), walls = skin.clone(), ramp = skin.clone();
+  skin.userData = { kilnOuterSkin: true, exteriorFacade: true };
+  shell.add(skin, walls, ramp); requests[1].resolve(shell); await flush();
+  assert.deepEqual([skin.visible, walls.visible, ramp.visible], [false, true, true]);
+  scene.freeCamera.mode = "free";
+  scene.setExteriorVisible(true); assert.equal(skin.visible, false);
+  scene.setViewIntent("summit"); assert.equal(skin.visible, true);
+  scene.setViewIntent(null); assert.equal(skin.visible, false);
+  scene.activeSegment = null; scene.applyLayerVisibility(); assert.equal(skin.visible, true);
+  scene.activeSegment = 4; scene.applyLayerVisibility(); assert.equal(skin.visible, false);
+  skin.geometry.dispose(); skin.material.dispose();
+});
+
 test("failed enclosure loads dispose their base model and do not show a deceptively wall-less ready chapter", async () => {
   const { scene, requests } = fixture();
   scene.mapPack.mapEnclosures = { enclosures: [{ segment: 0, objectId: 'source-shell-A' }] };
@@ -613,6 +641,8 @@ test("adjacent Citadel frames its entrance in Gloom while keeping the full exter
   assert.deepEqual(scene.enclosureContext.bounds.max, [100, 1226, 2300]);
   assert.deepEqual(scene.viewBounds(), { min: [-50, 600, 1600], max: [50, 908, 1900] });
   assert.equal(JSON.stringify(scene.mapPack.layers), original);
+  scene.enclosureContext.entries = [{ sourceRootName: "VolcanoModel" }];
+  assert.equal(scene.cameraContextBounds(), null, "Caldera's backdrop does not expand the framing of its playable route");
 });
 
 test("an old map load cannot borrow a new map's enclosure metadata", async () => {

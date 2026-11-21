@@ -37,10 +37,9 @@ export function enclosureGeometryReference(entry) {
   return `../../enclosures/${entry.geometry}`;
 }
 
-/** The adjacent Citadel is a source-authored landmark at the Swamp exit.
- * Include its exterior only for the audited single-chapter view. Its segment,
- * coordinates and identity stay unchanged; it does not assign players or
- * routes to the next chapter. Overview loads each shell with its own chapter. */
+/** The Citadel and Kiln are source-authored landmarks at their preceding exits.
+ * A single-chapter view can draw its neighbor without changing which chapter
+ * owns the geometry or the players. Overview loads each shell with its own chapter. */
 export function chapterEnclosures(mapPack, layer, { includeContext = false } = {}) {
   if (!Number.isInteger(layer?.segment)
       || !mapPack?.layers?.some(entry => entry.segment === layer.segment)) return [];
@@ -50,19 +49,21 @@ export function chapterEnclosures(mapPack, layer, { includeContext = false } = {
   // 3.1 static-source equivalence: data/maps/verified-builds/26542162/equivalence.json.
   // Every shell still binds to its own build, scene and source digest above.
   if (!includeContext || mapPack.identityVersion !== 3 || !['25306743', '25739797', '26134529', '26155610', '26542162'].includes(String(mapPack.gameBuildId))
-      || route?.authority !== 'serialized-map-handler' || route.branch !== 'swamp-temple'
-      || layer.segment !== 3 || String(layer.biome).toLowerCase() !== 'swamp') return own;
+      || route?.authority !== 'serialized-map-handler' || layer.segment !== 3) return own;
   const current = route.segments?.find(entry => entry.index === 3);
   const next = route.segments?.find(entry => entry.index === 4);
   const terminal = mapPack.layers.find(entry => entry.segment === 4);
-  if (current?.stageId !== 'swamp' || current.name !== 'Swamp_Segment'
-      || next?.stageId !== 'temple' || next.name !== 'Temple_Segment'
-      || String(current.biome).toLowerCase() !== 'swamp'
-      || String(next.biome).toLowerCase() !== 'swamp'
-      || String(terminal?.biome).toLowerCase() !== 'swamp') return own;
-  const ids = new Set(own.map(entry => entry.objectId));
-  return [...own, ...enclosures.filter(entry => entry.segment === 4
-    && entry.sourceRootName === 'Gloom Temple' && !ids.has(entry.objectId))];
+  const citadel = route.branch === 'swamp-temple' && current?.stageId === 'swamp' && current.name === 'Swamp_Segment'
+    && next?.stageId === 'temple' && next.name === 'Temple_Segment';
+  const kiln = route.branch === 'volcano-kiln' && current?.stageId === 'caldera' && current.name === 'Caldera_Segment'
+    && next?.stageId === 'kiln' && next.name === 'Volcano_Segment';
+  if (!citadel && !kiln) return own;
+  const biome = kiln ? 'volcano' : 'swamp';
+  if (![current, next, layer, terminal].every(part => String(part?.biome).toLowerCase() === biome)) return own;
+  return [...own, ...enclosures.filter(entry => entry.segment === 4 && (citadel
+    ? entry.sourceRootName === 'Gloom Temple'
+    : entry.sourceRootName === 'VolcanoModel' && entry.sourceModelName === 'Pipe'
+      && Array.isArray(entry.sourceHierarchy) && entry.sourceHierarchy.join('/') === 'Map/Biome_4/Caldera/VolcanoModel'))];
 }
 
 /** Select a chapter only when source coordinates disambiguate it. In overview,
