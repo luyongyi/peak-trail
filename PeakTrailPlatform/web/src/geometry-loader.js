@@ -9,7 +9,7 @@ import { applySourceWaterDepth } from "./source-water-material.js";
 import { isExplosiveMineMaterial, recordedHiddenMineIndices } from "./mine-visibility.js";
 import { sha256Hex } from "./sha256.js";
 import { isProjectionProxyMaterial, shadowOnlyNodeIndices } from "./source-render-policy.js";
-import { followWindowMaterial } from "./follow-window-material.js";
+import { sectionMaterial } from "./section-material.js";
 import { isInteriorLayer } from "./camera-placement.js";
 
 function assertEmbeddedGlb(bytes) {
@@ -202,37 +202,43 @@ function partitionFacade(geometry, { coreRadius, floorMin, floorMax }) {
   const index = geometry.index, pos = geometry.getAttribute("position");
   if (!index || !pos || geometry.groups.length || geometry.drawRange.start !== 0
       || geometry.drawRange.count < index.count || index.count % 3) return [{ geometry }];
-  const inside = [], outside = [], r2 = coreRadius * coreRadius;
+  const inside = [], outside = [], passage = [], r2 = coreRadius * coreRadius;
   for (let i = 0; i < index.count; i += 3) {
     const a = index.getX(i), b = index.getX(i+1), c = index.getX(i+2);
     const ax = pos.getX(a), ay = pos.getY(a), bx = pos.getX(b), by = pos.getY(b), cx = pos.getX(c), cy = pos.getY(c);
     const ab = ax * by - ay * bx, bc = bx * cy - by * cx, ca = cx * ay - cy * ax;
     const containsAxis = (ab > 0 && bc > 0 && ca > 0) || (ab < 0 && bc < 0 && ca < 0);
-    let keep = containsAxis || edgeTouchesCore(ax, ay, bx, by, r2) || edgeTouchesCore(bx, by, cx, cy, r2)
+    const keep = containsAxis || edgeTouchesCore(ax, ay, bx, by, r2) || edgeTouchesCore(bx, by, cx, cy, r2)
       || edgeTouchesCore(cx, cy, ax, ay, r2);
     // The authored +Y entrance extends beyond the shaft in both models. Keep
     // its upward-facing floor and adjoining landing even when the walls are
     // hidden. The Citadel ramp spans y=39..163, z=0..5; the Kiln passage
     // descends into the mountain. The roof and tunnel ceiling are separate
     // faces. Keep whole triangles at the edges of the measured footprint.
-    if (!keep && floorMin && ab + bc + ca > 0
+    if (floorMin && ab + bc + ca > 0
         && Math.min(ax, bx, cx) <= floorMax[0] && Math.max(ax, bx, cx) >= floorMin[0]
         && Math.min(ay, by, cy) <= floorMax[1] && Math.max(ay, by, cy) >= floorMin[1]) {
       const az = pos.getZ(a), bz = pos.getZ(b), cz = pos.getZ(c);
-      keep = Math.min(az, bz, cz) >= floorMin[2] && Math.max(az, bz, cz) <= floorMax[2];
+      if (Math.min(az, bz, cz) >= floorMin[2] && Math.max(az, bz, cz) <= floorMax[2]) {
+        passage.push(a, b, c);
+        continue;
+      }
     }
     (keep ? inside : outside).push(a, b, c);
   }
-  if (!outside.length) return [{ geometry, core: true }];
-  if (!inside.length) return [{ geometry, exterior: true }];
   function subset(indices) {
+    if (indices.length === index.count) return geometry;
     const result = new THREE.BufferGeometry();
     for (const [name, attribute] of Object.entries(geometry.attributes)) result.setAttribute(name, attribute);
     result.setIndex(indices);
     result.boundingBox = indexedBounds(result);
     return result;
   }
-  return [{ geometry: subset(inside), core: true }, { geometry: subset(outside), exterior: true }];
+  const parts = [];
+  if (inside.length) parts.push({ geometry: subset(inside), core: true });
+  if (outside.length) parts.push({ geometry: subset(outside), exterior: true });
+  if (passage.length) parts.push({ geometry: subset(passage), core: true, passage: true });
+  return parts;
 }
 
 // Keep the synchronous entry for offline geometry audits. The browser drains
@@ -266,7 +272,7 @@ function* buildStaticMeshes(scene, gameBuildId, shadowOnlyNodes = new Set(), ass
   const instance = new THREE.Matrix4();
   const prepared = new Set();
   const facadePartitions = new Map(), coreMaterials = new Map();
-  const windowMaterials = new Map();
+  const sectionMaterials = new Map();
   const boundsCache = new Map(), groupBoundsCache = new Map(), preciseBoundsCache = new Map();
   const cachedBounds = (geometry, grouped = false, precise = false) => {
     const cache = grouped ? groupBoundsCache : precise ? preciseBoundsCache : boundsCache;
@@ -350,20 +356,20 @@ function* buildStaticMeshes(scene, gameBuildId, shadowOnlyNodes = new Set(), ass
       }
       coreMaterial = coreMaterials.get(coreMaterial);
     }
-    let drawMaterial = object.material;
-    const sourceMesh = context.windowMeshNames?.[nodeIndex];
+    let drawMaterial = object.material, sectionCoreMaterial = coreMaterial;
+    const sourceMesh = context.sectionMeshNames?.[nodeIndex];
     if (sourceMesh) {
-      const adapt = material => followWindowMaterial(material, sourceMesh, context.facade?.nodes.has(nodeIndex) === true,
-        context.followWindow, windowMaterials);
+      const adapt = material => sectionMaterial(material, sourceMesh, context.facade?.nodes.has(nodeIndex) === true,
+        context.sectionPlane, sectionMaterials);
       drawMaterial = Array.isArray(drawMaterial) ? drawMaterial.map(adapt) : adapt(drawMaterial);
-      coreMaterial = coreMaterial === object.material ? drawMaterial : adapt(coreMaterial);
+      sectionCoreMaterial = coreMaterial === object.material ? drawMaterial : adapt(coreMaterial);
     }
     const addMatrix = (worldMatrix, instanceIndex) => {
       const campfire = context.campfire?.matches(nodeIndex, instanceIndex) === true;
       if (context.campOnly && !campfire) return;
       const transform = positiveInstanceTransform(worldMatrix.elements);
       for (const part of parts) {
-        const material = part.core ? coreMaterial : drawMaterial;
+        const material = part.passage ? coreMaterial : part.core ? sectionCoreMaterial : drawMaterial;
         const materialKey = Array.isArray(material) ? material.map(item => item.uuid).join(":") : material.uuid;
         const key = `${part.geometry.uuid}:${materialKey}:${transform.reflected}:${campfire}:${part.exterior === true}`;
         if (!batches.has(key)) batches.set(key, { geometry: part.geometry, material, exterior: part.exterior,
@@ -521,12 +527,12 @@ export async function loadGameGeometry(layer, signal, gameBuildId, context = {})
   await yieldGeometryTask(signal);
   preserveAffineMatrices(gltf);
   const document = gltf.parser.json, facade = sourceFacade(layer, gameBuildId, document);
-  const terminalFollow = context.followWindow && !context.campOnly && auditedFinaleBuilds.has(String(gameBuildId))
+  const terminalSection = context.sectionPlane && !context.campOnly && auditedFinaleBuilds.has(String(gameBuildId))
     && layer.segment === 4 && (facade || (layer === context.chapterLayer && isInteriorLayer(layer, context.route)));
-  const windowMeshNames = terminalFollow ? document.nodes?.map(node => document.meshes?.[node.mesh]?.name) : null;
+  const sectionMeshNames = terminalSection ? document.nodes?.map(node => document.meshes?.[node.mesh]?.name) : null;
   const root = await batchStaticMeshesAsync(gltf.scene, gameBuildId,
     shadowOnlyNodeIndices(gameBuildId, digest), gltf.parser.associations,
-    { ...context, geometryLayer: layer, facade, windowMeshNames }, signal);
+    { ...context, geometryLayer: layer, facade, sectionMeshNames }, signal);
   reportGeometryProgress(progress, "ready");
   return root;
 }

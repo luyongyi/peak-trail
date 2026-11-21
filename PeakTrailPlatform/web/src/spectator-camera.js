@@ -1,5 +1,7 @@
 // Presentation-only spectator framing. No climbing/contact normals are recorded:
 // the optional outward direction below is measured from the loaded map triangles.
+import { createSectionPlane, orientSectionPlane } from "./section-plane.js";
+
 export const FOLLOW_DISTANCE = 56;
 export const FOLLOW_MIN_DISTANCE = 12;
 export const FOLLOW_MAX_DISTANCE = 140;
@@ -24,6 +26,8 @@ export class SpectatorCamera {
     this.solution = null;
     this.lastRequest = "";
     this.mode = null;
+    this.probeSection = createSectionPlane(THREE);
+    this.probeEye = new THREE.Vector3();
     this.interiorCenter = new THREE.Vector3();
     this.interiorReferenceReady = false;
     this.interiorSideKnown = false;
@@ -32,7 +36,7 @@ export class SpectatorCamera {
   // Centre visibility alone can select a long, narrow slot between two rocks.
   // Check the subject's surrounding screen-space footprint, penalizing only
   // foreground hits. The wall directly behind a climber is useful context.
-  viewOpenness(direction, distance) {
+  viewOpenness(direction, distance, section) {
     this.viewPosition.copy(this.anchor).addScaledVector(direction, distance);
     this.viewRight.set(direction.z, 0, -direction.x).normalize();
     this.viewUp.crossVectors(direction, this.viewRight).normalize();
@@ -42,7 +46,7 @@ export class SpectatorCamera {
         .addScaledVector(this.viewUp, distance * y).sub(this.viewPosition);
       const length = this.viewRay.length();
       this.viewRay.divideScalar(length);
-      const hit = this.query?.cast(this.viewPosition, this.viewRay, length * 0.82);
+      const hit = this.query?.cast(this.viewPosition, this.viewRay, length * 0.82, section);
       if (!hit) clear++;
     }
     return clear / 8;
@@ -56,11 +60,24 @@ export class SpectatorCamera {
     return out.set(Math.sin(azimuth) * c, Math.sin(pitch), Math.cos(azimuth) * c);
   }
 
+  sectionAt(direction, distance, section) {
+    if (!section) return null;
+    const probe = this.probeSection;
+    probe.axisX = section.axisX; probe.axisZ = section.axisZ;
+    probe.value.copy(section.value);
+    probe.footing.value.copy(section.footing.value);
+    probe.keepContactWall = section.keepContactWall;
+    this.probeEye.copy(this.anchor).addScaledVector(direction, distance);
+    const backX = this.probeEye.x - this.look.x, backZ = this.probeEye.z - this.look.z;
+    orientSectionPlane(probe, backX, backZ, this.probeEye);
+    return probe;
+  }
+
   // Sphere-like camera clearance, tested at the centre and four near-plane
   // offsets. Only exact triangle intersections shorten the boom, never AABBs.
-  clearance(origin, direction, distance, wide = false, followWindowFloorY) {
+  clearance(origin, direction, distance, wide = false, section) {
     const padding = 0.8;
-    const hit = this.query?.cast(origin, direction, distance + padding, followWindowFloorY);
+    const hit = this.query?.cast(origin, direction, distance + padding, section);
     let allowed = hit ? Math.max(0.15, hit.distance - padding) : distance;
     if (wide && allowed > 1) {
       this.right.set(direction.z, 0, -direction.x).normalize();
@@ -69,15 +86,21 @@ export class SpectatorCamera {
         this.end.y += vertical;
         const length = this.end.length();
         this.end.divideScalar(length);
-        const side = this.query?.cast(origin, this.end, length + padding, followWindowFloorY);
+        const side = this.query?.cast(origin, this.end, length + padding, section);
         if (side) allowed = Math.min(allowed, Math.max(0.15, (side.distance - padding) * distance / length));
       }
     }
     return Math.min(distance, allowed);
   }
 
-  selectView({ distance, azimuth, pitch, preferredAzimuth, interior, manual }) {
+  selectView({ distance, azimuth, pitch, preferredAzimuth, interior, manual, sectionPlane }) {
     let preferred = Number.isFinite(preferredAzimuth) ? preferredAzimuth : azimuth;
+    let inward = null;
+    if (sectionPlane && !manual) {
+      const dx = sectionPlane.axisX - this.anchor.x, dz = sectionPlane.axisZ - this.anchor.z;
+      if (Math.hypot(dx, dz) > 3) inward = Math.atan2(dx, dz);
+      preferred = inward ?? azimuth;
+    }
     let normalFound = false;
     let closest = 5;
     if (!manual && !interior) {
@@ -95,16 +118,19 @@ export class SpectatorCamera {
     }
     const basePitch = manual ? pitch : interior ? 0.1 : 0.22;
     const angles = manual ? [azimuth] : [azimuth, preferred, ...[-1, 1, -2, 2, -3, 3, -4, 4, 6].map((x) => preferred + x * Math.PI / 6)];
+    if (inward !== null) angles.push(inward);
     const pitches = manual ? [pitch] : interior ? [basePitch, 0.3] : [basePitch, 0.5, 0.85];
     let best = null, incumbent = null;
     const evaluate = (angle, elevation) => {
       this.directionAt(angle, elevation);
-      const available = this.clearance(this.anchor, this.direction, distance, true);
+      const section = this.sectionAt(this.direction, distance, sectionPlane);
+      const available = this.clearance(this.anchor, this.direction, distance, true, section);
       const reach = available / distance;
       const outward = Math.cos(angleDelta(angle, preferred));
       const continuity = Math.cos(angleDelta(angle, azimuth));
-      const openness = !manual && available > 3 ? this.viewOpenness(this.direction, available) : 0;
-      const score = reach * 8 + outward * (normalFound ? 2.1 : 0.55)
+      const openness = !manual && available > 3 ? this.viewOpenness(this.direction, available, section) : 0;
+      const courtyard = inward === null ? 0 : Math.cos(angleDelta(angle, inward));
+      const score = reach * 8 + outward * (normalFound && section ? 3.6 : normalFound ? 2.1 : 0.55) + courtyard
         + continuity * 0.85 + openness * 3 - Math.abs(elevation - basePitch) * 1.2;
       const candidate = { azimuth: angle, pitch: elevation, distance: available, score, normalFound, openness };
       if (!best || score > best.score) best = candidate;
@@ -300,7 +326,7 @@ export class SpectatorCamera {
     this.probeIn -= dt;
     if (!this.solution || this.probeIn <= 0 || request !== this.lastRequest) {
       this.solution = this.selectView({ distance, azimuth: manual ? initialAzimuth : this.azimuth,
-        pitch: initialPitch, preferredAzimuth: options.preferredAzimuth, interior: options.interior, manual });
+        pitch: initialPitch, preferredAzimuth: options.preferredAzimuth, interior: options.interior, manual, sectionPlane: options.sectionPlane });
       this.probeIn = 0.28;
       this.lastRequest = request;
     }
@@ -308,12 +334,11 @@ export class SpectatorCamera {
     // A cached opening can close as the player walks around a corner. Re-query
     // in the same frame, using the same wide clearance as final placement.
     this.directionAt(this.azimuth, this.pitch);
-    // Prefer a physically open view when selecting the orbit. Only placement
-    // may look through the foreground rocks the renderer can actually cut.
-    let currentSafe = this.clearance(this.anchor, this.direction, distance, true, options.followWindowFloorY);
+    let currentSafe = this.clearance(this.anchor, this.direction, distance, true,
+      this.sectionAt(this.direction, distance, options.sectionPlane));
     if (!manual && currentSafe < distance * .65 && solution.distance > distance * .7 && this.probeIn < .28) {
       solution = this.solution = this.selectView({ distance, azimuth: this.azimuth,
-        pitch: initialPitch, preferredAzimuth: options.preferredAzimuth, interior: options.interior, manual });
+        pitch: initialPitch, preferredAzimuth: options.preferredAzimuth, interior: options.interior, manual, sectionPlane: options.sectionPlane });
       this.probeIn = .28;
     }
     // Interpolate the orbit, not the chord between camera positions. A Cartesian
@@ -322,7 +347,8 @@ export class SpectatorCamera {
     let nextAzimuth = this.azimuth + angleDelta(solution.azimuth, this.azimuth) * turn;
     let nextPitch = this.pitch + (solution.pitch - this.pitch) * turn;
     this.directionAt(nextAzimuth, nextPitch);
-    let safe = this.clearance(this.anchor, this.direction, distance, true, options.followWindowFloorY);
+    let safe = this.clearance(this.anchor, this.direction, distance, true,
+      this.sectionAt(this.direction, distance, options.sectionPlane));
     let relocated = false;
     if (!manual && !first && currentSafe > distance * .85 && safe < currentSafe * .8) {
       // Do not abandon an open view to begin an obstructed orbit transition.
@@ -333,7 +359,8 @@ export class SpectatorCamera {
     // This is only an automatic emergency transition, never manual orbit.
     if (!manual && safe < distance * .3 && solution.distance > distance * .7) {
       this.directionAt(solution.azimuth, solution.pitch);
-      const safeDestination = this.clearance(this.anchor, this.direction, distance, true, options.followWindowFloorY);
+      const safeDestination = this.clearance(this.anchor, this.direction, distance, true,
+        this.sectionAt(this.direction, distance, options.sectionPlane));
       if (safeDestination > distance * 0.65) {
         nextAzimuth = solution.azimuth; nextPitch = solution.pitch;
         safe = safeDestination; relocated = true;

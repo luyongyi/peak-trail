@@ -1,3 +1,5 @@
+import { cutsSectionPoint } from "./section-plane.js";
+
 // Camera-only queries against the same static triangles the map renders. Bounds
 // prune the search; they are never returned as a substitute collision surface.
 // The WeakMap does not retain unloaded GPU geometry and does not modify it.
@@ -105,9 +107,9 @@ function triangleTree(geometry) {
   return tree;
 }
 
-function solidMaterial(material, ignoreWindowMaterials) {
+function solidMaterial(material, ignoreSectionMaterials) {
   if (!material || material.visible === false || material.opacity === 0) return false;
-  if (ignoreWindowMaterials && material.userData?.peakFollowWindow) return false;
+  if (ignoreSectionMaterials && material.userData?.peakSectionPlane) return false;
   const sourceShader = material.userData?.peakTerrain?.sourceColors?.shader;
   if (SOFT_FOLIAGE_SHADERS.has(sourceShader)) return false;
   const effect = material.userData?.peakSourceEffect;
@@ -122,12 +124,12 @@ function visibleMesh(mesh) {
   return true;
 }
 
-function triangleIsSolid(mesh, offset, ignoreWindowMaterials = false) {
+function triangleIsSolid(mesh, offset, ignoreSectionMaterials = false) {
   const geometry = mesh.geometry, { start, count } = geometry.drawRange;
   if (offset < start || offset + 2 >= start + count) return false;
-  if (!Array.isArray(mesh.material)) return solidMaterial(mesh.material, ignoreWindowMaterials);
+  if (!Array.isArray(mesh.material)) return solidMaterial(mesh.material, ignoreSectionMaterials);
   return geometry.groups.some((group) => offset >= group.start && offset + 2 < group.start + group.count
-    && solidMaterial(mesh.material[group.materialIndex], ignoreWindowMaterials));
+    && solidMaterial(mesh.material[group.materialIndex], ignoreSectionMaterials));
 }
 
 /**
@@ -197,7 +199,7 @@ export class FollowTerrainQuery {
     return this;
   }
 
-  cast(origin, direction, maxDistance, followWindowFloorY) {
+  cast(origin, direction, maxDistance, sectionPlane) {
     this.lastStats = { worldNodes: 0, instances: 0, triangleNodes: 0, triangles: 0 };
     if (!Number.isFinite(maxDistance) || maxDistance < 0 || !origin || !direction
         || ![origin.x, origin.y, origin.z, direction.x, direction.y, direction.z].every(Number.isFinite)
@@ -221,7 +223,7 @@ export class FollowTerrainQuery {
         if (!visibleMesh(entry.mesh)
             || boxEntry(entry.bounds, this.ray.origin, this.ray.direction, bestDistance) === Infinity) continue;
         this.lastStats.instances++;
-        const hit = this.castInstance(entry, bestDistance, followWindowFloorY);
+        const hit = this.castInstance(entry, bestDistance, sectionPlane);
         if (hit && hit.distance <= bestDistance) { best = hit; bestDistance = hit.distance; }
       }
     }
@@ -240,7 +242,7 @@ export class FollowTerrainQuery {
     }
   }
 
-  castInstance(entry, maxDistance, followWindowFloorY) {
+  castInstance(entry, maxDistance, sectionPlane) {
     const local = this.localRay;
     local.origin.copy(this.ray.origin).applyMatrix4(entry.inverse);
     // Keep the world->local distance conversion, not just a normalized vector:
@@ -271,10 +273,10 @@ export class FollowTerrainQuery {
         this.localNormal.applyMatrix3(entry.normalMatrix).normalize();
         if (this.localNormal.dot(this.ray.direction) > 0) this.localNormal.negate();
         const point = this.localPoint.clone().applyMatrix4(entry.matrix);
-        // For follow placement only, look past cuttable walls for the next
-        // solid triangle. A walkable floor in the same material still blocks.
-        if (Number.isFinite(followWindowFloorY) && !triangleIsSolid(mesh, offset, true)
-            && !(point.y <= followWindowFloorY && Math.abs(this.localNormal.y) >= 0.55)) continue;
+        // Keep testing the next solid hit after a cut, including other
+        // material slots and contact surfaces from the same original mesh.
+        if (sectionPlane?.value.w && !triangleIsSolid(mesh, offset, true)
+            && cutsSectionPoint(sectionPlane, point, this.localNormal)) continue;
         // Use the world point to remove accumulated inverse-transform error.
         const worldDistance = point.distanceTo(this.ray.origin);
         if (worldDistance > maxDistance + 1e-9) continue;

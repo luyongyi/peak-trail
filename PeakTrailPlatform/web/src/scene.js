@@ -15,6 +15,7 @@ import { latestLifeEventBefore, MARKER_LIFE_EVENT_TYPES } from "./protocol.js";
 import { SpectatorCamera, FOLLOW_DISTANCE, FOLLOW_MIN_DISTANCE, FOLLOW_MAX_DISTANCE, FOLLOW_INTERIOR_DISTANCE, FOLLOW_INTERIOR_MIN_DISTANCE, FOLLOW_INTERIOR_MAX_DISTANCE } from "./spectator-camera.js";
 import { followLayerAtPosition } from "./map-enclosures.js";
 import { FollowTerrainQuery } from "./follow-terrain.js";
+import { createSectionPlane, orientSectionPlane } from "./section-plane.js";
 import { SourceWaterRenderer } from "./source-water-renderer.js";
 import { nadirCameraBounds, nadirCameraParts, supportsNadirCameraBuild } from "./nadir-camera-bounds.js";
 import { CommunityRouteOverlay } from "./community-route-overlay.js";
@@ -206,7 +207,7 @@ export class TrailScene {
     this.followChangeRevision = null;
     this.followAnchor = new THREE.Vector3();
     this.followTmp = new THREE.Vector3();
-    this.followWindow = { value: new THREE.Vector4(0, 0, 0, 0), supportY: { value: 0 } };
+    this.sectionPlane = createSectionPlane(THREE);
     this.followAzimuth = 0.6;
     this.followPitch = 0.22;
     this.followDistance = FOLLOW_DISTANCE;
@@ -368,12 +369,13 @@ export class TrailScene {
     try {
       const delta = this.lastFrameTime === null ? 0 : (timestamp - this.lastFrameTime) / 1000;
       this.lastFrameTime = timestamp;
-      // Only an actual follow-camera update in this frame may open the terrain.
-      if (this.followWindow) this.followWindow.value.w = 0;
+      // Only a followed player's live pose may protect a local contact surface.
+      if (this.sectionPlane) this.sectionPlane.footing.value.w = 0;
       if (this.mapLootFocus?.update(timestamp)) { /* The close-up flight owns the camera this frame. */ }
       else if (this.freeCamera.mode === "free") this.freeCamera.update(delta);
       else if (this.followTargetId !== null) this.updateFollowCamera(delta);
       else this.controls.update();
+      this.updateSectionPlane();
       this.updateCameraMarkerVisibility();
       this.fogDepthPass.render({ renderer: this.renderer, scene: this.scene, camera: this.camera,
         fogEntries: this.worldRenderer.entries.values(), depthEntries: this.waterDepthEntries,
@@ -762,7 +764,7 @@ export class TrailScene {
     const context = { chapterLayer: layer, route: this.mapPack.route,
       onProgress: progress => this.emitGeometryProgress(layer, progress, token) };
     if (!campOnly && layer.segment === 4 && isInteriorLayer(layer, this.mapPack.route))
-      context.followWindow = this.followWindow;
+      context.sectionPlane = this.sectionPlane;
     const model = await loadGameGeometry(layer, signal, gameBuildId, { ...context, campfire, campOnly });
     try {
       // The exact-source siblings were missed by the original root traversal.
@@ -1259,7 +1261,7 @@ export class TrailScene {
     if (next === null ? this.followTargetId == null : next === this.followTargetId) return;
     this.clearMapLootFocus();
     this.followTargetId = next;
-    if (this.followWindow) this.followWindow.value.w = 0;
+    if (this.sectionPlane) this.sectionPlane.footing.value.w = 0;
     this.surveyPreset = null;
     ++this.cameraSelectionRevision;
     this.followChangeReason = reason;
@@ -1437,12 +1439,16 @@ export class TrailScene {
     const preferredAzimuth = bounds ? Math.atan2(
       this.followAnchor.x - ((bounds.min[0] + bounds.max[0]) / 2 - this.origin.x),
       this.followAnchor.z + ((bounds.min[2] + bounds.max[2]) / 2 - this.origin.z)) : this.followAzimuth;
-    const followWindowFloorY = context.openFacade ? this.followAnchor.y + 0.15 : undefined;
+    const section = context.openFacade ? this.sectionPlane : null;
+    if (section) {
+      section.footing.value.set(this.followAnchor.x, this.followAnchor.y + 0.15, this.followAnchor.z, 3);
+      section.keepContactWall = !this.followUserOrbit;
+    }
     const result = this.followRig.update(this.followAnchor, deltaSeconds, {
       cameraPosition: this.camera.position, distance: this.followDistance,
       azimuth: this.followAzimuth, pitch: this.followPitch, manual: this.followUserOrbit,
       preferredAzimuth, interior: context.interior, interiorReference: context.interiorReference,
-      followWindowFloorY,
+      sectionPlane: section,
       discontinuity: this.followDiscontinuity,
     });
     this.followDiscontinuity = false;
@@ -1452,27 +1458,18 @@ export class TrailScene {
     this.camera.lookAt(result.target);
     // OrbitControls 目标同步：退出跟随时无缝交还。
     this.controls.target.copy(result.target);
-    this.updateFollowWindow(followWindowFloorY);
   }
 
-  updateFollowWindow(supportY) {
-    if (!this.followWindow) return;
-    const circle = this.followWindow.value;
-    circle.w = 0;
-    if (!Number.isFinite(supportY) || !this.viewportWidth || !this.viewportHeight) return;
-    this.camera.updateMatrixWorld();
-    const projected = this.followTmp.copy(this.followAnchor).applyMatrix4(this.camera.matrixWorldInverse);
-    const cutoff = -projected.z - 0.15;
-    projected.applyMatrix4(this.camera.projectionMatrix);
-    if (!(cutoff > this.camera.near && projected.z <= 1
-      && Math.abs(projected.x) <= 1 && Math.abs(projected.y) <= 1)) return;
-    // The shader samples gl_FragCoord. Map CSS radius to the actual framebuffer,
-    // including Safari's resolution cap, and project the real player rather than the damped look target.
-    const width = this.canvas.width, height = this.canvas.height;
-    const cssRadius = THREE.MathUtils.clamp(Math.min(this.viewportWidth, this.viewportHeight) * 0.18, 44, 144);
-    this.followWindow.supportY.value = supportY;
-    circle.set((projected.x + 1) * width * 0.5, (projected.y + 1) * height * 0.5,
-      cssRadius * height / this.viewportHeight, cutoff);
+  updateSectionPlane() {
+    const section = this.sectionPlane;
+    if (!section) return;
+    if (!this.facadeState?.available || this.facadeState.visible) {
+      section.value.w = 0;
+      section.footing.value.w = 0;
+      return;
+    }
+    const direction = this.camera.getWorldDirection(this.followTmp);
+    orientSectionPlane(section, -direction.x, -direction.z, this.camera.position);
   }
 
   /** Respect terrain depth; camera placement, not an opaque x-ray marker,
@@ -1948,24 +1945,22 @@ export class TrailScene {
 
   syncExteriorVisibility() {
     let available = false;
+    const center = this.mapPack?.mapEnclosures?.enclosures?.find(entry => entry.segment === this.activeSegment)?.interiorReference;
     for (const group of this.terrainRoot.children) {
       const layer = group.userData.mapLayer;
       if (!group.userData.loaded || layer?.segment !== 4 || !isInteriorLayer(layer, this.mapPack?.route)) continue;
-      const selected = this.useMap && this.activeSegment === layer.segment && this.viewIntent !== "summit";
-      const visible = !selected || this.exteriorVisible === true;
-      group.traverse(mesh => {
-        if (mesh.userData.exteriorFacade !== true) return;
-        if (selected) available = true;
-        if (mesh.visible === visible) return;
-        mesh.visible = visible;
-      });
+      if (this.useMap && this.activeSegment === layer.segment && this.viewIntent !== "summit" && center) {
+        group.traverse(mesh => { if (mesh.userData.exteriorFacade === true) available = true; });
+      }
+    }
+    if (available && this.sectionPlane) {
+      this.sectionPlane.axisX = center[0] - this.origin.x;
+      this.sectionPlane.axisZ = this.origin.z - center[2];
     }
     const visible = available && this.exteriorVisible === true;
     if (Boolean(this.facadeState?.available) === available && Boolean(this.facadeState?.visible) === visible) return;
     this.facadeState = { available, visible };
-    if ((!available || visible) && this.followWindow) this.followWindow.value.w = 0;
-    // Follow and loot terrain queries read object visibility on each cast.
-    // Only the chosen follow direction needs a new occlusion probe.
+    this.updateSectionPlane();
     this.followRig?.invalidate();
     this.canvas.dispatchEvent(new CustomEvent("peaktrail-facade-change", { detail: { available, visible } }));
   }
@@ -1974,9 +1969,6 @@ export class TrailScene {
     if (!this.facadeState?.available || this.exteriorVisible === visible) return;
     this.exteriorVisible = Boolean(visible);
     this.syncExteriorVisibility();
-    if (this.surveyPreset && this.freeCamera.mode === "orbit" && this.followTargetId == null) {
-      this.applySurveyPreset(this.surveyPreset);
-    }
   }
 
   getPlayerColor(playerId) {
@@ -2053,8 +2045,8 @@ export class TrailScene {
         group.userData.cameraSubjectParts = group.userData.campOnly || String(layer.biome).toLowerCase() === "void" ? parts
           : selectCameraSubjectParts(parts, { interior });
       }
-      if (this.facadeState?.available && !this.facadeState.visible && group.userData.segment === this.activeSegment)
-        return group.userData.cameraSubjectParts.filter(part => !part.exteriorFacade);
+      // The retained wall still spans the building's full height. Use the
+      // same cluster in both modes so the whole section fits as it rotates.
       return group.userData.cameraSubjectParts;
     });
   }

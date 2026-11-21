@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import * as THREE from "../../vendor/three/0.180.0/build/three.module.js";
 import { FollowTerrainQuery } from "../src/follow-terrain.js";
+import { createSectionPlane, orientSectionPlane } from "../src/section-plane.js";
 
 const vec = (x, y, z) => new THREE.Vector3(x, y, z);
 const material = (options = {}) => new THREE.MeshBasicMaterial(options);
@@ -75,8 +76,8 @@ test("nearest real triangle wins independent of root order and a far box does no
   close(query.cast(vec(0, 0, 10), vec(0, 0, -1), 30).distance, 30);
 });
 
-test("foreground follow placement looks through eligible rock slots but still collides with the next prop and the floor", () => {
-  const rock = material(); rock.userData.peakFollowWindow = true;
+test("section placement looks through the near half, retaining the far wall, a same-batch prop and the tracked footing", () => {
+  const rock = material(); rock.userData.peakSectionPlane = true;
   const mesh = triangle({ indexed: false, material: [rock, material()] });
   mesh.geometry.setAttribute("position", new THREE.Float32BufferAttribute([
     -2, -2, 2, 2, -2, 2, 0, 2, 2, -2, -2, 7, 2, -2, 7, 0, 2, 7,
@@ -86,10 +87,16 @@ test("foreground follow placement looks through eligible rock slots but still co
   floor.rotation.x = -Math.PI / 2; floor.position.y = -1;
   const query = new FollowTerrainQuery(THREE).setRoots([mesh, floor]);
   const origin = vec(0, 0, 0);
+  const section = createSectionPlane(THREE); section.axisZ = -1;
+  orientSectionPlane(section, 0, 1, vec(0, 2, 10));
+  section.footing.value.set(0, 0.15, 0, 3);
   close(query.cast(origin, vec(0, 0, 1), 10).distance, 2);
-  close(query.cast(origin, vec(0, 0, 1), 10, 0.15).distance, 7);
-  close(query.cast(origin, vec(0, -1, 0), 10, 0.15).distance, 1);
-  close(query.cast(origin, vec(0, 0, 1), 10).distance, 2, 1e-8);
+  close(query.cast(origin, vec(0, 0, 1), 10, section).distance, 7);
+  close(query.cast(origin, vec(0, -1, 0), 10, section).distance, 1);
+  section.footing.value.w = 0;
+  assert.equal(query.cast(origin, vec(0, -1, 0), 10, section), null);
+  orientSectionPlane(section, 0, -1, vec(0, 2, -10));
+  close(query.cast(origin, vec(0, 0, 1), 10, section).distance, 2);
 });
 
 test("all ancestor visibility and material visibility are checked dynamically without rebuilding", () => {

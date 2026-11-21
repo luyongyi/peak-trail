@@ -251,10 +251,10 @@ test("a preset drains real OrbitControls drag damping before setting the new cam
   }
 });
 
-test("the hidden terminal shell defines the main cluster but contributes no exterior bounds to its open view", t => {
+test("the full-height rotating half-shell keeps the same survey framing without distant outliers", t => {
   const { scene } = fixture(t);
   const layer = { segment: 4, name: "Volcano_Segment", biome: "Volcano" };
-  scene.mapPack = { identityVersion: 3, layers: [layer] };
+  scene.mapPack = { identityVersion: 3, layers: [layer], mapEnclosures: { enclosures: [{ segment: 4, interiorReference: [0, 0, 0] }] } };
   scene.activeSegment = 4;
   const chapter = new THREE.Group();
   chapter.userData = { mapLayer: layer, segment: 4, loaded: true };
@@ -267,13 +267,13 @@ test("the hidden terminal shell defines the main cluster but contributes no exte
   distant.position.x = 1800;
   chapter.add(exterior, floor, distant);
   scene.syncExteriorVisibility();
-  assert.equal(exterior.visible, false);
-  assert.equal(scene.cameraSubjectParts().length, 1, "the real floor fits the view without the nine distant rocks");
+  assert.equal(exterior.visible, true);
+  assert.equal(scene.cameraSubjectParts().length, 49, "the floor and far wall fit without the nine distant rocks");
   scene.setExteriorVisible(true);
   assert.equal(scene.cameraSubjectParts().length, 49, "full exterior returns without the outliers");
   const before = scene.cameraSubjectParts();
   scene.setExteriorVisible(false);
-  assert.deepEqual(scene.cameraSubjectParts(), before.filter(part => !part.exteriorFacade));
+  assert.deepEqual(scene.cameraSubjectParts(), before);
   exterior.dispose(); distant.dispose(); exterior.geometry.dispose(); floor.geometry.dispose(); material.dispose();
 });
 

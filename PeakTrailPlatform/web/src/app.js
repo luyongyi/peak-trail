@@ -3128,10 +3128,10 @@ $("watchShareLink").addEventListener("click", () => void copyWatchShare("link"))
 window.addEventListener("scroll", updatePhonePanelButton, { passive: true, capture: true });
 elements.sceneCanvas.addEventListener("peaktrail-facade-change", ({ detail }) => {
   elements.facadeControl.hidden = !detail.available;
-  elements.facadeToggle.checked = detail.visible;
+  elements.facadeToggle.checked = !detail.visible;
 });
 elements.facadeToggle.addEventListener("change", () => {
-  viewer?.setExteriorVisible(elements.facadeToggle.checked);
+  viewer?.setExteriorVisible(!elements.facadeToggle.checked);
   watchChrome.closeMenu(true);
 });
 elements.freeCameraButton.addEventListener("click", () => {

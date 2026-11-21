@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import * as THREE from "../../vendor/three/0.180.0/build/three.module.js";
 import { ReplayCamera } from "../src/replay-camera.js";
+import { createSectionPlane, orientSectionPlane } from "../src/section-plane.js";
 import { chooseOverviewDirection, fitPerspectivePoints } from "../src/camera-framing.js";
 import { chooseRecordedInteriorPose, isInteriorLayer } from "../src/camera-placement.js";
 import { latestLifeEventBefore, MARKER_LIFE_EVENT_TYPES } from "../src/protocol.js";
@@ -20,7 +21,7 @@ const source = (await readFile(new URL("../src/scene.js", import.meta.url), "utf
 const ports = { ...i18n, THREE, chooseOverviewDirection, fitPerspectivePoints, chooseRecordedInteriorPose, isInteriorLayer, latestLifeEventBefore,
   MARKER_LIFE_EVENT_TYPES, pointInBounds, markerInDisplayBounds, FOLLOW_DISTANCE, FOLLOW_MIN_DISTANCE, FOLLOW_MAX_DISTANCE,
   FOLLOW_INTERIOR_DISTANCE, FOLLOW_INTERIOR_MIN_DISTANCE, FOLLOW_INTERIOR_MAX_DISTANCE, followLayerAtPosition,
-  fitSurveyCamera,
+  fitSurveyCamera, createSectionPlane, orientSectionPlane,
   updateRecordedMineVisibility() {}, updateMapFogSurfaceVisibility() {} };
 const TrailScene = new Function(...Object.keys(ports), `${source}\nreturn TrailScene;`)(...Object.values(ports));
 
@@ -47,6 +48,7 @@ function fixture() {
     followAutoRotate: false, followAutoSwitchAt: Infinity, followTerrainDirty: true,
     followDiscontinuity: false, followAnchor: new THREE.Vector3(), followTmp: new THREE.Vector3(),
     followDistance: FOLLOW_DISTANCE, followAzimuth: 0, followPitch: 0.22, followUserOrbit: false,
+    sectionPlane: createSectionPlane(THREE),
     followTerrain: { setRoots(roots) { queryCalls.push(roots); } },
     followRig: { resets: 0, invalidations: 0, reset() { this.resets++; }, invalidate() { this.invalidations++; },
       update(anchor, dt, options) { rigCalls.push({ anchor: anchor.clone(), dt, options: { ...options } });
@@ -331,11 +333,11 @@ test("opening and restoring the facade changes follow geometry and distance whil
     scene.updateFollowCamera(1 / 60);
     assert.equal(f.rigCalls.at(-1).options.interior, false);
     assert.equal(scene.followDistance, 36);
-    assert.equal(f.rigCalls.at(-1).options.followWindowFloorY, scene.followAnchor.y + 0.15);
+    assert.equal(f.rigCalls.at(-1).options.sectionPlane.footing.value.y, scene.followAnchor.y + 0.15);
     scene.facadeState.visible = true;
     scene.updateFollowCamera(1 / 60);
     assert.equal(f.rigCalls.at(-1).options.interior, true);
-    assert.equal(f.rigCalls.at(-1).options.followWindowFloorY, undefined);
+    assert.equal(f.rigCalls.at(-1).options.sectionPlane, null);
     assert.equal(scene.followDistance, FOLLOW_INTERIOR_DISTANCE);
     scene.followUserOrbit = true; scene.followAzimuth = 0.8; scene.followDistance = 21;
     scene.facadeState.visible = false;
@@ -347,37 +349,29 @@ test("opening and restoring the facade changes follow geometry and distance whil
   } finally { f.cleanup(); }
 });
 
-test("the foreground window tracks the real player in framebuffer pixels and clears when follow loses ownership", () => {
+test("the vertical building section follows the view in orbit, player follow and free camera, retaining the overhead bearing", () => {
   const f = fixture(), { scene } = f;
   try {
     scene.activeSegment = 4;
     scene.facadeState = { available: true, visible: false };
-    scene.followWindow = { value: new THREE.Vector4(0, 0, 0, 0), supportY: { value: 0 } };
-    scene.viewportWidth = 600; scene.viewportHeight = 400;
-    scene.canvas.width = 900; scene.canvas.height = 600;
+    const s = scene.sectionPlane;
+    s.axisX = 20; s.axisZ = -50;
+    scene.camera.position.set(10, 5, 4); scene.camera.lookAt(10, 5, 0);
+    scene.updateSectionPlane(); assert.deepEqual(s.value.toArray(), [0, 1, 50, 1]);
+    scene.camera.lookAt(20, 5, 4); scene.updateSectionPlane();
+    assert.ok(Math.abs(s.value.x + 1) < 1e-8 && Math.abs(s.value.z - 20) < 1e-8);
+    scene.camera.quaternion.setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
+    scene.updateSectionPlane(); assert.ok(Math.abs(s.value.x + 1) < 1e-8);
     f.player("inside", { segment: 4 }); scene.setTime(1); scene.setFollowTarget("inside");
-    // Simulate the damped aim trailing the current player during movement.
-    scene.followRig.update = anchor => ({ position: anchor.clone().add(new THREE.Vector3(-3, -2, 36)),
-      target: anchor.clone().add(new THREE.Vector3(-3, -2, 0)), azimuth: 0, pitch: 0 });
-    scene.updateFollowCamera(1 / 60);
-    const projected = scene.followAnchor.clone().project(scene.camera), circle = scene.followWindow.value;
-    assert.ok(circle.x > 450 && circle.y > 300, "window follows the actual player above and to the right of the aim");
-    assert.ok(Math.abs(circle.x - (projected.x + 1) * 450) < 1e-8);
-    assert.ok(Math.abs(circle.y - (projected.y + 1) * 300) < 1e-8);
-    assert.equal(circle.z, 108);
-    assert.ok(Math.abs(circle.w - 35.85) < 1e-8);
-    assert.equal(scene.followWindow.supportY.value, scene.followAnchor.y + 0.15);
-    scene.facadeState.visible = true; scene.updateFollowCamera(1 / 60);
-    assert.equal(circle.w, 0);
-    scene.facadeState.visible = false; scene.updateFollowCamera(1 / 60);
-    assert.ok(circle.w > 0);
-    scene.toggleFreeCamera();
-    assert.equal(circle.w, 0);
-    scene.setFollowTarget("inside"); scene.updateFollowCamera(1 / 60);
-    assert.ok(circle.w > 0);
-    scene.playerObjects.get("inside").marker.userData.followable = false;
-    scene.updateFollowCamera(1 / 60);
-    assert.equal(circle.w, 0);
+    scene.updateFollowCamera(1 / 60); scene.updateSectionPlane();
+    const player = scene.followAnchor;
+    assert.deepEqual(s.footing.value.toArray(), [player.x, player.y + 0.15, player.z, 3]);
+    assert.ok(s.value.x * player.x + s.value.y * player.z + s.value.z < 0, "automatic follow retains the player's wall");
+    scene.toggleFreeCamera(); scene.updateSectionPlane();
+    assert.equal(s.value.w, 1); assert.equal(s.footing.value.w, 0);
+    scene.facadeState.visible = true; scene.updateSectionPlane(); assert.equal(s.value.w, 0);
+    scene.facadeState.visible = false; scene.updateSectionPlane(); assert.equal(s.value.w, 1);
+    scene.facadeState.available = false; scene.updateSectionPlane(); assert.equal(s.value.w, 0);
   } finally { f.cleanup(); }
 });
 

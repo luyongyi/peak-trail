@@ -3,6 +3,7 @@ import test from "node:test";
 import * as THREE from "../../vendor/three/0.180.0/build/three.module.js";
 import { SpectatorCamera, FOLLOW_DISTANCE, FOLLOW_INTERIOR_DISTANCE, FOLLOW_INTERIOR_MAX_DISTANCE } from "../src/spectator-camera.js";
 import { FollowTerrainQuery } from "../src/follow-terrain.js";
+import { createSectionPlane, orientSectionPlane } from "../src/section-plane.js";
 
 const v = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 // Analytic planes stand in for the query port, not the production triangle query.
@@ -63,19 +64,40 @@ test("a manual orbit retains its chosen side, but cannot put the camera through 
   assert.ok(Math.abs(result.position.x) < 0.001);
 });
 
-test("terminal follow keeps its readable orbit through a cuttable cliff and restores hard collision when closed", () => {
+test("manual terminal orbit rotates the cut with the viewer and restores hard collision when closed", () => {
   const rock = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), new THREE.MeshBasicMaterial());
-  rock.material.userData.peakFollowWindow = true; rock.position.z = 2;
+  rock.material.userData.peakSectionPlane = true; rock.position.z = 2;
   const query = new FollowTerrainQuery(THREE).setRoots([rock]);
   const rig = new SpectatorCamera({ THREE, query });
   const orbit = { manual: true, azimuth: 0, pitch: 0, distance: 36 };
-  const open = rig.update(v(), 1 / 60, { ...orbit, followWindowFloorY: 0.15 });
+  const sectionPlane = createSectionPlane(THREE);
+  orientSectionPlane(sectionPlane, 0, 1, v(0, 0, 36));
+  const open = rig.update(v(), 1 / 60, { ...orbit, sectionPlane });
   assert.ok(Math.abs(open.distance - 36) < 0.01);
   const closed = rig.update(v(), 1 / 60, orbit);
   assert.ok(closed.distance > 1 && closed.distance < 1.3);
-  const reopening = rig.update(v(), 1 / 60, { ...orbit, followWindowFloorY: 0.15 });
+  const reopening = rig.update(v(), 1 / 60, { ...orbit, sectionPlane });
   assert.ok(reopening.distance > closed.distance && reopening.distance < 5, "ordinary orbit expansion is damped");
   assert.equal(reopening.relocated, false);
+});
+
+test("automatic half-section follows either climbing face, retaining the entire contacted wall even outside an inner column", () => {
+  const anchor = v(0, 6, 24);
+  for (const offset of [-0.55, 0.55]) {
+    const wall = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.MeshBasicMaterial());
+    wall.material.userData.peakSectionPlane = true;
+    wall.position.z = anchor.z + offset;
+    const rig = new SpectatorCamera({ THREE, query: new FollowTerrainQuery(THREE).setRoots([wall]) });
+    const section = createSectionPlane(THREE);
+    section.keepContactWall = true;
+    section.footing.value.set(anchor.x, anchor.y + 0.15, anchor.z, 3);
+    const view = settle(rig, anchor, { distance: 36, preferredAzimuth: Math.PI, sectionPlane: section }, 30);
+    assert.ok((view.position.z - anchor.z) * offset < 0, "camera stays on the player's side of the wall");
+    assert.ok(view.distance > 30);
+    orientSectionPlane(section, view.position.x - anchor.x, view.position.z - anchor.z, view.position);
+    assert.ok(wall.position.z * section.value.y + section.value.z < -3, "the wall stays on the retained half, beyond the contact patch");
+    wall.geometry.dispose(); wall.material.dispose();
+  }
 });
 
 test("clear-space movement is smooth and approximately frame-rate independent", () => {

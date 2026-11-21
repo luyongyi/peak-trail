@@ -8,7 +8,7 @@ import { decodeGeometryBytes, GEOMETRY_FORMATS, readGeometryResponse, checkGeome
 import { positiveInstanceTransform } from "../src/geometry-matrices.js";
 import { getSourceEffectMaterial, supportsSourceEffect } from "../src/source-materials.js";
 import { isExplosiveMineMaterial, recordedHiddenMineIndices } from "../src/mine-visibility.js";
-import { followWindowMaterial } from "../src/follow-window-material.js";
+import { sectionMaterial } from "../src/section-material.js";
 import { isInteriorLayer } from "../src/camera-placement.js";
 import { sha256Hex } from "../src/sha256.js";
 import { isProjectionProxyMaterial, shadowOnlyNodeIndices } from "../src/source-render-policy.js";
@@ -22,9 +22,9 @@ const waterSource = (await readFile(new URL("../src/source-water-material.js", i
   .replace(/^import .*;\r?\n/gm, "").replace(/^export (?=function )/gm, "");
 const applySourceWaterDepth = new Function("THREE", "supportsSourceEffect", `${waterSource}\nreturn applySourceWaterDepth;`)(THREE, supportsSourceEffect);
 const compile = (ports = {}) => new Function(
-  "THREE", "GLTFLoader", "MeshoptDecoder", "decodeGeometryBytes", "GEOMETRY_FORMATS", "positiveInstanceTransform", "getSourceEffectMaterial", "supportsSourceEffect", "isExplosiveMineMaterial", "recordedHiddenMineIndices", "sha256Hex", "fetch", "crypto", "isProjectionProxyMaterial", "shadowOnlyNodeIndices", "applySourceWaterDepth", "readGeometryResponse", "checkGeometryAbort", "reportGeometryProgress", "yieldGeometryTask", "applySharedTerrainMaterial", "sharedVerifiableTopBlend", "followWindowMaterial", "isInteriorLayer",
+  "THREE", "GLTFLoader", "MeshoptDecoder", "decodeGeometryBytes", "GEOMETRY_FORMATS", "positiveInstanceTransform", "getSourceEffectMaterial", "supportsSourceEffect", "isExplosiveMineMaterial", "recordedHiddenMineIndices", "sha256Hex", "fetch", "crypto", "isProjectionProxyMaterial", "shadowOnlyNodeIndices", "applySourceWaterDepth", "readGeometryResponse", "checkGeometryAbort", "reportGeometryProgress", "yieldGeometryTask", "applySharedTerrainMaterial", "sharedVerifiableTopBlend", "sectionMaterial", "isInteriorLayer",
   `${source}\nreturn { loadGameGeometry, batchStaticMeshes, sourceFacade, updateRecordedMineVisibility, updateMapFogSurfaceVisibility, verifiableTopBlend };`,
-)(THREE, ports.GLTFLoader, {}, ports.decode || decodeGeometryBytes, GEOMETRY_FORMATS, positiveInstanceTransform, getSourceEffectMaterial, supportsSourceEffect, isExplosiveMineMaterial, recordedHiddenMineIndices, sha256Hex, ports.fetch, ports.crypto || webcrypto, isProjectionProxyMaterial, ports.shadowOnlyNodeIndices || shadowOnlyNodeIndices, applySourceWaterDepth, readGeometryResponse, checkGeometryAbort, reportGeometryProgress, yieldGeometryTask, applySharedTerrainMaterial, sharedVerifiableTopBlend, followWindowMaterial, isInteriorLayer);
+)(THREE, ports.GLTFLoader, {}, ports.decode || decodeGeometryBytes, GEOMETRY_FORMATS, positiveInstanceTransform, getSourceEffectMaterial, supportsSourceEffect, isExplosiveMineMaterial, recordedHiddenMineIndices, sha256Hex, ports.fetch, ports.crypto || webcrypto, isProjectionProxyMaterial, ports.shadowOnlyNodeIndices || shadowOnlyNodeIndices, applySourceWaterDepth, readGeometryResponse, checkGeometryAbort, reportGeometryProgress, yieldGeometryTask, applySharedTerrainMaterial, sharedVerifiableTopBlend, sectionMaterial, isInteriorLayer);
 
 test("only the verified original split shell participates in facade removal", () => {
   const { sourceFacade } = compile();
@@ -75,7 +75,7 @@ test("an exterior shell can be hidden without dropping the interior shaft, cross
   assert.equal(core.visible, true); assert.equal(originalStair.visible, true);
 });
 
-test("removing either facade leaves the original walking surface under the entrance passage", () => {
+test("both native entrance ramps keep their whole walking surface on either side of the cut", () => {
   const { batchStaticMeshes, sourceFacade } = compile();
   for (const sample of [
     { root: "Gloom Temple", model: "Temple Structure Outer", x: 3.505, y: 114.328, z: 0.78025064,
@@ -89,23 +89,30 @@ test("removing either facade leaves the original walking surface under the entra
       sourceOriginalRendererEnabled: false, sourceActiveSplitRenderers: 1 };
     const facade = sourceFacade(layer, "26542162", { nodes: [{ mesh: 0 }], meshes: [{ name: "Generated mesh 0,0,0" }] });
     const geometry = new THREE.BufferGeometry(), stone = new THREE.MeshStandardMaterial();
-    stone.userData.peakTerrain = { sourceColors: { cull: 2 } };
+    stone.userData.peakTerrain = { sourceMaterial: sample.model === "Pipe" ? "M_Rock_Volcano" : "M_temple_stone_Citadel",
+      sourceColors: { cull: 2, shader: "W/Peak_Rock" } };
     const roof = sample.floor.map(([x, y, z]) => [x, y, z + 25]);
     geometry.setAttribute("position", new THREE.Float32BufferAttribute([...sample.floor.flat(), ...roof.flat()], 3));
     geometry.setIndex([0, 1, 2, 3, 4, 5, 2, 1, 0]); // Floor, upper roof, downward-facing stone.
     const mesh = new THREE.Mesh(geometry, stone), scene = new THREE.Group();
     scene.add(mesh);
-    const root = batchStaticMeshes(scene, "26542162", new Set(), new Map([[mesh, { nodes: 0 }]]), { facade });
+    const sectionPlane = { value: new THREE.Vector4(0, 1, 0, 1), footing: { value: new THREE.Vector4() } };
+    const root = batchStaticMeshes(scene, "26542162", new Set(), new Map([[mesh, { nodes: 0 }]]),
+      { facade, sectionPlane, sectionMeshNames: ["Generated mesh 0,0,0"] });
     const peeled = root.children.filter(draw => !draw.userData.exteriorFacade);
     assert.equal(peeled.length, 1);
     assert.deepEqual([...peeled[0].geometry.index.array], [0, 1, 2]);
+    assert.notEqual(peeled[0].material.userData.peakSectionPlane, true);
+    const shell = root.children.find(draw => draw.userData.exteriorFacade);
+    assert.equal(shell.visible, true);
+    assert.equal(shell.material.userData.peakSectionPlane, true);
     const ray = new THREE.Raycaster(new THREE.Vector3(sample.x, sample.y, sample.z + 1), new THREE.Vector3(0, 0, -1));
     const [hit] = ray.intersectObjects(peeled);
     assert.ok(hit && Math.abs(hit.point.z - sample.z) < 0.00001, sample.root);
   }
 });
 
-test("only verified original structural draws use the shared spectator window, even for shared stone", () => {
+test("only verified original structural draws use the shared section plane, even for shared stone", () => {
   const { batchStaticMeshes } = compile();
   const geometry = new THREE.BoxGeometry(), stone = new THREE.MeshStandardMaterial();
   stone.name = "M_temple_stone_Citadel";
@@ -116,43 +123,50 @@ test("only verified original structural draws use the shared spectator window, e
     const owner = new THREE.Group(); owner.add(new THREE.Mesh(geometry, stone));
     associations.set(owner, { nodes: index }); scene.add(owner);
   });
-  const followWindow = { value: new THREE.Vector4(), supportY: { value: 0 } };
-  const result = batchStaticMeshes(scene, "26542162", new Set(), associations, { followWindow, windowMeshNames: names });
-  const marked = result.children.filter(mesh => mesh.material.userData.peakFollowWindow);
+  const sectionPlane = { value: new THREE.Vector4(), footing: { value: new THREE.Vector4() } };
+  const result = batchStaticMeshes(scene, "26542162", new Set(), associations, { sectionPlane, sectionMeshNames: names });
+  const marked = result.children.filter(mesh => mesh.material.userData.peakSectionPlane);
   assert.equal(marked.length, 1);
   assert.equal(marked[0].count, 2);
   assert.equal(result.children.find(mesh => mesh.material === stone).count, 3);
-  assert.equal(stone.userData.peakFollowWindow, undefined);
+  assert.equal(stone.userData.peakSectionPlane, undefined);
   const material = marked[0].material;
   assert.notEqual(material.customProgramCacheKey(), stone.customProgramCacheKey());
   const shader = { uniforms: {}, fragmentShader: "#include <clipping_planes_fragment>", vertexShader: "#include <defaultnormal_vertex>" };
   material.onBeforeCompile(shader, {});
   assert.match(shader.vertexShader, /inverse\(mat3\(instanceMatrix\)\)/, "keeps the signed map's affine normal correction");
-  assert.equal(shader.uniforms.peakFollowCircle, followWindow);
-  assert.equal(shader.uniforms.peakFollowSupportY, followWindow.supportY);
+  assert.equal(shader.uniforms.peakSectionPlane, sectionPlane);
+  assert.equal(shader.uniforms.peakSectionFooting, sectionPlane.footing);
+  assert.ok(!shader.fragmentShader.includes("gl_FragCoord"), "the cut is fixed in building space at any viewport size");
   const version = material.version;
-  followWindow.value.set(300, 180, 65, 38);
-  followWindow.supportY.value = 730;
-  assert.equal(shader.uniforms.peakFollowCircle.value.w, 38);
-  assert.equal(shader.uniforms.peakFollowSupportY.value, 730);
+  sectionPlane.value.set(0.6, 0.8, -38, 1);
+  sectionPlane.footing.value.set(8, 730, -12, 3);
+  assert.equal(shader.uniforms.peakSectionPlane.value.w, 1);
+  assert.equal(shader.uniforms.peakSectionFooting.value.y, 730);
   assert.equal(material.version, version);
-  followWindow.value.w = 0;
-  assert.equal(shader.uniforms.peakFollowCircle.value.w, 0);
+  sectionPlane.value.w = 0;
+  assert.equal(shader.uniforms.peakSectionPlane.value.w, 0);
 });
 
-test("transparent surfaces, lava, crystals and unverified rocks never receive the terrain window", () => {
+test("transparent surfaces, lava, crystals and unverified rocks never receive the section plane", () => {
   const stone = new THREE.MeshStandardMaterial();
-  const window = { value: new THREE.Vector4(), supportY: { value: 0 } };
-  function classify(name, shader, mesh, edits = {}) {
+  const plane = { value: new THREE.Vector4(), footing: { value: new THREE.Vector4() } };
+  function classify(name, shader, mesh, edits = {}, splitShell = false) {
     const mat = stone.clone(); Object.assign(mat, edits);
     mat.userData.peakTerrain = { sourceMaterial: name, sourceColors: { shader } };
-    return followWindowMaterial(mat, mesh, false, window, new Map()).userData.peakFollowWindow === true;
+    return sectionMaterial(mat, mesh, splitShell, plane, new Map()).userData.peakSectionPlane === true;
   }
   assert.equal(classify("M_Rock_Volcano", "W/Peak_Rock", "RockFinal"), true);
   assert.equal(classify("M_Lava", "Lava", "CirclePlane"), false);
   assert.equal(classify("M_Rock_Crystal", "W/Peak_Standard", "heart"), false);
   assert.equal(classify("M_Rock_Volcano", "W/Peak_Rock", "RockFinal", { transparent: true }), false);
   assert.equal(classify("M_Rock_Volcano", "OtherShader", "RockFinal"), false);
+  assert.equal(classify("M_Rock_Volcano", "W/Peak_Rock", "Rock_Hold1"), false);
+  assert.equal(classify("M_Rock_peak", "W/Peak_Rock", "Rock_Platform"), false);
+  assert.equal(classify("Tarnished Gold Carving", "W/Peak_Standard", "Bridge Structure"), true);
+  assert.equal(classify("Tarnished Gold Carving", "W/Peak_Standard", "Bridge Stairs"), false);
+  assert.equal(classify("M_RopeBridgeWood", "W/Peak_Standard", "Generated mesh 1,2,0", {}, true), true);
+  assert.equal(classify("M_RopeBridgeWood", "W/Peak_Standard", "Bridge"), false);
 });
 
 test("audited shadow-only affine/GPU panels are omitted, same-name solid props remain", () => {

@@ -539,7 +539,7 @@ test("terminal chapters open the classified exterior once mounted, preserve prop
   scene.mapPack.layers.push(layer);
   const terminal = group(layer);
   scene.terrainRoot.children.push(terminal);
-  scene.mapPack.mapEnclosures = { enclosures: [{ segment: 4, objectId: "verified-shell" }] };
+  scene.mapPack.mapEnclosures = { enclosures: [{ segment: 4, objectId: "verified-shell", interiorReference: [2, 300, 6] }] };
   const notifications = [];
   scene.canvas = new EventTarget();
   scene.canvas.addEventListener("peaktrail-facade-change", event => notifications.push(event.detail));
@@ -550,7 +550,7 @@ test("terminal chapters open the classified exterior once mounted, preserve prop
   requests[0].resolve(base); await flush();
   assert.deepEqual(notifications, []);
   requests[1].resolve(shell); await pending;
-  assert.equal(wall.visible, false); assert.equal(stair.visible, true);
+  assert.equal(wall.visible, true, "both sides of the original shell stay mounted for the rotating section"); assert.equal(stair.visible, true);
   assert.deepEqual(notifications, [{ available: true, visible: false }]);
 
   let refits = 0;
@@ -558,16 +558,16 @@ test("terminal chapters open the classified exterior once mounted, preserve prop
   const acceptedSubject = terminal.userData.cameraSubjectParts = [];
   scene.setExteriorVisible(true); scene.setExteriorVisible(true);
   assert.equal(wall.visible, true); assert.equal(stair.visible, true);
-  assert.equal(terminal.userData.cameraSubjectParts, acceptedSubject); assert.equal(refits, 1);
+  assert.equal(terminal.userData.cameraSubjectParts, acceptedSubject); assert.equal(refits, 0);
   scene.freeCamera.mode = "free"; scene.setExteriorVisible(false);
-  assert.equal(refits, 1, "a manual camera keeps its position");
+  assert.equal(refits, 0, "a manual camera keeps its position");
 
   scene.activeSegment = null; scene.applyLayerVisibility();
   assert.equal(wall.visible, true);
   assert.deepEqual(notifications.at(-1), { available: false, visible: false });
-  scene.activeSegment = 4; scene.applyLayerVisibility(); assert.equal(wall.visible, false);
-  scene.setViewIntent("summit"); assert.equal(wall.visible, true);
-  scene.setViewIntent(null); assert.equal(wall.visible, false);
+  scene.activeSegment = 4; scene.applyLayerVisibility(); assert.deepEqual(notifications.at(-1), { available: true, visible: false });
+  scene.setViewIntent("summit"); assert.equal(notifications.at(-1).available, false);
+  scene.setViewIntent(null); assert.equal(notifications.at(-1).available, true);
   const before = scene.cameraSelectionRevision;
   scene.enterInteriorView(false, { reason: "data" });
   assert.equal(scene.cameraSelectionRevision, before + 1, "arrival in an open chapter uses the external survey");
