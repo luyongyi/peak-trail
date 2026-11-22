@@ -30,6 +30,7 @@ import { collectCameraParts, selectCameraSubjectParts } from "./camera-subject.j
 import { chooseRenderPolicy, renderErrorName } from "./render-policy.js";
 import { mountMapDiagnostics } from "./map-diagnostics.js";
 import { tr, formatNumber } from "./i18n.js";
+import { packetPoseAt } from "./packet-motion.js";
 
 function collectWaterDepthEntries(root, heightScale) {
   const entries = [];
@@ -1724,7 +1725,9 @@ export class TrailScene {
       line.visible = this.showTracks;
       outline.visible = this.showTracks;
       occludedLine.visible = this.showTracks;
-      const sample = sampleAtTime(samples, this.currentTime, maxGap, blockingEvents);
+      const regular = sampleAtTime(samples, this.currentTime, maxGap, blockingEvents);
+      const poses = this.trace?.packetMotion?.get(group.userData.playerId)?.poses;
+      const sample = poses?.length ? packetPoseAt(poses, this.currentTime, regular, blockingEvents) : regular;
       const ghost = this.ghostMarkerAtTime(group.userData.playerId, this.currentTime, maxGap, blockingEvents);
       const markerState = ghost || sample;
       const latestLifecycle = lifecycleEvents.findLast((event) => event.t <= this.currentTime);

@@ -11,13 +11,13 @@ const payload = (fields = {}, status = "recording") => ({ capture: { roomCode: i
   live: { sceneEpoch: 1, manifest, records: [entry(1, { type: "participant", playerId: "p1", nickname: "Climber" }), entry(2)], lastSequence: 2, ...fields } });
 const response = (body, status = 200) => ({ status, ok: status === 200, json: async () => body });
 function fixture(handler = () => response(payload())) {
-  const timers = new Map(), calls = [], snapshots = [], records = [], states = [], connections = [];
+  const timers = new Map(), calls = [], snapshots = [], records = [], motions = [], states = [], connections = [];
   let next = 0, time = 1000;
   const client = new PacketWatchClient({ captureId: id, fetchImpl: async (url, options) => { calls.push({ url, options }); return handler(url, options); },
-    onSnapshot: data => snapshots.push(data), onRecord: data => records.push(data), onState: data => states.push(data),
+    onSnapshot: data => snapshots.push(data), onRecord: data => records.push(data), onMotion: data => motions.push(data), onState: data => states.push(data),
     onConnection: (...data) => connections.push(data), now: () => time,
     setTimer: (fn, delay) => { const key = ++next; timers.set(key, { fn, delay }); return key; }, clearTimer: key => timers.delete(key) });
-  return { client, calls, snapshots, records, states, connections, timers, setTime: value => { time = value; },
+  return { client, calls, snapshots, records, motions, states, connections, timers, setTime: value => { time = value; },
     async tick() { assert.equal(timers.size, 1); const [key, timer] = [...timers][0]; timers.delete(key); await timer.fn(); } };
 }
 
@@ -45,13 +45,90 @@ test("polled player movement is read at the playhead for the same epoch, actor a
 test("one second cookie polling snapshots first, emits only new records, and preserves freshness on duplicates", async () => {
   let value = payload(); const f = fixture(() => response(value));
   await f.client.start(); assert.equal(f.snapshots.length, 1); assert.equal(f.records.length, 0);
-  assert.equal(f.calls[0].url, `/api/navigation/captures/${id.replace(".", "/")}/live`);
+  assert.equal(f.calls[0].url, `/api/navigation/captures/${id.replace(".", "/")}/live?motion=1`);
   assert.equal(f.calls[0].options.credentials, "same-origin"); assert.equal(f.calls[0].options.redirect, "error");
   assert.equal([...f.timers.values()][0].delay, 1000);
   f.setTime(2000); await f.tick(); assert.equal(f.states.at(-1).lastRecordAt, 1000);
   value = payload({ records: [...value.live.records, entry(3)], lastSequence: 3 });
   await f.tick(); assert.deepEqual(f.records.map(record => record.seq), [3]); assert.equal(f.states.at(-1).lastRecordAt, 2000);
   f.client.stop(); assert.equal(f.timers.size, 0);
+});
+
+const liveUrl = `/api/navigation/captures/${id.replace(".", "/")}/live`;
+const pose = (seq, t) => [seq, t, -3.5, 1.25, 12, 45];
+const motionSnapshot = (fields = {}) => payload({ delivery: "snapshot", lastMotionSequence: 9,
+  motion: [["p1", 0, [pose(8, 1500.125), pose(9, 1520)]]], ...fields });
+const motionDelta = (fields = {}) => payload({ delivery: "delta", baseSequence: 2, lastSequence: 2,
+  baseMotionSequence: 9, lastMotionSequence: 11, records: [], motion: [["p2", null, [pose(11, 2020)]]], ...fields });
+
+test("both cursors advance independently and motion callbacks follow regular records in the same poll", async () => {
+  let value = motionSnapshot();
+  const f = fixture(() => response(value)), applied = [];
+  for (const name of ["onMotion", "onRecord", "onSnapshot", "onState"]) {
+    const callback = f.client[name];
+    f.client[name] = data => { applied.push(name); callback(data); };
+  }
+  await f.client.start();
+  assert.deepEqual(applied.splice(0), ["onSnapshot", "onMotion", "onState"]);
+  assert.equal(f.motions[0].reset, true);
+  assert.deepEqual(f.motions[0].samples[0], { playerId: "p1", t: 1.500125, pos: [-3.5, 1.25, 12], yaw: 45, activeSegment: 0 });
+  f.setTime(2000);
+  value = motionDelta();
+  await f.tick();
+  assert.equal(f.calls.at(-1).url, liveUrl + "?motion=1&epoch=1&after=2&afterMotion=9");
+  assert.deepEqual(applied.splice(0), ["onMotion", "onState"]);
+  assert.equal(f.motions.at(-1).reset, false); assert.equal(f.motions.at(-1).samples[0].activeSegment, null);
+  assert.equal(f.states.at(-1).lastRecordAt, 2000);
+  value = motionDelta({ baseMotionSequence: 11, lastMotionSequence: 13, records: [entry(5)], lastSequence: 5,
+    motion: [["p2", 1, [pose(13, 3020)]], ["p1", 0, [pose(12, 3010)]]] });
+  await f.tick();
+  assert.equal(f.calls.at(-1).url, liveUrl + "?motion=1&epoch=1&after=2&afterMotion=11");
+  assert.deepEqual(applied.splice(0), ["onRecord", "onMotion", "onState"]);
+  assert.equal(f.snapshots.length, 1); assert.equal(f.records.at(-1).seq, 5);
+  f.setTime(3100);
+  value = motionDelta({ baseSequence: 5, lastSequence: 5, baseMotionSequence: 13, lastMotionSequence: 13, motion: [] });
+  await f.tick();
+  assert.deepEqual(applied, ["onState"]);
+  assert.equal(f.states.at(-1).lastRecordAt, 2000);
+  f.client.stop();
+});
+
+test("bad base cursors, epoch, map or supplemental rows are rejected atomically and trigger a cold resync", async () => {
+  for (const fields of [
+    { baseSequence: 1 }, { baseMotionSequence: 8 }, { sceneEpoch: 2 }, { manifest: { ...manifest, sceneName: "Level_85" } },
+    { motion: [["p1", 0, [pose(10, 2100)]], ["p2", 0, [pose(10, 2101)]]] },
+    { motion: [["p1", 0, [pose(12, 2100)]]] }, { motion: [["p1", 0, [pose(9, 2100)]]] },
+    { motion: [["p1", 0, [[10, 2100, null, 0, 0, 0]]]] },
+  ]) {
+    let value = motionSnapshot(); const f = fixture(() => response(value)); await f.client.start();
+    value = motionDelta({ records: [entry(3)], lastSequence: 3, ...fields }); await f.tick();
+    assert.equal(f.connections.at(-1)[0], "reconnecting");
+    assert.equal(f.records.length, 0); assert.equal(f.motions.length, 1); assert.equal(f.client.seq, 2);
+    value = motionSnapshot({ sceneEpoch: 2, lastMotionSequence: 0, motion: [] }); await f.tick();
+    assert.equal(f.calls.at(-1).url, liveUrl + "?motion=1");
+    assert.equal(f.snapshots.length, 2); assert.deepEqual(f.motions.at(-1), { reset: true, samples: [] });
+    f.client.stop();
+  }
+});
+
+test("network retries keep their cursor, and an expired cursor or older archive resets the previous motion window", async () => {
+  let reply = response(motionSnapshot()); const f = fixture(() => reply); await f.client.start();
+  reply = response(null, 503); await f.tick();
+  const cursorUrl = f.calls.at(-1).url;
+  reply = response(motionSnapshot({ lastMotionSequence: 51, motion: [["p3", 1, [pose(51, 4500)]]] })); await f.tick();
+  assert.equal(f.calls.at(-1).url, cursorUrl); assert.equal(f.snapshots.length, 2);
+  assert.equal(f.motions.at(-1).reset, true); assert.deepEqual(f.motions.at(-1).samples.map(p => p.playerId), ["p3"]);
+  reply = response(payload({}, "completed")); await f.tick();
+  assert.equal(f.snapshots.length, 3); assert.deepEqual(f.motions.at(-1), { reset: true, samples: [] });
+  assert.equal(f.connections.at(-1)[0], "ended"); assert.equal(f.timers.size, 0);
+});
+
+test("an older bridge rejecting the opt-in query is polled on the legacy endpoint", async () => {
+  const f = fixture(url => url.includes("?") ? response(null, 400) : response(payload()));
+  await f.client.start(); await f.tick();
+  assert.deepEqual(f.calls.map(call => call.url), [liveUrl + "?motion=1", liveUrl, liveUrl]);
+  assert.equal(f.snapshots.length, 1); assert.equal(f.connections.at(-1)[0], "connected");
+  f.client.stop();
 });
 
 test("projection callbacks feed the existing trace parser and renderer data unchanged", async () => {

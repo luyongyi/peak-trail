@@ -7,16 +7,46 @@ export function parseCaptureId(value) {
 const ACTIVE = new Set(["connecting", "recording", "stopping"]);
 const STATUSES = new Set([...ACTIVE, "completed", "cancelled", "failed", "interrupted", "expired"]);
 const MOVEMENTS = new Set(["rope", "climbing", "sprinting", "grounded", "off-ground"]);
+const sequence = value => Number.isSafeInteger(value) && value >= 0;
+const inRange = (value, limit) => Number.isFinite(value) && Math.abs(value) <= limit;
+
+function readMotion(groups, after, last) {
+  if (!Array.isArray(groups) || groups.length > 4096) throw new Error("Invalid motion groups");
+  const samples = [], seen = new Set(), counts = new Map();
+  for (const group of groups) {
+    if (!Array.isArray(group) || group.length !== 3) throw new Error("Invalid motion group");
+    const [playerId, activeSegment, rows] = group;
+    if (typeof playerId !== "string" || !/^p[1-9][0-9]{0,9}$/.test(playerId) || Number(playerId.slice(1)) > 2147483647 ||
+        (activeSegment !== null && (!Number.isInteger(activeSegment) || activeSegment < -1 || activeSegment > 1000)) ||
+        !Array.isArray(rows) || rows.length + samples.length > 4096) throw new Error("Invalid motion group");
+    const count = (counts.get(playerId) ?? 0) + rows.length;
+    if (count > 128) throw new Error("Invalid player motion count");
+    counts.set(playerId, count);
+    let previous = after;
+    for (const row of rows) {
+      if (!Array.isArray(row) || row.length !== 6) throw new Error("Invalid motion row");
+      const [seq, t, x, y, z, yaw] = row;
+      if (!sequence(seq) || seq <= previous || seq > last || seen.has(seq) || !inRange(t, 1e12) || t < 0 ||
+          !inRange(x, 1e7) || !inRange(y, 1e7) || !inRange(z, 1e7) || !inRange(yaw, 1e6))
+        throw new Error("Invalid motion row");
+      seen.add(seq); previous = seq;
+      samples.push({ playerId, t: t / 1000, pos: [x, y, z], yaw, activeSegment });
+    }
+  }
+  return samples;
+}
+
 export class PacketWatchClient {
   constructor({ captureId, watchId, operator = false, fetchImpl = (...args) => globalThis.fetch(...args), onSnapshot = () => {},
-    onRecord = () => {}, onState = () => {}, onConnection = () => {}, now = () => Date.now(),
+    onRecord = () => {}, onMotion = () => {}, onState = () => {}, onConnection = () => {}, now = () => Date.now(),
     setTimer = (...args) => globalThis.setTimeout(...args), clearTimer = (...args) => globalThis.clearTimeout(...args) }) {
     this.id = parseCaptureId(captureId ?? watchId);
     if (!this.id) throw new Error("Invalid capture identity");
     this.operator = operator === true;
-    Object.assign(this, { fetchImpl, onSnapshot, onRecord, onState, onConnection, now, setTimer, clearTimer });
+    Object.assign(this, { fetchImpl, onSnapshot, onRecord, onMotion, onState, onConnection, now, setTimer, clearTimer });
     this.epoch = null; this.seq = 0; this.manifestKey = null; this.closed = false; this.ended = false;
     this.failures = 0; this.generation = 0;
+    this.legacyEndpoint = false; this.motionSeq = null; this.needsSnapshot = false;
     this.movements = new Map();
   }
   movementAt(playerId, seconds, activeSegment) {
@@ -25,7 +55,12 @@ export class PacketWatchClient {
     const latest = history.findLast(row => row.t <= t);
     return latest && latest.activeSegment === activeSegment && t - latest.t <= 1500 ? latest.movement : null;
   }
-  endpoint() { return `/api/${this.operator ? "packet-replay" : "navigation"}/captures/${this.id.replace(".", "/")}/live`; }
+  endpoint() {
+    const path = `/api/${this.operator ? "packet-replay" : "navigation"}/captures/${this.id.replace(".", "/")}/live`;
+    if (this.legacyEndpoint) return path;
+    const cursor = this.motionSeq === null ? "" : `&epoch=${this.epoch}&after=${this.seq}&afterMotion=${this.motionSeq}`;
+    return `${path}?motion=1${cursor}`;
+  }
   async start() { this.onConnection("connecting"); await this.poll(); }
   async poll() {
     if (this.closed || this.ended || this.request) return;
@@ -33,7 +68,18 @@ export class PacketWatchClient {
     const controller = new AbortController(); this.request = controller;
     const deadline = this.setTimer(() => controller.abort(), 10000);
     try {
-      const response = await this.fetchImpl(this.endpoint(), { credentials: "same-origin", cache: "no-store", redirect: "error", signal: controller.signal });
+      const options = { credentials: "same-origin", cache: "no-store", redirect: "error", signal: controller.signal };
+      let response = await this.fetchImpl(this.endpoint(), options);
+      if (this.closed || generation !== this.generation) return;
+      // Older bridges reject query parameters. Keep this room usable during a rolling upgrade.
+      if (response.status === 400 && !this.legacyEndpoint) {
+        if (this.motionSeq === null) {
+          this.legacyEndpoint = true;
+          response = await this.fetchImpl(this.endpoint(), options);
+        } else {
+          this.motionSeq = null; this.needsSnapshot = true;
+        }
+      }
       if (this.closed || generation !== this.generation) return;
       if ([401, 403].includes(response.status)) {
         this.stop(); this.onConnection("unauthorized", this.operator
@@ -44,9 +90,15 @@ export class PacketWatchClient {
         this.stop(); this.onConnection("error", "这次导航不存在或已过期，请返回 Peak导航。"); return;
       }
       if (!response.ok) throw new Error("Unavailable");
-      const value = await response.json();
-      if (this.closed || generation !== this.generation) return;
-      this.consume(value); this.failures = 0;
+      try {
+        const value = await response.json();
+        if (this.closed || generation !== this.generation) return;
+        this.consume(value);
+      } catch (error) {
+        this.motionSeq = null; this.needsSnapshot = true;
+        throw error;
+      }
+      this.failures = 0;
     } catch {
       if (!this.closed && generation === this.generation) {
         this.failures++; this.onConnection("reconnecting", "采集数据暂时不可用，正在重新同步。");
@@ -62,21 +114,29 @@ export class PacketWatchClient {
     if (!capture || `${capture.roomCode}.${capture.featureCode}` !== this.id || !STATUSES.has(capture.status)) throw new Error("Invalid capture");
     const status = ACTIVE.has(capture.status) ? "live" : "ended";
     const projection = live ?? { sceneEpoch: 0, manifest: null, records: [], lastSequence: 0 };
-    const { sceneEpoch: epoch, manifest, records, lastSequence } = projection;
+    const { sceneEpoch: epoch, manifest, records, lastSequence, delivery, baseSequence, baseMotionSequence, lastMotionSequence } = projection;
     const appearances = projection.appearanceBaselines ?? [];
-    if (!Number.isSafeInteger(epoch) || epoch < 0 || !Number.isSafeInteger(lastSequence) || lastSequence < 0 ||
+    if (!sequence(epoch) || !sequence(lastSequence) ||
       !Array.isArray(records) || records.length > 10000 || !Array.isArray(appearances) || appearances.length > 1024 ||
       appearances.some(record => record?.type !== "appearance" || typeof record.playerId !== "string" || !Number.isFinite(record.t) || record.t < 0) ||
       manifest !== null && (typeof manifest !== "object" || Array.isArray(manifest) || typeof manifest.sceneName !== "string" || !manifest.sceneName.trim())) throw new Error("Invalid projection");
-    let previous = 0;
+    const manifestKey = manifest === null ? null : JSON.stringify([manifest.sceneName, manifest.mapPackId,
+      manifest.gameBuildId, manifest.gameVersion, manifest.projectionVersion, manifest.coordinateSpace, manifest.route]);
+    const incremental = delivery !== undefined, delta = delivery === "delta";
+    if (incremental && (delivery !== "snapshot" && !delta || !sequence(lastMotionSequence))) throw new Error("Invalid delivery");
+    if (delta && (this.motionSeq === null || epoch !== this.epoch || this.manifestKey !== manifestKey ||
+        baseSequence !== this.seq || baseMotionSequence !== this.motionSeq ||
+        lastSequence < baseSequence || lastMotionSequence < baseMotionSequence)) throw new Error("Stale delta");
+    if (delivery === "snapshot" && (baseSequence != null || baseMotionSequence != null)) throw new Error("Invalid snapshot base");
+    const samples = incremental ? readMotion(projection.motion, delta ? baseMotionSequence : 0, lastMotionSequence) : [];
+    let previous = delta ? baseSequence : 0;
     for (const entry of records) {
       if (!Number.isSafeInteger(entry?.sequence) || entry.sequence <= previous || entry.sequence > lastSequence || !entry.record || typeof entry.record !== "object" || Array.isArray(entry.record)) throw new Error("Invalid record");
       previous = entry.sequence;
     }
-    const manifestKey = manifest === null ? null : JSON.stringify([manifest.sceneName, manifest.mapPackId,
-      manifest.gameBuildId, manifest.gameVersion, manifest.projectionVersion, manifest.coordinateSpace, manifest.route]);
-    const rebuild = this.epoch !== epoch || this.manifestKey !== manifestKey || lastSequence < this.seq ||
-      this.seq > 0 && records.length > 0 && records[0].sequence > this.seq + 1;
+    const rebuild = delivery === "snapshot" || !delta && (this.needsSnapshot || this.motionSeq !== null ||
+      this.epoch !== epoch || this.manifestKey !== manifestKey || lastSequence < this.seq ||
+      this.seq > 0 && records.length > 0 && records[0].sequence > this.seq + 1);
     if (rebuild) this.movements.clear();
     if (manifest?.gameBuildId === "26542162" && Array.isArray(projection.movements) && projection.movements.length <= 1024) {
       const participants = new Set(manifest.participants?.map(p => p.playerId));
@@ -90,7 +150,7 @@ export class PacketWatchClient {
         this.movements.set(row.playerId, history);
       }
     }
-    if (records.length && (rebuild || lastSequence > this.seq)) this.lastRecordAt = this.now();
+    if (samples.length || records.length && (rebuild || lastSequence > this.seq)) this.lastRecordAt = this.now();
     if (!manifest) this.lastRecordAt = null;
     const metadata = { status, epoch, capture, manifest, airport: projection.sceneName === "Airport",
       airportModelAvailable: projection.sceneName === "Airport" && projection.gameBuildId === "26542162",
@@ -106,7 +166,10 @@ export class PacketWatchClient {
       for (const entry of records) if (entry.sequence > this.seq)
         this.onRecord({ epoch, seq: entry.sequence, record: entry.record });
     }
+    if (rebuild || samples.length || delta && records.length)
+      this.onMotion({ reset: rebuild, samples: manifest ? samples : [] });
     this.epoch = epoch; this.seq = lastSequence; this.manifestKey = manifestKey;
+    this.motionSeq = incremental ? lastMotionSequence : null; this.needsSnapshot = false;
     this.onState(metadata);
     if (status === "ended") { this.ended = true; this.onConnection("ended"); }
     else this.onConnection(manifest ? "connected" : "waiting");

@@ -475,6 +475,77 @@ test("live projection rejects mixed scene records, invalid coordinates, ordering
   } finally { await f.close(); }
 });
 
+test("public and operator motion polling forward both cursors and resume with only new rows", async t => {
+  const live = { ...LIVE, gameVersion: "3.1.0", gameBuildId: "26542162", positionAuthority: "photon-character-hip" };
+  const path = `/captures/DRXPTJAB/${FEATURE}/live`;
+  const pose = (seq, t) => [seq, t, 12.125, -3.5, 1.75, 35];
+  const snapshot = { delivery: "snapshot", lastMotionSequence: 14,
+    motion: [["p1", 0, [pose(9, 12000), pose(14, 12100)]]] };
+  const delta = { delivery: "delta", baseSequence: 10, baseMotionSequence: 14, lastMotionSequence: 17, lastSequence: 10,
+    records: [], motion: [["p2", 1, [pose(16, 12166)]], ["p1", null, [pose(15, 12133), pose(17, 12200)]]] };
+  let projection = { ...live, ...snapshot };
+  const f = await fixture((_req, res) => write(res, 200, { capture: SNAPSHOT, live: projection }));
+  t.after(() => f.close());
+  const read = async (get, query) => {
+    const response = await get(path + query);
+    assert.equal(response.status, 200);
+    return (await response.json()).live;
+  };
+  assert.equal((await f.send(path + "?motion=1")).status, 401);
+  assert.equal(f.calls.length, 0);
+  await f.login();
+  for (const get of [f.send, url => fetch(f.base + "/api/navigation" + url)]) {
+    assert.equal((await read(get, "")).delivery, undefined);
+    assert.equal(f.calls.at(-1).path, "/api/v1" + path);
+    const first = await read(get, "?motion=1");
+    assert.equal(f.calls.at(-1).path, "/api/v1" + path + "?motion=1");
+    assert.deepEqual(first.motion, snapshot.motion);
+    assert.equal(first.delivery, "snapshot"); assert.deepEqual(first.records.map(r => r.sequence), [9, 10]);
+
+    projection = { ...live, ...delta };
+    const continued = await read(get, "?afterMotion=14&after=10&epoch=2&motion=1");
+    assert.equal(f.calls.at(-1).path, "/api/v1" + path + "?motion=1&epoch=2&after=10&afterMotion=14");
+    assert.deepEqual(continued.records, []); assert.equal(continued.baseSequence, 10);
+    assert.equal(continued.baseMotionSequence, 14); assert.equal(continued.lastMotionSequence, 17);
+    assert.deepEqual(continued.motion, [delta.motion[1]]);
+
+    projection = { ...live, ...snapshot };
+    assert.equal((await read(get, "?motion=1&epoch=1&after=5&afterMotion=1")).delivery, "snapshot");
+    projection = live; // Older collectors and sealed runs have no motion envelope.
+    assert.equal((await read(get, "?motion=1")).delivery, undefined);
+    projection = { ...live, ...snapshot };
+  }
+});
+
+test("motion cursors and supplemental payloads are bounded and validated before consumption", async t => {
+  const pose = [5, 151, 1, 2, 3, 10];
+  const base = { ...LIVE, delivery: "delta", baseSequence: 9, baseMotionSequence: 4, lastMotionSequence: 5,
+    records: [LIVE.records[1]], motion: [["p1", 0, [pose]]] };
+  let live = base;
+  const f = await fixture((_req, res) => write(res, 200, { capture: SNAPSHOT, live }));
+  t.after(() => f.close());
+  const url = f.base + `/api/navigation/captures/DRXPTJAB/${FEATURE}/live`;
+  for (const query of ["?motion=2", "?motion=1&extra=x", "?motion=1&after=7", "?motion=1&after=-1&epoch=2&afterMotion=0",
+    "?motion=1&epoch=2&after=0&after=3", "?motion=1&epoch=2&after=0&afterMotion=9007199254740992"]) {
+    assert.equal((await fetch(url + query)).status, 400);
+  }
+  assert.equal((await fetch(url.replace("/live", "") + "?motion=1")).status, 400);
+  assert.equal(f.calls.length, 0);
+  const cursor = "?motion=1&epoch=2&after=9&afterMotion=4";
+  for (const patch of [{ sceneEpoch: 1 }, { baseSequence: 8 }, { baseMotionSequence: 3 }, { lastSequence: 8 },
+    { records: LIVE.records }, { lastMotionSequence: 6 }, { motion: [["p1", 0, [pose, pose]]] },
+    { motion: [["p1", 0, [[5, 100, 1, 2, 3, null]]]] }, { motion: [["p1", -2, [pose]]] },
+    { motion: [["p1", 0, [[5, 100, 1, 2, 3, 10, API_KEY]]]] }, { motion: [["p1", 0, [[5, 151, 1e10, 2, 3, 0]]]] },
+    { motion: [["p1", 0, Array.from({ length: 129 }, (_, i) => [i + 5, 200 + i, 1, 2, 3, 10])]], lastMotionSequence: 133 }]) {
+    live = { ...base, ...patch };
+    const response = await fetch(url + cursor);
+    assert.equal(response.status, 502); assert.equal((await response.json()).code, "upstream_invalid_response");
+  }
+  live = base;
+  assert.equal((await fetch(url + "?motion=1")).status, 502); // A new viewer must receive a snapshot.
+  assert.equal((await fetch(url)).status, 502);
+});
+
 test("ZIP download uses sanitized Unicode host name, preserves bytes/range and strips private headers", async () => {
   const bytes = Buffer.from([80, 75, 3, 4, 10, 0]);
   const f = await fixture((req, res) => {

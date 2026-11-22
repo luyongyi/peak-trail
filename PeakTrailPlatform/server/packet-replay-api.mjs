@@ -224,6 +224,66 @@ function publicAppearanceRecord(playerId, t, value) {
   return value === null ? { type: "appearance", playerId, t, appearance: null, appearanceReady: false } : null;
 }
 
+function motionRequest(req, rawPath) {
+  if (!req.url.includes("?")) return null;
+  if (req.method !== "GET" || !/\/captures\/[^/]+\/[^/]+\/live$/.test(rawPath)) throw new Error("invalid_request");
+  const query = req.url.slice(rawPath.length + 1);
+  if (!query || query.length > 120) throw new Error("invalid_request");
+  const params = new URLSearchParams(query);
+  if (params.get("motion") !== "1") throw new Error("invalid_request");
+  if (params.size === 1) return { query: "?motion=1" };
+  if (params.size !== 4) throw new Error("invalid_request");
+  const cursor = {};
+  for (const key of ["epoch", "after", "afterMotion"]) {
+    const text = params.get(key);
+    if (!/^(?:0|[1-9][0-9]{0,15})$/.test(text ?? "") || !count(Number(text), key === "epoch" ? 2147483647 : Number.MAX_SAFE_INTEGER))
+      throw new Error("invalid_request");
+    cursor[key] = Number(text);
+  }
+  return { ...cursor, query: `?motion=1&epoch=${cursor.epoch}&after=${cursor.after}&afterMotion=${cursor.afterMotion}` };
+}
+
+function motionDto(raw, request, players) {
+  if (!request || raw.delivery === undefined) {
+    if (raw.delivery === "delta") throw new Error("upstream_invalid_response");
+    return {};
+  }
+  const { delivery, baseSequence, baseMotionSequence, lastMotionSequence } = raw;
+  if (!count(lastMotionSequence) || !Array.isArray(raw.motion) || raw.motion.length > 4096)
+    throw new Error("upstream_invalid_response");
+  if (delivery === "delta") {
+    if (request.epoch !== raw.sceneEpoch || request.after !== baseSequence || request.afterMotion !== baseMotionSequence ||
+        !count(baseSequence, raw.lastSequence) || !count(baseMotionSequence, lastMotionSequence))
+      throw new Error("upstream_invalid_response");
+  } else if (delivery !== "snapshot" || baseSequence != null || baseMotionSequence != null) throw new Error("upstream_invalid_response");
+
+  const motion = [], sequences = new Set(), rowCounts = new Map();
+  const allowed = new Set(players.filter(p => p.isCollector === false).map(p => p.playerId));
+  for (const group of raw.motion) {
+    if (!Array.isArray(group) || group.length !== 3) throw new Error("upstream_invalid_response");
+    const [id, segment, poses] = group;
+    if (!playerId(id) || (segment !== null && (!Number.isInteger(segment) || segment < -1 || segment > 1000)) ||
+        !Array.isArray(poses) || poses.length === 0 || sequences.size + poses.length > 4096) throw new Error("upstream_invalid_response");
+    const playerRows = (rowCounts.get(id) ?? 0) + poses.length;
+    if (playerRows > 128) throw new Error("upstream_invalid_response");
+    rowCounts.set(id, playerRows);
+    let previous = baseMotionSequence ?? 0;
+    for (const row of poses) {
+      if (!Array.isArray(row) || row.length !== 6) throw new Error("upstream_invalid_response");
+      const [seq, t, x, y, z, yaw] = row;
+      if (!count(seq, lastMotionSequence) || seq <= previous || sequences.has(seq) || !finite(t, 1e12) || t < 0 ||
+          !finite(x, 1e7) || !finite(y, 1e7) || !finite(z, 1e7) || !finite(yaw, 1e6))
+        throw new Error("upstream_invalid_response");
+      previous = seq;
+      sequences.add(seq);
+    }
+    if (raw.positionProjectionSupported === true && raw.positionAuthority === "photon-character-hip" && allowed.has(id))
+      motion.push(group);
+  }
+  if (delivery === "delta" && sequences.size !== lastMotionSequence - baseMotionSequence) throw new Error("upstream_invalid_response");
+  return { delivery, ...(delivery === "delta" ? { baseSequence, baseMotionSequence } : {}), lastMotionSequence, motion };
+}
+
 // The 3.1 collector snapshots the latest bound character pose separately from
 // its 10 Hz position history. Keep the pose's own timestamp, even when newer
 // than the last emitted sample. Never copy these flags back onto past samples.
@@ -240,13 +300,14 @@ function movementObservation(raw, player, sample) {
 
 // Only the audited pose and appearance projections cross this boundary. Raw Photon objects,
 // Steam IDs, authentication fields and arbitrary upstream metadata never do.
-function liveDto(value, room, feature) {
+function liveDto(value, room, feature, request) {
   const capture = captureDto(value?.capture, room, feature), raw = value?.live;
   if (raw === null) return { capture, live: null };
   if (!object(raw) || raw.roomCode !== room || !count(raw.sceneEpoch, 2147483647) || !count(raw.lastSequence) ||
       !Array.isArray(raw.records) || raw.records.length > 10000 || !Array.isArray(raw.players) || raw.players.length > 1024 ||
       raw.coordinateSpace !== "unity-world-meters" || raw.timeUnit !== "milliseconds") throw new Error("upstream_invalid_response");
   const players = raw.players.filter(player => object(player) && !player.isCollector && playerId(player.playerId));
+  const motion = motionDto(raw, request, players);
   const auditedPose = raw.gameBuildId === "26542162" && raw.gameVersion === "3.1.0" && raw.projectionVersion === 1
     && raw.positionProjectionSupported === true && raw.positionAuthority === "photon-character-hip"
     && /^(?:Level|Map)_[0-9]{1,6}$/.test(raw.sceneName);
@@ -255,7 +316,7 @@ function liveDto(value, room, feature) {
   const appearanceActors = new Set(APPEARANCE_BUILDS.has(raw.gameBuildId) ? players.map(player => player.playerId) : []);
   const retainedAppearances = new Set();
   const lastSamples = new Map();
-  let previous = 0;
+  let previous = motion.baseSequence ?? 0;
   const records = [];
   for (const entry of raw.records) {
     if (!object(entry) || !count(entry.sequence) || entry.sequence <= previous || entry.sequence > raw.lastSequence ||
@@ -312,9 +373,9 @@ function liveDto(value, room, feature) {
   } : null;
   const movements = manifest && auditedPose && raw.navigationProjectionVersion === 3
     ? players.map(player => movementObservation(raw, player, lastSamples.get(player.playerId))).filter(Boolean) : [];
-  return { capture, live: { sceneEpoch: raw.sceneEpoch, lastSequence: raw.lastSequence, records, manifest,
+  return { capture, live: { sceneEpoch: raw.sceneEpoch, lastSequence: raw.lastSequence, records, manifest, ...motion,
     ...(movements.length ? { movements } : {}),
-    ...(manifest && baselines.size ? { appearanceBaselines: [...baselines.values()] } : {}),
+    ...(manifest && baselines.size && motion.delivery !== "delta" ? { appearanceBaselines: [...baselines.values()] } : {}),
     sceneName, gameBuildId, hostName: capture.hostName, positionProjectionSupported: raw.positionProjectionSupported === true,
     positionSamples: count(raw.positionSamples) ? raw.positionSamples : 0,
     lastPacketSeconds: finite(raw.lastPacketSeconds, 1e9) && raw.lastPacketSeconds >= 0 ? raw.lastPacketSeconds : null,
@@ -434,7 +495,7 @@ export function createPacketReplayApi(options = {}) {
     return pendingStorage;
   }
 
-  async function proxy(req, res, path, { body, room, feature, file = false, zip = false, list = false, live = false, navigationStart = false, roomLookup = false, replaySearch = null, downloadReceipt = false } = {}) {
+  async function proxy(req, res, path, { body, room, feature, file = false, zip = false, list = false, live = false, motion = null, navigationStart = false, roomLookup = false, replaySearch = null, downloadReceipt = false } = {}) {
     const controller = new AbortController();
     activeRequests.add(controller);
     const timer = setTimeout(() => controller.abort(), file ? downloadTimeoutMs : requestTimeoutMs);
@@ -455,7 +516,7 @@ export function createPacketReplayApi(options = {}) {
       if (body !== undefined) headers["content-type"] = "application/json";
       if (body !== undefined && req.headers["idempotency-key"] && !downloadReceipt) headers["idempotency-key"] = req.headers["idempotency-key"];
       if (file && req.headers.range) headers.range = req.headers.range;
-      const response = await fetch(`${origin}/api/v1${path}`, { method: roomLookup || replaySearch ? "GET" : req.method, headers,
+      const response = await fetch(`${origin}/api/v1${path}${motion?.query ?? ""}`, { method: roomLookup || replaySearch ? "GET" : req.method, headers,
         ...(body !== undefined ? { body: JSON.stringify(body) } : {}), redirect: "error", signal: controller.signal });
       if (response.status === 401 || response.status === 403) { await response.body?.cancel(); return fail(res, 502, "collector_auth_failed"); }
       if (downloadReceipt && response.status === 204) {
@@ -531,7 +592,7 @@ export function createPacketReplayApi(options = {}) {
         const capture = captureDto(await upstreamJson(current), room, created.featureCode);
         return responseJson(res, response.status, { capture, reused: response.status === 200 });
       }
-      responseJson(res, response.status, list ? captureListDto(value) : live ? liveDto(value, room, feature) : captureDto(value, room, feature));
+      responseJson(res, response.status, list ? captureListDto(value) : live ? liveDto(value, room, feature, motion) : captureDto(value, room, feature));
     } catch (error) {
       if (res.headersSent) { if (!res.destroyed) res.destroy(); }
       else fail(res, controller.signal.aborted ? 504 : 502, controller.signal.aborted ? "upstream_timeout" : error.message === "upstream_invalid_response" ? "upstream_invalid_response" : "collector_unavailable");
@@ -546,11 +607,12 @@ export function createPacketReplayApi(options = {}) {
     const navigation = rawPath === NAVIGATION || rawPath.startsWith(`${NAVIGATION}/`);
     if (!navigation && rawPath !== PREFIX && !rawPath.startsWith(`${PREFIX}/`)) return false;
     try {
+      const motion = motionRequest(req, rawPath);
+      if (rawPath.includes("%")) { fail(res, 400, "invalid_request"); return true; }
       if (navigation) {
         // A fresh page receives no rooms or recordings. An explicit room-code
         // lookup can recover retained recordings for that code on another
         // device; feature codes still distinguish the individual recordings.
-        if ((req.url ?? "").includes("?") || rawPath.includes("%")) { fail(res, 400, "invalid_request"); return true; }
         if (rawPath === `${NAVIGATION}/session` && req.method === "GET") {
           responseJson(res, 200, { configured: configured && !closed, captures: [] }); return true;
         }
@@ -610,7 +672,7 @@ export function createPacketReplayApi(options = {}) {
           const zip = kind === "replays" && tail === "/archive.zip";
           if (req.method !== "GET" || !live && !status && !zip) { fail(res, 405, "method_not_allowed"); return true; }
           if (zip && req.headers.range && !/^bytes=(?:\d+-\d*|-\d+)$/.test(req.headers.range)) { fail(res, 400, "invalid_request"); return true; }
-          await proxy(req, res, `/${kind}/${room}/${feature}${tail}`, { room, feature, live, file: zip, zip }); return true;
+          await proxy(req, res, `/${kind}/${room}/${feature}${tail}`, { room, feature, live, motion, file: zip, zip }); return true;
         }
         fail(res, 404, "not_found"); return true;
       }
@@ -619,7 +681,6 @@ export function createPacketReplayApi(options = {}) {
         else fail(res, 503, "collector_unavailable");
         return true;
       }
-      if ((req.url ?? "").includes("?") || rawPath.includes("%")) { fail(res, 400, "invalid_request"); return true; }
       const authenticated = session(req);
       if (["POST", "DELETE"].includes(req.method) && !sameOrigin(req)) { fail(res, 403, "forbidden_origin"); return true; }
       if (rawPath === `${PREFIX}/session`) {
@@ -659,7 +720,7 @@ export function createPacketReplayApi(options = {}) {
         if (!file && !status && !stop && !live) { fail(res, 405, "method_not_allowed"); return true; }
         if (stop && (Number(req.headers["content-length"] ?? 0) > 0 || req.headers["transfer-encoding"])) { fail(res, 400, "invalid_request"); return true; }
         if (file && req.headers.range && !/^bytes=(?:\d+-\d*|-\d+)$/.test(req.headers.range)) { fail(res, 400, "invalid_request"); return true; }
-        await proxy(req, res, `/${kind}/${room}/${feature}${tail}`, { room, feature, file, zip, live }); return true;
+        await proxy(req, res, `/${kind}/${room}/${feature}${tail}`, { room, feature, file, zip, live, motion }); return true;
       }
       fail(res, 404, "not_found");
     } catch { fail(res, 400, "invalid_request"); }

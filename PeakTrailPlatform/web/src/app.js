@@ -38,6 +38,7 @@ import { getLocale, tr, onLocaleChange, biomeName, gameItemName, formatNumber } 
 import { initLanguageControls } from "./i18n-dom.js";
 import { WatchClient, parseWatchId, parseWatchCode, normalizeWatchInput, resolveWatchInput, watchSharePayload, watchCodeFromState } from "./watch-client.js";
 import { PacketWatchClient, parseCaptureId } from "./packet-watch-client.js";
+import { appendPacketMotion } from "./packet-motion.js";
 import { trimWatchTrace, isWatchMilestone, watchProgressLabel } from "./watch-window.js";
 import { watchText } from "./watch-text.js";
 import { createWatchChrome } from "./watch-chrome.js";
@@ -1833,6 +1834,9 @@ async function startWatch(id, { replaceUrl = true, watchCode = null, capture = f
         watch.lastRecordAt = Date.now();
         if (!capture && data.record.type === "sample") state.live.trail?.observe(performance.now());
       }
+    },
+    onMotion: batch => {
+      if (watch.active && state.watch.client === client && watch.trace) appendPacketMotion(watch.trace, batch);
     },
     onState: data => {
       if (!watch.active || state.watch.client !== client) return;
