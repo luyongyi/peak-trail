@@ -7,7 +7,7 @@ import { parseWatchId, parseWatchCode, watchCodeFromState } from "../src/watch-c
 
 const source = readFileSync(new URL("../src/app.js", import.meta.url), "utf8");
 function functions(names, ports) {
-  ports = { itemEventPanel: { sync() {} }, watchText: value => value, tr: value => value, formatNumber: String,
+  ports = { viewer: null, itemEventPanel: { sync() {} }, watchText: value => value, tr: value => value, formatNumber: String,
     liveCameraController: { begin() {}, suspend() {}, resume() {}, checkpoint() {} }, syncWatchCamera() {},
     selectedSegmentStatus: () => ({ status: "ready" }), errorUiText: value => String(value || ""), ...ports };
   return new Function(...Object.keys(ports), names.map(name => {
@@ -211,6 +211,25 @@ test('waiting UI explains airport preparation without showing a map, replay wind
   assert.equal(f.$('watchTimeStatus').textContent, '');
   state.watch.trace = makeTrace(); state.watch.awaitingRun = false; state.watch.status = 'live'; api.updateWatchStatus();
   assert.equal(f.classes.has('watch-empty'), false); assert.equal(f.$('watchCamera').hidden, false);
+});
+
+test('packet navigation distinguishes joining, confirmed terminal and departure', () => {
+  const f = watchNodes(), watch = { active: true, kind: 'packet', id: 'ABCDEFGH.123', trace: null,
+    connection: 'waiting', status: 'live', captureStatus: 'connecting', following: true };
+  const state = { currentTime: 0, watch };
+  const api = functions(['updateWatchStatus'], { ...f, state, viewer: { setAirportVisible: visible => visible ? 'ready' : null }, updateWatchShareUI() {}, watchProgressLabel: () => '' });
+  api.updateWatchStatus();
+  assert.equal(f.$('watchStatusText').textContent, '正在加入房间');
+  assert.equal(f.classes.has('watch-airport'), false);
+  Object.assign(watch, { captureStatus: 'recording', airport: true, airportModelAvailable: true });
+  api.updateWatchStatus();
+  assert.equal(f.$('watchStatusText').textContent, 'Peak_Map 已加入房间');
+  assert.equal(f.classes.has('watch-airport'), true);
+  assert.match(f.$('watchNoticeText').textContent, /登机后/);
+  watch.connection = 'reconnecting'; api.updateWatchStatus();
+  assert.equal(f.classes.has('watch-airport'), false);
+  Object.assign(watch, { connection: 'connected', trace: makeTrace() }); api.updateWatchStatus();
+  assert.equal(f.classes.has('watch-airport'), false);
 });
 
 test('waiting does not request a wake lock, while activated live playback retains the existing policy', () => {

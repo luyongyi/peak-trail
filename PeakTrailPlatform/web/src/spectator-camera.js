@@ -93,8 +93,17 @@ export class SpectatorCamera {
     return Math.min(distance, allowed);
   }
 
-  selectView({ distance, azimuth, pitch, preferredAzimuth, interior, manual, sectionPlane }) {
+  selectView({ distance, azimuth, pitch, climbAzimuth, preferredAzimuth, interior, manual, sectionPlane }) {
     let preferred = Number.isFinite(preferredAzimuth) ? preferredAzimuth : azimuth;
+    if (!manual && !sectionPlane && Number.isFinite(climbAzimuth)) {
+      preferred = climbAzimuth;
+      // Face the next checkpoint while the uphill composition is clear. A
+      // side wall, a nearby tree or the player's motion cannot turn this shot.
+      const direction = this.directionAt(preferred, .22);
+      const available = this.clearance(this.anchor, direction, distance, true);
+      if (available >= distance * .98 && this.viewOpenness(direction, available) >= 5 / 8)
+        return { azimuth: preferred, pitch: .22, distance: available, normalFound: false, climbAligned: true };
+    }
     let inward = null;
     if (sectionPlane && !manual) {
       const dx = sectionPlane.axisX - this.anchor.x, dz = sectionPlane.axisZ - this.anchor.z;
@@ -322,11 +331,11 @@ export class SpectatorCamera {
     this.aim.copy(anchor).add(this.tmp);
     this.look.lerp(this.aim, first ? 1 : 1 - Math.exp(-dt * 9));
 
-    const request = `${manual}:${options.interior}:${distance}:${manual ? `${initialAzimuth}:${initialPitch}` : "auto"}`;
+    const request = `${manual}:${options.interior}:${options.climbAzimuth ?? ""}:${distance}:${manual ? `${initialAzimuth}:${initialPitch}` : "auto"}`;
     this.probeIn -= dt;
     if (!this.solution || this.probeIn <= 0 || request !== this.lastRequest) {
       this.solution = this.selectView({ distance, azimuth: manual ? initialAzimuth : this.azimuth,
-        pitch: initialPitch, preferredAzimuth: options.preferredAzimuth, interior: options.interior, manual, sectionPlane: options.sectionPlane });
+        pitch: initialPitch, climbAzimuth: options.climbAzimuth, preferredAzimuth: options.preferredAzimuth, interior: options.interior, manual, sectionPlane: options.sectionPlane });
       this.probeIn = 0.28;
       this.lastRequest = request;
     }
@@ -338,7 +347,7 @@ export class SpectatorCamera {
       this.sectionAt(this.direction, distance, options.sectionPlane));
     if (!manual && currentSafe < distance * .65 && solution.distance > distance * .7 && this.probeIn < .28) {
       solution = this.solution = this.selectView({ distance, azimuth: this.azimuth,
-        pitch: initialPitch, preferredAzimuth: options.preferredAzimuth, interior: options.interior, manual, sectionPlane: options.sectionPlane });
+        pitch: initialPitch, climbAzimuth: options.climbAzimuth, preferredAzimuth: options.preferredAzimuth, interior: options.interior, manual, sectionPlane: options.sectionPlane });
       this.probeIn = .28;
     }
     // Interpolate the orbit, not the chord between camera positions. A Cartesian
@@ -370,6 +379,7 @@ export class SpectatorCamera {
     this.boom = first || relocated ? safe : Math.min(safe, this.boom + (safe - this.boom) * (1 - Math.exp(-dt * 5)));
     this.directionAt(this.azimuth, this.pitch);
     this.position.copy(this.anchor).addScaledVector(this.direction, this.boom);
+    if (solution.climbAligned) this.look.copy(this.anchor);
     return { position: this.position, target: this.look, distance: this.position.distanceTo(anchor),
       desiredDistance: distance, constrained: this.position.distanceTo(anchor) < distance * 0.65,
       geometryDerived: solution.normalFound, azimuth: this.azimuth, pitch: this.pitch, relocated, mode: "exterior" };

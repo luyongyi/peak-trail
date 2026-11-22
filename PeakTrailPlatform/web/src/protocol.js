@@ -1340,6 +1340,8 @@ export function appendLiveRecord(trace, record) {
       yaw: asFiniteNumber(record.yaw ?? record.rotationY, 0),
       segment: null, activeSegment: asActiveSegment(record.activeSegment, null),
       telemetry,
+      ...(record.navigationPose === true ? { navigationPose: true, movement: record.movement ?? null,
+        conditions: Array.isArray(record.conditions) ? record.conditions : null } : {}),
     });
     trace.sampleCount += 1;
     trace.telemetry.sampleCount += 1;
@@ -1448,7 +1450,9 @@ export function tracePlayerStateAtTime(trace, playerId, seconds) {
   const inventoryEntry = latestAtTime(trace?.inventoryTracks?.get(playerId) || [], seconds);
   const appearanceEntry = latestAtTime(trace?.appearanceTracks?.get(playerId) || [], seconds);
   const statusEntry = latestAtTime(trace?.statusTracks?.get(playerId) || [], seconds);
-  const telemetry = { ...(sample?.telemetry || {}) };
+  const poseFresh = sample?.navigationPose === true && seconds - sample.t <= 1.5;
+  const sampleTelemetry = !sample?.navigationPose || poseFresh ? sample?.telemetry : null;
+  const telemetry = { ...(sampleTelemetry || {}) };
   const vitalityKeys = [
     "stamina",
     "maxStamina",
@@ -1460,9 +1464,9 @@ export function tracePlayerStateAtTime(trace, playerId, seconds) {
     "baseMaxStamina",
     "baseMaxExtraStamina",
   ];
-  const sampleHasVitality = sample?.telemetry
-    && (sample.telemetry.ready !== null || vitalityKeys.some(
-      (key) => sample.telemetry[key] !== null && sample.telemetry[key] !== undefined,
+  const sampleHasVitality = sampleTelemetry
+    && (sampleTelemetry.ready !== null || vitalityKeys.some(
+      (key) => sampleTelemetry[key] !== null && sampleTelemetry[key] !== undefined,
     ));
   const stateWinsVitality = state?.telemetry
     && (!sampleHasVitality || state.t >= (sample?.t ?? -Infinity));
@@ -1493,7 +1497,7 @@ export function tracePlayerStateAtTime(trace, playerId, seconds) {
   }
   const inventory = inventoryEntry?.inventory || null;
   const inventoryWinsItem = inventory?.heldCaptured
-    && (!sample?.telemetry?.itemCaptured || inventoryEntry.t >= sample.t);
+    && (!sampleTelemetry?.itemCaptured || inventoryEntry.t >= sample.t);
   if (inventoryWinsItem) {
     telemetry.itemCaptured = true;
     telemetry.item = inventory.heldPresent ? inventory.held : null;
@@ -1505,6 +1509,8 @@ export function tracePlayerStateAtTime(trace, playerId, seconds) {
       : lifeEvent ? lifeEvent.type === "death" ? "dead" : "alive" : "unknown";
   return {
     sample,
+    movement: poseFresh ? sample.movement : null,
+    navigationConditions: poseFresh ? sample.conditions : null,
     telemetry: Object.keys(telemetry).length ? telemetry : null,
     inventory,
     appearance: appearanceEntry?.appearance || null,

@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
@@ -55,6 +56,9 @@ const PLAYER_COLORS = [
 ];
 
 const OPEN_FINALE_FOLLOW_DISTANCE = 36;
+// The serialized progress points in these builds all advance along Unity +Z.
+// Web map Z is reflected, so a camera behind the climber has azimuth zero.
+const uphillLandmarkBuilds = new Set(["25739797", "26134529", "26155610", "26542162"]);
 
 const DISCONTINUITY_EVENTS = new Set([
   "warp",
@@ -142,7 +146,7 @@ function heightColor(value, min, max) {
   return t < 0.58 ? low.lerp(middle, t / 0.58) : middle.lerp(high, (t - 0.58) / 0.42);
 }
 
-function disposeObject(root) {
+function disposeObject(root, closeImages = false) {
   const geometries = new Set();
   const materials = new Set();
   const textures = new Set();
@@ -155,7 +159,10 @@ function disposeObject(root) {
     for (const value of Object.values(material)) if (value?.isTexture) textures.add(value);
     material.dispose();
   }
-  for (const texture of textures) texture.dispose();
+  for (const texture of textures) {
+    texture.dispose();
+    if (closeImages) texture.source?.data?.close?.();
+  }
   for (const geometry of geometries) geometry.dispose();
   root.clear();
 }
@@ -208,6 +215,7 @@ export class TrailScene {
     this.followAnchor = new THREE.Vector3();
     this.followTmp = new THREE.Vector3();
     this.sectionPlane = createSectionPlane(THREE);
+    this.followOcclusion = { value: new THREE.Vector4(0, 0, 0, 0) };
     this.followAzimuth = 0.6;
     this.followPitch = 0.22;
     this.followDistance = FOLLOW_DISTANCE;
@@ -290,7 +298,8 @@ export class TrailScene {
       } });
     this.worldRenderer = new WorldRenderer(canvas);
     this.sourceWater = new SourceWaterRenderer();
-    this.enclosureContext = new EnclosureContextRenderer({ THREE, loadGeometry: loadGameGeometry, disposeObject });
+    this.enclosureContext = new EnclosureContextRenderer({ THREE, disposeObject,
+      loadGeometry: (layer, signal, build) => loadGameGeometry(layer, signal, build, { followOcclusion: this.followOcclusion }) });
     this.waterDepthEntries = [];
     this.fogDepthPass = new FogDepthPass(THREE);
     this.gameAssetPack = null;
@@ -371,6 +380,7 @@ export class TrailScene {
       this.lastFrameTime = timestamp;
       // Only a followed player's live pose may protect a local contact surface.
       if (this.sectionPlane) this.sectionPlane.footing.value.w = 0;
+      if (this.followOcclusion) this.followOcclusion.value.w = 0;
       if (this.mapLootFocus?.update(timestamp)) { /* The close-up flight owns the camera this frame. */ }
       else if (this.freeCamera.mode === "free") this.freeCamera.update(delta);
       else if (this.followTargetId !== null) this.updateFollowCamera(delta);
@@ -464,6 +474,7 @@ export class TrailScene {
 
 
   async setData({ mapPack, trace, useMap, activeSegment, viewIntent = null }) {
+    if (mapPack || trace) this.setAirportVisible?.(false);
     this.clearMapLootFocus();
     this.lootFocusTerrain?.dispose();
     this.lootFocusTerrain = null;
@@ -761,7 +772,7 @@ export class TrailScene {
   async loadChapterGeometry(layer, signal, gameBuildId, campfire, campOnly = false) {
     const enclosures = campOnly ? [] : (this.mapPack.mapEnclosures?.enclosures || []).filter(entry => entry.segment === layer.segment);
     const token = this.buildToken;
-    const context = { chapterLayer: layer, route: this.mapPack.route,
+    const context = { chapterLayer: layer, route: this.mapPack.route, followOcclusion: this.followOcclusion,
       onProgress: progress => this.emitGeometryProgress(layer, progress, token) };
     if (!campOnly && layer.segment === 4 && isInteriorLayer(layer, this.mapPack.route))
       context.sectionPlane = this.sectionPlane;
@@ -1034,6 +1045,11 @@ export class TrailScene {
   }
 
   rebuildPlayerLabels() {
+    // A packet batch replaces the 3D trail objects, but screen portraits look
+    // them up by player ID. Keep the existing images mounted between polls.
+    if (this.navigationPortraits && this.labelOverlay.classList.contains("is-navigation")
+        && this.playerLabels.size === this.playerObjects.size && this.trace.participants.every(player =>
+          !this.playerObjects.has(player.id) || this.playerLabels.get(player.id)?.element.title === (player.nickname || player.id))) return;
     this.labelOverlay.replaceChildren();
     this.labelOverlay.classList.toggle("is-navigation", this.navigationPortraits);
     this.playerLabels.clear();
@@ -1261,6 +1277,7 @@ export class TrailScene {
     if (next === null ? this.followTargetId == null : next === this.followTargetId) return;
     this.clearMapLootFocus();
     this.followTargetId = next;
+    if (this.followOcclusion) this.followOcclusion.value.w = 0;
     if (this.sectionPlane) this.sectionPlane.footing.value.w = 0;
     this.surveyPreset = null;
     ++this.cameraSelectionRevision;
@@ -1433,12 +1450,8 @@ export class TrailScene {
       this.followRig.reset();
       this.emitFollowStatus();
     }
-    // Current chapter bounds are only a weak prior. Nearby true surface normals
-    // and candidate visibility win; the whole-map centre is not a climbing face.
-    const bounds = this.viewBounds();
-    const preferredAzimuth = bounds ? Math.atan2(
-      this.followAnchor.x - ((bounds.min[0] + bounds.max[0]) / 2 - this.origin.x),
-      this.followAnchor.z + ((bounds.min[2] + bounds.max[2]) / 2 - this.origin.z)) : this.followAzimuth;
+    const climbAzimuth = context.layer?.segment >= 0 && context.layer.segment < 4
+      && uphillLandmarkBuilds.has(String(this.mapPack?.gameBuildId)) ? 0 : null;
     const section = context.openFacade ? this.sectionPlane : null;
     if (section) {
       section.footing.value.set(this.followAnchor.x, this.followAnchor.y + 0.15, this.followAnchor.z, 3);
@@ -1447,7 +1460,7 @@ export class TrailScene {
     const result = this.followRig.update(this.followAnchor, deltaSeconds, {
       cameraPosition: this.camera.position, distance: this.followDistance,
       azimuth: this.followAzimuth, pitch: this.followPitch, manual: this.followUserOrbit,
-      preferredAzimuth, interior: context.interior, interiorReference: context.interiorReference,
+      climbAzimuth, interior: context.interior, interiorReference: context.interiorReference,
       sectionPlane: section,
       discontinuity: this.followDiscontinuity,
     });
@@ -1456,6 +1469,12 @@ export class TrailScene {
     if (!this.followUserOrbit) { this.followAzimuth = result.azimuth; this.followPitch = result.pitch; }
     this.camera.position.copy(result.position);
     this.camera.lookAt(result.target);
+    if (this.followOcclusion) {
+      this.camera.updateWorldMatrix(true, false);
+      const subject = this.followOcclusion.value;
+      subject.set(this.followAnchor.x, this.followAnchor.y, this.followAnchor.z, 1).applyMatrix4(this.camera.matrixWorldInverse);
+      subject.w = THREE.MathUtils.clamp(-subject.z * .075, 1, 4.5);
+    }
     // OrbitControls 目标同步：退出跟随时无缝交还。
     this.controls.target.copy(result.target);
   }
@@ -2165,6 +2184,56 @@ export class TrailScene {
     this.setCameraPlacementNote("事件近景 · 特效为回放示意", "Event close-up · effects illustrate the replay");
   }
 
+  setAirportVisible(visible) {
+    if (!visible) {
+      if (!this.airportRequest) return;
+      this.airportRequest.abort();
+      this.airportRequest = null;
+      if (this.airportModel) {
+        this.scene.remove(this.airportModel);
+        disposeObject(this.airportModel, true);
+      }
+      this.airportModel = null;
+      this.airportPoints = null;
+      this.airportStatus = null;
+      this.worldRoot.visible = true;
+      return;
+    }
+    if (!this.airportRequest && !this.disposed) {
+      this.airportRequest = new AbortController();
+      this.airportStatus = "loading";
+      this.worldRoot.visible = false;
+      void this.loadAirport(this.airportRequest.signal);
+    }
+    return this.airportStatus;
+  }
+
+  async loadAirport(signal) {
+    try {
+      const response = await fetch("./src/airport/26542162.glb", { signal });
+      if (!response.ok) throw new Error("Airport geometry unavailable");
+      const bytes = await response.arrayBuffer();
+      if (signal.aborted) return;
+      const { scene: model } = await new GLTFLoader().parseAsync(bytes, "");
+      if (signal.aborted) { disposeObject(model, true); return; }
+      // The native interior has baked indirect lighting; a neutral fill keeps
+      // seat backs, counters and the inside of the passage readable from orbit.
+      model.add(new THREE.AmbientLight(0xffffff, 0.65));
+      this.airportModel = model;
+      this.scene.add(model);
+      const box = new THREE.Box3().setFromObject(model);
+      this.airportPoints = [];
+      for (const x of [box.min.x, box.max.x]) for (const y of [box.min.y, box.max.y])
+        for (const z of [box.min.z, box.max.z]) this.airportPoints.push([x, y, z]);
+      this.fitView({ reason: "data" });
+      this.airportStatus = "ready";
+    } catch {
+      if (signal.aborted) return;
+      this.airportStatus = "error";
+    }
+    this.canvas.dispatchEvent(new Event("peaktrail-airport-status"));
+  }
+
   fitView({ reason = "manual" } = {}) {
     this.clearMapLootFocus();
     this.setFollowTarget(null, { reason });
@@ -2206,14 +2275,17 @@ export class TrailScene {
     // OrbitControls caches the Y-up orbit axis. A tiny Z offset gives the top
     // view a stable north direction without changing that axis after creation.
     const up = [0, 1, 0];
-    const points = this.cameraFitPoints();
+    const points = this.airportPoints || this.cameraFitPoints();
     const framing = {
       aspect: this.camera.aspect, fov: this.camera.fov,
       up, padding: 1.02, frame: this.surveyCameraFrame(),
     };
     // Keep the full chapter, but use its shape and the available screen area
     // to avoid the empty corners of a fixed diagonal view on narrow screens.
-    const direction = top ? [0, 1, 0.000001] : chooseOverviewDirection(points, framing);
+    // In the terminal's exported Unity frame +Z runs up the screen and +X
+    // left. The boarding passage points left and the long hall stands upright.
+    const direction = this.airportPoints ? [0, 1, -0.48] : top ? [0, 1, 0.000001] : chooseOverviewDirection(points, framing);
+    if (this.airportPoints) framing.frame = { left: -0.97, right: 0.97, bottom: -0.85, top: 0.93 };
     const fit = fitPerspectivePoints(points, { ...framing, direction });
     if (!fit) return;
     // A preset must not inherit the last drag's residual rotation or pan.
@@ -2244,6 +2316,7 @@ export class TrailScene {
   }
 
   dispose() {
+    this.setAirportVisible(false);
     this.disposed = true;
     this.mapDiagnostics?.dispose();
     this.clearMapLootFocus();

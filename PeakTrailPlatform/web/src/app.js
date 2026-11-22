@@ -17,10 +17,10 @@ import {
 } from "./protocol.js";
 import { collectDroppedFiles } from "./file-intake.js";
 import { loadGameAssetPack } from "./game-assets.js";
-import { createPlayerCard, updatePlayerCard } from "./player-card.js";
+import { createPlayerCard, updatePlayerCard, updatePlayerHud } from "./player-card.js";
 import { classifyRouteSegment, resolveReplayRoute, routeSegmentName } from "./map-route.js";
 import { worldTelemetryNote } from "./world-timeline.js";
-import { createTrailEstimator, liveChaseTarget, LIVE_TRAIL_S } from "./live-follow.js";
+import { createPacketPlayout, createTrailEstimator, liveChaseTarget, LIVE_TRAIL_S } from "./live-follow.js";
 import { createLiveCameraController } from "./live-camera.js";
 import { createWakeLock } from "./wake-lock.js";
 import { createFullscreen } from "./fullscreen.js";
@@ -131,6 +131,7 @@ const elements = {
   cameraPlacement: $("cameraPlacement"),
   followHud: $("followHud"),
   followHudText: $("followHudText"),
+  playerHud: $("playerHud"),
   worldToggle: $("worldToggle"),
   worldTelemetryNote: $("worldTelemetryNote"),
   worldSummary: $("worldSummary"),
@@ -920,7 +921,7 @@ function renderGateRuns() {
 }
 
 // ============ 全屏与屏幕常亮 ============
-const fullscreen = createFullscreen({ onChange: () => syncWakeLock() });
+const fullscreen = createFullscreen({ onChange: () => { syncWakeLock(); syncPlayerHud(); } });
 const wakeLock = createWakeLock({ onChange: syncWakeLockChip });
 document.addEventListener("visibilitychange", () => wakeLock.handleVisibilityChange());
 elements.fullscreenButton.addEventListener("click", () => void fullscreen.toggle());
@@ -1531,8 +1532,10 @@ function stopWatch() {
   watch.client?.stop();
   clearInterval(watch.timer);
   watch.client = null;
+  watch.playout = null;
   watch.timer = null;
   watch.active = false;
+  viewer?.setAirportVisible?.(false);
   watch.trace = null;
   watch.awaitingRun = false;
   watch.code = null;
@@ -1542,6 +1545,7 @@ function stopWatch() {
   elements.appShell.classList.remove("watch-players-open");
   elements.appShell.classList.remove("watch-loading");
   elements.appShell.classList.remove("watch-empty");
+  elements.appShell.classList.remove("watch-airport");
   for (const id of ["watchStatus", "watchShare", "watchShareLink", "watchCamera", "watchTimebar", "watchNotice", "watchMenu"]) $(id).hidden = true;
   elements.timeline.min = "0";
   syncWakeLock();
@@ -1552,6 +1556,11 @@ function updateWatchStatus() {
   if (!watch.active) return;
   updateWatchShareUI();
   const empty = !watch.trace;
+  const packetWaiting = empty && watch.kind === "packet" && watch.connection === "waiting" && watch.status !== "ended";
+  const joined = packetWaiting && watch.captureStatus === "recording";
+  const airport = joined && watch.airport;
+  const terminal = viewer?.setAirportVisible?.(Boolean(airport && watch.airportModelAvailable));
+  elements.appShell?.classList.toggle("watch-airport", terminal === "ready");
   elements.appShell?.classList.toggle("watch-empty", empty);
   $("watchCamera").hidden = empty;
   $("watchTimebar").hidden = empty;
@@ -1562,6 +1571,7 @@ function updateWatchStatus() {
     : { waiting: watchText("等待主播入图"), live: watchText("直播中"), reconnecting: watchText("主播重连中"),
     ended: watch.awaitingRun ? watchText("等待已结束") : watchText("直播已结束") };
   const text = watch.connection === "unauthorized" ? watch.operator ? tr("请先解锁导航管理", "Unlock navigation management") : tr("请检查导航链接", "Check the navigation link")
+    : packetWaiting ? joined ? tr("Peak_Map 已加入房间", "Peak_Map joined the room") : tr("正在加入房间", "Joining the room")
     : watch.connection === "waiting" ? tr("等待本局关卡", "Waiting for the current map")
     : watch.connection === "error" ? watch.kind === "packet" ? tr("无法打开导航", "Navigation unavailable") : watchText("无法打开直播")
     : watch.status === "ended" ? labels.ended
@@ -1571,7 +1581,7 @@ function updateWatchStatus() {
   $("watchStatusText").textContent = [text, watchProgressLabel(watch.trace)].filter(Boolean).join(" · ");
   $("watchStatus").dataset.status = watch.status === "ended" ? "ended" : watch.connection === "error" ? "error" : watch.status;
   const age = Number.isFinite(watch.lastRecordAt) ? Math.max(0, Math.floor((Date.now() - watch.lastRecordAt) / 1000)) : null;
-  $("watchFreshness").textContent = watch.awaitingRun
+  $("watchFreshness").textContent = airport ? tr("机场 · 候机中", "Airport · At the terminal") : watch.awaitingRun
     ? watch.status === "ended" ? watchText("本次尚未开始攀登") : watchText("机场准备中 · 入图后自动显示")
     : `${state.trace?.manifest?.sceneName || watch.sceneName || watchText("等待地图")} · ${age === null ? watchText("等待游戏数据") : age === 0 ? watchText("刚刚更新") : tr(`${age} 秒前更新`, `Updated ${age}s ago`)}`;
   const mapStatus = !empty && !watch.initializing ? selectedSegmentStatus() : null;
@@ -1582,12 +1592,16 @@ function updateWatchStatus() {
   const packetMapMissing = watch.kind === "packet" && watch.trace && !state.usingCompatibleMap && !watch.initializing;
   const notice = watch.initializing || !watch.trace || !watch.trace.sampleCount || packetMapMissing || ["error", "unauthorized"].includes(watch.connection);
   $("watchNotice").hidden = !notice;
-  $("watchNoticeText").textContent = watchText(watch.message) || (watch.initializing ? watchText("正在匹配本局地图…")
+  $("watchNoticeText").textContent = watchText(watch.message) || (terminal === "error" ? tr("机场模型未能加载，登机后仍会自动切换地图。", "The terminal model could not load. The climbing map will open after boarding.")
+    : terminal === "loading" ? tr("正在载入机场候机楼…", "Loading the airport terminal…")
+    : airport ? tr("队伍已在机场。登机后自动切换到攀登地图。", "Your team is at the airport. The climbing map opens after boarding.")
+    : packetWaiting ? joined ? tr("已开始接收房间数据，正在确认场景。", "Receiving room data. Identifying the scene.") : tr("正在连接游戏房间…", "Connecting to the game room…")
+    : watch.initializing ? watchText("正在匹配本局地图…")
     : packetMapMissing ? tr("暂未加载到与本局版本匹配的地图，正在继续采集玩家路线；请稍后重新连接。", "The map for this game build is unavailable. Capture continues; reconnect later.")
     : watch.awaitingRun ? watch.status === "ended" ? watchText("等待已结束，本次尚未开始攀登") : watchText("主播已在机场，等待进入关卡。入图后会自动开始观战。")
     : watch.status === "ended" ? watch.kind === "packet" ? tr("导航已结束，本次没有可显示的路径", "Navigation ended without a visible path") : watchText("直播已结束，本次没有可显示的路径")
     : watch.trace ? watchText("已连接，等待玩家位置…") : watch.kind === "packet" ? tr("正在连接导航…", "Connecting navigation…") : watchText("正在连接直播…"));
-  $("watchRetry").hidden = !["error", "reconnecting"].includes(watch.connection);
+  $("watchRetry").hidden = terminal !== "error" && !["error", "reconnecting"].includes(watch.connection);
   $("watchUnlock").hidden = watch.kind !== "packet" || watch.connection !== "unauthorized";
   $("watchUnlock").href = `./record.html?room=${watch.kind === "packet" ? watch.id.split(".")[0] : ""}${watch.operator ? "&operator=1#managementPanel" : ""}`;
   $("watchUnlock").textContent = watch.operator ? tr("返回导航管理解锁", "Unlock navigation management") : tr("返回 Peak导航", "Return to Peak Navigation");
@@ -1639,6 +1653,8 @@ async function applyWatchSnapshot(snapshot, trace) {
   finalizeLiveFlush(trace);
   trace.warnings = [watchText("观战页面可回看最近约 2 分钟的路径；玩家身份只在本次会话内有效。")];
   watch.trace = trace;
+  watch.playout?.reset();
+  watch.playout?.observe(trace.duration, performance.now());
   watch.awaitingRun = false;
   watch.epoch = snapshot.epoch;
   watch.initializing = true;
@@ -1653,7 +1669,9 @@ async function applyWatchSnapshot(snapshot, trace) {
   state.workspaceMode = "watch";
   resetSegmentNavigation(trace);
   viewer?.setFollowTarget(null, { reason: "data" });
-  state.currentTime = Math.max(trace.windowStart || 0, trace.duration - (watch.status === "ended" ? 0 : LIVE_TRAIL_S));
+  const playbackStart = () => Math.max(trace.windowStart || 0, watch.status === "ended" ? trace.duration
+    : (watch.playout?.target(trace.duration, performance.now()) ?? trace.duration - LIVE_TRAIL_S));
+  state.currentTime = playbackStart();
   setPlaying(false);
   syncGameAssetsForTrace(trace, revision);
   try { await syncMapForTrace(trace); }
@@ -1674,7 +1692,7 @@ async function applyWatchSnapshot(snapshot, trace) {
   updateTraceUI();
   updateMapUI();
   updateCompatibilityUI(false);
-  state.currentTime = Math.max(trace.windowStart || 0, trace.duration - (watch.status === "ended" ? 0 : LIVE_TRAIL_S));
+  state.currentTime = playbackStart();
   watch.initializing = false;
   elements.appShell.classList.remove("watch-loading");
   flushWatch();
@@ -1751,6 +1769,8 @@ async function startWatch(id, { replaceUrl = true, watchCode = null, capture = f
   disconnectLive(true);
   const watch = state.watch;
   Object.assign(watch, { active: true, id, kind: capture ? "packet" : "v2", operator: capture && operator, trace: null, status: "connecting", connection: "connecting",
+    captureStatus: null, airport: false, airportModelAvailable: false,
+    playout: capture ? createPacketPlayout() : null,
     lastRecordAt: null, following: true, dirty: false, records: 0, playerKey: "", epoch: null,
     initializing: false, awaitingRun: false, message: "", sceneName: null, persistence: null, code: parseWatchCode(watchCode), copiedUntil: 0, copiedKind: null });
   liveCameraController.begin(id, viewer);
@@ -1811,12 +1831,18 @@ async function startWatch(id, { replaceUrl = true, watchCode = null, capture = f
       if (appendLiveRecord(watch.trace, data.record)) {
         watch.dirty = true;
         watch.lastRecordAt = Date.now();
-        if (data.record.type === "sample") state.live.trail?.observe(performance.now());
+        if (!capture && data.record.type === "sample") state.live.trail?.observe(performance.now());
       }
     },
     onState: data => {
       if (!watch.active || state.watch.client !== client) return;
+      if (watch.trace) watch.playout?.observe(watch.trace.duration, performance.now());
       if (data.status) watch.status = data.status;
+      if (capture) {
+        watch.captureStatus = data.capture?.status;
+        watch.airport = data.airport;
+        watch.airportModelAvailable = data.airportModelAvailable;
+      }
       if (!capture && data.epoch === 0 && data.manifest === null) watch.awaitingRun = true;
       if (data.persistence) watch.persistence = data.persistence;
       if (!capture) watch.code = watchCodeFromState(watch.code, data);
@@ -2222,6 +2248,7 @@ function updatePlayers() {
 
 function updatePlayerTelemetry() {
   updateWorldTelemetry();
+  syncPlayerHud();
   const trace = state.trace;
   for (const row of elements.playerList.querySelectorAll(".player-row")) {
     const playerState = tracePlayerStateAtTime(state.trace, row.dataset.playerId, state.currentTime);
@@ -2479,7 +2506,9 @@ function playbackLoop(timestamp) {
     }
   } else if (isLiveFollowing() && state.trace) {
     const delta = Math.min(0.25, (timestamp - state.lastPlaybackFrame) / 1000);
-    const next = liveChaseTarget({
+    const next = state.watch.active && state.watch.playout ? state.watch.playout.next(
+      state.currentTime, state.trace.duration, delta, timestamp,
+    ) : liveChaseTarget({
       currentTime: state.currentTime,
       edge: state.trace.duration,
       deltaSeconds: delta,
@@ -2893,6 +2922,7 @@ elements.playerList.addEventListener("click", (event) => {
 // ===== 跟随相机：HUD + 快捷键 =====
 function syncFollowHud(detail) {
   const active = Boolean(detail?.active ?? (viewer?.followTargetId != null));
+  syncPlayerHud();
   const auto = active && (detail?.autoRotate ?? viewer?.followAutoRotate ?? false);
   elements.cinematicButton.setAttribute("aria-pressed", String(auto));
   elements.followHud.hidden = !active;
@@ -2909,7 +2939,16 @@ function syncFollowHud(detail) {
     );
   }
 }
+function syncPlayerHud() {
+  const id = viewer?.followTargetId;
+  const visible = id != null && state.trace && document.body.classList.contains("map-expanded");
+  const player = visible ? tracePlayerStateAtTime(state.trace, id, state.currentTime) : null;
+  const movement = player && state.watch?.active && state.watch.trace === state.trace
+    ? state.watch.client?.movementAt?.(id, state.currentTime, player.sample?.activeSegment) : null;
+  updatePlayerHud(elements.playerHud, visible ? participantName(id) : "", player, state.gameAssetPack, player?.movement ?? movement);
+}
 elements.sceneCanvas.addEventListener("peaktrail-follow-status", (event) => syncFollowHud(event.detail));
+elements.sceneCanvas.addEventListener("peaktrail-airport-status", updateWatchStatus);
 elements.cinematicButton.addEventListener("click", () => {
   if (!viewer) return;
   if (viewer.followTargetId != null && viewer.followAutoRotate) {
@@ -3074,7 +3113,8 @@ $("watchGoLive").addEventListener("click", () => {
   if (!state.watch.trace) return;
   state.watch.following = true;
   setPlaying(false);
-  updatePlaybackTime(state.watch.status === "ended" ? state.trace.duration : state.trace.duration - LIVE_TRAIL_S, false);
+  updatePlaybackTime(state.watch.status === "ended" ? state.trace.duration
+    : (state.watch.playout?.target(state.trace.duration, performance.now()) ?? state.trace.duration - LIVE_TRAIL_S), false);
   updateWatchStatus();
 });
 $("watchAllPlayers").addEventListener("click", () => { viewer?.setFollowTarget(null); viewer?.fitView(); watchChrome.closeMenu(true); });

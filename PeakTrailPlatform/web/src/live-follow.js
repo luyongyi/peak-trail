@@ -40,6 +40,7 @@ export function createTrailEstimator({
   defaultMs = Math.round(LIVE_TRAIL_S * 1000),
   windowSize = 16,
   minSamples = 4,
+  maxGapMs = 1500,
 } = {}) {
   const gaps = [];
   let last = null;
@@ -47,7 +48,7 @@ export function createTrailEstimator({
     observe(nowMs) {
       if (last !== null) {
         const gap = nowMs - last;
-        if (gap >= 8 && gap <= 1500) {
+        if (gap >= 8 && gap <= maxGapMs) {
           gaps.push(gap);
           if (gaps.length > windowSize) gaps.shift();
         }
@@ -63,6 +64,39 @@ export function createTrailEstimator({
     reset() {
       gaps.length = 0;
       last = null;
+    },
+  };
+}
+
+// The room API delivers a batch after each one-second poll. Measure a batch
+// once, not once per player or sample. Let the clock consume that batch
+// between polls, up to the last known timestamp; never predict a position.
+export function createPacketPlayout() {
+  const delay = createTrailEstimator({ minMs: 1150, defaultMs: 1500, maxMs: 2400, maxGapMs: 3000 });
+  let lastEdge = null, arrivalMs = 0;
+  function target(edge, nowMs) {
+    const elapsed = lastEdge === edge ? Math.max(0, nowMs - arrivalMs) : 0;
+    return Math.max(0, Math.min(edge, edge + (elapsed - delay.trailMs()) / 1000));
+  }
+  return {
+    observe(edge, nowMs) {
+      if (!Number.isFinite(edge) || lastEdge !== null && edge <= lastEdge) return;
+      delay.observe(nowMs);
+      lastEdge = edge;
+      arrivalMs = nowMs;
+    },
+    reset() { lastEdge = null; arrivalMs = 0; delay.reset(); },
+    target,
+    next(current, edge, delta, nowMs) {
+      if (edge <= current || delta <= 0) return null;
+      const desired = target(edge, nowMs);
+      if (desired === 0 && current === 0) return null;
+      const drift = desired - current;
+      if (drift > LIVE_SNAP_BEHIND_S) return desired;
+      // Absorb ordinary arrival jitter gradually, without frame jumps or
+      // rewinding. After an actual outage the marker holds at the final sample.
+      const rate = 1 + Math.max(-0.12, Math.min(0.12, (drift - delta) * 0.4));
+      return Math.min(edge, current + delta * rate);
     },
   };
 }

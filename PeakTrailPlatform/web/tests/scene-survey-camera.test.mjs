@@ -40,6 +40,55 @@ function fixture() {
   return { scene, container, finish };
 }
 const mapPack = { identityVersion: 3, gameBuildId: "25739797", layers };
+
+test("airport departure points left and the hall points up on desktop and portrait screens", () => {
+  for (const aspect of [1280 / 768, 390 / 792]) {
+    const { scene } = fixture();
+    scene.camera.aspect = aspect;
+    scene.airportPoints = [];
+    for (const x of [-34, 44]) for (const y of [-2, 6]) for (const z of [38, 148]) scene.airportPoints.push([x, y, z]);
+    scene.applySurveyPreset("overview");
+    scene.camera.updateMatrixWorld(true);
+    const project = (x, y, z) => new THREE.Vector3(x, y, z).project(scene.camera);
+    assert.ok(project(40, 1, 90).x < project(0, 1, 90).x);
+    assert.ok(project(0, 1, 148).y > project(0, 1, 38).y);
+    for (const point of scene.airportPoints) {
+      const ndc = project(...point);
+      assert.ok(Math.abs(ndc.x) < 1 && Math.abs(ndc.y) < 1 && Math.abs(ndc.z) < 1);
+    }
+  }
+});
+
+test("leaving the airport during GLB decoding disposes the late model without changing the next chapter", async () => {
+  let finishParse, beginParse;
+  const parsing = new Promise(resolve => { beginParse = resolve; });
+  const loaded = new Promise(resolve => { finishParse = resolve; });
+  class GLTFLoader { parseAsync() { beginParse(); return loaded; } }
+  const fetch = async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(0) });
+  const SceneWithLoader = new Function("GLTFLoader", "fetch", source + "\nreturn TrailScene;")(GLTFLoader, fetch);
+  const scene = Object.create(SceneWithLoader.prototype);
+  scene.worldRoot = new THREE.Group();
+  scene.scene = new THREE.Scene();
+  scene.canvas = new EventTarget();
+  const controller = new AbortController();
+  scene.airportRequest = controller;
+  scene.worldRoot.visible = false;
+  const pending = scene.loadAirport(controller.signal);
+  await parsing;
+  scene.setAirportVisible(false);
+  const model = new THREE.Group();
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshStandardMaterial());
+  let disposed = 0;
+  mesh.geometry.addEventListener("dispose", () => { disposed++; });
+  model.add(mesh);
+  finishParse({ scene: model });
+  await pending;
+  assert.equal(disposed, 1);
+  assert.equal(scene.scene.children.length, 0);
+  assert.equal(scene.worldRoot.visible, true);
+  assert.equal(scene.airportStatus, null);
+});
+
 function assertInFrame(scene, layer) {
   scene.camera.updateMatrixWorld(true);
   for (const x of [layer.minX, layer.maxX]) for (const y of [layer.minY, layer.maxY]) for (const z of [layer.minZ, layer.maxZ]) {

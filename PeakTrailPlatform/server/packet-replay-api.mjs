@@ -2,6 +2,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { isIP } from "node:net";
+import { GAME_ITEM_KEYS } from "../web/src/game-text.js";
 
 const PREFIX = "/api/packet-replay";
 const NAVIGATION = "/api/navigation";
@@ -189,6 +190,29 @@ const LIVE_WARNINGS = new Set(["unsupported_game_fingerprint", "unverified_resou
 const APPEARANCE_BUILDS = new Set(["26155610", "26542162"]);
 const APPEARANCE_FIELDS = ["skinIndex", "eyesIndex", "mouthIndex", "accessoryIndex", "outfitIndex", "hatIndex"];
 
+const HUD_CONDITIONS = ["Injury", "Hunger", "Cold", "Poison", "Crab", "Curse", "Drowsy", "Weight", "Hot",
+  "Thorns", "Spores", "Web", "Arrow", "Petrify", "FlyTrap"];
+function poseMovement(flags) {
+  return flags & 2 ? "rope" : flags & 64 ? "climbing" : flags & 1 ? "sprinting" : flags & 128 ? "grounded" : "off-ground";
+}
+
+function addSampleHud(record, hud) {
+  if (!object(hud)) return;
+  record.navigationPose = true;
+  for (const key of ["stamina01", "extraStamina01"]) {
+    if (finite(hud[key], 1) && hud[key] >= 0) record[key] = hud[key];
+  }
+  if (count(hud.motionFlags, 255)) record.movement = poseMovement(hud.motionFlags);
+  if (hud.heldItemPrefab === "") record.heldItemName = "";
+  else if (typeof hud.heldItemPrefab === "string" && Object.hasOwn(GAME_ITEM_KEYS, hud.heldItemPrefab))
+    record.item = { prefabName: hud.heldItemPrefab };
+  // The native RPC supplies condition levels, but does not by itself establish
+  // how much normal or bonus stamina each condition blocks.
+  if (Array.isArray(hud.statusLevels) && hud.statusLevels.length === HUD_CONDITIONS.length
+      && hud.statusLevels.every(n => finite(n, 2) && n >= 0))
+    record.conditions = HUD_CONDITIONS.filter((_, i) => hud.statusLevels[i] > 0);
+}
+
 function liveAppearance(value) {
   if (!object(value) || !APPEARANCE_FIELDS.every(key => count(value[key], 255))) return null;
   return { ...Object.fromEntries(APPEARANCE_FIELDS.map(key => [key, value[key]])), ready: true, source: "photon-persistent-cosmetics" };
@@ -200,7 +224,21 @@ function publicAppearanceRecord(playerId, t, value) {
   return value === null ? { type: "appearance", playerId, t, appearance: null, appearanceReady: false } : null;
 }
 
-// Only the audited position and appearance projections cross this boundary. Raw Photon objects,
+// The 3.1 collector snapshots the latest bound character pose separately from
+// its 10 Hz position history. Keep the pose's own timestamp, even when newer
+// than the last emitted sample. Never copy these flags back onto past samples.
+function movementObservation(raw, player, sample) {
+  if (!sample || player.isCollector !== false || player.connected !== true || player.isInactive !== false
+      || player.playerId !== `p${player.actorNumber}` || !Number.isInteger(player.viewId) || player.viewId <= 0
+      || !count(player.flags, 255) || !count(raw.activeSegment, 1000) || sample.activeSegment !== raw.activeSegment
+      || !finite(player.updatedSeconds, 1e9) || player.updatedSeconds < 0 || !finite(raw.lastPacketSeconds, 1e9)
+      || raw.lastPacketSeconds < player.updatedSeconds || raw.lastPacketSeconds - player.updatedSeconds > 1.5) return null;
+  const t = player.updatedSeconds * 1000;
+  if (t < sample.t - 0.001 || t > sample.t + 100.001) return null;
+  return { playerId: player.playerId, t, activeSegment: sample.activeSegment, movement: poseMovement(player.flags) };
+}
+
+// Only the audited pose and appearance projections cross this boundary. Raw Photon objects,
 // Steam IDs, authentication fields and arbitrary upstream metadata never do.
 function liveDto(value, room, feature) {
   const capture = captureDto(value?.capture, room, feature), raw = value?.live;
@@ -209,8 +247,14 @@ function liveDto(value, room, feature) {
       !Array.isArray(raw.records) || raw.records.length > 10000 || !Array.isArray(raw.players) || raw.players.length > 1024 ||
       raw.coordinateSpace !== "unity-world-meters" || raw.timeUnit !== "milliseconds") throw new Error("upstream_invalid_response");
   const players = raw.players.filter(player => object(player) && !player.isCollector && playerId(player.playerId));
+  const auditedPose = raw.gameBuildId === "26542162" && raw.gameVersion === "3.1.0" && raw.projectionVersion === 1
+    && raw.positionProjectionSupported === true && raw.positionAuthority === "photon-character-hip"
+    && /^(?:Level|Map)_[0-9]{1,6}$/.test(raw.sceneName);
+  const hudActors = new Set(auditedPose && raw.navigationProjectionVersion === 4
+    ? players.filter(p => p.isCollector === false && count(p.actorNumber) && p.playerId === `p${p.actorNumber}`).map(p => p.playerId) : []);
   const appearanceActors = new Set(APPEARANCE_BUILDS.has(raw.gameBuildId) ? players.map(player => player.playerId) : []);
   const retainedAppearances = new Set();
+  const lastSamples = new Map();
   let previous = 0;
   const records = [];
   for (const entry of raw.records) {
@@ -233,6 +277,8 @@ function liveDto(value, room, feature) {
       if (finite(entry.yaw, 1e6)) record.yaw = entry.yaw;
       if (Number.isInteger(entry.activeSegment) && entry.activeSegment >= -1 && entry.activeSegment <= 1000)
         record.activeSegment = entry.activeSegment;
+      if (hudActors.has(entry.playerId)) addSampleHud(record, entry.playerHud);
+      lastSamples.set(entry.playerId, record);
     }
     records.push({ sequence: entry.sequence, record });
   }
@@ -264,7 +310,10 @@ function liveDto(value, room, feature) {
     positionAuthority: "photon-character-hip", identityMode: "session-player-id", segmentResolution: "unassigned",
     startedAtUtc: capture.startedUtc, participants,
   } : null;
+  const movements = manifest && auditedPose && raw.navigationProjectionVersion === 3
+    ? players.map(player => movementObservation(raw, player, lastSamples.get(player.playerId))).filter(Boolean) : [];
   return { capture, live: { sceneEpoch: raw.sceneEpoch, lastSequence: raw.lastSequence, records, manifest,
+    ...(movements.length ? { movements } : {}),
     ...(manifest && baselines.size ? { appearanceBaselines: [...baselines.values()] } : {}),
     sceneName, gameBuildId, hostName: capture.hostName, positionProjectionSupported: raw.positionProjectionSupported === true,
     positionSamples: count(raw.positionSamples) ? raw.positionSamples : 0,
@@ -455,7 +504,9 @@ export function createPacketReplayApi(options = {}) {
         await response.body?.cancel();
         return responseJson(res, 416, { code: "range_not_satisfiable" }, /^bytes \*\/\d+$/.test(range ?? "") ? { "content-range": range } : {});
       }
-      const value = await upstreamJson(response, live ? 4 * 1024 * 1024 : list || roomLookup || replaySearch ? 256 * 1024 : 32768);
+      // The collector bounds a live projection to 16 MiB, independently of
+      // the capture metadata that accompanies it in this response.
+      const value = await upstreamJson(response, live ? 17 * 1024 * 1024 : list || roomLookup || replaySearch ? 256 * 1024 : 32768);
       if (!response.ok) {
         const status = [400, 404, 409, 410, 413, 429, 503].includes(response.status) ? response.status : 502;
         return fail(res, status, CODES.has(value.code) ? value.code : "collector_unavailable");

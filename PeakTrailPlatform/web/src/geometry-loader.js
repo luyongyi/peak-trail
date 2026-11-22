@@ -10,6 +10,7 @@ import { isExplosiveMineMaterial, recordedHiddenMineIndices } from "./mine-visib
 import { sha256Hex } from "./sha256.js";
 import { isProjectionProxyMaterial, shadowOnlyNodeIndices } from "./source-render-policy.js";
 import { sectionMaterial } from "./section-material.js";
+import { applyFollowOcclusion } from "./follow-occlusion.js";
 import { isInteriorLayer } from "./camera-placement.js";
 
 function assertEmbeddedGlb(bytes) {
@@ -353,6 +354,7 @@ function* buildStaticMeshes(scene, gameBuildId, shadowOnlyNodes = new Set(), ass
         applySourceCutoutMaterial(material, gameBuildId);
         if (!applySourceEffectMaterial(material, gameBuildId)) applyTerrainMaterial(material);
         useExactInstanceNormals(material);
+        if (context.followOcclusion) applyFollowOcclusion(material, context.followOcclusion);
         prepared.add(material);
       }
     }

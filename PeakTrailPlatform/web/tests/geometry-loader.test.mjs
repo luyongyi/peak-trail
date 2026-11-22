@@ -8,6 +8,7 @@ import { decodeGeometryBytes, GEOMETRY_FORMATS, readGeometryResponse, checkGeome
 import { positiveInstanceTransform } from "../src/geometry-matrices.js";
 import { getSourceEffectMaterial, supportsSourceEffect } from "../src/source-materials.js";
 import { isExplosiveMineMaterial, recordedHiddenMineIndices } from "../src/mine-visibility.js";
+import { applyFollowOcclusion } from "../src/follow-occlusion.js";
 import { sectionMaterial } from "../src/section-material.js";
 import { isInteriorLayer } from "../src/camera-placement.js";
 import { sha256Hex } from "../src/sha256.js";
@@ -22,9 +23,9 @@ const waterSource = (await readFile(new URL("../src/source-water-material.js", i
   .replace(/^import .*;\r?\n/gm, "").replace(/^export (?=function )/gm, "");
 const applySourceWaterDepth = new Function("THREE", "supportsSourceEffect", `${waterSource}\nreturn applySourceWaterDepth;`)(THREE, supportsSourceEffect);
 const compile = (ports = {}) => new Function(
-  "THREE", "GLTFLoader", "MeshoptDecoder", "decodeGeometryBytes", "GEOMETRY_FORMATS", "positiveInstanceTransform", "getSourceEffectMaterial", "supportsSourceEffect", "isExplosiveMineMaterial", "recordedHiddenMineIndices", "sha256Hex", "fetch", "crypto", "isProjectionProxyMaterial", "shadowOnlyNodeIndices", "applySourceWaterDepth", "readGeometryResponse", "checkGeometryAbort", "reportGeometryProgress", "yieldGeometryTask", "applySharedTerrainMaterial", "sharedVerifiableTopBlend", "sectionMaterial", "isInteriorLayer",
+  "THREE", "GLTFLoader", "MeshoptDecoder", "decodeGeometryBytes", "GEOMETRY_FORMATS", "positiveInstanceTransform", "getSourceEffectMaterial", "supportsSourceEffect", "isExplosiveMineMaterial", "recordedHiddenMineIndices", "sha256Hex", "fetch", "crypto", "isProjectionProxyMaterial", "shadowOnlyNodeIndices", "applySourceWaterDepth", "readGeometryResponse", "checkGeometryAbort", "reportGeometryProgress", "yieldGeometryTask", "applySharedTerrainMaterial", "sharedVerifiableTopBlend", "sectionMaterial", "applyFollowOcclusion", "isInteriorLayer",
   `${source}\nreturn { loadGameGeometry, batchStaticMeshes, sourceFacade, updateRecordedMineVisibility, updateMapFogSurfaceVisibility, verifiableTopBlend };`,
-)(THREE, ports.GLTFLoader, {}, ports.decode || decodeGeometryBytes, GEOMETRY_FORMATS, positiveInstanceTransform, getSourceEffectMaterial, supportsSourceEffect, isExplosiveMineMaterial, recordedHiddenMineIndices, sha256Hex, ports.fetch, ports.crypto || webcrypto, isProjectionProxyMaterial, ports.shadowOnlyNodeIndices || shadowOnlyNodeIndices, applySourceWaterDepth, readGeometryResponse, checkGeometryAbort, reportGeometryProgress, yieldGeometryTask, applySharedTerrainMaterial, sharedVerifiableTopBlend, sectionMaterial, isInteriorLayer);
+)(THREE, ports.GLTFLoader, {}, ports.decode || decodeGeometryBytes, GEOMETRY_FORMATS, positiveInstanceTransform, getSourceEffectMaterial, supportsSourceEffect, isExplosiveMineMaterial, recordedHiddenMineIndices, sha256Hex, ports.fetch, ports.crypto || webcrypto, isProjectionProxyMaterial, ports.shadowOnlyNodeIndices || shadowOnlyNodeIndices, applySourceWaterDepth, readGeometryResponse, checkGeometryAbort, reportGeometryProgress, yieldGeometryTask, applySharedTerrainMaterial, sharedVerifiableTopBlend, sectionMaterial, applyFollowOcclusion, isInteriorLayer);
 
 test("only the verified original split shell participates in facade removal", () => {
   const { sourceFacade } = compile();
@@ -200,6 +201,24 @@ test("transparent surfaces, lava, crystals and unverified rocks never receive th
   assert.equal(classify("Tarnished Gold Carving", "W/Peak_Standard", "Bridge Stairs"), false);
   assert.equal(classify("M_RopeBridgeWood", "W/Peak_Standard", "Generated mesh 1,2,0", {}, true), true);
   assert.equal(classify("M_RopeBridgeWood", "W/Peak_Standard", "Bridge"), false);
+});
+
+test("the following player's foreground fade shares its uniform with instanced map materials and cutaway variants", () => {
+  const { batchStaticMeshes } = compile(), scene = new THREE.Group();
+  const stone = new THREE.MeshStandardMaterial(), geo = new THREE.BoxGeometry(), object = new THREE.Mesh(geo, stone);
+  stone.userData.peakTerrain = { sourceMaterial: "M_Rock", sourceColors: { shader: "W/Peak_Rock" } };
+  scene.add(object);
+  const followOcclusion = { value: new THREE.Vector4(0, 0, 0, 0) };
+  const sectionPlane = { value: new THREE.Vector4(), footing: { value: new THREE.Vector4() } };
+  const output = batchStaticMeshes(scene, "26542162", new Set(), new Map([[object, { nodes: 0 }]]),
+    { sectionPlane, followOcclusion, sectionMeshNames: ["Rock_Hill"] });
+  const marked = output.children[0], shader = { uniforms: {}, fragmentShader: "#include <clipping_planes_fragment>", vertexShader: "" };
+  marked.material.onBeforeCompile(shader, {});
+  assert.ok(marked.isInstancedMesh && marked.material.depthWrite && !marked.material.transparent);
+  assert.equal(shader.uniforms.peakSectionPlane, sectionPlane);
+  assert.equal(shader.uniforms.peakFollowSubject, followOcclusion);
+  assert.match(shader.fragmentShader, /peakFollowSubject\.w > 0\.0/);
+  assert.match(marked.material.customProgramCacheKey(), /follow-fade.*section/);
 });
 
 test("audited shadow-only affine/GPU panels are omitted, same-name solid props remain", () => {

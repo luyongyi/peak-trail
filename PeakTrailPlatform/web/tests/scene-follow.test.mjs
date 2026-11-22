@@ -87,6 +87,37 @@ function fixture() {
 
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 
+test("outdoor follow uses the uphill bearing and limits the foreground fade to the current follow target", () => {
+  const f = fixture(), { scene } = f;
+  try {
+    scene.mapPack.gameBuildId = "26542162";
+    scene.followOcclusion = { value: new THREE.Vector4(0, 0, 0, 0) };
+    f.player("a"); scene.setTime(0); scene.setFollowTarget("a");
+    scene.updateFollowCamera(1/60);
+    assert.equal(f.rigCalls.at(-1).options.climbAzimuth, 0);
+    const point = scene.followOcclusion.value;
+    assert.ok(point.z < -50 && Math.hypot(point.x, point.y) < .001 && point.w > 0);
+    scene.setFollowTarget(null);
+    assert.equal(point.w, 0);
+  } finally { f.cleanup(); }
+});
+
+test("the native checkpoints advance along Unity +Z in every outdoor chapter using the fixed camera", async () => {
+  for (const build of ["25739797", "26134529", "26155610", "26542162"]) {
+    const index = JSON.parse(await readFile(new URL(`../../data/maps/landmarks.${build}.json`, import.meta.url), "utf8"));
+    assert.ok(index.maps.length);
+    for (const map of index.maps) {
+      const checkpoints = map.alignment.landmarks.filter(entry => entry.kind === "progress-point");
+      for (let segment = 0; segment < 4; segment++) {
+        const start = checkpoints.find(point => point.stageIndex === segment).positionCm;
+        const exit = checkpoints.find(point => point.stageIndex === segment + 1).positionCm;
+        assert.equal(exit[0], start[0], map.sceneName);
+        assert.ok(exit[2] > start[2], map.sceneName);
+      }
+    }
+  }
+});
+
 test("automatic chapter transitions retain follow ownership before and after interior geometry resolves", async () => {
   const f = fixture(); const { scene } = f;
   try {

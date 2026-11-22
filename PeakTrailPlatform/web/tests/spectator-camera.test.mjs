@@ -47,6 +47,23 @@ test("near actual cliff wins over an incorrect map-centre prior", () => {
   assert.ok(result.distance > 50); assert.equal(result.geometryDerived, true);
 });
 
+test("an open uphill shot holds its heading through sideways movement, with a clear fallback at a cliff", () => {
+  const query = planes([["x", 0]]), rig = new SpectatorCamera({ THREE, query });
+  const options = { azimuth: -1.4, climbAzimuth: 0 };
+  for (let i = 0; i < 120; i++) {
+    const anchor = v(3 + .7 * Math.sin(i / 8), 3 + i / 30, -i / 8);
+    const shot = rig.update(anchor, 1/60, options);
+    assert.equal(shot.azimuth, 0);
+    assert.ok(shot.target.equals(anchor));
+    assert.equal(shot.geometryDerived, false);
+  }
+  const otherRig = new SpectatorCamera({ THREE, query: planes([["z", 1]]) });
+  const aroundCliff = otherRig.update(v(), 1/60, options);
+  assert.ok(aroundCliff.position.z < 1 && aroundCliff.distance > 40);
+  const manual = rig.update(v(3, 7, -15), 1/60, { ...options, manual: true, azimuth: .8, pitch: .2 });
+  assert.ok(Math.abs(manual.azimuth - .8) < 1e-7);
+});
+
 test("enclosed interiors shorten a clear boom instead of forcing a distant camera outside walls", () => {
   const query = planes([["z", 10], ["z", -10], ["x", 12], ["x", -12], ["y", 5], ["y", -2]]);
   const rig = new SpectatorCamera({ THREE, query });

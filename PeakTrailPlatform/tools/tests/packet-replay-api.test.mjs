@@ -4,7 +4,7 @@ import { createServer, request } from "node:http";
 import { once } from "node:events";
 import { createPacketReplayApi } from "../../server/packet-replay-api.mjs";
 import { createLiveServer } from "../../server/live-server.mjs";
-import { createLiveTrace, appendLiveRecord } from "../../web/src/protocol.js";
+import { createLiveTrace, appendLiveRecord, tracePlayerStateAtTime } from "../../web/src/protocol.js";
 import { PacketWatchClient } from "../../web/src/packet-watch-client.js";
 
 const OPERATOR = "operator-only-test-key-not-the-collector-key";
@@ -380,6 +380,82 @@ test("navigation exposes only validated choices for players and preserves reset 
     const unknown = await (await f.send(`/captures/DRXPTJAB/${FEATURE}/live`)).json();
     assert.equal(unknown.live.appearanceBaselines, undefined);
     assert.deepEqual(unknown.live.records.map(entry => entry.sequence), [9, 10]);
+  } finally { await f.close(); }
+});
+
+test("latest movement is public only for a bound player, same scene and a recent matching sample", async () => {
+  const actor = { ...LIVE.players[0], actorNumber: 1, viewId: 1001, connected: true, isInactive: false, flags: 64, updatedSeconds: .27 };
+  const base = { ...LIVE, gameBuildId: "26542162", gameVersion: "3.1.0", positionAuthority: "photon-character-hip",
+    navigationProjectionVersion: 3, activeSegment: 1, lastPacketSeconds: .29, players: [actor],
+    records: [{ ...LIVE.records[1], activeSegment: 1 }] };
+  let live = base;
+  const f = await fixture((_req, res) => write(res, 200, { capture: SNAPSHOT, live }));
+  const readLive = async () => (await (await f.send(`/captures/DRXPTJAB/${FEATURE}/live`)).json()).live;
+  try {
+    await f.login();
+    const dto = await readLive();
+    assert.deepEqual(dto.movements, [{ playerId: "p1", t: 270, activeSegment: 1, movement: "climbing" }]);
+    assert.equal(dto.records[0].record.movement, undefined);
+    for (const patch of [{ activeSegment: 2 }, { gameBuildId: "26155610" }, { navigationProjectionVersion: 2 },
+      { lastPacketSeconds: .26 }, { lastPacketSeconds: 5 }, { positionAuthority: "unknown" },
+      ...[{ connected: false }, { viewId: null }, { actorNumber: 2 }, { isCollector: true }, { flags: 256 },
+        { updatedSeconds: .19 }, { updatedSeconds: .302 }].map(overrides => ({ players: [{ ...actor, ...overrides }] }))]) {
+      live = { ...base, ...patch };
+      assert.equal((await readLive()).movements, undefined);
+    }
+  } finally { await f.close(); }
+});
+
+test("verified v4 samples expose historical stamina, held prefab, movement and complete observed conditions", async () => {
+  const hud = { stamina01: 0, extraStamina01: .25, motionFlags: 66, heldItemPrefab: "Airplane Food",
+    statusLevels: [0, .2, ...Array(13).fill(0)], hidden: API_KEY };
+  const base = { ...LIVE, gameBuildId: "26542162", gameVersion: "3.1.0", positionAuthority: "photon-character-hip",
+    navigationProjectionVersion: 4, players: [{ ...LIVE.players[0], actorNumber: 1 }],
+    records: [{ ...LIVE.records[1], activeSegment: 1, playerHud: hud }] };
+  let live = base;
+  const f = await fixture((_req, res) => write(res, 200, { capture: SNAPSHOT, live }));
+  const read = async () => (await (await f.send(`/captures/DRXPTJAB/${FEATURE}/live`)).json()).live;
+  try {
+    await f.login();
+    const dto = await read(), record = dto.records[0].record;
+    assert.equal(record.movement, "rope"); assert.equal(record.stamina01, 0); assert.equal(record.extraStamina01, .25);
+    assert.deepEqual(record.item, { prefabName: "Airplane Food" }); assert.deepEqual(record.conditions, ["Hunger"]);
+    assert.ok(!JSON.stringify(dto).includes(API_KEY));
+    const trace = createLiveTrace(dto.manifest); appendLiveRecord(trace, record);
+    const at = t => tracePlayerStateAtTime(trace, "p1", t);
+    assert.equal(at(.19).movement, null); assert.equal(at(.21).movement, "rope");
+    assert.equal(at(.21).telemetry.item.prefabName, "Airplane Food"); assert.deepEqual(at(.21).navigationConditions, ["Hunger"]);
+    assert.equal(at(1.701).movement, null); assert.equal(at(1.701).telemetry, null);
+    for (const patch of [{ gameBuildId: "26155610" }, { navigationProjectionVersion: 3 }, { positionAuthority: "unknown" },
+      { records: [{ ...base.records[0], playerId: "p2" }] }]) {
+      live = { ...base, ...patch };
+      assert.equal((await read()).records[0].record.navigationPose, undefined);
+    }
+    live = { ...base, records: [{ ...base.records[0], playerHud: { stamina01: 4, motionFlags: -1, heldItemPrefab: API_KEY, statusLevels: [1] } }] };
+    const invalid = (await read()).records[0].record;
+    for (const field of ["movement", "conditions", "item", "stamina01"]) assert.equal(invalid[field], undefined);
+    live.records[0].playerHud = { heldItemPrefab: "", statusLevels: Array(15).fill(0) };
+    const empty = (await read()).records[0].record;
+    assert.equal(empty.heldItemName, ""); assert.deepEqual(empty.conditions, []);
+  } finally { await f.close(); }
+});
+
+test("a full navigation HUD window can exceed the old four MiB envelope", async () => {
+  const playerHud = { stamina01: .12345678, extraStamina01: .7654321, motionFlags: 64, heldItemPrefab: "Airplane Food",
+    statusLevels: Array(15).fill(.123456789) };
+  const sample = { ...LIVE.records[1], pos: [123.456789, 123.456789, 123.456789], playerHud };
+  const live = { ...LIVE, gameBuildId: "26542162", gameVersion: "3.1.0", positionAuthority: "photon-character-hip",
+    navigationProjectionVersion: 4, lastSequence: 10000, players: [{ ...LIVE.players[0], actorNumber: 1 }],
+    records: Array.from({ length: 10000 }, (_, i) => ({ ...sample, sequence: i + 1, t: i * 10 })) };
+  assert.ok(Buffer.byteLength(JSON.stringify(live)) > 4 * 1024 * 1024);
+  const f = await fixture((_req, res) => write(res, 200, { capture: SNAPSHOT, live }));
+  try {
+    await f.login();
+    const response = await f.send(`/captures/DRXPTJAB/${FEATURE}/live`);
+    assert.equal(response.status, 200);
+    const value = await response.json();
+    assert.equal(value.live.records.length, 10000);
+    assert.equal(value.live.records.at(-1).record.movement, "climbing");
   } finally { await f.close(); }
 });
 

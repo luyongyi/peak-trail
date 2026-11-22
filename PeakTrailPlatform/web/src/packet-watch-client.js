@@ -6,6 +6,7 @@ export function parseCaptureId(value) {
 
 const ACTIVE = new Set(["connecting", "recording", "stopping"]);
 const STATUSES = new Set([...ACTIVE, "completed", "cancelled", "failed", "interrupted", "expired"]);
+const MOVEMENTS = new Set(["rope", "climbing", "sprinting", "grounded", "off-ground"]);
 export class PacketWatchClient {
   constructor({ captureId, watchId, operator = false, fetchImpl = (...args) => globalThis.fetch(...args), onSnapshot = () => {},
     onRecord = () => {}, onState = () => {}, onConnection = () => {}, now = () => Date.now(),
@@ -16,6 +17,13 @@ export class PacketWatchClient {
     Object.assign(this, { fetchImpl, onSnapshot, onRecord, onState, onConnection, now, setTimer, clearTimer });
     this.epoch = null; this.seq = 0; this.manifestKey = null; this.closed = false; this.ended = false;
     this.failures = 0; this.generation = 0;
+    this.movements = new Map();
+  }
+  movementAt(playerId, seconds, activeSegment) {
+    const history = this.movements.get(playerId), t = seconds * 1000;
+    if (!history || !Number.isFinite(t)) return null;
+    const latest = history.findLast(row => row.t <= t);
+    return latest && latest.activeSegment === activeSegment && t - latest.t <= 1500 ? latest.movement : null;
   }
   endpoint() { return `/api/${this.operator ? "packet-replay" : "navigation"}/captures/${this.id.replace(".", "/")}/live`; }
   async start() { this.onConnection("connecting"); await this.poll(); }
@@ -69,9 +77,24 @@ export class PacketWatchClient {
       manifest.gameBuildId, manifest.gameVersion, manifest.projectionVersion, manifest.coordinateSpace, manifest.route]);
     const rebuild = this.epoch !== epoch || this.manifestKey !== manifestKey || lastSequence < this.seq ||
       this.seq > 0 && records.length > 0 && records[0].sequence > this.seq + 1;
+    if (rebuild) this.movements.clear();
+    if (manifest?.gameBuildId === "26542162" && Array.isArray(projection.movements) && projection.movements.length <= 1024) {
+      const participants = new Set(manifest.participants?.map(p => p.playerId));
+      for (const row of projection.movements) {
+        if (!row || !participants.has(row.playerId) || !MOVEMENTS.has(row.movement) || !Number.isFinite(row.t) || row.t < 0
+            || !Number.isInteger(row.activeSegment) || row.activeSegment < 0 || row.activeSegment > 1000) continue;
+        const history = this.movements.get(row.playerId) || [];
+        if ((!history.length && this.movements.size >= 1024) || (history.length && row.t <= history.at(-1).t)) continue;
+        history.push({ t: row.t, activeSegment: row.activeSegment, movement: row.movement });
+        if (history.length > 600) history.shift();
+        this.movements.set(row.playerId, history);
+      }
+    }
     if (records.length && (rebuild || lastSequence > this.seq)) this.lastRecordAt = this.now();
     if (!manifest) this.lastRecordAt = null;
-    const metadata = { status, epoch, capture, manifest, sessionId: this.id, watchId: this.id,
+    const metadata = { status, epoch, capture, manifest, airport: projection.sceneName === "Airport",
+      airportModelAvailable: projection.sceneName === "Airport" && projection.gameBuildId === "26542162",
+      sessionId: this.id, watchId: this.id,
       lastSeq: lastSequence, lastRecordAt: this.lastRecordAt ?? null };
     if (rebuild) {
       this.onSnapshot({ ...metadata, snapshotSeq: lastSequence,
@@ -86,7 +109,7 @@ export class PacketWatchClient {
     this.epoch = epoch; this.seq = lastSequence; this.manifestKey = manifestKey;
     this.onState(metadata);
     if (status === "ended") { this.ended = true; this.onConnection("ended"); }
-    else this.onConnection(manifest ? "connected" : "waiting", manifest ? "" : "已连接采集器，等待确认本局关卡；不会加载今日地图代替。");
+    else this.onConnection(manifest ? "connected" : "waiting");
   }
   stop() {
     this.closed = true; ++this.generation; this.clearTimer(this.timer); this.request?.abort(); this.request = null;

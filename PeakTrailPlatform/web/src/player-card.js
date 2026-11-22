@@ -455,6 +455,95 @@ function selectedSlotKey(inventory) {
     : null;
 }
 
+// Only publish what was observed at the playhead. Movement-only navigation
+// records give us altitude, but they contain neither a hotbar nor stamina.
+function hudItems(player, pack) {
+  const inventory = player.inventory;
+  const slots = [];
+  if (inventory?.captured && inventory.ready !== false) {
+    const selected = selectedSlotKey(inventory);
+    for (const definition of PLAYER_BASE_SLOTS) {
+      const { mode, item } = inventoryVisualState(inventory, definition);
+      if (definition.index === 250 && !item && selected !== definition.key) continue;
+      const asset = item && resolveItemAsset(pack, item);
+      const name = item ? itemDisplayName(asset, item) : mode === "empty" ? tr("空", "Empty") : "？";
+      slots.push({ key: definition.short, name, icon: asset?.iconUrl || null, count: item?.count, selected: selected === definition.key });
+    }
+  }
+  if (!slots.some(slot => slot.selected) && player.inventory?.ready !== false) {
+    const held = heldVisual(player);
+    if (held.mode === "item" || (!slots.length && held.mode === "empty")) {
+      const asset = held.item && resolveItemAsset(pack, held.item);
+      slots.push({ key: tr("手持", "Hand"), name: held.item ? itemDisplayName(asset, held.item) : tr("空", "Empty"),
+        icon: asset?.iconUrl || null, count: held.item?.count, selected: true });
+    }
+  }
+  return slots;
+}
+
+const HUD_MOVEMENT = {
+  rope: ["攀绳", "On rope"], climbing: ["攀爬", "Climbing"], sprinting: ["冲刺", "Sprinting"],
+  grounded: ["着地", "Grounded"], "off-ground": ["离地", "Off ground"],
+};
+
+export function updatePlayerHud(root, name, player, pack, movement = null) {
+  const hidden = !player || player.life === "absent";
+  if (root.hidden !== hidden) root.hidden = hidden;
+  if (hidden) return;
+  const nameNode = root.querySelector(".player-hud-name"), heightNode = root.querySelector(".player-hud-altitude");
+  const y = player.sample?.pos?.[1];
+  const altitude = Number.isFinite(y) ? tr(`海拔 ${Math.round(y)} m`, `Altitude ${Math.round(y)} m`) : "";
+  if (nameNode.textContent !== name) nameNode.textContent = name;
+  if (heightNode.textContent !== altitude) heightNode.textContent = altitude;
+
+  const { ratio, output } = staminaLayout(player.telemetry, player.status);
+  const slots = hudItems(player, pack);
+  const values = player.status?.ready === true ? player.status.values.filter(s => s.amount > 0 || s.staminaBlock > 0 || s.extraStaminaBlock > 0)
+    : (player.navigationConditions || []).map(type => ({ type }));
+  const labels = [];
+  if (player.life === "dead") labels.push(tr("已死亡", "Dead"));
+  else if (Object.hasOwn(HUD_MOVEMENT, movement)) labels.push(tr(...HUD_MOVEMENT[movement]));
+  if (ratio !== null) {
+    const extra = staminaLayout(player.telemetry, player.status, true);
+    labels.push(tr(`体力 ${output}`, `Stamina ${output}`) + (extra.ratio > 0 ? ` +${extra.output}` : ""));
+  }
+  if (values.length) {
+    labels.push(...values.slice(0, 2).map(s => conditionPresentation(s.type).label));
+    if (values.length > 2) labels.push(`+${values.length - 2}`);
+  } else if (player.status?.complete || Array.isArray(player.navigationConditions)) labels.push(tr("无状态占用", "No active conditions"));
+  if (!slots.length && ratio === null && !player.status?.ready && !player.navigationConditions) {
+    labels.push(labels.length ? tr("物品、体力未记录", "Inventory and stamina not recorded")
+      : tr("物品和状态未记录", "Inventory and status not recorded"));
+  } else {
+    if (!slots.length) labels.push(tr("物品未记录", "Inventory not recorded"));
+    if (!labels.length) labels.push(tr("状态未记录", "Status not recorded"));
+  }
+  const summary = root.querySelector(".player-hud-status span"), label = labels.join(" · ");
+  if (summary.textContent !== label) summary.textContent = label;
+  const meter = root.querySelector("meter");
+  if (meter.hidden !== (ratio === null)) meter.hidden = ratio === null;
+  if (ratio !== null && meter.value !== ratio) meter.value = ratio;
+  const list = root.querySelector(".player-hud-slots");
+  const key = JSON.stringify(slots);
+  if (list.dataset.key === key) return;
+  list.dataset.key = key;
+  list.hidden = !slots.length;
+  list.replaceChildren(...slots.map(slot => {
+    const node = element("span", "player-hud-slot");
+    node.classList.toggle("is-selected", slot.selected);
+    node.append(element("b", "", slot.key));
+    if (slot.icon) {
+      const icon = element("img"); icon.alt = ""; icon.decoding = "async"; icon.src = slot.icon;
+      icon.onerror = () => { icon.hidden = true; };
+      node.append(icon);
+    }
+    const text = slot.count > 1 ? `${slot.name} ×${slot.count}` : slot.name;
+    node.append(element("span", "", text));
+    node.title = `${slot.key} · ${text}`;
+    return node;
+  }));
+}
+
 function updateInventory(row, inventory, context) {
   const selectedKey = selectedSlotKey(inventory);
   const heldIsKnown = inventory?.heldCaptured && inventory?.heldPresent;

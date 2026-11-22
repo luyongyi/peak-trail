@@ -26,6 +26,22 @@ test("capture identity accepts only a room and feature, never arbitrary watch en
   for (const bad of ["../../private", "Q12345." + "A".repeat(20), id + "?key=secret", "https://remote/" + id]) assert.equal(parseCaptureId(bad), null);
 });
 
+test("polled player movement is read at the playhead for the same epoch, actor and stage, then expires", () => {
+  const { client } = fixture();
+  const current = { ...manifest, gameBuildId: "26542162", participants: [{ playerId: "p1" }] };
+  const move = (t, movement) => ({ playerId: "p1", activeSegment: 1, movement, t });
+  client.consume(payload({ manifest: current, movements: [move(2000, "grounded")] }));
+  client.consume(payload({ manifest: current, movements: [move(3100, "climbing")] }));
+  assert.equal(client.movementAt("p1", 1.9, 1), null);
+  assert.equal(client.movementAt("p1", 2.9, 1), "grounded");
+  assert.equal(client.movementAt("p1", 3.1, 1), "climbing");
+  assert.equal(client.movementAt("p1", 4.601, 1), null);
+  assert.equal(client.movementAt("p2", 3.1, 1), null);
+  assert.equal(client.movementAt("p1", 3.1, 0), null);
+  client.consume(payload({ sceneEpoch: 2, manifest: current, movements: [move(2000, "private")] }));
+  assert.equal(client.movementAt("p1", 3.1, 1), null);
+});
+
 test("one second cookie polling snapshots first, emits only new records, and preserves freshness on duplicates", async () => {
   let value = payload(); const f = fixture(() => response(value));
   await f.client.start(); assert.equal(f.snapshots.length, 1); assert.equal(f.records.length, 0);
@@ -82,6 +98,19 @@ test("unknown scene supplies a null snapshot, never a made-up manifest or daily 
   assert.equal(f.snapshots.at(-1).manifest, null); assert.deepEqual(f.snapshots.at(-1).snapshot.records, []);
   assert.equal(f.states.at(-1).lastRecordAt, null); assert.equal(f.connections.at(-1)[0], "waiting");
   assert.throws(() => f.client.consume(payload({ manifest: {} })));
+});
+
+test("waiting polls distinguish the verified airport from other scenes and builds without inventing a climbing map", () => {
+  const f = fixture();
+  for (const [sceneName, gameBuildId, airport, available] of [
+    [null, null, false, false], ["Airport", "26542162", true, true],
+    ["Airport", "other", true, false], ["MainMenu", "26542162", false, false],
+  ]) {
+    f.client.consume(payload({ manifest: null, records: [], lastSequence: 0, sceneName, gameBuildId }));
+    assert.equal(f.states.at(-1).airport, airport);
+    assert.equal(f.states.at(-1).airportModelAvailable, available);
+    assert.equal(f.states.at(-1).manifest, null);
+  }
 });
 
 test("unauthorized and missing captures stop polling and never expose upstream errors", async () => {

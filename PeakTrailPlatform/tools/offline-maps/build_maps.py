@@ -143,12 +143,14 @@ def raster(vertices, triangles, uv, colors, tex, tint, top_tint, top_settings, e
                 depth[z,x]=y
 
 class Scene:
-    def __init__(self,path,game):
+    def __init__(self,path,game,*,static_only=False):
         self.env=UnityPy.load(str(path)); self.file=next(iter(self.env.files.values()))
         self.objects=self.file.objects
         self.cache={}; self.matrices={}; self.go_transforms={}; self.meshes={}; self.materials={}; self.textures={}
+        self.special={}
+        if static_only: return
         self.gen=TypeTreeGenerator(self.file.unity_version); self.gen.load_local_game(str(game))
-        self.special={}; scripts={}
+        scripts={}
         for obj in self.objects.values():
             if obj.type.name!='MonoBehaviour': continue
             mb=obj.read(check_read=False); key=(mb.m_Script.m_FileID,mb.m_Script.m_PathID)

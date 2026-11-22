@@ -3253,6 +3253,30 @@ body:has(.app-shell[data-workspace-mode="watch"]) { overflow: hidden; }
 .app-shell[data-workspace-mode="watch"] .follow-hud .follow-dot { flex: 0 0 6px; width: 6px; height: 6px; }
 .app-shell[data-workspace-mode="watch"] #followHudText { min-width: 0; overflow-wrap: anywhere; }
 .app-shell[data-workspace-mode="watch"] .follow-hud small { display: none; }
+.player-hud {
+  position: absolute; z-index: 4; left: max(12px, env(safe-area-inset-left, 0px));
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px)); display: grid; gap: 4px;
+  width: max-content; max-width: min(360px, calc(100% - 24px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
+  padding: 8px 11px; border: 1px solid var(--line); border-radius: 9px; background: #101b19eb;
+  color: var(--text); font-size: 12px; line-height: 1.35; pointer-events: none;
+}
+.player-hud[hidden], .player-hud [hidden], body:not(.map-expanded) .player-hud { display: none; }
+.player-hud-heading, .player-hud-status { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.player-hud-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.player-hud-altitude { flex: none; color: var(--accent-strong); font-variant-numeric: tabular-nums; }
+.player-hud-status { font-size: 11px; color: var(--muted-strong); }
+.player-hud-status meter { flex: 0 0 48px; width: 48px; height: 8px; accent-color: #bfd58b; }
+.player-hud-slots { display: flex; flex-wrap: wrap; gap: 3px; min-width: 0; }
+.player-hud-slot { display: inline-flex; align-items: center; gap: 3px; min-width: 0; padding: 2px 4px; border-radius: 3px; background: #e4eee813; font-size: 11px; }
+.player-hud-slot.is-selected { box-shadow: inset 0 0 0 1px var(--accent); }
+.player-hud-slot b { color: var(--accent-strong); }
+.player-hud-slot img { width: 15px; height: 15px; object-fit: contain; }
+.player-hud-slot span { max-width: 8em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 620px), (max-height: 480px) {
+  .player-hud { padding: 6px 8px; gap: 3px; }
+  .viewport-panel:has(.event-toast.is-visible, .camera-touch-controls:not([hidden]), .item-event-card:not([hidden])) .player-hud,
+  .app-shell.watch-players-open .player-hud { display: none; }
+}
 .app-shell[data-workspace-mode="watch"] .watch-menu-panel .map-loot-menu { position: static; min-width: 0; }
 .app-shell[data-workspace-mode="watch"] .watch-menu-panel .free-camera-button,
 .app-shell[data-workspace-mode="watch"] .watch-menu-panel .facade-control,
@@ -3326,8 +3350,14 @@ body:has(.app-shell[data-workspace-mode="watch"]) { overflow: hidden; }
 .app-shell[data-workspace-mode="watch"].watch-empty { grid-template-rows: var(--watch-header-height) minmax(0, 1fr); }
 .app-shell[data-workspace-mode="watch"].watch-empty .timeline-panel,
 .app-shell[data-workspace-mode="watch"].watch-empty .inspector { display: none; }
-.app-shell[data-workspace-mode="watch"].watch-empty .viewport-panel > :not(#watchNotice):not(.viewport-fade) { visibility: hidden; pointer-events: none; }
+.app-shell[data-workspace-mode="watch"].watch-empty .viewport-panel > :not(#watchNotice):not(#sceneCanvas):not(.viewport-fade),
+.app-shell[data-workspace-mode="watch"].watch-empty:not(.watch-airport) #sceneCanvas { visibility: hidden; pointer-events: none; }
 .app-shell[data-workspace-mode="watch"].watch-empty #watchNotice { top: 50%; }
+.app-shell[data-workspace-mode="watch"].watch-airport #watchNotice {
+  top: auto; bottom: max(10px, env(safe-area-inset-bottom)); transform: translateX(-50%);
+  width: max-content; max-width: calc(100% - 32px); padding: 5px 12px; pointer-events: none;
+}
+.watch-airport #watchNoticeText { font-size: 12px; }
 
 /* Keep fullscreen and wake feedback outside the viewport hidden by airport waiting. */
 .top-actions { position: relative; }

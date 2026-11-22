@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createPlayerCard, updatePlayerCard, PLAYER_BASE_SLOTS } from "../src/player-card.js";
+import { createPlayerCard, updatePlayerCard, updatePlayerHud, PLAYER_BASE_SLOTS } from "../src/player-card.js";
 import { setLocale } from "../src/i18n.js";
 
 // The card's DOM ports are enough to verify language updates without a canvas,
@@ -38,6 +38,33 @@ class Node {
     return descend(this);
   }
 }
+
+test("fullscreen HUD shows measured altitude and clears missing, stale or unfollowed player data", () => {
+  const previous = globalThis.document;
+  globalThis.document = { createElement: name => new Node(name), documentElement: {} };
+  try {
+    setLocale("zh-CN");
+    const root = new Node("section");
+    const add = (parent, tag, cls = "") => { const n = new Node(tag); n.className = cls; parent.append(n); return n; };
+    const name = add(root, "strong", "player-hud-name"), altitude = add(root, "span", "player-hud-altitude");
+    const status = add(root, "div", "player-hud-status"), meter = add(status, "meter"), summary = add(status, "span");
+    const slots = add(root, "div", "player-hud-slots");
+    updatePlayerHud(root, "A", { sample: { pos: [2, 70, 4] }, telemetry: { stamina: 0, maxStamina: 1 },
+      inventory: { captured: true, ready: true, selectedSlotKnown: true, selectedSlot: 1,
+        slots: [{ index: 1, location: "inventory", item: { name: "Rope", count: 2 } }] } }, null);
+    assert.equal(meter.hidden, false); assert.equal(meter.value, 0);
+    assert.equal(slots.children.length, 4);
+    assert.ok(slots.children[1].classList.contains("is-selected"));
+    assert.match(slots.children[1].title, /×2/);
+    setLocale("en");
+    updatePlayerHud(root, "B", { sample: { pos: [1, -4.2, 2] }, life: "unknown" }, null);
+    assert.equal(name.textContent, "B"); assert.equal(altitude.textContent, "Altitude -4 m");
+    assert.equal(meter.hidden, true); assert.equal(slots.hidden, true); assert.equal(slots.children.length, 0);
+    assert.equal(summary.textContent, "Inventory and status not recorded");
+    updatePlayerHud(root, "B", { life: "absent" }, null); assert.equal(root.hidden, true);
+    updatePlayerHud(root, "", null, null); assert.equal(root.hidden, true);
+  } finally { setLocale("zh-CN"); globalThis.document = previous; }
+});
 
 test("existing player cards update static and cached labels without changing nickname or controls", () => {
   const previous = globalThis.document;

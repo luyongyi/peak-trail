@@ -18,6 +18,7 @@
 /PeakTrailPlatform/data/game-assets/
 *.f32
 *.glb
+!/PeakTrailPlatform/web/src/airport/26542162.glb
 *.glb.gz
 *.dll
 *.pdb

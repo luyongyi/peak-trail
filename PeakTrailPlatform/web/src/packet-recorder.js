@@ -665,7 +665,7 @@ export function mountNavigation(document, window) {
     if (!capture) return;
     const view = capturePresentation(capture, { operator: false });
     byId("navigationCapture").dataset.status = capture.status;
-    byId("navigationTitle").textContent = capture.status === "recording" ? "导航进行中" : capture.status === "connecting" ? "正在接入房间" : capture.status === "completed" ? "导航已结束" : view.title;
+    byId("navigationTitle").textContent = capture.status === "recording" ? "Peak_Map 已加入房间" : capture.status === "connecting" ? "正在加入房间" : capture.status === "completed" ? "导航已结束" : view.title;
     byId("navigationDescription").textContent = capture.status === "recording" ? "正在同步队伍位置。" : view.description;
     byId("navigationDescription").hidden = ["completed", "recording"].includes(capture.status);
     byId("navigationShared").hidden = !state.reused || !isActiveCapture(capture);

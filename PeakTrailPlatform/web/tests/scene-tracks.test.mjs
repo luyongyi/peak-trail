@@ -50,6 +50,22 @@ function defaultSamples() {
   ];
 }
 const player = (scene) => scene.playerObjects.get("synthetic-player");
+test("packet track refresh keeps existing portrait images mounted and removes departed labels", () => {
+  const scene = fixture(), id = "synthetic-player", label = { element: { title: "Test" } };
+  scene.trace.manifest.positionAuthority = "photon-character-hip";
+  scene.playerObjects.set(id, {});
+  scene.playerLabels = new Map([[id, label]]);
+  let replacements = 0;
+  scene.labelOverlay = { classList: { contains: () => true, toggle() {} }, replaceChildren() { replacements++; } };
+  delete scene.rebuildPlayerLabels;
+  scene.rebuildPlayerLabels();
+  assert.equal(replacements, 0);
+  assert.equal(scene.playerLabels.get(id), label);
+  scene.playerObjects.clear();
+  scene.rebuildPlayerLabels();
+  assert.equal(replacements, 1);
+  assert.equal(scene.playerLabels.size, 0);
+});
 const ghostEntry = (t, pos, extra = {}) => ({ t, activeSegment: 1, appearance: {
   ghostReady: true, ghostActive: true, ghostVisible: false, ghostPosition: pos, ghostRotation: [0, 0, 0, 1], ...extra } });
 function vec3(attribute, index) { return [attribute.getX(index), attribute.getY(index), attribute.getZ(index)]; }

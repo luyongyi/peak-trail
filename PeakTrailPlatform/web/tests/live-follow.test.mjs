@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createTrailEstimator, liveChaseTarget, LIVE_SNAP_BEHIND_S, LIVE_TRAIL_S } from "../src/live-follow.js";
+import { createPacketPlayout, createTrailEstimator, liveChaseTarget, LIVE_SNAP_BEHIND_S, LIVE_TRAIL_S } from "../src/live-follow.js";
 
 test("live chase holds position once the playhead reaches the trailing edge", () => {
   assert.equal(liveChaseTarget({ currentTime: 10, edge: 10.3, deltaSeconds: 0.016 }), null);
@@ -39,6 +39,43 @@ test("live chase clamps the target at zero for very short runs", () => {
   assert.equal(liveChaseTarget({ currentTime: 0.05, edge: 0.1, deltaSeconds: 5 }), null);
   assert.equal(liveChaseTarget({ currentTime: 0, edge: 5, deltaSeconds: 5 }), 5 - LIVE_TRAIL_S,
     "a snap inside a short run still reaches the trailing edge");
+});
+
+test("packet navigation plays timestamped positions between HTTP batches without stopping at every poll", () => {
+  const clock = createPacketPlayout(), arrivals = [1060, 1200, 1380, 1070, 1020, 1300, 1150];
+  const frameMs = 1000 / 60, sampleMs = 112;
+  let due = 0, batch = 0, edge = 0, time;
+  for (let frame = 0; frame < 1800; frame++) {
+    const now = frame * frameMs;
+    if (now >= due) {
+      edge = 40 + Math.floor(now / sampleMs) * sampleMs / 1000;
+      clock.observe(edge, now);
+      due += arrivals[batch++ % arrivals.length];
+    }
+    time ??= clock.target(edge, now);
+    const next = clock.next(time, edge, frameMs / 1000, now);
+    assert.ok(next > time && next - time <= 1.13 / 60, "smooth forward frames between ordinary batches");
+    assert.ok(next <= edge, "never display movement beyond the captured samples");
+    time = next;
+  }
+  assert.ok(edge - time < 2, "playback stays near the room after thirty seconds");
+});
+
+test("packet clock ignores empty repeats, holds at the final known sample, and resets for a new scene", () => {
+  const clock = createPacketPlayout();
+  clock.observe(20, 1000);
+  const initial = clock.target(20, 1000);
+  clock.observe(20, 2100);
+  assert.equal(clock.target(20, 2100), initial + 1.1);
+  assert.equal(clock.target(20, 15000), 20);
+  assert.equal(clock.next(20, 20, .016, 15000), null);
+  clock.observe(30, 15100);
+  assert.equal(clock.next(20, 30, .016, 15100), clock.target(30, 15100), "seek past a long outage");
+  clock.reset();
+  clock.observe(.3, 20000);
+  assert.equal(clock.next(0, .3, .016, 20000), null, "prime the short initial packet window");
+  clock.observe(3, 22600);
+  assert.equal(clock.target(3, 22600), 1.5);
 });
 
 test("trail estimator falls back to the default until it has enough samples", () => {
