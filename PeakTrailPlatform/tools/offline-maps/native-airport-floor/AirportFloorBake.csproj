@@ -1,0 +1,22 @@
+<Project>
+  <PropertyGroup>
+    <ToolBuildRoot Condition="'$(ToolBuildRoot)' == ''">$([System.IO.Path]::Combine($([System.IO.Path]::GetTempPath()), 'PeakTrail', 'AirportFloorBake'))</ToolBuildRoot>
+    <BaseIntermediateOutputPath>$(ToolBuildRoot)/obj/</BaseIntermediateOutputPath>
+    <BaseOutputPath>$(ToolBuildRoot)/bin/</BaseOutputPath>
+  </PropertyGroup>
+  <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="BepInEx" HintPath="$(PeakGameRoot)/BepInEx/core/BepInEx.dll" Private="false" />
+    <Reference Include="$(PeakGameRoot)/PEAK_Data/Managed/UnityEngine*.dll" Private="false" />
+    <Reference Include="$(PeakGameRoot)/PEAK_Data/Managed/Unity.RenderPipelines*.dll" Private="false" />
+  </ItemGroup>
+  <Target Name="CheckPeakGameRoot" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="'$(PeakGameRoot)' == '' Or !Exists('$(PeakGameRoot)/BepInEx/core/BepInEx.dll') Or !Exists('$(PeakGameRoot)/PEAK_Data/Managed/Unity.RenderPipelines.Universal.Runtime.dll')"
+           Text="Set -p:PeakGameRoot to the absolute path of your isolated PEAK installation with BepInEx and URP." />
+  </Target>
+  <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
+</Project>

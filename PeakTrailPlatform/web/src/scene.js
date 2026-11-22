@@ -2216,6 +2216,13 @@ export class TrailScene {
       if (signal.aborted) return;
       const { scene: model } = await new GLTFLoader().parseAsync(bytes, "");
       if (signal.aborted) { disposeObject(model, true); return; }
+      // Unity's orthographic render already includes the terminal floor shading.
+      // Applying the survey camera's film curve again would change its colours.
+      model.traverse(object => {
+        for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
+          if (material?.isMeshBasicMaterial && material.userData.source === "Unity W/Peak_Standard") material.toneMapped = false;
+        }
+      });
       // The native interior has baked indirect lighting; a neutral fill keeps
       // seat backs, counters and the inside of the passage readable from orbit.
       model.add(new THREE.AmbientLight(0xffffff, 0.65));

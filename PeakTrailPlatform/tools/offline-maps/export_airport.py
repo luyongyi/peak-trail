@@ -16,6 +16,12 @@ from export_meshes import GlbBuilder, material_color_metadata, stored_color_to_l
 
 SCENE_SHA = "f1228b42b888d4db681c65eb4f9f6566f1f56589632488eb12a040ced767f3bd"
 MAIN = "Map/BL_Airport/Main Meshes/Airport"
+CARPET = "Map/BL_Airport/Main Meshes/Carpet"
+MAIN_CHUNK = MAIN + "/Splitmesh "
+CARPET_CHUNK = CARPET + "/Splitmesh "
+STRUCTURE = "Map/BL_Airport/Main Meshes/"
+PRACTICE_WALL = "Map/Climbing Wall/Climbing wall"
+PRACTICE_MATS = "Map/Climbing Wall/Mat/"
 # The lobby floor is Y=0.51. Its tall wall primitives share submeshes with
 # the upper shell, so slice triangles at the cut height rather than dropping
 # entire crossing walls. Lower foundations and the airfield are out of view.
@@ -23,24 +29,32 @@ BASE, CUT = -1.35, 3.65
 # Southernmost terminal entrance in the source. An off-building row of chairs
 # in the airfield has the very same prefab name as indoor seating.
 ENTRANCE_Z = 48.79
+ATLAS_X = (-40., 48.)
+ATLAS_Z = (44., 152.)
+ATLAS_SIZE = (1408, 1728)
+# Camera Y 3.71 minus its 2.62 m near plane in the Unity floor capture.
+ATLAS_MAX_Y = 1.09
+MAT_X = (-1., 15.)
+MAT_Z = (60., 77.)
 
 
 def retained(path):
     if path.startswith("Map/BL_Airport/Elevator") and "/Door " in path:
         return True
-    if path == MAIN or path in ("Court", "Map/BL_Airport/Main Meshes/Desk",
-                                "Chess/Plane", "Map/BL_Airport/Main Meshes/Windows", "Map/Climbing Wall/Climbing wall"):
+    if path.startswith((MAIN_CHUNK, CARPET_CHUNK)) or path in ("Court", STRUCTURE + "Desk", STRUCTURE + "Cube",
+                                STRUCTURE + "Cube (1)", STRUCTURE + "Outside grid",
+                                "Chess/Plane", STRUCTURE + "Windows", PRACTICE_WALL):
         return True
     return path.startswith(("Map/BL_Airport/Seats/", "Map/BL_Airport/Fences/", "Map/BL_Airport/Conveyor (",
                             "Map/BL_Airport/Misc/", "Map/BL_Airport/Displays/", "Map/stanchion", "Map/Sliding Doors", "Map/Flight Board",
-                            "Map/Boarding Sign", "Map/Photobooth/Kiosk", "Map/Climbing Wall/Mat/"))
+                            "Map/Boarding Sign", "Map/Photobooth/Kiosk", PRACTICE_MATS))
 
 
-def clip_height(triangles, height, keep_above):
+def clip_axis(triangles, axis, boundary, keep_above):
     """Clip position, normal and UV together, preserving winding and material."""
     if not len(triangles):
         return triangles
-    inside = triangles[:, :, 1] >= height if keep_above else triangles[:, :, 1] <= height
+    inside = triangles[:, :, axis] >= boundary if keep_above else triangles[:, :, axis] <= boundary
     whole = inside.all(axis=1)
     parts = [triangles[whole]]
     cut = []
@@ -49,7 +63,7 @@ def clip_height(triangles, height, keep_above):
         for i, b in enumerate(tri):
             a = tri[i-1]
             if mask[i-1] != mask[i]:
-                poly.append(a + (b - a) * ((height-a[1]) / (b[1]-a[1])))
+                poly.append(a + (b - a) * ((boundary-a[axis]) / (b[axis]-a[axis])))
             if mask[i]:
                 poly.append(b)
         for i in range(1, len(poly)-1):
@@ -60,6 +74,32 @@ def clip_height(triangles, height, keep_above):
 
 
 class AirportGlb(GlbBuilder):
+    def add_native_surface(self, atlas, name, span_x, span_z):
+        # Unity rendered this ortho texture with the game's shader variants,
+        # source vertex masks, texture layers and lighting. Keep the rendered
+        # colour independent of the lighting on the surrounding GLB geometry.
+        with Image.open(atlas) as source:
+            if source.size != ATLAS_SIZE:
+                raise ValueError(f"Expected native XZ projection {ATLAS_SIZE}, got {source.size}")
+            pixels_per_meter = ATLAS_SIZE[0] / (ATLAS_X[1] - ATLAS_X[0])
+            bounds = ((span_x[0] - ATLAS_X[0]) * pixels_per_meter, (ATLAS_Z[1] - span_z[1]) * pixels_per_meter,
+                      (span_x[1] - ATLAS_X[0]) * pixels_per_meter, (ATLAS_Z[1] - span_z[0]) * pixels_per_meter)
+            encoded = io.BytesIO()
+            source.crop(tuple(map(int, bounds))).convert("RGB").save(encoded, format="JPEG", quality=95, subsampling=0, optimize=True)
+        self.gltf["extensionsUsed"] = ["KHR_materials_unlit"]
+        sampler = len(self.gltf["samplers"])
+        self.gltf["samplers"].append({"magFilter": 9729, "minFilter": 9987, "wrapS": 33071, "wrapT": 33071})
+        texture = len(self.gltf["textures"])
+        self.gltf["textures"].append({"source": len(self.gltf["images"]), "sampler": sampler})
+        self.gltf["images"].append({"name": name, "bufferView": self.buffer_view(encoded.getvalue()),
+                                    "mimeType": "image/jpeg"})
+        index = len(self.gltf["materials"])
+        self.gltf["materials"].append({"name": name, "extensions": {"KHR_materials_unlit": {}},
+              "pbrMetallicRoughness": {"baseColorTexture": {"index": texture}, "metallicFactor": 0., "roughnessFactor": 1.},
+              "extras": {"source": "Unity W/Peak_Standard", "viewportWorldX": span_x, "viewportWorldZ": span_z,
+                         "sourcePngSha256": hashlib.sha256(atlas.read_bytes()).hexdigest()}})
+        return index
+
     def map_material(self, ptr):
         key = (ptr["m_FileID"], pid(ptr))
         if key in self.material_ids:
@@ -120,13 +160,15 @@ class AirportGlb(GlbBuilder):
         return record
 
 
-def export(data, output):
+def export(data, output, native_floor, native_mats):
     path = data / "level3"
     if hashlib.sha256(path.read_bytes()).hexdigest() != SCENE_SHA:
         raise ValueError("Unverified Airport scene")
     s = Scene(path, data.parent, static_only=True)
     b = AirportGlb(s)
     b.gltf.pop("extensionsUsed")
+    floor_material = b.add_native_surface(native_floor, "Airport native floor", ATLAS_X, ATLAS_Z)
+    mat_material = b.add_native_surface(native_mats, "Airport native climbing mats", MAT_X, MAT_Z)
     b.gltf["asset"]["extras"].update({"gameBuildId": "26542162", "sceneName": "Airport", "sourceSceneSha256": SCENE_SHA,
                                      "buildingCutHeight": CUT})
     grouped = collections.defaultdict(list)
@@ -150,9 +192,7 @@ def export(data, output):
         if "MeshRenderer" not in comp or "MeshFilter" not in comp:
             continue
         mr = s.read(comp["MeshRenderer"])
-        # Main is the unsplit source of 11 active spatial chunks. Reading it
-        # once avoids seams at chunk boundaries. Its separate Roof is excluded.
-        if (not mr["m_Enabled"] and name != MAIN) or mr["m_CastShadows"] == 3:
+        if not mr["m_Enabled"] or mr["m_CastShadows"] == 3:
             continue
         ptr = s.read(comp["MeshFilter"])["m_Mesh"]
         if not pid(ptr):
@@ -194,19 +234,52 @@ def export(data, output):
             tex[:, :, 1] = 1 - tex[:, :, 1]
             # Neutral vertex colours on the terminal encode baked shading.
             # Coloured channels elsewhere are Unity layer masks, not pigment.
-            gray = np.ones(len(verts))
-            if vertex_strength and np.max(np.ptp(color[:, :3], axis=1)) < .015:
-                gray = 1. - vertex_strength * (1. - color[:, 0])
-            tris = np.concatenate((p, n[face], tex, gray[face, None]), axis=2)
+            rgb = np.ones((len(verts), 3))
+            holds = name == PRACTICE_WALL and b.gltf["materials"][mat]["name"] == "Climbing Holds"
+            if holds and vertex_strength:
+                rgb = 1. - vertex_strength * (1. - color[:, :3])
+            elif vertex_strength and np.max(np.ptp(color[:, :3], axis=1)) < .015:
+                rgb[:] = 1. - vertex_strength * (1. - color[:, :1])
+            tris = np.concatenate((p, n[face], tex, rgb[face]), axis=2)
             # Furniture at floor level can extend above the sliced wall. High
             # overhead signs and lights must not become a new roof.
-            high = CUT if name == MAIN or name.endswith("/Windows") else 5.7
-            tris = clip_height(clip_height(tris, BASE, True), high, False)
+            high = CUT if name.startswith(STRUCTURE) and not name.endswith("/Desk") else 5.7
+            tris = clip_axis(tris, 1, BASE, True)
+            if name != PRACTICE_WALL:
+                tris = clip_axis(tris, 1, high, False)
+            if name.startswith(CARPET_CHUNK) or name == STRUCTURE + "Outside grid":
+                # Both meshes extend into backstage areas behind the entrance.
+                tris = clip_axis(tris, 2, ENTRANCE_Z, True)
+            is_mat = name.startswith(PRACTICE_MATS)
+            if len(tris) and (is_mat or name.startswith((MAIN_CHUNK, CARPET_CHUNK))
+                              or name in (STRUCTURE + "Outside grid", "Chess/Plane", "Court")):
+                # Apply the overhead projection to the floor and lower grating.
+                # Wall tops and the sides of steps keep their own material.
+                surface = np.cross(tris[:, 1, :3] - tris[:, 0, :3], tris[:, 2, :3] - tris[:, 0, :3])
+                magnitude = np.linalg.norm(surface, axis=1)
+                if is_mat:
+                    # Capture includes the entire rounded top of each pad.
+                    project = surface[:, 1] > .03 * magnitude
+                    target_mat, span_x, span_z = mat_material, MAT_X, MAT_Z
+                else:
+                    project = (surface[:, 1] > .8 * magnitude) & (np.max(tris[:, :, 1], axis=1) < ATLAS_MAX_Y)
+                    target_mat, span_x, span_z = floor_material, ATLAS_X, ATLAS_Z
+                tops = tris[project]
+                if len(tops):
+                    tops[:, :, 6] = (tops[:, :, 0] - span_x[0]) / (span_x[1] - span_x[0])
+                    tops[:, :, 7] = (span_z[1] - tops[:, :, 2]) / (span_z[1] - span_z[0])
+                    tops[:, :, 8:11] = 1.
+                    grouped[target_mat].append(tops.reshape(-1, 11))
+                    metadata[name] += len(tops)
+                tris = tris[~project]
             if len(tris):
-                grouped[mat].append(tris.reshape(-1, 9))
+                grouped[mat].append(tris.reshape(-1, 11))
                 metadata[name] += len(tris)
-    if MAIN not in metadata or not any("/Seats/" in name for name in metadata):
-        raise ValueError("Missing Airport terminal or seating")
+    if (not any(name.startswith(MAIN_CHUNK) for name in metadata)
+            or not any(name.startswith(CARPET_CHUNK) for name in metadata)
+            or not grouped[floor_material] or not grouped[mat_material] or PRACTICE_WALL not in metadata
+            or not any("/Seats/" in name for name in metadata)):
+        raise ValueError("Missing Airport terminal, carpet, native floor or seating")
     primitives = []
     triangle_count = 0
     for mat, batches in grouped.items():
@@ -220,19 +293,24 @@ def export(data, output):
             faces = remap.reshape(-1, 3)
             valid = (faces[:, 0] != faces[:, 1]) & (faces[:, 1] != faces[:, 2]) & (faces[:, 2] != faces[:, 0])
             raw = raw[representatives[faces[valid].ravel()]]
+            # Centimetre precision is finer than these cells. Quantize only
+            # their position/normal/UV data; retain the authored route colours.
+            raw[:, :8] = raw[:, :8].round(2)
         verts, index = np.unique(raw.round(4).astype("float32"), axis=0, return_inverse=True)
         faces = index.reshape(-1, 3)
         area = np.cross(verts[faces[:, 1], :3] - verts[faces[:, 0], :3], verts[faces[:, 2], :3] - verts[faces[:, 0], :3])
         index = faces[np.linalg.norm(area, axis=1) > 1e-9].ravel()
+        if not len(index):
+            continue
         norm = verts[:, 3:6]
         norm /= np.maximum(np.linalg.norm(norm, axis=1, keepdims=True), 1e-12)
         attrs = {"POSITION": b.accessor(verts[:, :3], "VEC3", target=34962, bounds=True),
                  "NORMAL": b.accessor(norm, "VEC3", target=34962)}
         if "baseColorTexture" in b.gltf["materials"][mat]["pbrMetallicRoughness"]:
             attrs["TEXCOORD_0"] = b.accessor(verts[:, 6:8], "VEC2", target=34962)
-        if np.any(verts[:, 8] < .999):
+        if np.any(verts[:, 8:11] < .999):
             rgba = np.ones((len(verts), 4))
-            rgba[:, :3] = verts[:, 8:9]
+            rgba[:, :3] = verts[:, 8:11]
             attrs["COLOR_0"] = b.accessor(np.round(np.clip(rgba, 0, 1) * 255), "VEC4", 5121, target=34962)
             b.gltf["accessors"][attrs["COLOR_0"]]["normalized"] = True
         primitives.append({"attributes": attrs, "material": mat, "indices": b.accessor(index.ravel(), "SCALAR",
@@ -249,5 +327,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("data", type=Path, help="Installed PEAK_Data directory")
     parser.add_argument("output", type=Path, help="Destination GLB")
+    parser.add_argument("--native-floor", type=Path, required=True,
+                        help="1408×1728 orthographic Unity floor render, world X [-40,48] → right, Z [44,152] → up")
+    parser.add_argument("--native-mats", type=Path, required=True,
+                        help="Matching full-frame Unity capture of the nine climbing mats, including their upper surface")
     args = parser.parse_args()
-    export(args.data, args.output)
+    export(args.data, args.output, args.native_floor, args.native_mats)
