@@ -70,7 +70,7 @@ footer { padding: 12px 0 20px; color: #91a497; font-size: 11px; line-height: 1.5
 .history-row small { color: #96a99c; font-size: 11px; }
 .history-row .button { padding-inline: 12px; }
 .navigation-entry { border-color: #c9d09a44; background: #18251f; }
-.record-tools { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.05fr) minmax(0, .9fr); gap: 12px; margin-bottom: 15px; }
+.record-tools { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 15px; }
 .record-tool { min-width: 0; margin: 0; padding: 15px; }
 .record-tool-heading { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; }
 .record-tool-heading h2 { font-size: 16px; font-weight: 600; }
@@ -82,11 +82,6 @@ footer { padding: 12px 0 20px; color: #91a497; font-size: 11px; line-height: 1.5
 .record-tool button, .record-tool .button { padding: 8px 11px; font-size: 13px; }
 .record-tool .field-note { margin-top: 7px; line-height: 1.45; }
 .record-tool .navigation-storage { margin-top: 8px; padding-top: 6px; }
-.windows-replay { scroll-margin-top: 12px; }
-.windows-replay:target { outline: 2px solid #9ab293; outline-offset: 2px; }
-.windows-replay-version { margin: 0; color: #d5e3ce; font-size: 12px; line-height: 1.4; }
-.windows-replay-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; margin-top: 10px; }
-.windows-replay-actions .quiet-link { display: inline-flex; align-items: center; min-height: 44px; }
 .replay-search-results:not(:empty) { margin-bottom: 14px; }
 #replaySearchMore { margin: 0 0 14px; }
 .management-panel { margin-top: 16px; border-top: 1px solid #a7b89c22; padding-top: 7px; }
@@ -129,16 +124,11 @@ footer { padding: 12px 0 20px; color: #91a497; font-size: 11px; line-height: 1.5
 .navigation-storage-used { margin-inline-start: auto; font-variant-numeric: tabular-nums; white-space: nowrap; }
 #navigationHistoryPanel > .eyebrow, #navigationHistoryPanel .panel-heading .eyebrow { display: none; }
 #replaySearchError { color: #e8b8a7; }
-@media (max-width: 800px) {
-  .record-tools { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .windows-replay { grid-column: 1 / -1; }
-}
 @media (max-width: 620px) {
   .record-tools { grid-template-columns: minmax(0, 1fr); gap: 8px; }
   .record-tool { padding: 10px 12px; }
   .record-tool-heading { margin-bottom: 6px; }
   .record-tool .field-note { margin-top: 4px; }
-  .windows-replay-actions { margin-top: 5px; }
 }
 @media (max-width: 620px) {
   .navigation-storage-used { margin-inline-start: 0; }

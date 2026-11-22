@@ -21,9 +21,13 @@ test("all public navigation and download entrypoints use the current Windows pac
   assert.doesNotMatch(home, /href="(?:\.\/mods\.html|[^"]*peak-packet-replay-windows\.zip)"/);
   assert.match(header, /class="gate-brand"[\s\S]*?id="homeTitle">今日地图<\/h1>[\s\S]*?class="home-actions"/);
   assert.match(home, /<section class="home-route"[^>]*aria-labelledby="homeTitle">/);
-  assert.match(record, /<header class="record-header">[\s\S]*?href="#windowsReplay"[\s\S]*?返回地图[\s\S]*?<\/header>/);
-  assert.match(record, /<div class="record-tools">[\s\S]*?id="navigationForm"[\s\S]*?id="replaySearchForm"[\s\S]*?id="windowsReplay"[\s\S]*?href="\/downloads\/peak-packet-replay-windows\.zip"[\s\S]*?id="replaySearchResults"[\s\S]*?id="navigationHistoryPanel"/);
-  for (const page of [mods, guide, record]) {
+  const recordHeader = record.match(/<header class="record-header">[\s\S]*?<\/header>/)?.[0];
+  assert.match(recordHeader, /class="record-replay-shortcut" href="\.\/guide\.html#replay"[\s\S]*?Windows 组件[\s\S]*?返回地图/);
+  assert.match(guide, /<section id="replay"[\s\S]*?href="\/downloads\/peak-packet-replay-windows\.zip"[\s\S]*?<\/section>/);
+  assert.deepEqual([...record.matchAll(/<section\b[^>]*class="panel record-tool\b[^>]*aria-labelledby="([^"]+)"/g)].map(match => match[1]),
+    ["navigationHeading", "replaySearchHeading"]);
+  assert.match(record, /id="navigationForm"[\s\S]*?id="replaySearchForm"[\s\S]*?id="replaySearchResults"[\s\S]*?id="navigationHistoryPanel"/);
+  for (const page of [mods, guide]) {
     assert.ok(page.includes(release.downloadPath));
     assert.match(page, /Windows/);
     assert.match(page, /PEAK 3\.1\.0/);
