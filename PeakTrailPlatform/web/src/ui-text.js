@@ -53,7 +53,6 @@ export const UI_TEXT_PAIRS = Object.freeze([
   ["非官方粉丝工具 · 与 Landfall / Aggro Crab 无关联", "Unofficial fan tool · Not affiliated with Landfall / Aggro Crab"],
   ["开发工具", "Developer tools"],
   ["演示直播（非真实对局）", "Live demo (sample data)"],
-  ["回忆录可主动上传精简轨迹", "Share lightweight routes from Memories"],
   ["地图", "Map"],
   ["正在获取…", "Loading…"],
   ["换记录 ▾", "Change recording ▾"],
