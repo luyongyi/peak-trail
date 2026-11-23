@@ -126,6 +126,9 @@ test('Escape respects a menu that already handled it and does not also cancel ca
   const screen = createFullscreen({ documentRef: doc }); await screen.toggle();
   listeners.get('keydown')({ key: 'Escape', defaultPrevented: true });
   assert.equal(screen.mode, 'page', 'closing a topmost menu leaves expansion active');
+  listeners.get('keydown')({ key: 'Escape', target: { closest: selector => selector === "dialog[open]" },
+    preventDefault() { assert.fail('the browser must dismiss the dialog first'); } });
+  assert.equal(screen.mode, 'page');
   let stopped = false;
   listeners.get('keydown')({ key: 'Escape', preventDefault() {}, stopPropagation() { stopped = true; } });
   assert.equal(screen.mode, null); assert.equal(stopped, true, 'the same key never reaches the camera window handler');

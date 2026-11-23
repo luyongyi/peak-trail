@@ -58,6 +58,7 @@ export function createFullscreen({
     notify();
   }
   function keydown(event) {
+    if (event.target?.closest?.("dialog[open]")) return;
     if (!event.defaultPrevented && !disposed && pageExpanded && !active() && event.key === "Escape") {
       pageExpanded = false; error = null;
       event.preventDefault?.();
