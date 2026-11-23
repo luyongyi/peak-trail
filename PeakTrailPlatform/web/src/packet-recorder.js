@@ -393,9 +393,9 @@ export class NavigationClient extends PacketRecorder {
     if (!pending && saved) await this.lookup(saved.roomCode, saved.featureCode);
     await this.refreshHistory();
   }
-  async findRoom(roomInput) {
+  async findRoom(roomInput, { enter = false } = {}) {
     if (this.disposed || this.state.busy && this.roomLookup === null) return false;
-    if (this.pendingStart) return this.start(roomInput);
+    if (this.pendingStart) return enter && this.start(roomInput);
     const roomCode = normalizeRoom(roomInput);
     if (!this.state.configured || !validRoom(roomCode)) {
       this.fail(new RecorderError(!this.state.configured ? "navigation_unavailable" : "invalid_room_code")); return false;
@@ -420,9 +420,11 @@ export class NavigationClient extends PacketRecorder {
       history.sort((a, b) => (Date.parse(b.completedUtc ?? b.startedUtc) || 0) - (Date.parse(a.completedUtc ?? a.startedUtc) || 0));
       this.state.roomResult = { roomCode, active, history, hasMore: value.hasMore };
       for (const capture of [...history].reverse()) { this.forgotten.delete(captureKey(capture)); this.remember(capture); }
-      if (active || history.length) {
-        const selected = active ?? history[0]; this.forgotten.delete(captureKey(selected));
-        this.accept(selected); this.state.reused = Boolean(active); return true;
+      const currentEntry = enter && validCurrentRoom(roomCode);
+      if (active && currentEntry || history.length && !currentEntry) {
+        const selected = currentEntry ? active : history[0];
+        this.forgotten.delete(captureKey(selected));
+        this.accept(selected); this.state.reused = currentEntry; return true;
       }
       // Legacy codes locate retained files only. Never turn an empty old-code
       // lookup into an admission request in the new matchmaking partition.
@@ -430,8 +432,12 @@ export class NavigationClient extends PacketRecorder {
         this.state.error = "未找到这份旧房间的录像。新导航请使用 8 位房间号。";
         return true;
       }
-      // A code with retained recordings is read-only until the explicit new
-      // game button is pressed. Only a completely empty current lookup may auto-join.
+      if (!currentEntry) {
+        this.state.error = "这个房间暂无可下载的录像。";
+        return true;
+      }
+      // An eight-character code may have been reused for a new game. The
+      // collector deduplicates starts if another viewer joined after lookup.
       this.roomLookup = null; this.state.busy = false;
       return await this.start(roomCode);
     } catch (error) {
@@ -639,11 +645,12 @@ export function mountNavigation(document, window) {
   let storage = null; try { storage = window.localStorage; } catch { }
   const client = new NavigationClient({ storage, onChange: state => {
     byId("navigationStatus").textContent = state.checking ? "正在连接 Peak导航…"
-      : !state.configured ? "导航服务暂不可用，请稍后再试。" : "输入房间号查询导航或录像";
+      : !state.configured ? "导航服务暂不可用，请稍后再试。" : "";
     byId("navigationStatus").hidden = !state.checking && state.configured;
     byId("navigationError").hidden = !state.error; byId("navigationError").textContent = state.error;
     byId("navigationStart").disabled = state.busy || state.checking || !state.configured;
-    byId("navigationStart").textContent = state.pendingRoom ? "重试接入" : "查询房间";
+    byId("navigationStartLabel").textContent = state.busy ? "正在处理…" : state.pendingRoom ? "重试进入" : "进入房间";
+    byId("navigationRoomArchive").disabled = state.busy || state.checking || !state.configured || Boolean(state.pendingRoom);
     byId("navigationRoom").disabled = state.busy || Boolean(state.pendingRoom);
     if (state.pendingRoom) byId("navigationRoom").value = state.pendingRoom;
     const list = byId("navigationHistoryList");
@@ -657,9 +664,6 @@ export function mountNavigation(document, window) {
     byId("navigationRoomHistoryCode").textContent = result?.roomCode ?? "";
     byId("navigationRoomHistoryMore").hidden = !result?.hasMore;
     renderRows(byId("navigationRoomHistoryList"), result?.history ?? []);
-    byId("navigationNewGame").hidden = !result?.history.length || Boolean(result?.active) || !validCurrentRoom(result?.roomCode);
-    byId("navigationNewGame").disabled = state.busy || Boolean(state.pendingRoom);
-    byId("navigationNewGameHint").hidden = byId("navigationNewGame").hidden;
     const capture = state.capture;
     byId("navigationCapture").hidden = !capture;
     if (!capture) return;
@@ -689,19 +693,29 @@ export function mountNavigation(document, window) {
   } });
   const initialRoom = normalizeRoom(new URL(window.location.href).searchParams.get("room"));
   if (validRoom(initialRoom)) byId("navigationRoom").value = initialRoom;
-  byId("navigationForm").addEventListener("submit", event => { event.preventDefault(); void client.findRoom(byId("navigationRoom").value); });
-  byId("navigationNewGame").addEventListener("click", () => { const result = client.state.roomResult; if (result && !result.active) void client.start(result.roomCode); });
+  byId("navigationForm").addEventListener("submit", async event => {
+    event.preventDefault();
+    const room = normalizeRoom(byId("navigationRoom").value);
+    const enter = event.submitter !== byId("navigationRoomArchive") && validCurrentRoom(room);
+    if (!await client.findRoom(room, { enter }) || client.disposed) return;
+    const capture = client.state.capture;
+    if (enter && isActiveCapture(capture) && capture.roomCode === room) {
+      window.location.assign(capturePresentation(capture, { operator: false }).map);
+    }
+  });
   byId("navigationRefresh").addEventListener("click", () => { const capture = client.state.capture; if (capture) void client.lookup(capture.roomCode, capture.featureCode); });
   byId("navigationHistoryRefresh").addEventListener("click", () => { void client.refreshHistory(); });
   byId("navigationHistoryClear").addEventListener("click", () => client.clearHistory());
   window.addEventListener("pagehide", () => client.dispose(), { once: true });
+  // Browser Back may restore the landing page after it opened the map.
+  window.addEventListener("pageshow", event => { if (event.persisted) window.location.reload(); });
   void client.initialize();
   return client;
 }
 
 export function mountPacketRecorder(document, window) {
   const byId = id => document.getElementById(id);
-  if (new URL(window.location.href).searchParams.get("operator") === "1") byId("managementPanel").open = true;
+  byId("managementPanel").hidden = false;
   let storage = null; try { storage = window.sessionStorage; } catch { }
   const client = new PacketRecorder({ storage, libraryEnabled: true, onChange: state => {
     const capture = state.capture, active = isActiveCapture(capture);
@@ -762,8 +776,6 @@ export function mountPacketRecorder(document, window) {
     byId("captureHost").textContent = capture.hostName || "等待识别房主";
     byId("captureBytes").textContent = formatBytes(capture.bytes); byId("captureEvents").textContent = capture.events.toLocaleString("zh-CN");
     byId("captureNote").hidden = !view.note; byId("captureNote").textContent = view.note;
-    byId("stopButton").hidden = !active; byId("stopButton").disabled = state.busy || capture.status === "stopping";
-    byId("stopButton").textContent = capture.status === "connecting" ? "取消加入" : "停止并保存";
     byId("refreshButton").disabled = state.busy;
     byId("downloadLink").hidden = !view.download; byId("playbackHint").hidden = !view.download;
     byId("mapLink").href = view.map; byId("mapLink").hidden = !active && capture.status !== "completed";
@@ -776,18 +788,15 @@ export function mountPacketRecorder(document, window) {
   byId("loginForm").addEventListener("submit", event => { event.preventDefault(); const code = byId("accessCode").value; byId("accessCode").value = ""; void client.login(code); });
   byId("startForm").addEventListener("submit", event => { event.preventDefault(); void client.start(byId("roomCode").value); });
   byId("lookupForm").addEventListener("submit", event => { event.preventDefault(); void client.lookup(byId("lookupRoom").value, byId("lookupFeature").value); });
-  byId("stopButton").addEventListener("click", () => { void client.stop(); });
   byId("refreshButton").addEventListener("click", () => { const capture = client.state.capture; if (capture) void client.lookup(capture.roomCode, capture.featureCode); });
   byId("logoutButton").addEventListener("click", () => { void client.logout(); });
   byId("libraryRefresh").addEventListener("click", () => { void client.action(() => client.refreshLibrary()); });
   byId("activeRefresh").addEventListener("click", () => { void client.action(() => client.refreshLibrary()); });
   window.addEventListener("pagehide", () => client.dispose(), { once: true });
-  // A restored back-forward-cache page needs fresh cookies and a new polling lifecycle.
-  window.addEventListener("pageshow", event => { if (event.persisted) window.location.reload(); });
   void client.initialize();
   return client;
 }
 if (typeof document !== "undefined" && document.querySelector("[data-packet-recorder]")) {
   mountNavigation(document, window);
-  mountPacketRecorder(document, window);
+  if (new URL(window.location.href).searchParams.get("operator") === "1") mountPacketRecorder(document, window);
 }

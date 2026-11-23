@@ -39,6 +39,7 @@ import { initLanguageControls } from "./i18n-dom.js";
 import { WatchClient, parseWatchId, parseWatchCode, normalizeWatchInput, resolveWatchInput, watchSharePayload, watchCodeFromState } from "./watch-client.js";
 import { PacketWatchClient, parseCaptureId } from "./packet-watch-client.js";
 import { appendPacketMotion } from "./packet-motion.js";
+import { createPacketStop } from "./packet-stop.js";
 import { trimWatchTrace, isWatchMilestone, watchProgressLabel } from "./watch-window.js";
 import { watchText } from "./watch-text.js";
 import { createWatchChrome } from "./watch-chrome.js";
@@ -609,6 +610,12 @@ function syncGameAssetsForTrace(trace, selectionRevision) {
 let viewer;
 const liveCameraController = createLiveCameraController();
 let itemEventPanel, communitySnapshot = null;
+const packetStop = createPacketStop({
+  group: $("watchMenuCapture"), button: $("watchStopCapture"), buttonLabel: $("watchStopLabel"), menu: $("watchMenu"),
+  dialog: $("watchStopDialog"), form: $("watchStopForm"), title: $("watchStopTitle"), description: $("watchStopDescription"),
+  authorization: $("watchStopAuthorization"), codeLabel: $("watchStopCodeLabel"), code: $("watchStopCode"),
+  status: $("watchStopStatus"), cancel: $("watchStopCancel"), confirm: $("watchStopConfirm"), translate: tr,
+});
 const watchChrome = createWatchChrome({
   shell: elements.appShell, menu: $("watchMenu"),
   groups: [
@@ -1541,6 +1548,7 @@ function stopWatch() {
   watch.awaitingRun = false;
   watch.code = null;
   watch.copiedUntil = 0;
+  packetStop.update(null, null);
   watchChrome.reset();
   ++state.traceSelectionRevision;
   elements.appShell.classList.remove("watch-players-open");
@@ -1556,6 +1564,8 @@ function updateWatchStatus() {
   const watch = state.watch;
   if (!watch.active) return;
   updateWatchShareUI();
+  const packet = watch.kind === "packet";
+  packetStop.update(packet ? watch.id : null, watch.captureStatus);
   const empty = !watch.trace;
   const packetWaiting = empty && watch.kind === "packet" && watch.connection === "waiting" && watch.status !== "ended";
   const joined = packetWaiting && watch.captureStatus === "recording";
@@ -1571,7 +1581,8 @@ function updateWatchStatus() {
   const labels = watch.kind === "packet" ? { waiting: tr("等待本局关卡", "Waiting for the current map"), live: tr("导航中", "Navigation live"), reconnecting: tr("导航重连中", "Navigation reconnecting"), ended: tr("导航已结束", "Navigation ended") }
     : { waiting: watchText("等待主播入图"), live: watchText("直播中"), reconnecting: watchText("主播重连中"),
     ended: watch.awaitingRun ? watchText("等待已结束") : watchText("直播已结束") };
-  const text = watch.connection === "unauthorized" ? watch.operator ? tr("请先解锁导航管理", "Unlock navigation management") : tr("请检查导航链接", "Check the navigation link")
+  const text = watch.connection === "unauthorized" ? watch.operator ? tr("管理员会话已过期", "Administrator session expired") : tr("请检查导航链接", "Check the navigation link")
+    : packet && watch.captureStatus === "stopping" ? tr("正在停止采集", "Stopping capture")
     : packetWaiting ? joined ? tr("Peak_Map 已加入房间", "Peak_Map joined the room") : tr("正在加入房间", "Joining the room")
     : watch.connection === "waiting" ? tr("等待本局关卡", "Waiting for the current map")
     : watch.connection === "error" ? watch.kind === "packet" ? tr("无法打开导航", "Navigation unavailable") : watchText("无法打开直播")
@@ -1604,8 +1615,9 @@ function updateWatchStatus() {
     : watch.trace ? watchText("已连接，等待玩家位置…") : watch.kind === "packet" ? tr("正在连接导航…", "Connecting navigation…") : watchText("正在连接直播…"));
   $("watchRetry").hidden = terminal !== "error" && !["error", "reconnecting"].includes(watch.connection);
   $("watchUnlock").hidden = watch.kind !== "packet" || watch.connection !== "unauthorized";
-  $("watchUnlock").href = `./record.html?room=${watch.kind === "packet" ? watch.id.split(".")[0] : ""}${watch.operator ? "&operator=1#managementPanel" : ""}`;
-  $("watchUnlock").textContent = watch.operator ? tr("返回导航管理解锁", "Unlock navigation management") : tr("返回 Peak导航", "Return to Peak Navigation");
+  $("watchUnlock").href = packet && watch.operator
+    ? `./index.html?capture=${watch.id}` : `./record.html?room=${packet ? watch.id.split(".")[0] : ""}`;
+  $("watchUnlock").textContent = watch.operator ? tr("打开导航地图", "Open navigation map") : tr("返回 Peak导航", "Return to Peak Navigation");
   const behind = Math.max(0, (watch.trace?.duration || 0) - state.currentTime);
   $("watchTimeStatus").textContent = empty ? "" : watch.status === "ended"
     ? watch.kind === "packet" ? tr("导航已结束 · 可回看保留的路径", "Navigation ended · Retained paths are available") : watchText("直播已结束 · 可回看保留的路径")
@@ -2963,7 +2975,7 @@ elements.cinematicButton.addEventListener("click", () => {
 });
 
 window.addEventListener("keydown", (event) => {
-  if (gateOpen()) return;
+  if (gateOpen() || event.defaultPrevented || event.target?.closest?.("dialog[open]")) return;
   if (!viewer) return;
   if (event.key === "Escape" && viewer.cinematic) {
     event.preventDefault();

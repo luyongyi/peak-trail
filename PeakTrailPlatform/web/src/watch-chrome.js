@@ -40,7 +40,7 @@ export function createWatchChrome({ shell, menu, groups, onClosePanel, root = do
   // Handle only the top visible UI layer. The same Escape must not also cancel
   // the spectator camera, and Tab retains its normal document navigation.
   root.addEventListener('keydown', event => {
-    if (!active || event.key !== 'Escape') return;
+    if (!active || event.key !== 'Escape' || event.target?.closest?.('dialog[open]')) return;
     let closed = closeMenu(true);
     if (!closed) for (const kind of ['players', 'replay']) {
       if (shell.classList.contains(`watch-${kind}-open`)) {

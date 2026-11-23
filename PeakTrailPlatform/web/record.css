@@ -69,25 +69,35 @@ footer { padding: 12px 0 20px; color: #91a497; font-size: 11px; line-height: 1.5
 .history-row p { margin: 0 0 6px; font: 12px ui-monospace, monospace; overflow-wrap: anywhere; }
 .history-row small { color: #96a99c; font-size: 11px; }
 .history-row .button { padding-inline: 12px; }
-.navigation-entry { border-color: #c9d09a44; background: #18251f; }
-.record-tools { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 15px; }
+.record-tools { display: grid; gap: 12px; margin-bottom: 15px; }
 .record-tool { min-width: 0; margin: 0; padding: 15px; }
 .record-tool-heading { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; }
 .record-tool-heading h2 { font-size: 16px; font-weight: 600; }
 .record-tool-icon { flex: 0 0 30px; width: 30px; height: 30px; padding: 5px; border-radius: 6px; background: #adbf9a1a; color: #c5d6bc; }
-.navigation-entry .record-tool-icon { background: #e5d09622; color: #f0dba8; }
 .record-tool label { margin-bottom: 5px; }
 .record-tool .input-row { gap: 7px; }
 .record-tool input { min-height: 44px; padding: 8px 10px; }
 .record-tool button, .record-tool .button { padding: 8px 11px; font-size: 13px; }
 .record-tool .field-note { margin-top: 7px; line-height: 1.45; }
-.record-tool .navigation-storage { margin-top: 8px; padding-top: 6px; }
+.navigation-entry { padding: clamp(18px, 3vw, 32px); border-color: #c9d09a65; background: radial-gradient(ellipse at top left, #d5d58b14, transparent 75%), #18251f; }
+.navigation-entry .record-tool-heading { gap: 12px; margin-bottom: 17px; }
+.navigation-entry .record-tool-heading h2 { font-size: clamp(21px, 3vw, 28px); color: #f1f1e1; }
+.navigation-entry .record-tool-icon { flex-basis: 40px; width: 40px; height: 40px; padding: 7px; background: #e5d09622; color: #f0dba8; }
+.navigation-entry label { margin-bottom: 8px; font-size: 13px; }
+.navigation-entry .input-row { gap: 10px; }
+.navigation-entry input { min-height: 56px; padding-inline: 14px; font-size: 17px; }
+.navigation-entry #navigationStart { min-height: 56px; gap: 10px; padding-inline: clamp(14px, 3vw, 30px); font-size: 15px; }
+.navigation-entry #navigationStart svg { width: 18px; height: 18px; }
+.navigation-entry-help { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; column-gap: 14px; }
+.navigation-entry-help .field-note { margin: 7px 0; }
+.navigation-entry-help .text-button { padding-inline: 2px; }
+.navigation-entry .navigation-storage { margin-top: 3px; padding-top: 11px; }
+.replay-search-tool { display: grid; grid-template-columns: minmax(115px, 1fr) minmax(0, 3fr); align-items: center; gap: 4px 15px; background: #15211c66; }
+.replay-search-tool .record-tool-heading { margin: 0; }
+.replay-search-tool [role="status"], #replaySearchError { grid-column: 2; }
 .replay-search-results:not(:empty) { margin-bottom: 14px; }
 #replaySearchMore { margin: 0 0 14px; }
 .management-panel { margin-top: 16px; border-top: 1px solid #a7b89c22; padding-top: 7px; }
-.management-panel > summary { cursor: pointer; color: #bdc8b9; font-size: 13px; padding: 10px 0; }
-.management-panel > summary span { color: #819587; font-size: 11px; margin-left: 14px; }
-.management-panel > summary:focus-visible { outline: 2px solid #e5dba4; outline-offset: 4px; }
 .history-actions { display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
 .active-row + .active-row { border-top: 1px solid #a7b89c22; }
 .active-row small { display: block; overflow-wrap: anywhere; line-height: 1.7; }
@@ -125,10 +135,11 @@ footer { padding: 12px 0 20px; color: #91a497; font-size: 11px; line-height: 1.5
 #navigationHistoryPanel > .eyebrow, #navigationHistoryPanel .panel-heading .eyebrow { display: none; }
 #replaySearchError { color: #e8b8a7; }
 @media (max-width: 620px) {
-  .record-tools { grid-template-columns: minmax(0, 1fr); gap: 8px; }
-  .record-tool { padding: 10px 12px; }
-  .record-tool-heading { margin-bottom: 6px; }
-  .record-tool .field-note { margin-top: 4px; }
+  .record-tools { gap: 10px; }
+  .navigation-entry .record-tool-heading { margin-bottom: 13px; }
+  .navigation-entry #navigationStart { gap: 6px; }
+  .replay-search-tool { grid-template-columns: minmax(0, 1fr); gap: 9px; padding: 12px; }
+  .replay-search-tool [role="status"], #replaySearchError { grid-column: auto; margin-top: 0; }
 }
 @media (max-width: 620px) {
   .navigation-storage-used { margin-inline-start: 0; }
@@ -164,7 +175,7 @@ footer { padding: 12px 0 20px; color: #91a497; font-size: 11px; line-height: 1.5
 }
 @media (max-width: 365px) {
   .record-brand { font-size: 0; gap: 0; }
-  .record-tool { padding-block: 8px; }
-  .record-tool label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-  .record-tool .navigation-storage { margin-top: 5px; padding-top: 4px; }
+  .navigation-entry { padding-inline: 13px; }
+  .navigation-entry #navigationStart svg { display: none; }
+  .navigation-entry-help .text-button { font-size: 12px; }
 }

@@ -40,9 +40,15 @@
               <h2 id="navigationHeading">房间导航</h2>
             </div>
             <form id="navigationForm">
-              <label for="navigationRoom">房间号（旧 6 位可查录像）</label>
-              <div class="input-row"><input id="navigationRoom" class="code-input" placeholder="8 位房间号" maxlength="8" pattern="(?:[A-Pa-p][A-Za-z0-9]{5}|[A-Pa-p][A-Za-z][A-Za-z2-9]{6})" autocomplete="off" autocapitalize="characters" spellcheck="false" required aria-describedby="navigationHint" /><button id="navigationStart" type="submit" disabled>查询房间</button></div>
-              <p id="navigationHint" class="field-note">请征得队友同意，并预留 1 个玩家名额。</p>
+              <label for="navigationRoom">联机房间号</label>
+              <div class="input-row">
+                <input id="navigationRoom" class="code-input" placeholder="8 位房间号" maxlength="8" pattern="(?:[A-Pa-p][A-Za-z0-9]{5}|[A-Pa-p][A-Za-z][A-Za-z2-9]{6})" autocomplete="off" autocapitalize="characters" spellcheck="false" required aria-describedby="navigationHint" />
+                <button id="navigationStart" type="submit" disabled><span id="navigationStartLabel">进入房间</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h15m-6-6 6 6-6 6" /></svg></button>
+              </div>
+              <div class="navigation-entry-help">
+                <p id="navigationHint" class="field-note">请征得队友同意，并预留 1 个玩家名额。</p>
+                <button id="navigationRoomArchive" type="submit" class="text-button" disabled>按房间号找录像</button>
+              </div>
             </form>
             <div class="navigation-storage" id="navigationStorage" role="status" hidden>
               <span class="navigation-storage-label">录像空间</span>
@@ -50,7 +56,7 @@
               <span id="navigationStorageUsed" class="navigation-storage-used"></span>
             </div>
           </section>
-          <section class="panel record-tool" data-replay-search aria-labelledby="replaySearchHeading">
+          <section class="panel record-tool replay-search-tool" data-replay-search aria-labelledby="replaySearchHeading">
             <div class="record-tool-heading">
               <svg class="record-tool-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <circle cx="10.5" cy="10.5" r="5.5" /><path d="m15 15 5 5" />
@@ -89,18 +95,15 @@
           <div class="panel-heading"><div><p class="eyebrow">房间 <span id="navigationRoomHistoryCode" class="code-input"></span></p><h2 id="navigationRoomHistoryHeading">房间录像</h2></div></div>
           <div id="navigationRoomHistoryList" class="navigation-record-list" aria-live="polite"></div>
           <p id="navigationRoomHistoryMore" class="field-note" hidden>显示最近 20 份有效录像。</p>
-          <div class="capture-actions"><button id="navigationNewGame" type="button" hidden>开始本局导航</button></div>
-          <p id="navigationNewGameHint" class="field-note" hidden>房间号用于新一局时，点击“开始本局导航”。</p>
         </section>
         <section id="navigationHistoryPanel" class="panel" aria-labelledby="navigationHistoryHeading" hidden>
           <div class="panel-heading"><div><p class="eyebrow">本机记录</p><h2 id="navigationHistoryHeading">我的导航记录</h2></div><button id="navigationHistoryRefresh" type="button" class="text-button">刷新</button></div>
-          <p class="field-note navigation-history-hint">最近 30 次查询，仅保存在本机。</p>
-          <p id="navigationHistoryEmpty" class="field-note">暂无查询记录。</p>
+          <p class="field-note navigation-history-hint">最近 30 条记录，仅保存在本机。</p>
+          <p id="navigationHistoryEmpty" class="field-note">暂无导航记录。</p>
           <div id="navigationHistoryList" class="navigation-record-list" aria-live="polite"></div>
           <div class="capture-actions"><button id="navigationHistoryClear" type="button" class="text-button" title="仅清空本机记录，不影响导航或服务器录像" disabled>清空本机记录</button></div>
         </section>
-        <details id="managementPanel" class="management-panel">
-          <summary>管理员入口 <span>停止采集与录像管理</span></summary>
+        <section id="managementPanel" class="management-panel" aria-label="录像管理" hidden>
         <p id="connectionStatus" class="connection-status" role="status">正在检查录制服务…</p>
         <p id="recordError" class="notice error" role="alert" hidden></p>
         <section id="loginPanel" class="panel login-panel" aria-labelledby="loginTitle" hidden>
@@ -117,14 +120,14 @@
               <label for="roomCode">八位联机码</label>
               <div class="input-row"><input id="roomCode" class="code-input" placeholder="DYILUS97" maxlength="8" pattern="[A-Pa-p][A-Za-z][A-Za-z2-9]{6}" autocomplete="off" autocapitalize="characters" spellcheck="false" required aria-describedby="roomHint" /><button id="startButton" type="submit">启动或接入房间</button></div>
               <p class="field-note" id="roomHint">请征得同房玩家同意，并预留一个玩家名额。录像从采集器加入时开始。</p>
-              <p class="field-note">多个房间可同时导航，同一个房间自动共享。选中房间后点“停止并保存”只会结束该房间；切换关卡会继续录制。</p>
+              <p class="field-note">多个房间可同时导航，同一个房间自动共享。</p>
             </form>
           </section>
           <section class="panel" aria-labelledby="activeTitle">
             <div class="panel-heading"><div><p class="eyebrow">正在导航</p><h2 id="activeTitle">活动房间 <span id="activeCount" class="status-badge">0 个房间</span></h2></div><button id="activeRefresh" type="button" class="text-button">刷新房间</button></div>
             <p id="activeEmpty" class="field-note">正在读取房间…</p>
             <div id="activeList" aria-live="polite"></div>
-            <p class="field-note">选择一个房间查看状态、地图或停止采集。其他房间会继续运行。</p>
+            <p class="field-note">选择房间查看状态。停止采集请打开该房间的地图。</p>
           </section>
           <section id="capturePanel" class="panel capture-panel" aria-labelledby="captureTitle" hidden>
             <div class="panel-heading"><div><p class="eyebrow">当前选中的房间</p><h2 id="captureTitle">等待加入</h2></div><span id="captureBadge" class="status-badge"></span></div>
@@ -133,7 +136,7 @@
             <dl class="capture-identity"><div><dt>联机码</dt><dd id="captureRoom">—</dd></div><div><dt>特征码</dt><dd id="captureFeature">—</dd></div></dl>
             <dl class="capture-stats"><div><dt>已保存数据</dt><dd id="captureBytes">0 B</dd></div><div><dt>记录条数</dt><dd id="captureEvents">0</dd></div></dl>
             <p id="captureNote" class="field-note" hidden></p>
-            <div class="capture-actions"><a id="mapLink" class="button" hidden>查看导航地图 ↗</a><button id="stopButton" type="button" class="secondary" hidden>停止并保存</button><button id="refreshButton" type="button" class="text-button">刷新状态</button><a id="downloadLink" class="button secondary" hidden>下载录像 ZIP</a><a id="rawDownloadLink" class="quiet-link" hidden>原始录像</a></div>
+            <div class="capture-actions"><a id="mapLink" class="button" hidden>查看导航地图 ↗</a><button id="refreshButton" type="button" class="text-button">刷新状态</button><a id="downloadLink" class="button secondary" hidden>下载录像 ZIP</a><a id="rawDownloadLink" class="quiet-link" hidden>原始录像</a></div>
             <p id="playbackHint" class="field-note" hidden>在游戏主菜单打开“录像回放”，直接选择下载的录像 ZIP。</p>
           </section>
           <section class="panel" aria-labelledby="historyTitle">
@@ -148,7 +151,7 @@
             <form id="lookupForm"><div class="lookup-inputs"><div><label for="lookupRoom">联机码</label><input id="lookupRoom" class="code-input" maxlength="8" pattern="(?:[A-Pa-p][A-Za-z0-9]{5}|[A-Pa-p][A-Za-z][A-Za-z2-9]{6})" autocomplete="off" autocapitalize="characters" spellcheck="false" required /></div><div><label for="lookupFeature">20 位特征码</label><input id="lookupFeature" class="code-input feature-input" maxlength="20" pattern="[A-Fa-f0-9]{20}" autocomplete="off" autocapitalize="characters" spellcheck="false" required /></div></div><button id="lookupButton" type="submit" class="secondary">查找录像</button></form>
           </section>
         </div>
-        </details>
+        </section>
         <noscript><p class="notice">请启用 JavaScript 使用 Peak导航。</p></noscript>
       </main>
       <footer>支持多房间 · 同房共享 · 关闭网页后继续导航</footer>

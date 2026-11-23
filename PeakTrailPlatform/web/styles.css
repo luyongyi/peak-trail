@@ -3238,6 +3238,29 @@ body:has(.app-shell[data-workspace-mode="watch"]) { overflow: hidden; }
 .app-shell[data-workspace-mode="watch"] .watch-menu-group > .language-toggle {
   width: 100%; min-height: 44px; justify-content: flex-start; padding: 8px 10px; font-size: 12px; white-space: normal; text-align: left;
 }
+.watch-menu-group > .watch-stop-button { color: var(--danger); }
+.watch-stop-button svg { flex: 0 0 16px; height: 16px; fill: currentColor; }
+.watch-stop-dialog {
+  width: min(390px, calc(100vw - 32px)); max-height: calc(100dvh - 32px);
+  padding: 22px; border: 1px solid var(--line-strong); border-radius: var(--radius);
+  color: var(--text); background: var(--surface-strong); box-shadow: var(--shadow);
+}
+.watch-stop-dialog::backdrop { background: rgb(5 10 10 / 72%); }
+.watch-stop-dialog form { display: grid; gap: 14px; }
+.watch-stop-dialog h2, .watch-stop-dialog p { margin: 0; }
+.watch-stop-dialog h2 { font-size: 20px; }
+.watch-stop-dialog p, .watch-stop-dialog label { color: var(--muted-strong); font-size: 14px; line-height: 1.5; }
+.watch-stop-dialog label { display: grid; gap: 6px; }
+.watch-stop-dialog [hidden] { display: none; }
+.watch-stop-dialog input {
+  width: 100%; min-height: 44px; padding: 9px 12px; border: 1px solid var(--line-strong); border-radius: 8px;
+  color: var(--text); background: var(--surface); font: inherit; font-size: 16px;
+}
+.watch-stop-dialog .watch-stop-status { color: var(--accent-strong); }
+.watch-stop-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.watch-stop-actions .button { min-height: 44px; }
+.watch-stop-confirm { border-color: var(--danger); color: var(--danger); background: rgb(255 113 110 / 10%); }
+.watch-stop-confirm:hover:not(:disabled) { background: rgb(255 113 110 / 20%); }
 .app-shell[data-workspace-mode="watch"] .watch-camera,
 .app-shell[data-workspace-mode="watch"] .watch-menu-panel .viewport-layer-actions {
   position: static; inset: auto; display: flex; flex-direction: column; align-items: stretch; gap: 5px;

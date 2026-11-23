@@ -56,16 +56,32 @@ test("legacy lookup recovers an archive; direct admission rejects old codes befo
   assert.match(f.client.state.error, /旧 6 位仅用于查询/);
 });
 
-test("empty current lookup joins once and subsequent same-room requests share that actor", async t => {
+test("entering a reused room code starts the new capture even when an archive exists", async t => {
+  const old = { ...capture(current), featureCode: "ABBCCDD0011223344556" };
   const f = fixture(path => path.endsWith("/session") ? { configured: true, captures: [] }
-    : path.endsWith("/lookup") ? { roomCode: current, active: null, history: [], hasMore: false }
+    : path.endsWith("/lookup") ? { roomCode: current, active: null, history: [old], hasMore: false }
     : { capture: capture(current, "recording"), reused: false });
   t.after(() => f.client.dispose()); await f.client.initialize();
   assert.equal(await f.client.findRoom(current.toLowerCase()), true);
+  assert.equal(f.client.state.capture.featureCode, old.featureCode);
+  assert.equal(f.calls.some(call => call.path === "/api/navigation/rooms"), false);
+  assert.equal(await f.client.findRoom(current.toLowerCase(), { enter: true }), true);
+  assert.equal(f.client.state.capture.featureCode, feature);
+  assert.equal(f.client.state.roomResult.history[0].featureCode, old.featureCode);
   assert.equal(await f.client.start(current), true);
   assert.equal(f.client.state.reused, true);
   const starts = f.calls.filter(call => call.path === "/api/navigation/rooms");
   assert.equal(starts.length, 1); assert.deepEqual(JSON.parse(starts[0].body), { roomCode: current });
+});
+
+test("entering a shared room selects the live capture and does not start it again", async t => {
+  const f = fixture(path => path.endsWith("/session") ? { configured: true, captures: [] }
+    : { roomCode: current, active: capture(current, "recording"), history: [], hasMore: false });
+  t.after(() => f.client.dispose()); await f.client.initialize();
+  assert.equal(await f.client.findRoom(current, { enter: true }), true);
+  assert.equal(f.client.state.capture.status, "recording");
+  assert.equal(f.client.state.reused, true);
+  assert.deepEqual(f.calls.map(call => call.path), ["/api/navigation/session", "/api/navigation/rooms/lookup"]);
 });
 
 test("administrator cannot create an old room, but restored identities still locate it", async t => {
