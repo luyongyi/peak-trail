@@ -37,6 +37,19 @@ test("terrain is queried from both sides, with normals facing back toward the ca
   assert.equal(mesh.material.side, THREE.FrontSide, "query must not mutate rendering materials");
 });
 
+test("the fade ignores culled faces and geometry before the near plane but recognizes visible foliage", () => {
+  const near = triangle(), leaves = triangle();
+  near.position.z = 9.95;
+  leaves.material.userData.peakTerrain = { sourceColors: { shader: "GD/FoliageGD" } };
+  leaves.scale.x = -1;
+  const query = new FollowTerrainQuery(THREE).setRoots([near, leaves]);
+  const options = { renderedFacesOnly: true, minimumDistance: 0.08 };
+  close(query.cast(vec(0, 0, 10), vec(0, 0, -1), 20, null, options).distance, 10);
+  assert.equal(query.cast(vec(0, 0, -1), vec(0, 0, 1), 20, null, options), null);
+  leaves.material.side = THREE.DoubleSide;
+  close(query.cast(vec(0, 0, -1), vec(0, 0, 1), 20, null, options).distance, 1);
+});
+
 test("maxDistance is exact in world metres and ray origins may be on a surface or inside bounds", () => {
   const query = new FollowTerrainQuery(THREE).setRoots([triangle()]);
   assert.equal(query.cast(vec(0, 0, 10), vec(0, 0, -1), 9.999), null);

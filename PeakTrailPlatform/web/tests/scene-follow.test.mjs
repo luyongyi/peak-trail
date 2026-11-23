@@ -49,7 +49,7 @@ function fixture() {
     followDiscontinuity: false, followAnchor: new THREE.Vector3(), followTmp: new THREE.Vector3(),
     followDistance: FOLLOW_DISTANCE, followAzimuth: 0, followPitch: 0.22, followUserOrbit: false,
     sectionPlane: createSectionPlane(THREE),
-    followTerrain: { setRoots(roots) { queryCalls.push(roots); } },
+    followTerrain: { setRoots(roots) { queryCalls.push(roots); }, cast() { return null; } },
     followRig: { resets: 0, invalidations: 0, reset() { this.resets++; }, invalidate() { this.invalidations++; },
       update(anchor, dt, options) { rigCalls.push({ anchor: anchor.clone(), dt, options: { ...options } });
         return { position: anchor.clone().add(new THREE.Vector3(0, 12, 56)), target: anchor.clone(), azimuth: 0, pitch: 0.22 }; } },
@@ -87,7 +87,7 @@ function fixture() {
 
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 
-test("navigation follow sends the uphill bearing and fades the foreground without building a terrain query", () => {
+test("navigation follow sends the uphill bearing and fades only a ray-tested foreground", () => {
   const f = fixture(), { scene } = f;
   try {
     scene.mapPack.gameBuildId = "26542162";
@@ -97,9 +97,19 @@ test("navigation follow sends the uphill bearing and fades the foreground withou
     scene.updateFollowCamera(1/60);
     assert.equal(f.rigCalls.at(-1).options.climbAzimuth, 0);
     assert.equal(f.rigCalls.at(-1).options.fixedFollow, true);
-    assert.equal(f.queryCalls.length, 0);
     const point = scene.followOcclusion.value;
-    assert.ok(point.z < -50 && Math.hypot(point.x, point.y) < .001 && point.w > 0);
+    assert.ok(point.z < -50 && Math.hypot(point.x, point.y) < .001 && point.w === 0);
+    const cameraBefore = scene.camera.position.clone();
+    scene.followTerrain.cast = (eye, ray, maxDistance, section, options) => {
+      assert.equal(eye, scene.camera.position);
+      assert.ok(eye.clone().add(ray).distanceTo(scene.followAnchor) < 1e-9);
+      assert.ok(Math.abs(maxDistance - (ray.length() - 0.65)) < 1e-9);
+      assert.equal(options.renderedFacesOnly, true);
+      return { distance: 4 };
+    };
+    scene.updateFollowCamera(1/60);
+    assert.ok(point.w > 0, "activate the fade only after an obstruction");
+    assert.ok(scene.camera.position.equals(cameraBefore), "an obstruction must never move the fixed camera");
     const width = point.w;
     scene.camera.aspect = .45;
     scene.updateFollowCamera(1 / 60);

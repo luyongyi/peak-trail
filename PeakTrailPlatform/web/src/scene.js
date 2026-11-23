@@ -57,6 +57,7 @@ const PLAYER_COLORS = [
 ];
 
 const OPEN_FINALE_FOLLOW_DISTANCE = 36;
+const FOLLOW_FADE_CONTACT_MARGIN = 0.65;
 // The serialized progress points in these builds all advance along Unity +Z.
 // Web map Z is reflected, so a camera behind the climber has azimuth zero.
 const uphillLandmarkBuilds = new Set(["25739797", "26134529", "26155610", "26542162"]);
@@ -1437,9 +1438,7 @@ export class TrailScene {
     }
 
     const fixedFollow = this.trace?.manifest?.positionAuthority === "photon-character-hip";
-    // Navigation fades foreground terrain on the GPU instead of probing the
-    // whole map for an alternate camera position.
-    if (!fixedFollow) this.currentTerrainQuery();
+    const terrain = this.currentTerrainQuery();
     const context = this.followViewContext();
     const viewMode = context.interior ? "interior" : "exterior";
     if (viewMode !== this.followViewMode || context.defaultDistance !== this.followDefaultDistance) {
@@ -1477,9 +1476,20 @@ export class TrailScene {
       this.camera.updateWorldMatrix(true, false);
       const subject = this.followOcclusion.value;
       subject.set(this.followAnchor.x, this.followAnchor.y, this.followAnchor.z, 1).applyMatrix4(this.camera.matrixWorldInverse);
+      const ray = this.followTmp.copy(this.followAnchor).sub(this.camera.position);
+      const distance = ray.length();
+      // Use the current camera's building cut, which normally updates later
+      // in animate(). A hidden face must not activate the foreground fade.
+      if (fixedFollow && section) {
+        const back = result.position, target = result.target;
+        orientSectionPlane(section, back.x - target.x, back.z - target.z, back);
+      }
+      const blocked = !fixedFollow || distance > FOLLOW_FADE_CONTACT_MARGIN &&
+        terrain.cast(this.camera.position, ray, distance - FOLLOW_FADE_CONTACT_MARGIN, section,
+          { renderedFacesOnly: true, minimumDistance: this.camera.near });
       const halfFov = THREE.MathUtils.degToRad(this.camera.getEffectiveFOV() / 2);
       const shortAxis = Math.min(1, this.camera.aspect);
-      subject.w = THREE.MathUtils.clamp(-subject.z * Math.tan(halfFov) * shortAxis * .33, 1.15, 6);
+      subject.w = blocked ? THREE.MathUtils.clamp(-subject.z * Math.tan(halfFov) * shortAxis * .33, 1.15, 6) : 0;
     }
     // OrbitControls 目标同步：退出跟随时无缝交还。
     this.controls.target.copy(result.target);

@@ -5,6 +5,7 @@ import { cutsSectionPoint } from "./section-plane.js";
 // The WeakMap does not retain unloaded GPU geometry and does not modify it.
 const geometryTrees = new WeakMap();
 const LEAF_SIZE = 8;
+const FRONT_SIDE = 0, DOUBLE_SIDE = 2;
 // Source shader evidence, not a name/biome guess. The recorded shore route
 // passes through GD/FoliageGD leaves at centimetre distances; treating these
 // decorative surfaces as hard mountain walls traps the spectator at its torso.
@@ -107,9 +108,16 @@ function triangleTree(geometry) {
   return tree;
 }
 
-function solidMaterial(material, ignoreSectionMaterials) {
+function solidMaterial(material, ignoreSectionMaterials, frontFacing) {
   if (!material || material.visible === false || material.opacity === 0) return false;
   if (ignoreSectionMaterials && material.userData?.peakSectionPlane) return false;
+  if (frontFacing !== undefined) {
+    // Match the materials eligible for the GPU fade and Three's side culling.
+    // Foliage may cover the fixed camera even though it is not a hard wall.
+    return (material.isMeshStandardMaterial || material.isMeshBasicMaterial)
+      && material.depthWrite && !material.userData?.peakSourceEffect
+      && (material.side === DOUBLE_SIDE || (material.side === FRONT_SIDE) === frontFacing);
+  }
   const sourceShader = material.userData?.peakTerrain?.sourceColors?.shader;
   if (SOFT_FOLIAGE_SHADERS.has(sourceShader)) return false;
   const effect = material.userData?.peakSourceEffect;
@@ -124,12 +132,12 @@ function visibleMesh(mesh) {
   return true;
 }
 
-function triangleIsSolid(mesh, offset, ignoreSectionMaterials = false) {
+function triangleIsSolid(mesh, offset, ignoreSectionMaterials = false, frontFacing) {
   const geometry = mesh.geometry, { start, count } = geometry.drawRange;
   if (offset < start || offset + 2 >= start + count) return false;
-  if (!Array.isArray(mesh.material)) return solidMaterial(mesh.material, ignoreSectionMaterials);
+  if (!Array.isArray(mesh.material)) return solidMaterial(mesh.material, ignoreSectionMaterials, frontFacing);
   return geometry.groups.some((group) => offset >= group.start && offset + 2 < group.start + group.count
-    && solidMaterial(mesh.material[group.materialIndex], ignoreSectionMaterials));
+    && solidMaterial(mesh.material[group.materialIndex], ignoreSectionMaterials, frontFacing));
 }
 
 /**
@@ -137,7 +145,8 @@ function triangleIsSolid(mesh, offset, ignoreSectionMaterials = false) {
  * Object/ancestor visibility and material visibility are read on every cast.
  * Three's instanceMatrix.needsUpdate also refreshes the world index lazily, so
  * hiding a mine by a zero-scale instance and restoring it on rewind both work.
- * Results are renderer-world metres, two-sided, with normals facing the ray.
+ * Results are renderer-world metres, normally two-sided, with normals facing
+ * the ray. renderedFacesOnly respects material culling for the camera fade.
  * This is map visibility evidence, not recorded player collision/climb normals.
  * Source GD/FoliageGD leaves are soft decoration, not hard camera blockers.
  * Callers using this same query for framing will also ignore those leaves;
@@ -199,7 +208,7 @@ export class FollowTerrainQuery {
     return this;
   }
 
-  cast(origin, direction, maxDistance, sectionPlane) {
+  cast(origin, direction, maxDistance, sectionPlane, { renderedFacesOnly = false, minimumDistance = 0 } = {}) {
     this.lastStats = { worldNodes: 0, instances: 0, triangleNodes: 0, triangles: 0 };
     if (!Number.isFinite(maxDistance) || maxDistance < 0 || !origin || !direction
         || ![origin.x, origin.y, origin.z, direction.x, direction.y, direction.z].every(Number.isFinite)
@@ -223,7 +232,7 @@ export class FollowTerrainQuery {
         if (!visibleMesh(entry.mesh)
             || boxEntry(entry.bounds, this.ray.origin, this.ray.direction, bestDistance) === Infinity) continue;
         this.lastStats.instances++;
-        const hit = this.castInstance(entry, bestDistance, sectionPlane);
+        const hit = this.castInstance(entry, bestDistance, sectionPlane, renderedFacesOnly, minimumDistance);
         if (hit && hit.distance <= bestDistance) { best = hit; bestDistance = hit.distance; }
       }
     }
@@ -242,7 +251,7 @@ export class FollowTerrainQuery {
     }
   }
 
-  castInstance(entry, maxDistance, sectionPlane) {
+  castInstance(entry, maxDistance, sectionPlane, renderedFacesOnly, minimumDistance) {
     const local = this.localRay;
     local.origin.copy(this.ray.origin).applyMatrix4(entry.inverse);
     // Keep the world->local distance conversion, not just a normalized vector:
@@ -252,6 +261,7 @@ export class FollowTerrainQuery {
     const localPerWorld = local.direction.length();
     if (!Number.isFinite(localPerWorld) || localPerWorld <= 0) return null;
     local.direction.divideScalar(localPerWorld);
+    const localMinimum = minimumDistance * localPerWorld;
     let limit = maxDistance * localPerWorld, best = null;
     const { geometry, mesh } = entry, stack = [geometry.root];
     while (stack.length) {
@@ -260,22 +270,24 @@ export class FollowTerrainQuery {
       if (node.left) { this.pushNearest(stack, node, local, limit); continue; }
       for (let index = node.start; index < node.end; index++) {
         const offset = geometry.ids[index] * 3;
-        if (!triangleIsSolid(mesh, offset)) continue;
+        if (!renderedFacesOnly && !triangleIsSolid(mesh, offset)) continue;
         this.lastStats.triangles++;
         this.a.fromBufferAttribute(geometry.position, geometry.index ? geometry.index.getX(offset) : offset);
         this.b.fromBufferAttribute(geometry.position, geometry.index ? geometry.index.getX(offset + 1) : offset + 1);
         this.c.fromBufferAttribute(geometry.position, geometry.index ? geometry.index.getX(offset + 2) : offset + 2);
         if (!local.intersectTriangle(this.a, this.b, this.c, false, this.localPoint)) continue;
         const distance = this.localPoint.distanceTo(local.origin);
-        if (distance > limit) continue;
+        if (distance > limit || distance < localMinimum) continue;
         this.localNormal.subVectors(this.b, this.a).cross(this.edge.subVectors(this.c, this.a));
         if (this.localNormal.lengthSq() < 1e-24) continue;
+        const frontFacing = renderedFacesOnly ? this.localNormal.dot(local.direction) <= 0 : undefined;
+        if (renderedFacesOnly && !triangleIsSolid(mesh, offset, false, frontFacing)) continue;
         this.localNormal.applyMatrix3(entry.normalMatrix).normalize();
         if (this.localNormal.dot(this.ray.direction) > 0) this.localNormal.negate();
         const point = this.localPoint.clone().applyMatrix4(entry.matrix);
         // Keep testing the next solid hit after a cut, including other
         // material slots and contact surfaces from the same original mesh.
-        if (sectionPlane?.value.w && !triangleIsSolid(mesh, offset, true)
+        if (sectionPlane?.value.w && !triangleIsSolid(mesh, offset, true, frontFacing)
             && cutsSectionPoint(sectionPlane, point, this.localNormal)) continue;
         // Use the world point to remove accumulated inverse-transform error.
         const worldDistance = point.distanceTo(this.ray.origin);
