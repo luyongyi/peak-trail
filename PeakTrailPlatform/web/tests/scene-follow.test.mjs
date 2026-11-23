@@ -87,7 +87,7 @@ function fixture() {
 
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 
-test("navigation follow sends the uphill bearing and fades only a ray-tested foreground", () => {
+test("navigation follow locks the course axis and fades only a ray-tested foreground", () => {
   const f = fixture(), { scene } = f;
   try {
     scene.mapPack.gameBuildId = "26542162";
@@ -95,7 +95,6 @@ test("navigation follow sends the uphill bearing and fades only a ray-tested for
     scene.followOcclusion = { value: new THREE.Vector4(0, 0, 0, 0) };
     f.player("a"); scene.setTime(0); scene.setFollowTarget("a");
     scene.updateFollowCamera(1/60);
-    assert.equal(f.rigCalls.at(-1).options.climbAzimuth, 0);
     assert.equal(f.rigCalls.at(-1).options.fixedFollow, true);
     const point = scene.followOcclusion.value;
     assert.ok(point.z < -50 && Math.hypot(point.x, point.y) < .001 && point.w === 0);
@@ -119,15 +118,16 @@ test("navigation follow sends the uphill bearing and fades only a ray-tested for
   } finally { f.cleanup(); }
 });
 
-test("the native checkpoints advance along Unity +Z in every outdoor chapter using the fixed camera", async () => {
+test("the native checkpoints advance along one Unity +Z axis to the summit", async () => {
   for (const build of ["25739797", "26134529", "26155610", "26542162"]) {
     const index = JSON.parse(await readFile(new URL(`../../data/maps/landmarks.${build}.json`, import.meta.url), "utf8"));
     assert.ok(index.maps.length);
     for (const map of index.maps) {
       const checkpoints = map.alignment.landmarks.filter(entry => entry.kind === "progress-point");
-      for (let segment = 0; segment < 4; segment++) {
+      const summit = checkpoints.find(point => point.key === "progress-point:peak");
+      for (let segment = 0; segment <= 4; segment++) {
         const start = checkpoints.find(point => point.stageIndex === segment).positionCm;
-        const exit = checkpoints.find(point => point.stageIndex === segment + 1).positionCm;
+        const exit = (segment === 4 ? summit : checkpoints.find(point => point.stageIndex === segment + 1)).positionCm;
         assert.equal(exit[0], start[0], map.sceneName);
         assert.ok(exit[2] > start[2], map.sceneName);
       }
@@ -440,5 +440,32 @@ test("touch pinch changes followed-camera distance and lifting a finger resumes 
     assert.notEqual(f.scene.followAzimuth, azimuth);
     f.scene.setFollowTarget(null);
     assert.equal(f.scene.followTouches.size, 0);
+  } finally { f.cleanup(); }
+});
+
+test("packet navigation keeps its axis during mouse and touch drags, with pinch zoom and a free camera", () => {
+  const f = fixture(), { scene } = f;
+  try {
+    scene.trace.manifest.positionAuthority = "photon-character-hip";
+    f.player("p1"); scene.setTime(0); scene.setFollowTarget("p1"); scene.updateFollowCamera(1 / 60);
+    const { followAzimuth, followPitch, followDistance } = scene;
+    const pointer = (pointerId, pointerType, clientX, clientY, isPrimary = true) => ({
+      pointerId, pointerType, isPrimary, button: 0, clientX, clientY, preventDefault() {},
+    });
+    scene.onFollowPointerDown(pointer(1, "mouse", 10, 20));
+    scene.onFollowPointerMove(pointer(1, "mouse", 130, 90));
+    scene.onFollowPointerUp(pointer(1, "mouse", 130, 90));
+    scene.onFollowPointerDown(pointer(2, "touch", 30, 10));
+    scene.onFollowPointerDown(pointer(3, "touch", 150, 10, false));
+    scene.onFollowPointerMove(pointer(3, "touch", 210, 10, false));
+    assert.ok(scene.followDistance < followDistance);
+    scene.onFollowPointerUp(pointer(2, "touch", 30, 10));
+    scene.onFollowPointerMove(pointer(3, "touch", 240, 60, false));
+    assert.equal(scene.followAzimuth, followAzimuth);
+    assert.equal(scene.followPitch, followPitch);
+    assert.equal(scene.followUserOrbit, false);
+    scene.toggleFreeCamera();
+    assert.equal(scene.followTargetId, null);
+    assert.equal(scene.freeCamera.mode, "free");
   } finally { f.cleanup(); }
 });

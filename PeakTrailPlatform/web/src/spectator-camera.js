@@ -304,28 +304,19 @@ export class SpectatorCamera {
   }
 
   updateFixed(anchor, options) {
-    const { interior, manual, climbAzimuth } = options;
+    const { interior } = options;
     const requestedDistance = Number(options.distance);
     const defaultDistance = interior ? FOLLOW_INTERIOR_DISTANCE : FOLLOW_DISTANCE;
     const distance = clamp(Number.isFinite(requestedDistance) && requestedDistance > 0 ? requestedDistance : defaultDistance,
       interior ? FOLLOW_INTERIOR_MIN_DISTANCE : FOLLOW_MIN_DISTANCE,
       interior ? FOLLOW_INTERIOR_MAX_DISTANCE : FOLLOW_MAX_DISTANCE);
-    const suppliedAzimuth = Number.isFinite(options.azimuth) ? options.azimuth : 0.6;
-    if (manual) {
-      this.azimuth = suppliedAzimuth;
-    } else if (Number.isFinite(climbAzimuth)) {
-      this.azimuth = climbAzimuth;
-    } else if (!this.initialized) {
-      this.anchor.copy(anchor);
-      this.setInteriorReference(interior ? options.interiorReference : null);
-      this.azimuth = this.interiorAzimuth ?? suppliedAzimuth;
-    }
-    this.initialized = true;
-    this.pitch = manual && Number.isFinite(options.pitch) ? clamp(options.pitch, -0.45, 1.3) : FOLLOW_DOWN_ANGLE;
-    this.position.copy(anchor).addScaledVector(this.directionAt(this.azimuth, this.pitch), distance);
+    // The native maps progress along Unity +Z. Renderer Z is reflected, so
+    // the camera sits on the player's +Z side and looks through them uphill.
+    const azimuth = 0, pitch = FOLLOW_DOWN_ANGLE;
+    this.position.copy(anchor).addScaledVector(this.directionAt(azimuth, pitch), distance);
     this.look.copy(anchor);
     return { position: this.position, target: this.look, distance, desiredDistance: distance,
-      constrained: false, relocated: false, azimuth: this.azimuth, pitch: this.pitch,
+      constrained: false, relocated: false, azimuth, pitch,
       mode: interior ? "interior" : "exterior" };
   }
 

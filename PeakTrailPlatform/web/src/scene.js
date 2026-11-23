@@ -973,7 +973,7 @@ export class TrailScene {
       }));
       occludedLine.renderOrder = 8;
 
-      const marker = this.navigationPortraits ? new THREE.Object3D() : this.createPlayerMarker(color);
+      const marker = this.isPacketNavigation ? new THREE.Object3D() : this.createPlayerMarker(color);
       const group = new THREE.Group();
       group.add(occludedLine, outline, line, marker);
       group.userData.playerId = participant.id;
@@ -1029,7 +1029,7 @@ export class TrailScene {
     return root;
   }
 
-  get navigationPortraits() {
+  get isPacketNavigation() {
     return this.trace?.manifest?.positionAuthority === "photon-character-hip";
   }
 
@@ -1049,17 +1049,17 @@ export class TrailScene {
   rebuildPlayerLabels() {
     // A packet batch replaces the 3D trail objects, but screen portraits look
     // them up by player ID. Keep the existing images mounted between polls.
-    if (this.navigationPortraits && this.labelOverlay.classList.contains("is-navigation")
+    if (this.isPacketNavigation && this.labelOverlay.classList.contains("is-navigation")
         && this.playerLabels.size === this.playerObjects.size && this.trace.participants.every(player =>
           !this.playerObjects.has(player.id) || this.playerLabels.get(player.id)?.element.title === (player.nickname || player.id))) return;
     this.labelOverlay.replaceChildren();
-    this.labelOverlay.classList.toggle("is-navigation", this.navigationPortraits);
+    this.labelOverlay.classList.toggle("is-navigation", this.isPacketNavigation);
     this.playerLabels.clear();
     this.playerGroups.clear();
     for (const participant of this.trace?.participants || []) {
       if (!this.playerObjects.has(participant.id)) continue;
       const label = document.createElement("div");
-      const leader = this.navigationPortraits ? null : document.createElement("div");
+      const leader = this.isPacketNavigation ? null : document.createElement("div");
       if (leader) {
         leader.className = "trail-player-leader";
         leader.style.setProperty("--player-color", this.getPlayerColor(participant.id));
@@ -1094,20 +1094,20 @@ export class TrailScene {
     const entries = [];
     for (const [id, label] of this.playerLabels) {
       const object = this.playerObjects.get(id);
-      let visible = Boolean(object?.group.visible && (this.navigationPortraits ? object.marker.userData.replayVisible : object.marker.visible));
+      let visible = Boolean(object?.group.visible && (this.isPacketNavigation ? object.marker.userData.replayVisible : object.marker.visible));
       if (visible) {
         object.marker.getWorldPosition(this.labelPosition);
         // Marker-local metres preserve the real separation, including ghost poses;
         // its parents may exaggerate height or mirror the rendered map.
         this.labelPosition.applyMatrix4(this.camera.matrixWorldInverse);
         const projectedSize = portraitScreenSize(-this.labelPosition.z, height, this.camera);
-        const size = this.navigationPortraits ? Math.max(22, projectedSize) : projectedSize;
+        const size = this.isPacketNavigation ? Math.max(22, projectedSize) : projectedSize;
         this.labelPosition.applyMatrix4(this.camera.projectionMatrix);
         const { x, y, z } = this.labelPosition;
         visible = Number.isFinite(x + y + z) && z >= -1 && z <= 1 && Math.abs(x) < 1 && Math.abs(y) < 1;
         if (visible) {
           entries.push({ id, x: (x + 1) * width / 2, y: (1 - y) * height / 2,
-            pos: this.navigationPortraits ? null : object.marker.position.toArray(), size, label });
+            pos: this.isPacketNavigation ? null : object.marker.position.toArray(), size, label });
           continue;
         }
       }
@@ -1115,7 +1115,7 @@ export class TrailScene {
       if (label.leader) label.leader.hidden = true;
     }
 
-    if (this.navigationPortraits) {
+    if (this.isPacketNavigation) {
       for (const { label, size, left, top } of layoutNavigationPortraits(entries, { width, height })) {
         label.element.hidden = false;
         label.element.style.setProperty("--portrait-size", `${size}px`);
@@ -1437,7 +1437,7 @@ export class TrailScene {
       return;
     }
 
-    const fixedFollow = this.trace?.manifest?.positionAuthority === "photon-character-hip";
+    const fixedFollow = this.isPacketNavigation;
     const terrain = this.currentTerrainQuery();
     const context = this.followViewContext();
     const viewMode = context.interior ? "interior" : "exterior";
@@ -1453,23 +1453,24 @@ export class TrailScene {
       this.followRig.reset();
       this.emitFollowStatus();
     }
-    const climbAzimuth = !context.interior && context.layer?.segment >= 0 && context.layer.segment < 4
+    const manual = !fixedFollow && this.followUserOrbit;
+    const climbAzimuth = !fixedFollow && !context.interior && context.layer?.segment >= 0 && context.layer.segment < 4
       && uphillLandmarkBuilds.has(String(this.mapPack?.gameBuildId)) ? 0 : null;
     const section = context.openFacade ? this.sectionPlane : null;
     if (section) {
       section.footing.value.set(this.followAnchor.x, this.followAnchor.y + 0.15, this.followAnchor.z, 3);
-      section.keepContactWall = !this.followUserOrbit;
+      section.keepContactWall = !manual;
     }
     const result = this.followRig.update(this.followAnchor, deltaSeconds, {
       cameraPosition: this.camera.position, distance: this.followDistance,
-      azimuth: this.followAzimuth, pitch: this.followPitch, manual: this.followUserOrbit, fixedFollow,
+      azimuth: this.followAzimuth, pitch: this.followPitch, manual, fixedFollow,
       climbAzimuth, interior: context.interior, interiorReference: context.interiorReference,
       sectionPlane: section,
       discontinuity: this.followDiscontinuity,
     });
     this.followDiscontinuity = false;
     if (!result) return;
-    if (!this.followUserOrbit) { this.followAzimuth = result.azimuth; this.followPitch = result.pitch; }
+    if (!manual) { this.followAzimuth = result.azimuth; this.followPitch = result.pitch; }
     this.camera.position.copy(result.position);
     this.camera.lookAt(result.target);
     if (this.followOcclusion) {
@@ -1566,6 +1567,7 @@ export class TrailScene {
     this.followPointer.y = event.clientY;
     if (!Number.isFinite(dx + dy)) return;
     event.preventDefault();
+    if (this.isPacketNavigation) return;
     this.followUserOrbit = true;
     this.followAzimuth -= dx * 0.006;
     this.followPitch = THREE.MathUtils.clamp(this.followPitch + dy * 0.005, -0.45, 1.3);

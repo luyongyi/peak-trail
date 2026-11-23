@@ -2947,6 +2947,9 @@ function syncFollowHud(detail) {
     const name = detail?.name ?? (viewer?.followTargetId != null ? participantName(viewer.followTargetId) : "");
     elements.followHudText.textContent = state.watch?.active ? tr(`跟随 · ${name}`, `Following · ${name}`)
       : tr(`${viewMode === "interior" ? "关内向外观测" : "外侧观测"} · ${name} · ${auto ? "自动轮换 60s" : "已锁定"}`, `${viewMode === "interior" ? "Interior observation" : "Exterior observation"} · ${name} · ${auto ? "Auto cycle · 60s" : "Locked"}`);
+    $("followHudHint").textContent = viewer?.isPacketNavigation
+      ? tr("朝向山体 · 滚轮或双指缩放", "Facing uphill · Scroll or pinch to zoom")
+      : watchText("地形避让 · Esc 退出 · Tab 换人 · 拖动环绕 · 滚轮缩放");
   }
   for (const row of elements.playerList.querySelectorAll(".player-row")) {
     row.querySelector(".player-follow-button")?.classList.toggle(
