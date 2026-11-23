@@ -1,7 +1,6 @@
-// View-space cone ending at the followed player's torso. Share one screen-space
-// coverage pattern across all intervening surfaces so overlapping leaves or
-// rocks do not accumulate into an opaque stack. Solid depth and instancing
-// still work normally outside that small area.
+// Fade a small cone of terrain between the eye and the followed player.
+// Every overlapping surface uses the same screen-space coverage pattern.
+// Retained pixels still write solid depth, including the player's backdrop.
 const fade = `
   if (peakFollowSubject.w > 0.0 && peakFollowSubject.z < -0.01) {
     vec3 at = -vViewPosition;
@@ -9,27 +8,36 @@ const fade = `
     if (t > 0.0 && t < 1.0) {
       vec2 delta = at.xy - t * peakFollowSubject.xy;
       float radius = t * peakFollowSubject.w;
-      float footprint = 1.0 - smoothstep(radius * 0.55, radius, length(delta));
-      float foreground = smoothstep(0.2, 1.25, at.z - peakFollowSubject.z);
+      float footprint = 1.0 - smoothstep(radius * 0.32, radius, length(delta));
+      // Preserve contact surfaces immediately around the player.
+      float foreground = smoothstep(0.12, 0.65, at.z - peakFollowSubject.z);
       if (footprint * foreground > 0.0) {
         ivec2 cell = ivec2(gl_FragCoord.xy) & 3;
         ivec2 hi = cell >> 1;
         int lowRank = ((cell.x ^ cell.y) & 1) * 2 + (cell.y & 1);
         int highRank = ((hi.x ^ hi.y) & 1) * 2 + (hi.y & 1);
         float threshold = (float(4 * lowRank + highRank) + 0.5) / 16.0;
-        if (threshold < 0.84 * footprint * foreground) discard;
+        if (threshold < footprint * foreground) discard;
       }
     }
   }`;
 
 export function applyFollowOcclusion(material, subject) {
-  if (!material.isMeshStandardMaterial || !material.depthWrite || material.userData.peakSourceEffect) return;
+  if ((!material.isMeshStandardMaterial && !material.isMeshBasicMaterial)
+      || !material.depthWrite || material.userData.peakSourceEffect) return;
   const compile = material.onBeforeCompile, key = material.customProgramCacheKey();
+  const unlit = material.isMeshBasicMaterial;
   material.onBeforeCompile = function(shader, renderer) {
     compile.call(this, shader, renderer);
     shader.uniforms.peakFollowSubject = subject;
-    shader.fragmentShader = "uniform vec4 peakFollowSubject;\n" + shader.fragmentShader
-      .replace("#include <clipping_planes_fragment>", "#include <clipping_planes_fragment>\n" + fade);
+    if (unlit) {
+      // The MeshBasic shader does not expose the standard material view vector.
+      shader.vertexShader = "varying vec3 vPeakFollowView;\n" + shader.vertexShader.replace(
+        "#include <project_vertex>", "#include <project_vertex>\nvPeakFollowView = mvPosition.xyz;");
+    }
+    const fragment = unlit ? fade.replace("-vViewPosition", "vPeakFollowView") : fade;
+    shader.fragmentShader = "uniform vec4 peakFollowSubject;\n" + (unlit ? "varying vec3 vPeakFollowView;\n" : "") +
+      shader.fragmentShader.replace("#include <clipping_planes_fragment>", "#include <clipping_planes_fragment>\n" + fragment);
   };
-  material.customProgramCacheKey = () => key + "-follow-fade-v1";
+  material.customProgramCacheKey = () => `${key}-follow-fade-v2-${unlit ? "unlit" : "standard"}`;
 }

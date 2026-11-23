@@ -1436,7 +1436,10 @@ export class TrailScene {
       return;
     }
 
-    this.currentTerrainQuery();
+    const fixedFollow = this.trace?.manifest?.positionAuthority === "photon-character-hip";
+    // Navigation fades foreground terrain on the GPU instead of probing the
+    // whole map for an alternate camera position.
+    if (!fixedFollow) this.currentTerrainQuery();
     const context = this.followViewContext();
     const viewMode = context.interior ? "interior" : "exterior";
     if (viewMode !== this.followViewMode || context.defaultDistance !== this.followDefaultDistance) {
@@ -1451,7 +1454,7 @@ export class TrailScene {
       this.followRig.reset();
       this.emitFollowStatus();
     }
-    const climbAzimuth = context.layer?.segment >= 0 && context.layer.segment < 4
+    const climbAzimuth = !context.interior && context.layer?.segment >= 0 && context.layer.segment < 4
       && uphillLandmarkBuilds.has(String(this.mapPack?.gameBuildId)) ? 0 : null;
     const section = context.openFacade ? this.sectionPlane : null;
     if (section) {
@@ -1460,7 +1463,7 @@ export class TrailScene {
     }
     const result = this.followRig.update(this.followAnchor, deltaSeconds, {
       cameraPosition: this.camera.position, distance: this.followDistance,
-      azimuth: this.followAzimuth, pitch: this.followPitch, manual: this.followUserOrbit,
+      azimuth: this.followAzimuth, pitch: this.followPitch, manual: this.followUserOrbit, fixedFollow,
       climbAzimuth, interior: context.interior, interiorReference: context.interiorReference,
       sectionPlane: section,
       discontinuity: this.followDiscontinuity,
@@ -1474,7 +1477,9 @@ export class TrailScene {
       this.camera.updateWorldMatrix(true, false);
       const subject = this.followOcclusion.value;
       subject.set(this.followAnchor.x, this.followAnchor.y, this.followAnchor.z, 1).applyMatrix4(this.camera.matrixWorldInverse);
-      subject.w = THREE.MathUtils.clamp(-subject.z * .075, 1, 4.5);
+      const halfFov = THREE.MathUtils.degToRad(this.camera.getEffectiveFOV() / 2);
+      const shortAxis = Math.min(1, this.camera.aspect);
+      subject.w = THREE.MathUtils.clamp(-subject.z * Math.tan(halfFov) * shortAxis * .33, 1.15, 6);
     }
     // OrbitControls 目标同步：退出跟随时无缝交还。
     this.controls.target.copy(result.target);
@@ -1492,8 +1497,7 @@ export class TrailScene {
     orientSectionPlane(section, -direction.x, -direction.z, this.camera.position);
   }
 
-  /** Respect terrain depth; camera placement, not an opaque x-ray marker,
-   * establishes the relationship between the climber and the mountain. */
+  /** The marker shares terrain depth through the local foreground fade. */
   applyFollowMarkerOverlay() {
     for (const entry of this.playerObjects.values()) {
       entry.marker.traverse((node) => {

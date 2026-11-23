@@ -87,16 +87,23 @@ function fixture() {
 
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 
-test("outdoor follow uses the uphill bearing and limits the foreground fade to the current follow target", () => {
+test("navigation follow sends the uphill bearing and fades the foreground without building a terrain query", () => {
   const f = fixture(), { scene } = f;
   try {
     scene.mapPack.gameBuildId = "26542162";
+    scene.trace.manifest.positionAuthority = "photon-character-hip";
     scene.followOcclusion = { value: new THREE.Vector4(0, 0, 0, 0) };
     f.player("a"); scene.setTime(0); scene.setFollowTarget("a");
     scene.updateFollowCamera(1/60);
     assert.equal(f.rigCalls.at(-1).options.climbAzimuth, 0);
+    assert.equal(f.rigCalls.at(-1).options.fixedFollow, true);
+    assert.equal(f.queryCalls.length, 0);
     const point = scene.followOcclusion.value;
     assert.ok(point.z < -50 && Math.hypot(point.x, point.y) < .001 && point.w > 0);
+    const width = point.w;
+    scene.camera.aspect = .45;
+    scene.updateFollowCamera(1 / 60);
+    assert.ok(point.w < width, "the fade stays local on portrait displays");
     scene.setFollowTarget(null);
     assert.equal(point.w, 0);
   } finally { f.cleanup(); }

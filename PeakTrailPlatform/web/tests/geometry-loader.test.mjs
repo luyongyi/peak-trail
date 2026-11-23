@@ -221,6 +221,24 @@ test("the following player's foreground fade shares its uniform with instanced m
   assert.match(marked.material.customProgramCacheKey(), /follow-fade.*section/);
 });
 
+test("unlit map props use their projected position for the foreground fade, leaving source effects alone", () => {
+  const followOcclusion = { value: new THREE.Vector4(0, 0, -20, 3) };
+  const material = new THREE.MeshBasicMaterial();
+  const shader = { uniforms: {}, fragmentShader: "#include <clipping_planes_fragment>", vertexShader: "#include <project_vertex>" };
+  applyFollowOcclusion(material, followOcclusion);
+  material.onBeforeCompile(shader, {});
+  assert.equal(shader.uniforms.peakFollowSubject, followOcclusion);
+  assert.match(shader.vertexShader, /vPeakFollowView = mvPosition.xyz/);
+  assert.match(shader.fragmentShader, /vec3 at = vPeakFollowView/);
+  assert.equal(material.transparent, false);
+  assert.equal(material.depthWrite, true);
+  const effect = new THREE.MeshBasicMaterial();
+  effect.userData.peakSourceEffect = { kind: "fog" };
+  const original = effect.onBeforeCompile;
+  applyFollowOcclusion(effect, followOcclusion);
+  assert.equal(effect.onBeforeCompile, original);
+});
+
 test("audited shadow-only affine/GPU panels are omitted, same-name solid props remain", () => {
   const { batchStaticMeshes } = compile();
   const geometry = new THREE.PlaneGeometry();

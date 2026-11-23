@@ -64,6 +64,37 @@ test("an open uphill shot holds its heading through sideways movement, with a cl
   assert.ok(Math.abs(manual.azimuth - .8) < 1e-7);
 });
 
+test("fixed navigation faces uphill from above and keeps its exact boom through occluders", () => {
+  const query = planes([["z", 1], ["x", 5], ["y", 4]]);
+  const rig = new SpectatorCamera({ THREE, query });
+  const options = { fixedFollow: true, climbAzimuth: 0, azimuth: 1.8, pitch: 0.1, distance: FOLLOW_DISTANCE };
+  for (const anchor of [v(0, 0, 0), v(10, 15, 15), v(4, 6, -10)]) {
+    const pose = rig.update(anchor, 1/60, options);
+    const offset = pose.position.clone().sub(anchor);
+    assert.equal(pose.azimuth, 0);
+    assert.ok(offset.y >= FOLLOW_DISTANCE * 0.55);
+    assert.ok(offset.z > 0 && Math.abs(offset.x) < 1e-8);
+    assert.ok(Math.abs(offset.length() - FOLLOW_DISTANCE) < 1e-8);
+    assert.equal(pose.constrained, false);
+    assert.ok(pose.target.equals(anchor));
+  }
+  assert.equal(query.calls, 0);
+});
+
+test("the fixed enclosure bearing survives movement, while intentional orbit and zoom still work", () => {
+  const rig = new SpectatorCamera({ THREE, query: planes([["x", 1], ["z", 5]]) });
+  const options = { fixedFollow: true, interior: true, interiorReference: { center: [3, 0, 0] } };
+  const first = rig.update(v(), 1/60, options);
+  assert.equal(first.azimuth, Math.PI / 2);
+  const moved = rig.update(v(3, 6, 10), 1/60, options);
+  assert.equal(moved.azimuth, Math.PI / 2);
+  assert.equal(moved.distance, FOLLOW_INTERIOR_DISTANCE);
+  const manual = rig.update(v(3, 6, 10), 1/60, { ...options, manual: true, azimuth: 0.2, pitch: 0.8, distance: 6 });
+  assert.equal(manual.azimuth, 0.2);
+  assert.equal(manual.pitch, 0.8);
+  assert.equal(manual.distance, 6);
+});
+
 test("enclosed interiors shorten a clear boom instead of forcing a distant camera outside walls", () => {
   const query = planes([["z", 10], ["z", -10], ["x", 12], ["x", -12], ["y", 5], ["y", -2]]);
   const rig = new SpectatorCamera({ THREE, query });

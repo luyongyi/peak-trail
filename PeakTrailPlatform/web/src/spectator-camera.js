@@ -11,6 +11,7 @@ export const FOLLOW_INTERIOR_MIN_DISTANCE = 4;
 export const FOLLOW_INTERIOR_MAX_DISTANCE = 28;
 const TAU = Math.PI * 2;
 const INTERIOR_CONE = Math.PI * 5 / 12;
+const FOLLOW_DOWN_ANGLE = 0.6;
 const clamp = (x, low, high) => Math.min(high, Math.max(low, x));
 const angleDelta = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 
@@ -302,10 +303,38 @@ export class SpectatorCamera {
       interiorSideKnown: this.interiorSideKnown };
   }
 
+  updateFixed(anchor, options) {
+    const { interior, manual, climbAzimuth } = options;
+    const requestedDistance = Number(options.distance);
+    const defaultDistance = interior ? FOLLOW_INTERIOR_DISTANCE : FOLLOW_DISTANCE;
+    const distance = clamp(Number.isFinite(requestedDistance) && requestedDistance > 0 ? requestedDistance : defaultDistance,
+      interior ? FOLLOW_INTERIOR_MIN_DISTANCE : FOLLOW_MIN_DISTANCE,
+      interior ? FOLLOW_INTERIOR_MAX_DISTANCE : FOLLOW_MAX_DISTANCE);
+    const suppliedAzimuth = Number.isFinite(options.azimuth) ? options.azimuth : 0.6;
+    if (manual) {
+      this.azimuth = suppliedAzimuth;
+    } else if (Number.isFinite(climbAzimuth)) {
+      this.azimuth = climbAzimuth;
+    } else if (!this.initialized) {
+      this.anchor.copy(anchor);
+      this.setInteriorReference(interior ? options.interiorReference : null);
+      this.azimuth = this.interiorAzimuth ?? suppliedAzimuth;
+    }
+    this.initialized = true;
+    this.pitch = manual && Number.isFinite(options.pitch) ? clamp(options.pitch, -0.45, 1.3) : FOLLOW_DOWN_ANGLE;
+    this.position.copy(anchor).addScaledVector(this.directionAt(this.azimuth, this.pitch), distance);
+    this.look.copy(anchor);
+    return { position: this.position, target: this.look, distance, desiredDistance: distance,
+      constrained: false, relocated: false, azimuth: this.azimuth, pitch: this.pitch,
+      mode: interior ? "interior" : "exterior" };
+  }
+
   update(anchor, deltaSeconds, options = {}) {
     if (!anchor || ![anchor.x, anchor.y, anchor.z].every(Number.isFinite)) return null;
     const mode = options.interior ? "interior" : "exterior";
-    if (mode !== this.mode) { this.reset(); this.mode = mode; }
+    const cameraMode = options.fixedFollow ? `fixed-${mode}` : mode;
+    if (cameraMode !== this.mode) { this.reset(); this.mode = cameraMode; }
+    if (options.fixedFollow) return this.updateFixed(anchor, options);
     if (mode === "interior") return this.updateInterior(anchor, deltaSeconds, options);
     const dt = clamp(Number.isFinite(deltaSeconds) ? deltaSeconds : 0, 0, 0.05);
     const distance = clamp(Number(options.distance) || FOLLOW_DISTANCE, FOLLOW_MIN_DISTANCE, FOLLOW_MAX_DISTANCE);
