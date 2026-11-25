@@ -501,6 +501,16 @@
       "mapSlot": 111,
       "sceneName": "Level_111",
       "nextChangeAtUtc": "2026-11-24T16:59:59.381Z"
+    },
+    {
+      "observedAtUtc": "2026-11-25T01:23:57.819Z",
+      "levelIndex": 528,
+      "apiVersion": "3.1",
+      "gameBuildId": "26542162",
+      "mapCount": 208,
+      "mapSlot": 112,
+      "sceneName": "Level_112",
+      "nextChangeAtUtc": "2026-11-25T16:59:59.819Z"
     }
   ]
 }
