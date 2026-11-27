@@ -10,6 +10,10 @@ const COOKIE = "peak_packet_session";
 const CURRENT_ROOM = /^[A-P][A-Z][A-Z2-9]{6}$/;
 const ROOM = /^(?:[A-P][A-Z0-9]{5}|[A-P][A-Z][A-Z2-9]{6})$/;
 const FEATURE = /^[A-F0-9]{20}$/;
+const SUPPLY_ORDER = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const SUPPLY_STATES = new Set(["queued", "sent", "rejected", "unconfirmed"]);
+const SUPPLY_CATEGORIES = new Set(["climb", "food", "medical", "gear", "mystical", "other"]);
+const SUPPLY_REASONS = new Set(["supply_unavailable", "unsupported_supply_build", "target_unavailable", "scene_changed", "request_expired", "disconnected", "capture_not_active", "send_failed", "send_unconfirmed"]);
 const STATES = new Set(["connecting", "recording", "stopping", "completed", "cancelled", "failed", "interrupted", "expired"]);
 const CODES = new Set([
   "invalid_room_code", "invalid_identity", "idempotency_key_required", "idempotency_conflict",
@@ -27,10 +31,36 @@ const CODES = new Set([
   "steam_ticket_reused", "steam_ticket_capacity",
   "archive_expired", "capture_expired", "game_ended", "live_unavailable", "metadata_write_failed", "process_interrupted", "idempotency_capacity",
   "invalid_download_receipt", "download_receipt_too_large", "download_receipt_busy", "disk_pressure",
+  "invalid_order", "order_conflict", "order_not_found", "supply_unavailable", "supply_busy", "supply_capacity",
+  "unsupported_supply_build", "target_unavailable", "scene_changed", "request_expired", "send_failed", "send_unconfirmed",
 ]);
 const digest = value => createHash("sha256").update(value).digest();
 const localAddress = address => address === "127.0.0.1" || address === "::1" || address === "::ffff:127.0.0.1";
 const object = value => value !== null && typeof value === "object" && !Array.isArray(value);
+
+function supplyDto(value, orderId) {
+  if (!object(value)) throw new Error("upstream_invalid_response");
+  const reason = SUPPLY_REASONS.has(value.reason) ? value.reason : undefined;
+  if (orderId) {
+    if (value.orderId !== orderId || !SUPPLY_STATES.has(value.status)) throw new Error("upstream_invalid_response");
+    return { orderId, status: value.status, ...(reason ? { reason } : {}) };
+  }
+  if (typeof value.enabled !== "boolean" || !Number.isInteger(value.sceneEpoch) || value.sceneEpoch < 0 || value.sceneEpoch > 2147483647
+      || !Array.isArray(value.players) || value.players.length > 128 || !Array.isArray(value.items) || value.items.length > 250)
+    throw new Error("upstream_invalid_response");
+  const players = new Map(), items = new Map();
+  const name = text => typeof text === "string" && text.trim().length > 0 && text.length <= 100 && !/[\u0000-\u001f\u007f]/.test(text);
+  for (const player of value.players) {
+    if (!playerId(player?.playerId) || !name(player.name) || players.has(player.playerId)) throw new Error("upstream_invalid_response");
+    players.set(player.playerId, { playerId: player.playerId, name: player.name });
+  }
+  for (const item of value.items) {
+    if (!Number.isInteger(item?.itemId) || item.itemId < 0 || item.itemId > 65535 || !name(item.name)
+        || !SUPPLY_CATEGORIES.has(item.category) || items.has(item.itemId)) throw new Error("upstream_invalid_response");
+    items.set(item.itemId, { itemId: item.itemId, name: item.name, category: item.category });
+  }
+  return { enabled: value.enabled, sceneEpoch: value.sceneEpoch, players: [...players.values()], items: [...items.values()], ...(reason ? { reason } : {}) };
+}
 
 function collectorOrigin(value) {
   try {
@@ -495,7 +525,7 @@ export function createPacketReplayApi(options = {}) {
     return pendingStorage;
   }
 
-  async function proxy(req, res, path, { body, room, feature, file = false, zip = false, list = false, live = false, motion = null, navigationStart = false, roomLookup = false, replaySearch = null, downloadReceipt = false } = {}) {
+  async function proxy(req, res, path, { body, room, feature, file = false, zip = false, list = false, live = false, motion = null, navigationStart = false, roomLookup = false, replaySearch = null, downloadReceipt = false, supply = false, supplyOrderId = null } = {}) {
     const controller = new AbortController();
     activeRequests.add(controller);
     const timer = setTimeout(() => controller.abort(), file ? downloadTimeoutMs : requestTimeoutMs);
@@ -574,6 +604,7 @@ export function createPacketReplayApi(options = {}) {
       }
       if (downloadReceipt) throw new Error("upstream_invalid_response");
       if (![200, 202].includes(response.status) || file) throw new Error("upstream_invalid_response");
+      if (supply) return responseJson(res, response.status, supplyDto(value, supplyOrderId));
       if (replaySearch) {
         if (response.status !== 200) throw new Error("upstream_invalid_response");
         return responseJson(res, 200, replaySearchDto(value, replaySearch));
@@ -617,6 +648,29 @@ export function createPacketReplayApi(options = {}) {
           responseJson(res, 200, { configured: configured && !closed, captures: [] }); return true;
         }
         if (closed || !configured) { fail(res, 503, "collector_unavailable"); return true; }
+        const supplyMatch = rawPath.slice(NAVIGATION.length).match(/^\/captures\/([^/]+)\/([^/]+)\/supply(?:\/([^/]+))?$/);
+        if (supplyMatch) {
+          const [, room, feature, orderId] = supplyMatch;
+          if (!CURRENT_ROOM.test(room) || !FEATURE.test(feature) || orderId !== undefined && !SUPPLY_ORDER.test(orderId)) {
+            fail(res, 400, "invalid_identity"); return true;
+          }
+          if (req.url !== rawPath) { fail(res, 400, "invalid_request"); return true; }
+          if (req.method === "POST" && orderId === undefined) {
+            if (!sameOrigin(req)) { fail(res, 403, "forbidden_origin"); return true; }
+            const body = await requestJson(req, 512);
+            if (Object.keys(body).length !== 4 || !SUPPLY_ORDER.test(body.orderId) || !playerId(body.playerId)
+                || !Number.isInteger(body.sceneEpoch) || body.sceneEpoch < 0 || body.sceneEpoch > 2147483647
+                || !Number.isInteger(body.itemId) || body.itemId < 0 || body.itemId > 65535) {
+              fail(res, 400, "invalid_order"); return true;
+            }
+            if (navigationLimited(req)) { fail(res, 429, "rate_limited"); return true; }
+            await proxy(req, res, `/captures/${room}/${feature}/supply`, { body, supply: true, supplyOrderId: body.orderId });
+            return true;
+          }
+          if (req.method !== "GET") { fail(res, 405, "method_not_allowed"); return true; }
+          await proxy(req, res, `/captures/${room}/${feature}/supply${orderId ? `/${orderId}` : ""}`, { supply: true, supplyOrderId: orderId });
+          return true;
+        }
         if (rawPath === `${NAVIGATION}/storage`) {
           if (req.method !== "GET") { fail(res, 405, "method_not_allowed"); return true; }
           const capacity = await storageSnapshot();

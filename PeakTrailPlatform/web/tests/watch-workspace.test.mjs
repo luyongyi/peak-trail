@@ -8,7 +8,7 @@ import { parseWatchId, parseWatchCode, watchCodeFromState } from "../src/watch-c
 const source = readFileSync(new URL("../src/app.js", import.meta.url), "utf8");
 function functions(names, ports) {
   ports = { viewer: null, itemEventPanel: { sync() {} }, watchText: value => value, tr: value => value, formatNumber: String,
-    packetStop: { update() {} },
+    packetStop: { update() {} }, syncNavigationSupply() {},
     liveCameraController: { begin() {}, suspend() {}, resume() {}, checkpoint() {} }, syncWatchCamera() {},
     selectedSegmentStatus: () => ({ status: "ready" }), errorUiText: value => String(value || ""), ...ports };
   return new Function(...Object.keys(ports), names.map(name => {
@@ -74,6 +74,27 @@ test("live time-follow is separate from paused replay and does not depend on the
   state.watch.following = false; assert.equal(api.isLiveFollowing(), false);
   state.watch.following = true; state.watch.status = "ended"; assert.equal(api.isLiveFollowing(), false);
   state.watch.status = "live"; state.watch.initializing = true; assert.equal(api.isLiveFollowing(), false);
+});
+
+test("navigation supplies receive the camera target only in current live packet navigation", () => {
+  const trace = makeTrace();
+  const state = { trace, watch: { active: true, kind: "packet", id: "ABCDEFGH.12345678901234567890",
+    trace, captureStatus: "recording", connection: "connected", following: true, epoch: 2 } };
+  const updates = [], viewer = { followTargetId: "p1" };
+  const api = functions(["syncNavigationSupply"], { state, viewer, navigationSupply: { update: next => updates.push(next) } });
+  api.syncNavigationSupply();
+  assert.equal(updates.at(-1).followsLive, true);
+  assert.equal(updates.at(-1).playerId, "p1");
+  assert.equal(updates.at(-1).sceneEpoch, 2);
+  state.watch.following = false;
+  api.syncNavigationSupply();
+  assert.equal(updates.at(-1).followsLive, false);
+  Object.assign(state.watch, { following: true, captureStatus: "completed" });
+  api.syncNavigationSupply();
+  assert.equal(updates.at(-1).followsLive, false);
+  state.watch.kind = "v2";
+  api.syncNavigationSupply();
+  assert.equal(updates.at(-1).captureId, null);
 });
 
 test('ended watch snapshots expose retained Nadir facts while only confirmed durable sessions claim automatic saving', async () => {

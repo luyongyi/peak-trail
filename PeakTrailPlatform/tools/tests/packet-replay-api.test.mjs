@@ -46,6 +46,57 @@ async function fixture(handler = (req, res) => write(res, 200, SNAPSHOT), option
     close: async () => { api.close(); await close(server); await close(upstream); } };
 }
 
+test("collector supply uses the exact capture and scene, strips private fields, and preserves idempotent results", async t => {
+  const path = `/api/navigation/captures/DRXPTJAB/${FEATURE}/supply`;
+  const order = { orderId: "6e661ce7-3321-47b7-bf69-b250692c5e70", sceneEpoch: 2, playerId: "p3", itemId: 65 };
+  const orders = new Map();
+  let queued = 0;
+  const f = await fixture((req, res, call) => {
+    assert.equal(call.headers.authorization, `Bearer ${API_KEY}`);
+    assert.ok(call.path.startsWith(`/api/v1/captures/DRXPTJAB/${FEATURE}/supply`));
+    if (call.method === "GET" && !call.path.endsWith(order.orderId)) return write(res, 200, {
+      enabled: true, sceneEpoch: 2, players: [{ playerId: "p3", name: "队友", steamId: "private" }],
+      items: [{ itemId: 65, name: "Rope", category: "climb", prefabPath: "private" }], apiKey: API_KEY,
+    });
+    if (call.method === "POST") {
+      const body = JSON.parse(call.body);
+      assert.deepEqual(body, order);
+      if (!orders.has(body.orderId)) { queued++; orders.set(body.orderId, { orderId: body.orderId, status: "sent" }); }
+    }
+    write(res, 200, { ...orders.get(order.orderId), token: API_KEY });
+  });
+  t.after(() => f.close());
+  const catalog = await (await fetch(f.base + path)).json();
+  assert.deepEqual(catalog, { enabled: true, sceneEpoch: 2, players: [{ playerId: "p3", name: "队友" }], items: [{ itemId: 65, name: "Rope", category: "climb" }] });
+  const init = { method: "POST", headers: { origin: f.base, "content-type": "application/json" }, body: JSON.stringify(order) };
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const response = await fetch(f.base + path, init);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { orderId: order.orderId, status: "sent" });
+  }
+  assert.equal(queued, 1);
+  assert.deepEqual(await (await fetch(f.base + path + "/" + order.orderId)).json(), { orderId: order.orderId, status: "sent" });
+  const previousCalls = f.calls.length;
+  for (const body of [{ ...order, sceneEpoch: -1 }, { ...order, playerId: "p0" }, { ...order, count: 3 }, { ...order, itemId: "65" }]) {
+    assert.equal((await fetch(f.base + path, { ...init, body: JSON.stringify(body) })).status, 400);
+  }
+  assert.equal((await fetch(f.base + path, { ...init, headers: { ...init.headers, origin: "https://example.invalid" } })).status, 403);
+  assert.equal(f.calls.length, previousCalls);
+});
+
+test("collector supply rejects mismatched result identity and never invents delivery", async t => {
+  const id = "6e661ce7-3321-47b7-bf69-b250692c5e70";
+  let value = { orderId: id, status: "delivered" };
+  const f = await fixture((req, res) => write(res, 200, value));
+  t.after(() => f.close());
+  const url = `${f.base}/api/navigation/captures/DRXPTJAB/${FEATURE}/supply/${id}`;
+  assert.equal((await fetch(url)).status, 502);
+  value = { orderId: "7e661ce7-3321-47b7-bf69-b250692c5e70", status: "sent" };
+  assert.equal((await fetch(url)).status, 502);
+  value = { orderId: id, status: "rejected", reason: "scene_changed", private: "discard" };
+  assert.deepEqual(await (await fetch(url)).json(), { orderId: id, status: "rejected", reason: "scene_changed" });
+});
+
 test("disabled configuration never contacts a collector and integration keeps health working", async () => {
   for (const options of [{ operatorKey: "" }, { apiKey: "short" }, { collectorUrl: "https://example.com" },
     { collectorUrl: "http://127.0.0.1:123/a" }, { collectorUrl: "http://user:pass@127.0.0.1:123" }, { operatorKey: API_KEY }]) {

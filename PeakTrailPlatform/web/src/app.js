@@ -40,6 +40,7 @@ import { WatchClient, parseWatchId, parseWatchCode, normalizeWatchInput, resolve
 import { PacketWatchClient, parseCaptureId } from "./packet-watch-client.js";
 import { appendPacketMotion } from "./packet-motion.js";
 import { createPacketStop } from "./packet-stop.js";
+import { createNavigationSupply } from "./navigation-supply.js";
 import { trimWatchTrace, isWatchMilestone, watchProgressLabel } from "./watch-window.js";
 import { watchText } from "./watch-text.js";
 import { createWatchChrome } from "./watch-chrome.js";
@@ -615,6 +616,15 @@ const packetStop = createPacketStop({
   dialog: $("watchStopDialog"), form: $("watchStopForm"), title: $("watchStopTitle"), description: $("watchStopDescription"),
   authorization: $("watchStopAuthorization"), codeLabel: $("watchStopCodeLabel"), code: $("watchStopCode"),
   status: $("watchStopStatus"), cancel: $("watchStopCancel"), confirm: $("watchStopConfirm"), translate: tr,
+});
+const navigationSupply = createNavigationSupply({
+  menu: $("watchMenu"),
+  actionButtons: [$("navigationSupplyMenuAction"), $("navigationSupplyHudAction")],
+  dialog: $("navigationSupplyDialog"), title: $("navigationSupplyTitle"), close: $("navigationSupplyClose"),
+  shop: $("navigationSupplyShop"), recipient: $("navigationSupplyRecipient"),
+  search: $("navigationSupplySearch"), filters: $("navigationSupplyFilters"), items: $("navigationSupplyItems"),
+  empty: $("navigationSupplyEmpty"), give: $("navigationSupplyGive"), status: $("navigationSupplyStatus"),
+  onTargetReady: ready => { elements.playerHud.classList.toggle("has-navigation-supply", ready); syncPlayerHud(); },
 });
 const watchChrome = createWatchChrome({
   shell: elements.appShell, menu: $("watchMenu"),
@@ -1549,6 +1559,7 @@ function stopWatch() {
   watch.code = null;
   watch.copiedUntil = 0;
   packetStop.update(null, null);
+  navigationSupply.update();
   watchChrome.reset();
   ++state.traceSelectionRevision;
   elements.appShell.classList.remove("watch-players-open");
@@ -1566,6 +1577,7 @@ function updateWatchStatus() {
   updateWatchShareUI();
   const packet = watch.kind === "packet";
   packetStop.update(packet ? watch.id : null, watch.captureStatus);
+  syncNavigationSupply();
   const empty = !watch.trace;
   const packetWaiting = empty && watch.kind === "packet" && watch.connection === "waiting" && watch.status !== "ended";
   const joined = packetWaiting && watch.captureStatus === "recording";
@@ -2317,7 +2329,11 @@ function createEventButton(event) {
     button.title = tr("关键节点已保留，位置已超出近期回看窗口", "Milestone retained; its position is outside the recent replay window");
   }
   button.addEventListener("click", () => {
-    if (state.watch?.active) { state.watch.following = false; toggleWatchReplay(true); }
+    if (state.watch?.active) {
+      state.watch.following = false;
+      toggleWatchReplay(true);
+      syncNavigationSupply();
+    }
     setPlaying(false);
     updatePlaybackTime(event.t, true);
     showEventToast(event);
@@ -2939,6 +2955,7 @@ elements.playerList.addEventListener("click", (event) => {
 function syncFollowHud(detail) {
   const active = Boolean(detail?.active ?? (viewer?.followTargetId != null));
   syncPlayerHud();
+  syncNavigationSupply();
   const auto = active && (detail?.autoRotate ?? viewer?.followAutoRotate ?? false);
   elements.cinematicButton.setAttribute("aria-pressed", String(auto));
   elements.followHud.hidden = !active;
@@ -2958,9 +2975,20 @@ function syncFollowHud(detail) {
     );
   }
 }
+function syncNavigationSupply() {
+  const watch = state.watch;
+  const packet = watch.active && watch.kind === "packet";
+  navigationSupply.update({
+    captureId: packet ? watch.id : null, sceneEpoch: watch.epoch,
+    followsLive: packet && watch.captureStatus === "recording" && watch.connection === "connected"
+      && watch.following && !watch.initializing && Boolean(watch.trace),
+    playerId: viewer?.followTargetId, gameAssetPack: state.gameAssetPack,
+  });
+}
 function syncPlayerHud() {
   const id = viewer?.followTargetId;
-  const visible = id != null && state.trace && document.body.classList.contains("map-expanded");
+  const visible = id != null && state.trace
+    && (document.body.classList.contains("map-expanded") || elements.playerHud.classList.contains("has-navigation-supply"));
   const player = visible ? tracePlayerStateAtTime(state.trace, id, state.currentTime) : null;
   const movement = player && state.watch?.active && state.watch.trace === state.trace
     ? state.watch.client?.movementAt?.(id, state.currentTime, player.sample?.activeSegment) : null;

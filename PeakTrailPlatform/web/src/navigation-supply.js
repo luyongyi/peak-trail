@@ -1,0 +1,318 @@
+import { resolveItemAsset } from "./game-assets.js";
+import { gameItemName, tr } from "./i18n.js";
+import { parseCaptureId } from "./packet-watch-client.js";
+
+const ROOT = "/api/navigation/captures";
+const CATEGORIES = {
+  all: ["全部", "All", ""],
+  climb: ["攀登", "Climbing", "⤴"],
+  food: ["饮食", "Food", "◒"],
+  medical: ["医疗", "Medical", "✚"],
+  gear: ["装备", "Gear", "◈"],
+  mystical: ["奇物", "Mystical", "✦"],
+  other: ["其他", "Other", "◇"],
+};
+const ORDER_WAIT_MS = 70_000;
+const REQUEST_TIMEOUT_MS = 6_000;
+const PLAYER_ID = /^p[1-9][0-9]{0,9}$/;
+const FINAL_ORDER_STATUS = new Set(["sent", "rejected", "unconfirmed"]);
+
+function catalog(value) {
+  if (!Array.isArray(value?.items) || !Array.isArray(value?.players)) return null;
+  const items = new Map();
+  for (const item of value.items.slice(0, 1024)) {
+    if (!Number.isSafeInteger(item?.itemId) || item.itemId < 0 || items.has(item.itemId)
+        || typeof item.name !== "string" || !item.name.trim() || item.name.length > 100
+        || item.category === "all" || !Object.hasOwn(CATEGORIES, item.category)) continue;
+    items.set(item.itemId, { itemId: item.itemId, name: item.name, category: item.category });
+  }
+  const players = new Map();
+  for (const player of value.players.slice(0, 128)) {
+    if (PLAYER_ID.test(player?.playerId) && typeof player.name === "string" && player.name.trim())
+      players.set(player.playerId, player.name.slice(0, 100));
+  }
+  return { items, players };
+}
+
+function itemLabel(item) {
+  return gameItemName(item.name);
+}
+
+function itemMatches(item, category, query) {
+  return (category === "all" || item.category === category)
+    && (!query || [item.name, itemLabel(item)].some(value => value.normalize("NFKC").toLowerCase().includes(query)));
+}
+
+export function createNavigationSupply({ menu, actionButtons, dialog, title, close,
+  shop, recipient, search, filters, items, empty, give, status,
+  onTargetReady = () => {}, fetchImpl = (...args) => globalThis.fetch(...args) }) {
+  let context = {};
+  let session = null, nextRefresh = 0, refreshing = false;
+  let mode = null, category = "all", selected = null, dialogTarget = null, message = null;
+  let order = null, itemButtons = new Map(), filtersKey = "", itemsKey = "", focusOnClose;
+  let wasTargetReady = false;
+  const doc = dialog.ownerDocument;
+
+  function currentTarget() {
+    const { captureId, followsLive, playerId, sceneEpoch } = context;
+    const name = session?.players.get(playerId);
+    return captureId && followsLive && name && session.captureId === captureId && session.sceneEpoch === sceneEpoch
+      ? { captureId, sceneEpoch, playerId, name } : null;
+  }
+
+  function sameTarget(target) {
+    const current = currentTarget();
+    return current && target && current.captureId === target.captureId && current.sceneEpoch === target.sceneEpoch
+      && current.playerId === target.playerId;
+  }
+
+  function setMessage(chinese, english, state = "") {
+    message = { chinese, english, state };
+  }
+
+  function renderCatalog() {
+    const languageKey = tr("zh", "en");
+    const shownCategories = ["all", ...new Set(Array.from(session.items.values(), item => item.category))];
+    if (!shownCategories.includes(category)) category = "all";
+    const filterKey = JSON.stringify([languageKey, shownCategories]);
+    if (filtersKey !== filterKey) {
+      filtersKey = filterKey;
+      filters.replaceChildren(...shownCategories.map(key => {
+        const button = doc.createElement("button");
+        button.type = "button";
+        button.dataset.supplyCategory = key;
+        button.textContent = tr(...CATEGORIES[key]);
+        return button;
+      }));
+    }
+    for (const button of filters.children) button.setAttribute("aria-pressed", String(button.dataset.supplyCategory === category));
+    const query = search.value.trim().normalize("NFKC").toLowerCase();
+    const visible = Array.from(session.items.values(), item => {
+      return [item, resolveItemAsset(context.gameAssetPack, { itemId: item.itemId, name: item.name })?.iconUrl];
+    }).filter(([item]) => itemMatches(item, category, query));
+    const listKey = JSON.stringify([languageKey, category, query, visible]);
+    if (itemsKey !== listKey) {
+      itemsKey = listKey;
+      items.scrollTop = 0;
+      itemButtons = new Map();
+      items.replaceChildren(...visible.map(([item, iconUrl]) => {
+        const button = doc.createElement("button");
+        button.type = "button";
+        button.className = "navigation-supply-item";
+        button.dataset.supplyItemId = String(item.itemId);
+        const icon = doc.createElement("span");
+        icon.className = "navigation-supply-icon";
+        icon.setAttribute("aria-hidden", "true");
+        icon.textContent = CATEGORIES[item.category][2];
+        if (iconUrl) {
+          const image = doc.createElement("img");
+          image.alt = "";
+          image.hidden = true;
+          image.decoding = "async";
+          image.addEventListener("load", () => { icon.hidden = true; image.hidden = false; }, { once: true });
+          image.src = iconUrl;
+          button.append(image);
+        }
+        const label = doc.createElement("span");
+        label.textContent = itemLabel(item);
+        button.append(icon, label);
+        itemButtons.set(item.itemId, button);
+        return button;
+      }));
+    }
+    for (const [id, button] of itemButtons) {
+      button.setAttribute("aria-pressed", String(id === selected));
+      button.disabled = Boolean(order);
+    }
+    empty.hidden = visible.length !== 0;
+    empty.textContent = tr("没有匹配的物品。", "No matching items.");
+  }
+
+  function render() {
+    const target = currentTarget();
+    const isTargetReady = Boolean(target);
+    if (wasTargetReady !== isTargetReady) {
+      wasTargetReady = isTargetReady;
+      onTargetReady(isTargetReady);
+    }
+    for (const button of actionButtons) {
+      button.hidden = !target;
+      button.disabled = Boolean(order);
+      button.textContent = tr("给物品", "Give item");
+    }
+    if (!dialog.open) return;
+    title.textContent = tr("队伍补给", "Team supplies");
+    close.setAttribute("aria-label", tr("关闭", "Close"));
+    shop.hidden = mode !== "shop";
+    if (mode === "shop" && sameTarget(dialogTarget)) {
+      recipient.textContent = tr(`给 ${target.name}`, `To ${target.name}`);
+      search.placeholder = tr("搜索物品", "Find items");
+      search.setAttribute("aria-label", search.placeholder);
+      filters.setAttribute("aria-label", tr("物品分类", "Item categories"));
+      renderCatalog();
+      const item = session.items.get(selected);
+      give.disabled = !item || Boolean(order);
+      give.textContent = order ? tr("正在发送…", "Sending…")
+        : item ? tr(`给 ${target.name} 1 个${itemLabel(item)}`, `Give ${target.name} 1 × ${itemLabel(item)}`)
+        : tr("选择物品", "Select an item");
+    }
+    const statusText = message ? tr(message.chinese, message.english) : "";
+    if (status.textContent !== statusText) status.textContent = statusText;
+    status.hidden = !message;
+    status.dataset.state = message?.state ?? "";
+  }
+
+  function hideDialog() {
+    mode = null;
+    selected = null;
+    search.value = "";
+    category = "all";
+    message = null;
+    dialogTarget = null;
+    if (dialog.open) dialog.close();
+  }
+
+  function openDialog(nextMode, source) {
+    if (dialog.open) return;
+    mode = nextMode;
+    dialogTarget = nextMode === "shop" ? currentTarget() : null;
+    if (menu.open) menu.open = false;
+    focusOnClose = menu.contains(source) ? menu.querySelector("summary") : source;
+    dialog.showModal();
+    render();
+  }
+
+  async function request(path, { body } = {}) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    try {
+      const response = await fetchImpl(ROOT + path, {
+        method: body ? "POST" : "GET", credentials: "same-origin", cache: "no-store", redirect: "error",
+        signal: controller.signal,
+        headers: { Accept: "application/json",
+          ...(body ? { "Content-Type": "application/json" } : {}) },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      });
+      return { status: response.status, ok: response.ok, value: await response.json().catch(() => null) };
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  async function refreshSession() {
+    if (!context.followsLive || refreshing || Date.now() < nextRefresh) return;
+    refreshing = true;
+    nextRefresh = Date.now() + 4_000;
+    const { captureId, sceneEpoch } = context;
+    try {
+      const { ok, value } = await request(`/${captureId.replace(".", "/")}/supply`);
+      if (context.captureId !== captureId || context.sceneEpoch !== sceneEpoch) return;
+      const refreshed = ok && value?.enabled === true && value.sceneEpoch === sceneEpoch ? catalog(value) : null;
+      if (!refreshed) {
+        session = null;
+        hideDialog();
+      } else {
+        session = { captureId, sceneEpoch, ...refreshed };
+        if (mode === "shop" && !sameTarget(dialogTarget)) hideDialog();
+        if (!session.items.has(selected)) selected = null;
+      }
+      render();
+    } catch { /* Keep the current panel while a refresh is retried. */ }
+    finally { refreshing = false; }
+  }
+
+  for (const button of actionButtons) button.addEventListener("click", () => {
+    if (currentTarget() && !order) openDialog("shop", button);
+  });
+  close.addEventListener("click", hideDialog);
+  dialog.addEventListener("close", () => {
+    if (dialog.open) return;
+    hideDialog();
+    if (!focusOnClose?.hidden && focusOnClose?.getClientRects().length) focusOnClose.focus();
+  });
+  filters.addEventListener("click", event => {
+    const key = event.target.closest("[data-supply-category]")?.dataset.supplyCategory;
+    if (!key || !Object.hasOwn(CATEGORIES, key) || mode !== "shop") return;
+    category = key;
+    selected = null;
+    render();
+  });
+  search.addEventListener("input", () => { selected = null; render(); });
+  items.addEventListener("click", event => {
+    const button = event.target.closest("[data-supply-item-id]");
+    if (!button || order || !sameTarget(dialogTarget)) return;
+    selected = Number(button.dataset.supplyItemId);
+    message = null;
+    render();
+  });
+
+  async function settleOrder(current, firstResponse) {
+    let response = await firstResponse.catch(() => null);
+    let submitted = true;
+    while (order === current) {
+      const result = response?.value;
+      if (response?.ok && result?.orderId === current.id && FINAL_ORDER_STATUS.has(result.status))
+        return result.status;
+      if (submitted && response && !response.ok && response.status >= 400 && response.status < 500)
+        return ["supply_busy", "supply_capacity"].includes(result?.code) ? "busy" : "rejected";
+      if (!submitted && [401, 403, 404, 410].includes(response?.status)) return "unconfirmed";
+      if (Date.now() >= current.expiresAt) return "unconfirmed";
+      await new Promise(resolve => setTimeout(resolve, 1_500));
+      if (order !== current) break;
+      submitted = false;
+      response = await request(`${current.path}/${current.id}`).catch(() => null);
+    }
+    return "unconfirmed";
+  }
+
+  give.addEventListener("click", async () => {
+    if (order || !sameTarget(dialogTarget) || !session.items.has(selected)) return;
+    const current = {
+      target: dialogTarget, path: `/${dialogTarget.captureId.replace(".", "/")}/supply`, id: globalThis.crypto.randomUUID(),
+      expiresAt: Date.now() + ORDER_WAIT_MS,
+    };
+    const item = session.items.get(selected);
+    order = current;
+    setMessage("正在发送请求…", "Sending request…");
+    render();
+    const result = await settleOrder(current, request(current.path,
+      { body: { orderId: current.id, sceneEpoch: current.target.sceneEpoch, playerId: current.target.playerId, itemId: item.itemId } }));
+    if (order !== current) return;
+    order = null;
+    if (mode === "shop" && sameTarget(current.target)) {
+      if (result === "sent") {
+        selected = null;
+        setMessage("请求已发出，请在游戏内查看。", "Request sent. Check in the game.", "sent");
+      } else if (result === "busy") {
+        setMessage("正在处理另一件补给，请稍后再试。", "Another request is being handled. Try again shortly.", "error");
+      } else if (result === "unconfirmed") {
+        selected = null;
+        setMessage("暂未确认送达，请先在游戏内查看。", "Delivery is unconfirmed. Check in the game before trying again.", "error");
+      } else {
+        setMessage("请求未发出，请确认玩家仍在当前关卡。", "Request was not sent. Check that the player is still in this scene.", "error");
+      }
+    }
+    render();
+  });
+
+  return {
+    update(next = {}) {
+      const captureId = parseCaptureId(next.captureId);
+      const changedRoom = context.captureId !== captureId;
+      const changedScene = changedRoom || context.sceneEpoch !== next.sceneEpoch;
+      const followsLive = Boolean(captureId && next.followsLive);
+      const language = tr("zh", "en");
+      const changed = changedRoom || context.followsLive !== followsLive || context.language !== language
+        || context.playerId !== next.playerId || context.sceneEpoch !== next.sceneEpoch || context.gameAssetPack !== next.gameAssetPack;
+      if (changedScene) {
+        session = null;
+        nextRefresh = 0;
+        hideDialog();
+      }
+      context = { ...next, captureId, followsLive, language };
+      if (mode && (!followsLive || mode === "shop" && !sameTarget(dialogTarget))) hideDialog();
+      if (followsLive) void refreshSession();
+      if (changed) render();
+    },
+  };
+}

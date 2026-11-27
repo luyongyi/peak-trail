@@ -247,6 +247,22 @@
         </form>
       </dialog>
 
+      <dialog class="navigation-supply-dialog" id="navigationSupplyDialog" aria-labelledby="navigationSupplyTitle">
+        <div class="navigation-supply-heading">
+          <h2 id="navigationSupplyTitle">队伍补给</h2>
+          <button class="navigation-supply-close" id="navigationSupplyClose" type="button" aria-label="关闭" autofocus>×</button>
+        </div>
+        <div class="navigation-supply-shop" id="navigationSupplyShop" hidden>
+          <div class="navigation-supply-recipient" id="navigationSupplyRecipient"></div>
+          <input id="navigationSupplySearch" type="search" maxlength="80" placeholder="搜索物品" aria-label="搜索物品" />
+          <div class="navigation-supply-filters" id="navigationSupplyFilters" aria-label="物品分类"></div>
+          <div class="navigation-supply-items" id="navigationSupplyItems"></div>
+          <p id="navigationSupplyEmpty" hidden>没有匹配的物品。</p>
+          <button class="navigation-supply-confirm" id="navigationSupplyGive" type="button" disabled>选择物品</button>
+        </div>
+        <p class="navigation-supply-status" id="navigationSupplyStatus" role="status" hidden></p>
+      </dialog>
+
       <section class="replay-empty-state" id="replayEmptyState" aria-labelledby="replayEmptyTitle" hidden>
         <div class="empty-glyph" aria-hidden="true"><span></span><span></span><span></span></div>
         <p class="eyebrow">我的足迹</p>
@@ -389,9 +405,12 @@
             <span class="follow-dot" aria-hidden="true"></span>
             <span id="followHudText">跟随中</span>
             <small id="followHudHint">地形避让 · Esc 退出 · Tab 换人 · 拖动环绕 · 滚轮缩放</small>
+            <button class="navigation-supply-action" id="navigationSupplyMenuAction" type="button" aria-haspopup="dialog" hidden>给物品</button>
           </div>
           <section class="player-hud" id="playerHud" aria-labelledby="playerHudName" hidden>
-            <div class="player-hud-heading"><strong class="player-hud-name" id="playerHudName"></strong><span class="player-hud-altitude"></span></div>
+            <div class="player-hud-heading"><strong class="player-hud-name" id="playerHudName"></strong><span class="player-hud-altitude"></span>
+              <button class="navigation-supply-action" id="navigationSupplyHudAction" type="button" aria-haspopup="dialog" hidden>给物品</button>
+            </div>
             <div class="player-hud-status"><meter min="0" max="1" aria-labelledby="playerHudStatusText" hidden></meter><span id="playerHudStatusText"></span></div>
             <div class="player-hud-slots"></div>
           </section>
