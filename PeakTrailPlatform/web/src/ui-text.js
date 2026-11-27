@@ -12,6 +12,7 @@ export const UI_TEXT_PAIRS = Object.freeze([
   ["道具事件", "Item events"],
   ["关闭", "Close"],
   ["队伍补给", "Team supplies"],
+  ["接收玩家", "Recipient"],
   ["搜索物品", "Find items"],
   ["物品分类", "Item categories"],
   ["没有匹配的物品。", "No matching items."],

@@ -35,7 +35,7 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
 
 function fixture(fetchImpl) {
   const document = { createElement: () => new Element(document) };
-  const elements = Object.fromEntries(["menu", "dialog", "title", "close", "shop", "recipient", "search", "filters", "items", "empty", "give", "status"]
+  const elements = Object.fromEntries(["menu", "airportAction", "airportGroup", "dialog", "title", "close", "shop", "recipient", "recipientPicker", "recipientSelect", "search", "filters", "items", "empty", "give", "status"]
     .map(key => [key, new Element(document)]));
   const action = new Element(document);
   const api = createNavigationSupply({ ...elements, actionButtons: [action], fetchImpl });
@@ -124,4 +124,87 @@ test("a lost submission response is resolved by status lookup without a second P
   await f.give.fire("click");
   assert.equal(calls.filter(call => call.method === "POST").length, 1);
   assert.equal(f.status.dataset.state, "sent");
+});
+
+test("airport supply shows its sole recipient without requiring a climbing trace or camera target", async () => {
+  const posts = [];
+  const f = fixture(async (path, init) => {
+    if (init.method === "GET") return response({ ...available, players: [available.players[0]] });
+    const body = JSON.parse(init.body); posts.push(body);
+    return response({ orderId: body.orderId, status: "sent" });
+  });
+  f.api.update({ ...context, liveAirport: true, playerId: null }); await tick();
+  assert.equal(f.airportGroup.hidden, false);
+  assert.equal(f.airportAction.hidden, false);
+  assert.equal(f.action.hidden, true);
+  await f.airportAction.fire("click");
+  assert.equal(f.recipientPicker.hidden, false);
+  assert.equal(f.recipientSelect.value, "p3");
+  assert.equal(f.recipient.textContent, "给 小王");
+  await f.items.fire("click", f.items.children[0]);
+  await f.give.fire("click");
+  assert.equal(posts.length, 1);
+  assert.equal(posts[0].playerId, "p3");
+  assert.equal(posts[0].sceneEpoch, 2);
+});
+
+test("airport with multiple players requires an explicit current recipient and does not inherit a camera target", async t => {
+  t.mock.timers.enable({ apis: ["Date"], now: 10000 });
+  const posts = [];
+  const f = fixture(async (path, init) => {
+    if (init.method === "GET") return response(available);
+    const body = JSON.parse(init.body); posts.push(body);
+    return response({ orderId: body.orderId, status: "sent" });
+  });
+  const airportContext = { ...context, liveAirport: true };
+  f.api.update(airportContext); await tick(); await f.airportAction.fire("click");
+  assert.equal(f.recipientSelect.value, "");
+  assert.equal(f.give.disabled, true);
+  await f.items.fire("click", f.items.children[0]);
+  await f.give.fire("click");
+  assert.equal(posts.length, 0);
+  t.mock.timers.tick(4001); f.api.update(airportContext); await tick();
+  assert.equal(f.dialog.open, true, "polling does not close an unselected airport dialog");
+  f.recipientSelect.value = "p4"; await f.recipientSelect.fire("change");
+  assert.equal(f.recipient.textContent, "给 小李");
+  await f.items.fire("click", f.items.children[0]); await f.give.fire("click");
+  assert.equal(posts.length, 1);
+  assert.equal(posts[0].playerId, "p4");
+});
+
+test("departed airport recipient closes an open selection instead of assigning another player", async t => {
+  t.mock.timers.enable({ apis: ["Date"], now: 10000 });
+  let roster = available.players;
+  const posts = [];
+  const f = fixture(async (path, init) => {
+    if (init.method === "GET") return response({ ...available, players: roster });
+    posts.push(JSON.parse(init.body)); return response({}, 400);
+  });
+  const airportContext = { ...context, liveAirport: true, playerId: null };
+  f.api.update(airportContext); await tick(); await f.airportAction.fire("click");
+  f.recipientSelect.value = "p3"; await f.recipientSelect.fire("change");
+  await f.items.fire("click", f.items.children[0]);
+  roster = [available.players[1]];
+  t.mock.timers.tick(4001); f.api.update(airportContext); await tick();
+  assert.equal(f.dialog.open, false);
+  await f.give.fire("click");
+  assert.equal(posts.length, 0);
+  assert.equal(f.airportAction.hidden, false, "remaining players can be selected by a new explicit action");
+});
+
+test("airport-to-climb and epoch changes invalidate the recipient and hide the airport entry", async () => {
+  const f = fixture(async () => response({ ...available, players: [available.players[0]] }));
+  const airportContext = { ...context, liveAirport: true, playerId: null };
+  f.api.update(airportContext); await tick(); await f.airportAction.fire("click");
+  f.api.update({ ...context, liveAirport: false });
+  assert.equal(f.dialog.open, false);
+  assert.equal(f.airportAction.hidden, true);
+  await tick(); await f.select();
+  assert.equal(f.recipientPicker.hidden, true);
+  assert.equal(f.recipient.textContent, "给 小王");
+  f.api.update({ ...airportContext, sceneEpoch: 3 });
+  assert.equal(f.dialog.open, false);
+  assert.equal(f.airportAction.hidden, true);
+  await tick();
+  assert.equal(f.airportAction.hidden, true, "old readiness cannot enable a new scene");
 });

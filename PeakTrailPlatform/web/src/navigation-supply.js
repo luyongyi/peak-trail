@@ -43,18 +43,24 @@ function itemMatches(item, category, query) {
     && (!query || [item.name, itemLabel(item)].some(value => value.normalize("NFKC").toLowerCase().includes(query)));
 }
 
-export function createNavigationSupply({ menu, actionButtons, dialog, title, close,
-  shop, recipient, search, filters, items, empty, give, status,
+export function createNavigationSupply({ menu, actionButtons, airportAction, airportGroup, dialog, title, close,
+  shop, recipient, recipientPicker, recipientSelect, search, filters, items, empty, give, status,
   onTargetReady = () => {}, fetchImpl = (...args) => globalThis.fetch(...args) }) {
   let context = {};
   let session = null, nextRefresh = 0, refreshing = false;
   let mode = null, category = "all", selected = null, dialogTarget = null, message = null;
   let order = null, itemButtons = new Map(), filtersKey = "", itemsKey = "", focusOnClose;
-  let wasTargetReady = false;
+  let wasTargetReady = false, airportPlayerId = null, recipientsKey = "";
   const doc = dialog.ownerDocument;
 
+  function airportReady() {
+    return Boolean(context.liveAirport && context.followsLive && session?.players.size
+      && session.captureId === context.captureId && session.sceneEpoch === context.sceneEpoch);
+  }
+
   function currentTarget() {
-    const { captureId, followsLive, playerId, sceneEpoch } = context;
+    const { captureId, followsLive, sceneEpoch } = context;
+    const playerId = context.liveAirport ? airportPlayerId : context.playerId;
     const name = session?.players.get(playerId);
     return captureId && followsLive && name && session.captureId === captureId && session.sceneEpoch === sceneEpoch
       ? { captureId, sceneEpoch, playerId, name } : null;
@@ -122,7 +128,7 @@ export function createNavigationSupply({ menu, actionButtons, dialog, title, clo
     }
     for (const [id, button] of itemButtons) {
       button.setAttribute("aria-pressed", String(id === selected));
-      button.disabled = Boolean(order);
+      button.disabled = Boolean(order) || !currentTarget();
     }
     empty.hidden = visible.length !== 0;
     empty.textContent = tr("没有匹配的物品。", "No matching items.");
@@ -130,30 +136,53 @@ export function createNavigationSupply({ menu, actionButtons, dialog, title, clo
 
   function render() {
     const target = currentTarget();
-    const isTargetReady = Boolean(target);
+    const airport = airportReady();
+    const isTargetReady = Boolean(target) && !context.liveAirport;
     if (wasTargetReady !== isTargetReady) {
       wasTargetReady = isTargetReady;
       onTargetReady(isTargetReady);
     }
     for (const button of actionButtons) {
-      button.hidden = !target;
+      button.hidden = !isTargetReady;
       button.disabled = Boolean(order);
       button.textContent = tr("给物品", "Give item");
+    }
+    if (airportGroup) airportGroup.hidden = !airport;
+    if (airportAction) {
+      airportAction.hidden = !airport;
+      airportAction.disabled = Boolean(order);
+      airportAction.textContent = tr("给物品", "Give item");
     }
     if (!dialog.open) return;
     title.textContent = tr("队伍补给", "Team supplies");
     close.setAttribute("aria-label", tr("关闭", "Close"));
     shop.hidden = mode !== "shop";
-    if (mode === "shop" && sameTarget(dialogTarget)) {
-      recipient.textContent = tr(`给 ${target.name}`, `To ${target.name}`);
+    if (recipientPicker) recipientPicker.hidden = !airport;
+    if (airport && recipientSelect) {
+      const key = JSON.stringify([tr("zh", "en"), [...session.players]]);
+      if (recipientsKey !== key) {
+        recipientsKey = key;
+        recipientSelect.replaceChildren(...[["", tr("选择接收玩家", "Choose a player")], ...session.players].map(([id, name]) => {
+          const option = doc.createElement("option");
+          option.value = id;
+          option.textContent = name;
+          return option;
+        }));
+      }
+      recipientSelect.value = airportPlayerId || "";
+      recipientSelect.disabled = Boolean(order);
+      recipientSelect.setAttribute("aria-label", tr("接收玩家", "Recipient"));
+    }
+    if (mode === "shop" && (sameTarget(dialogTarget) || airport && !dialogTarget)) {
+      recipient.textContent = target ? tr(`给 ${target.name}`, `To ${target.name}`) : tr("先选择接收玩家", "Choose the recipient first");
       search.placeholder = tr("搜索物品", "Find items");
       search.setAttribute("aria-label", search.placeholder);
       filters.setAttribute("aria-label", tr("物品分类", "Item categories"));
       renderCatalog();
       const item = session.items.get(selected);
-      give.disabled = !item || Boolean(order);
+      give.disabled = !item || !target || Boolean(order);
       give.textContent = order ? tr("正在发送…", "Sending…")
-        : item ? tr(`给 ${target.name} 1 个${itemLabel(item)}`, `Give ${target.name} 1 × ${itemLabel(item)}`)
+        : item && target ? tr(`给 ${target.name} 1 个${itemLabel(item)}`, `Give ${target.name} 1 × ${itemLabel(item)}`)
         : tr("选择物品", "Select an item");
     }
     const statusText = message ? tr(message.chinese, message.english) : "";
@@ -169,12 +198,16 @@ export function createNavigationSupply({ menu, actionButtons, dialog, title, clo
     category = "all";
     message = null;
     dialogTarget = null;
+    airportPlayerId = null;
     if (dialog.open) dialog.close();
   }
 
   function openDialog(nextMode, source) {
     if (dialog.open) return;
     mode = nextMode;
+    // The airport has no climbing camera target. Show the actual current
+    // recipient and require a choice when more than one player is present.
+    if (airportReady()) airportPlayerId = session.players.size === 1 ? session.players.keys().next().value : null;
     dialogTarget = nextMode === "shop" ? currentTarget() : null;
     if (menu.open) menu.open = false;
     focusOnClose = menu.contains(source) ? menu.querySelector("summary") : source;
@@ -213,7 +246,7 @@ export function createNavigationSupply({ menu, actionButtons, dialog, title, clo
         hideDialog();
       } else {
         session = { captureId, sceneEpoch, ...refreshed };
-        if (mode === "shop" && !sameTarget(dialogTarget)) hideDialog();
+        if (mode === "shop" && !sameTarget(dialogTarget) && !(airportReady() && !dialogTarget)) hideDialog();
         if (!session.items.has(selected)) selected = null;
       }
       render();
@@ -221,8 +254,16 @@ export function createNavigationSupply({ menu, actionButtons, dialog, title, clo
     finally { refreshing = false; }
   }
 
-  for (const button of actionButtons) button.addEventListener("click", () => {
-    if (currentTarget() && !order) openDialog("shop", button);
+  for (const button of [...actionButtons, airportAction].filter(Boolean)) button.addEventListener("click", () => {
+    if ((currentTarget() || airportReady()) && !order) openDialog("shop", button);
+  });
+  recipientSelect?.addEventListener("change", () => {
+    if (order || !airportReady() || mode !== "shop") return;
+    airportPlayerId = session.players.has(recipientSelect.value) ? recipientSelect.value : null;
+    dialogTarget = currentTarget();
+    selected = null;
+    message = null;
+    render();
   });
   close.addEventListener("click", hideDialog);
   dialog.addEventListener("close", () => {
@@ -300,17 +341,18 @@ export function createNavigationSupply({ menu, actionButtons, dialog, title, clo
       const captureId = parseCaptureId(next.captureId);
       const changedRoom = context.captureId !== captureId;
       const changedScene = changedRoom || context.sceneEpoch !== next.sceneEpoch;
+      const changedMode = Boolean(context.liveAirport) !== Boolean(next.liveAirport);
       const followsLive = Boolean(captureId && next.followsLive);
       const language = tr("zh", "en");
       const changed = changedRoom || context.followsLive !== followsLive || context.language !== language
-        || context.playerId !== next.playerId || context.sceneEpoch !== next.sceneEpoch || context.gameAssetPack !== next.gameAssetPack;
-      if (changedScene) {
+        || context.playerId !== next.playerId || context.sceneEpoch !== next.sceneEpoch || context.gameAssetPack !== next.gameAssetPack || changedMode;
+      if (changedScene || changedMode) {
         session = null;
         nextRefresh = 0;
         hideDialog();
       }
       context = { ...next, captureId, followsLive, language };
-      if (mode && (!followsLive || mode === "shop" && !sameTarget(dialogTarget))) hideDialog();
+      if (mode && (!followsLive || mode === "shop" && !sameTarget(dialogTarget) && !(airportReady() && !dialogTarget))) hideDialog();
       if (followsLive) void refreshSession();
       if (changed) render();
     },

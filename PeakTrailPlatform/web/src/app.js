@@ -620,8 +620,10 @@ const packetStop = createPacketStop({
 const navigationSupply = createNavigationSupply({
   menu: $("watchMenu"),
   actionButtons: [$("navigationSupplyMenuAction"), $("navigationSupplyHudAction")],
+  airportAction: $("navigationSupplyAirportAction"), airportGroup: $("watchMenuSupply"),
   dialog: $("navigationSupplyDialog"), title: $("navigationSupplyTitle"), close: $("navigationSupplyClose"),
   shop: $("navigationSupplyShop"), recipient: $("navigationSupplyRecipient"),
+  recipientPicker: $("navigationSupplyRecipientPicker"), recipientSelect: $("navigationSupplyRecipientSelect"),
   search: $("navigationSupplySearch"), filters: $("navigationSupplyFilters"), items: $("navigationSupplyItems"),
   empty: $("navigationSupplyEmpty"), give: $("navigationSupplyGive"), status: $("navigationSupplyStatus"),
   onTargetReady: ready => { elements.playerHud.classList.toggle("has-navigation-supply", ready); syncPlayerHud(); },
@@ -2978,10 +2980,12 @@ function syncFollowHud(detail) {
 function syncNavigationSupply() {
   const watch = state.watch;
   const packet = watch.active && watch.kind === "packet";
+  const liveAirport = packet && watch.airport && !watch.trace && watch.connection === "waiting";
   navigationSupply.update({
     captureId: packet ? watch.id : null, sceneEpoch: watch.epoch,
-    followsLive: packet && watch.captureStatus === "recording" && watch.connection === "connected"
-      && watch.following && !watch.initializing && Boolean(watch.trace),
+    followsLive: packet && watch.captureStatus === "recording" && watch.following && !watch.initializing
+      && (liveAirport || watch.connection === "connected" && Boolean(watch.trace)),
+    liveAirport,
     playerId: viewer?.followTargetId, gameAssetPack: state.gameAssetPack,
   });
 }
