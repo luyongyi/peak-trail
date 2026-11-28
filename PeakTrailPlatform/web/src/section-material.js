@@ -51,18 +51,25 @@ const section = `
 
 export function sectionMaterial(material, sourceMesh, splitShell, plane, cache) {
   if (!isStructuralDraw(material, sourceMesh, splitShell)) return material;
-  if (cache.has(material)) return cache.get(material);
+  // Separate rocks/pillars are whole objects. Only the verified, continuous
+  // native enclosure wall uses a surface cut; cutting round props per pixel
+  // leaves the hollow hemispheres visible along the building's open edge.
+  const mode = splitShell ? "surface" : "module";
+  const cacheKey = `${material.uuid}:${mode}`;
+  if (cache.has(cacheKey)) return cache.get(cacheKey);
   const clone = material.clone();
   const compile = material.onBeforeCompile, programKey = material.customProgramCacheKey();
   clone.userData.peakSectionPlane = true;
+  clone.userData.peakSectionMode = mode;
   clone.onBeforeCompile = function(shader, renderer) {
     compile.call(this, shader, renderer);
+    if (mode !== "surface") return;
     shader.uniforms.peakSectionPlane = plane;
     shader.uniforms.peakSectionFooting = plane.footing;
     shader.fragmentShader = "uniform vec4 peakSectionPlane;\nuniform vec4 peakSectionFooting;\n" + shader.fragmentShader
       .replace("#include <clipping_planes_fragment>", "#include <clipping_planes_fragment>\n" + section);
   };
-  clone.customProgramCacheKey = () => programKey + "-section-v1";
-  cache.set(material, clone);
+  clone.customProgramCacheKey = () => `${programKey}-section-${mode}-v2`;
+  cache.set(cacheKey, clone);
   return clone;
 }

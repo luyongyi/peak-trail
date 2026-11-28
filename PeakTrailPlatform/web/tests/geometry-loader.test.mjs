@@ -10,6 +10,7 @@ import { getSourceEffectMaterial, supportsSourceEffect } from "../src/source-mat
 import { isExplosiveMineMaterial, recordedHiddenMineIndices } from "../src/mine-visibility.js";
 import { applyFollowOcclusion, prepareFollowOcclusionMesh } from "../src/follow-occlusion.js";
 import { sectionMaterial } from "../src/section-material.js";
+import { applySectionModuleMask } from "../src/section-module.js";
 import { isInteriorLayer } from "../src/camera-placement.js";
 import { sha256Hex } from "../src/sha256.js";
 import { isProjectionProxyMaterial, shadowOnlyNodeIndices } from "../src/source-render-policy.js";
@@ -23,9 +24,9 @@ const waterSource = (await readFile(new URL("../src/source-water-material.js", i
   .replace(/^import .*;\r?\n/gm, "").replace(/^export (?=function )/gm, "");
 const applySourceWaterDepth = new Function("THREE", "supportsSourceEffect", `${waterSource}\nreturn applySourceWaterDepth;`)(THREE, supportsSourceEffect);
 const compile = (ports = {}) => new Function(
-  "THREE", "GLTFLoader", "MeshoptDecoder", "decodeGeometryBytes", "GEOMETRY_FORMATS", "positiveInstanceTransform", "getSourceEffectMaterial", "supportsSourceEffect", "isExplosiveMineMaterial", "recordedHiddenMineIndices", "sha256Hex", "fetch", "crypto", "isProjectionProxyMaterial", "shadowOnlyNodeIndices", "applySourceWaterDepth", "readGeometryResponse", "checkGeometryAbort", "reportGeometryProgress", "yieldGeometryTask", "applySharedTerrainMaterial", "sharedVerifiableTopBlend", "sectionMaterial", "applyFollowOcclusion", "prepareFollowOcclusionMesh", "isInteriorLayer",
+  "THREE", "GLTFLoader", "MeshoptDecoder", "decodeGeometryBytes", "GEOMETRY_FORMATS", "positiveInstanceTransform", "getSourceEffectMaterial", "supportsSourceEffect", "isExplosiveMineMaterial", "recordedHiddenMineIndices", "sha256Hex", "fetch", "crypto", "isProjectionProxyMaterial", "shadowOnlyNodeIndices", "applySourceWaterDepth", "readGeometryResponse", "checkGeometryAbort", "reportGeometryProgress", "yieldGeometryTask", "applySharedTerrainMaterial", "sharedVerifiableTopBlend", "sectionMaterial", "applySectionModuleMask", "applyFollowOcclusion", "prepareFollowOcclusionMesh", "isInteriorLayer",
   `${source}\nreturn { loadGameGeometry, batchStaticMeshes, sourceFacade, updateRecordedMineVisibility, updateMapFogSurfaceVisibility, verifiableTopBlend };`,
-)(THREE, ports.GLTFLoader, {}, ports.decode || decodeGeometryBytes, GEOMETRY_FORMATS, positiveInstanceTransform, getSourceEffectMaterial, supportsSourceEffect, isExplosiveMineMaterial, recordedHiddenMineIndices, sha256Hex, ports.fetch, ports.crypto || webcrypto, isProjectionProxyMaterial, ports.shadowOnlyNodeIndices || shadowOnlyNodeIndices, applySourceWaterDepth, readGeometryResponse, checkGeometryAbort, reportGeometryProgress, yieldGeometryTask, applySharedTerrainMaterial, sharedVerifiableTopBlend, sectionMaterial, applyFollowOcclusion, ports.prepareFollowOcclusionMesh || prepareFollowOcclusionMesh, isInteriorLayer);
+)(THREE, ports.GLTFLoader, {}, ports.decode || decodeGeometryBytes, GEOMETRY_FORMATS, positiveInstanceTransform, getSourceEffectMaterial, supportsSourceEffect, isExplosiveMineMaterial, recordedHiddenMineIndices, sha256Hex, ports.fetch, ports.crypto || webcrypto, isProjectionProxyMaterial, ports.shadowOnlyNodeIndices || shadowOnlyNodeIndices, applySourceWaterDepth, readGeometryResponse, checkGeometryAbort, reportGeometryProgress, yieldGeometryTask, applySharedTerrainMaterial, sharedVerifiableTopBlend, sectionMaterial, applySectionModuleMask, applyFollowOcclusion, ports.prepareFollowOcclusionMesh || prepareFollowOcclusionMesh, isInteriorLayer);
 
 test("follow modules join every material primitive of one source instance without hiding its repeated neighbors", () => {
   const { batchStaticMeshes } = compile();
@@ -124,6 +125,109 @@ test("unassociated source objects stay separate and non-follow loads create no m
   }
 });
 
+test("section-only views bind complete multi-material modules to precise bounds, including reflected instances", () => {
+  const { batchStaticMeshes } = compile(), scene = new THREE.Group(), source = new THREE.Group();
+  const geometry = (positions, unused) => {
+    const value = new THREE.BufferGeometry();
+    value.setAttribute("position", new THREE.Float32BufferAttribute([...positions, ...unused], 3));
+    value.setIndex([0, 1, 2]); value.computeBoundingBox();
+    return value;
+  };
+  const rockGeometry = geometry([0, 0, 0, 2, 0, 0, 0, 1, 2], [9000, 9000, 9000]);
+  const trimGeometry = geometry([-4, -2, -3, -3, -1, -2, -4, -1, -3], [-9000, -9000, -9000]);
+  const stone = new THREE.MeshStandardMaterial({ name: "rock" });
+  stone.userData.peakTerrain = { sourceMaterial: "M_Rock_Volcano", sourceColors: { shader: "W/Peak_Rock" } };
+  const trim = new THREE.MeshBasicMaterial({ name: "trim", transparent: true, depthWrite: false });
+  const matrices = [new THREE.Matrix4().makeTranslation(10, 20, 30),
+    new THREE.Matrix4().makeScale(-2, 1, 3).setPosition(-12, 10, 40)];
+  // The unclassified primitive is visited first: a later stone slot must
+  // make both primitives participate using the complete original bounds.
+  for (const [geo, material] of [[trimGeometry, trim], [rockGeometry, stone]]) {
+    const mesh = new THREE.InstancedMesh(geo, material, 2);
+    matrices.forEach((matrix, index) => mesh.setMatrixAt(index, matrix)); source.add(mesh);
+  }
+  const platform = new THREE.Mesh(rockGeometry, stone); platform.position.set(100, 0, 0);
+  scene.add(source, platform);
+  const plane = { value: new THREE.Vector4(0, 1, 0, 1), footing: { value: new THREE.Vector4() } };
+  const root = batchStaticMeshes(scene, "26542162", new Set(), new Map([[source, { nodes: 0 }], [platform, { nodes: 1 }]]),
+    { sectionPlane: plane, sectionMeshNames: ["Rock_Round", "Rock_Platform"] });
+  const expected = [
+    { center: [9, 19.5, 29.5], extent: [3, 1.5, 2.5] },
+    { center: [-10, 9.5, 38.5], extent: [6, 1.5, 7.5] },
+  ];
+  const seen = [new Set(), new Set()];
+  for (const mesh of root.children) {
+    const centers = mesh.geometry.getAttribute("peakSectionModule"), extents = mesh.geometry.getAttribute("peakSectionExtent");
+    assert.equal(centers.count, mesh.count); assert.equal(extents.count, mesh.count);
+    mesh.userData.followModules.forEach((module, index) => {
+      if (module.sourceNode === 1) {
+        assert.equal(centers.getW(index), 0, "an independent platform sharing the rock material stays intact");
+        return;
+      }
+      const sample = expected[module.sourceInstance];
+      assert.equal(module.sectionModule, true); assert.equal(centers.getW(index), 1);
+      assert.deepEqual([centers.getX(index) * mesh.scale.x, centers.getY(index), centers.getZ(index)], sample.center);
+      assert.deepEqual([extents.getX(index), extents.getY(index), extents.getZ(index)], sample.extent);
+      assert.deepEqual(module.sectionBounds.getCenter(new THREE.Vector3()).toArray(), sample.center);
+      seen[module.sourceInstance].add(mesh.material.name);
+    });
+    const matrixBytes = [...mesh.instanceMatrix.array], version = mesh.instanceMatrix.version;
+    plane.value.set(1, 0, -5, 1);
+    assert.deepEqual([...mesh.instanceMatrix.array], matrixBytes);
+    assert.equal(mesh.instanceMatrix.version, version, "rotating the cut never changes static instance transforms");
+  }
+  seen.forEach(materials => assert.deepEqual([...materials].sort(), ["rock", "trim"]));
+  assert.equal(rockGeometry.getAttribute("peakSectionModule"), undefined);
+  assert.equal(trimGeometry.getAttribute("peakSectionModule"), undefined);
+});
+
+test("non-terminal chapters carrying the shared section plane skip module bounds, attributes and shader hooks", () => {
+  const { batchStaticMeshes } = compile();
+  for (const following of [false, true]) {
+    const scene = new THREE.Group(), geometry = new THREE.BoxGeometry(), material = new THREE.MeshStandardMaterial();
+    geometry.computeBoundingBox();
+    let vertexReads = 0;
+    const position = geometry.getAttribute("position"), getX = position.getX;
+    position.getX = function(index) { vertexReads++; return getX.call(this, index); };
+    scene.add(new THREE.Mesh(geometry, material));
+    const plane = { value: new THREE.Vector4(), footing: { value: new THREE.Vector4() } };
+    const context = { sectionPlane: plane, sectionMeshNames: following ? [] : null };
+    if (following) context.followOcclusion = { value: new THREE.Vector4() };
+    const root = batchStaticMeshes(scene, "26542162", new Set(), new Map(), context), mesh = root.children[0];
+    assert.equal(vertexReads, 0, "ordinary chapters keep their existing conservative accessor bounds");
+    assert.equal(mesh.geometry.getAttribute("peakSectionModule"), undefined);
+    assert.equal(mesh.geometry.getAttribute("peakSectionExtent"), undefined);
+    const shader = { uniforms: {}, vertexShader: "#include <begin_vertex>", fragmentShader: "#include <clipping_planes_fragment>" };
+    mesh.material.onBeforeCompile(shader, {});
+    assert.doesNotMatch(shader.vertexShader, /peakSectionModule/);
+    assert.equal(shader.uniforms.peakSectionModulePlane, undefined);
+    if (following) {
+      assert.equal(mesh.geometry.getAttribute("peakFollowHidden").count, 1);
+      assert.equal(mesh.userData.followModules[0].sectionBounds, undefined);
+      assert.equal(shader.uniforms.peakFollowSubject, context.followOcclusion);
+    } else {
+      assert.equal(mesh.geometry, geometry);
+      assert.equal(mesh.userData.followModules, undefined);
+    }
+  }
+});
+
+test("native split walls keep surface clipping separate from whole ordinary rocks using the same material", () => {
+  const stone = new THREE.MeshStandardMaterial();
+  stone.userData.peakTerrain = { sourceMaterial: "M_Rock_Volcano", sourceColors: { shader: "W/Peak_Rock" } };
+  const plane = { value: new THREE.Vector4(), footing: { value: new THREE.Vector4() } }, cache = new Map();
+  const rock = sectionMaterial(stone, "RockFinal", false, plane, cache);
+  const wall = sectionMaterial(stone, "Generated mesh 0,0,0", true, plane, cache);
+  assert.notEqual(rock, wall);
+  assert.equal(rock.userData.peakSectionMode, "module");
+  assert.equal(wall.userData.peakSectionMode, "surface");
+  const shader = () => ({ uniforms: {}, vertexShader: "", fragmentShader: "#include <clipping_planes_fragment>" });
+  const rockShader = shader(), wallShader = shader();
+  rock.onBeforeCompile(rockShader, {}); wall.onBeforeCompile(wallShader, {});
+  assert.doesNotMatch(rockShader.fragmentShader, /bool cut = dot\(world/);
+  assert.match(wallShader.fragmentShader, /bool cut = dot\(world/);
+});
+
 test("only the verified original split shell participates in facade removal", () => {
   const { sourceFacade } = compile();
   const template = { segment: 4, objectId: "map-enclosure:BuildPlayer-Level_1:16118", sourceRootName: "Gloom Temple",
@@ -205,6 +309,12 @@ test("both native entrance ramps keep their whole walking surface on either side
     assert.equal(shell.userData.kilnOuterSkin === true, sample.model === "Pipe");
     assert.notEqual(floor[0].userData.kilnOuterSkin, true);
     assert.equal(shell.material.userData.peakSectionPlane, true);
+    assert.equal(shell.material.userData.peakSectionMode, "surface");
+    for (const draw of root.children) {
+      assert.equal(draw.geometry.getAttribute("peakSectionModule").getW(0), 0,
+        "native shell core/exterior/passage never become ordinary whole-object cuts");
+    }
+    assert.equal(floor[0].userData.followOcclusionProtected, true);
     const ray = new THREE.Raycaster(new THREE.Vector3(sample.x, sample.y, sample.z + 1), new THREE.Vector3(0, 0, -1));
     const [hit] = ray.intersectObjects(floor);
     assert.ok(hit && Math.abs(hit.point.z - sample.z) < 0.00001, sample.root);
@@ -262,21 +372,26 @@ test("only verified original structural draws use the shared section plane, even
   assert.equal(result.children.find(mesh => mesh.material === stone).count, 3);
   assert.equal(stone.userData.peakSectionPlane, undefined);
   const material = marked[0].material;
+  assert.equal(material.userData.peakSectionMode, "module");
+  assert.equal(marked[0].geometry.getAttribute("peakSectionModule").getW(0), 1);
+  assert.equal(marked[0].geometry.getAttribute("peakSectionModule").getW(1), 1);
   assert.notEqual(material.customProgramCacheKey(), stone.customProgramCacheKey());
-  const shader = { uniforms: {}, fragmentShader: "#include <clipping_planes_fragment>", vertexShader: "#include <defaultnormal_vertex>" };
+  const shader = { uniforms: {}, fragmentShader: "#include <clipping_planes_fragment>", vertexShader: "#include <begin_vertex>\n#include <defaultnormal_vertex>" };
   material.onBeforeCompile(shader, {});
   assert.match(shader.vertexShader, /inverse\(mat3\(instanceMatrix\)\)/, "keeps the signed map's affine normal correction");
-  assert.equal(shader.uniforms.peakSectionPlane, sectionPlane);
-  assert.equal(shader.uniforms.peakSectionFooting, sectionPlane.footing);
+  assert.equal(shader.uniforms.peakSectionModulePlane, sectionPlane);
+  assert.equal(shader.uniforms.peakSectionModuleFooting, sectionPlane.footing);
+  assert.match(shader.vertexShader, /peakSectionModule/);
+  assert.doesNotMatch(shader.fragmentShader, /bool cut = dot\(world/);
   assert.ok(!shader.fragmentShader.includes("gl_FragCoord"), "the cut is fixed in building space at any viewport size");
   const version = material.version;
   sectionPlane.value.set(0.6, 0.8, -38, 1);
   sectionPlane.footing.value.set(8, 730, -12, 3);
-  assert.equal(shader.uniforms.peakSectionPlane.value.w, 1);
-  assert.equal(shader.uniforms.peakSectionFooting.value.y, 730);
+  assert.equal(shader.uniforms.peakSectionModulePlane.value.w, 1);
+  assert.equal(shader.uniforms.peakSectionModuleFooting.value.y, 730);
   assert.equal(material.version, version);
   sectionPlane.value.w = 0;
-  assert.equal(shader.uniforms.peakSectionPlane.value.w, 0);
+  assert.equal(shader.uniforms.peakSectionModulePlane.value.w, 0);
 });
 
 test("transparent surfaces, lava, crystals and unverified rocks never receive the section plane", () => {
@@ -312,7 +427,7 @@ test("whole-module hiding shares its uniform with instanced map materials and cu
   const marked = output.children[0], shader = { uniforms: {}, fragmentShader: "#include <clipping_planes_fragment>", vertexShader: "#include <begin_vertex>" };
   marked.material.onBeforeCompile(shader, {});
   assert.ok(marked.isInstancedMesh && marked.material.depthWrite && !marked.material.transparent);
-  assert.equal(shader.uniforms.peakSectionPlane, sectionPlane);
+  assert.equal(shader.uniforms.peakSectionModulePlane, sectionPlane);
   assert.equal(shader.uniforms.peakFollowSubject, followOcclusion);
   assert.match(shader.vertexShader, /vPeakFollowHidden = peakFollowHidden/);
   assert.match(shader.fragmentShader, /peakFollowSubject\.w > 0\.0 && vPeakFollowHidden > 0\.5/);

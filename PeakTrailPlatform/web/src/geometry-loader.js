@@ -10,6 +10,7 @@ import { isExplosiveMineMaterial, recordedHiddenMineIndices } from "./mine-visib
 import { sha256Hex } from "./sha256.js";
 import { isProjectionProxyMaterial, shadowOnlyNodeIndices } from "./source-render-policy.js";
 import { sectionMaterial } from "./section-material.js";
+import { applySectionModuleMask } from "./section-module.js";
 import { applyFollowOcclusion, prepareFollowOcclusionMesh } from "./follow-occlusion.js";
 import { isInteriorLayer } from "./camera-placement.js";
 
@@ -290,10 +291,11 @@ async function batchStaticMeshesAsync(scene, build, shadowOnly, associations, co
 function* buildStaticMeshes(scene, gameBuildId, shadowOnlyNodes = new Set(), associations = new Map(), context = {}) {
   scene.updateMatrixWorld(true);
   const batches = new Map();
+  const sectionModules = Boolean(context.sectionPlane && context.sectionMeshNames?.length);
   // A GLB node can contain several material primitives; each corresponding
   // instance is still one source renderer. Intern locally so identical node
   // numbers in another chapter/load never become the same hiding unit.
-  const followModules = context.followOcclusion ? new Map() : null;
+  const followModules = context.followOcclusion || sectionModules ? new Map() : null;
   const instance = new THREE.Matrix4();
   const prepared = new Set();
   const facadePartitions = new Map(), coreMaterials = new Map();
@@ -359,6 +361,7 @@ function* buildStaticMeshes(scene, gameBuildId, shadowOnlyNodes = new Set(), ass
         if (!applySourceEffectMaterial(material, gameBuildId)) applyTerrainMaterial(material);
         useExactInstanceNormals(material);
         if (context.followOcclusion) applyFollowOcclusion(material, context.followOcclusion);
+        if (sectionModules) applySectionModuleMask(material, context.sectionPlane);
         prepared.add(material);
       }
     }
@@ -407,7 +410,16 @@ function* buildStaticMeshes(scene, gameBuildId, shadowOnlyNodes = new Set(), ass
         if (followModules) {
           const sourceNode = nodeIndex ?? object.uuid, moduleKey = `${sourceNode}:${instanceIndex}:${role}`;
           if (!followModules.has(moduleKey)) followModules.set(moduleKey, { sourceNode, sourceInstance: instanceIndex, role });
-          batch.followModules.push(followModules.get(moduleKey));
+          const module = followModules.get(moduleKey);
+          if (sectionModules) {
+            // Include every material primitive of this original renderer,
+            // never unused vertices from a shared Unity static-batch buffer.
+            module.sectionBounds ||= new THREE.Box3();
+            module.sectionBounds.union(cachedBounds(part.geometry, Array.isArray(material), true).clone().applyMatrix4(worldMatrix));
+            const drawMaterials = Array.isArray(material) ? material : [material];
+            if (role === "object" && drawMaterials.some(item => item.userData?.peakSectionMode === "module")) module.sectionModule = true;
+          }
+          batch.followModules.push(module);
         }
         if (mineBounds) {
           // Record original Unity-world bounds BEFORE reflection factoring and
@@ -447,6 +459,22 @@ function* buildStaticMeshes(scene, gameBuildId, shadowOnlyNodes = new Set(), ass
       // floor. Keep the measured passage separate from all wall modules.
       if (batch.followOcclusionProtected) mesh.userData.followOcclusionProtected = true;
       prepareFollowOcclusionMesh(mesh, THREE);
+      if (sectionModules) {
+        const centers = new Float32Array(mesh.count * 4), extents = new Float32Array(mesh.count * 3);
+        const center = new THREE.Vector3(), halfSize = new THREE.Vector3();
+        batch.followModules.forEach((module, index) => {
+          const bounds = module.sectionBounds;
+          if (!bounds || bounds.isEmpty() || ![...bounds.min.toArray(), ...bounds.max.toArray()].every(Number.isFinite)) return;
+          bounds.getCenter(center); bounds.getSize(halfSize).multiplyScalar(0.5);
+          // Original bounds are already in Unity world space. The output
+          // mesh's X reflection is factored out here and reapplied by its
+          // modelMatrix, together with the viewer's origin and Z conversion.
+          centers.set([center.x * mesh.scale.x, center.y, center.z, module.sectionModule === true ? 1 : 0], index * 4);
+          extents.set(halfSize.toArray(), index * 3);
+        });
+        mesh.geometry.setAttribute("peakSectionModule", new THREE.InstancedBufferAttribute(centers, 4));
+        mesh.geometry.setAttribute("peakSectionExtent", new THREE.InstancedBufferAttribute(extents, 3));
+      }
     }
     setInstanceBounds(mesh, cachedBounds(batch.geometry, Array.isArray(batch.material)));
     root.add(mesh);

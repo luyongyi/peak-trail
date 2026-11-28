@@ -142,6 +142,46 @@ test("castAll looks past section-cut and undrawn triangles within each output me
   assert.deepEqual(cast().map(hit => hit.distance), [7, 9]);
 });
 
+test("whole-module section queries use the supplied probe plane and keep neighboring instances independent", () => {
+  const source = triangle(), mesh = new THREE.InstancedMesh(source.geometry, source.material, 3);
+  source.material.userData.peakSectionPlane = true; source.material.userData.peakSectionMode = "module";
+  const centres = [-3, 0, 3];
+  centres.forEach((x, i) => mesh.setMatrixAt(i, new THREE.Matrix4().makeTranslation(x, 0, 0)));
+  mesh.geometry.setAttribute("peakSectionModule", new THREE.InstancedBufferAttribute(new Float32Array(
+    centres.flatMap(x => [x, 0, 0, 1])), 4));
+  mesh.geometry.setAttribute("peakSectionExtent", new THREE.InstancedBufferAttribute(new Float32Array(
+    centres.flatMap(() => [2, 2, 0])), 3));
+  const query = new FollowTerrainQuery(THREE).setRoots([mesh]);
+  const section = createSectionPlane(THREE); section.value.set(1, 0, 0, 1);
+  const probe = createSectionPlane(THREE); probe.value.set(-1, 0, 0, 1);
+  const cast = (x, plane) => query.cast(vec(x, 0, 10), vec(0, 0, -1), 20, plane, { renderedFacesOnly: true });
+  assert.equal(cast(-3, section).instanceId, 0);
+  assert.equal(cast(3, section), null);
+  assert.equal(cast(-3, probe), null);
+  assert.equal(cast(3, probe).instanceId, 2, "candidate plane is independent of current render state");
+  assert.equal(cast(-.5, section), null, "a point on the rear half of a crossing module also disappears");
+  section.value.w = 0;
+  assert.equal(cast(3, section).instanceId, 2);
+  assert.equal(cast(0, section).instanceId, 1);
+  assert.equal(query.castAll(vec(3, 0, 10), vec(0, 0, -1), 20, probe)[0].instanceId, 2);
+});
+
+test("contact-protected module queries retain every face rather than applying the old per-point cut", () => {
+  const source = triangle(), mesh = new THREE.InstancedMesh(source.geometry, source.material, 1);
+  source.material.userData.peakSectionPlane = true; source.material.userData.peakSectionMode = "module";
+  mesh.setMatrixAt(0, new THREE.Matrix4().makeTranslation(3, 0, 0));
+  mesh.geometry.setAttribute("peakSectionModule", new THREE.InstancedBufferAttribute(new Float32Array([3, 0, 0, 1]), 4));
+  mesh.geometry.setAttribute("peakSectionExtent", new THREE.InstancedBufferAttribute(new Float32Array([2, 2, 0]), 3));
+  const query = new FollowTerrainQuery(THREE).setRoots([mesh]);
+  const section = createSectionPlane(THREE); section.value.set(1, 0, 0, 1); section.footing.value.set(3, 0, 0, .1);
+  const cast = () => query.castAll(vec(3.75, 0, 10), vec(0, 0, -1), 20, section, { renderedFacesOnly: true });
+  assert.equal(cast()[0].instanceId, 0, "the sampled face lies outside the local footing patch but its whole module is protected");
+  section.footing.value.w = 0;
+  assert.deepEqual(cast(), []);
+  mesh.geometry.getAttribute("peakSectionModule").setW(0, 0);
+  assert.equal(cast()[0].instanceId, 0, "ineligible modules do not fall back to fragment sectioning");
+});
+
 test("castAll keeps render-hidden instances detectable but refreshes actual mine transforms", () => {
   const source = triangle(), mesh = new THREE.InstancedMesh(source.geometry, source.material, 2);
   mesh.setMatrixAt(0, new THREE.Matrix4().makeTranslation(0, 0, 4));

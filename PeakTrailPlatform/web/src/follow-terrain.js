@@ -1,4 +1,5 @@
 import { cutsSectionPoint } from "./section-plane.js";
+import { cutsSectionModule } from "./section-module.js";
 
 // Camera-only queries against the same static triangles the map renders. Bounds
 // prune the search; they are never returned as a substitute collision surface.
@@ -114,7 +115,7 @@ function triangleTree(geometry) {
 
 function solidMaterial(material, ignoreSectionMaterials, frontFacing) {
   if (!material || material.visible === false || material.opacity === 0) return false;
-  if (ignoreSectionMaterials && material.userData?.peakSectionPlane) return false;
+  if (ignoreSectionMaterials && material.userData?.peakSectionPlane && material.userData?.peakSectionMode !== "module") return false;
   if (frontFacing !== undefined) {
     // Match the materials eligible for the GPU fade and Three's side culling.
     // Foliage may cover the fixed camera even though it is not a hard wall.
@@ -273,6 +274,7 @@ export class FollowTerrainQuery {
   }
 
   castInstance(entry, maxDistance, sectionPlane, renderedFacesOnly, minimumDistance) {
+    if (cutsSectionModule(sectionPlane, entry.mesh, entry.instanceId)) return null;
     const local = this.localRay;
     local.origin.copy(this.ray.origin).applyMatrix4(entry.inverse);
     // Keep the world->local distance conversion, not just a normalized vector:
