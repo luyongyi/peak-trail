@@ -87,7 +87,7 @@ function fixture() {
 
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 
-test("navigation follow locks the course axis and fades only a ray-tested foreground", () => {
+test("navigation follow keeps the course axis while hiding whole foreground modules", () => {
   const f = fixture(), { scene } = f;
   try {
     scene.mapPack.gameBuildId = "26542162";
@@ -99,22 +99,28 @@ test("navigation follow locks the course axis and fades only a ray-tested foregr
     const point = scene.followOcclusion.value;
     assert.ok(point.z < -50 && Math.hypot(point.x, point.y) < .001 && point.w === 0);
     const cameraBefore = scene.camera.position.clone();
-    scene.followTerrain.cast = (eye, ray, maxDistance, section, options) => {
-      assert.equal(eye, scene.camera.position);
-      assert.ok(eye.clone().add(ray).distanceTo(scene.followAnchor) < 1e-9);
-      assert.ok(Math.abs(maxDistance - (ray.length() - 0.65)) < 1e-9);
-      assert.equal(options.renderedFacesOnly, true);
-      return { distance: 4 };
+    let resets = 0;
+    scene.followOcclusionModules = {
+      update({ query, camera, anchor, radius, deltaSeconds }) {
+        assert.equal(query, scene.followTerrain);
+        assert.equal(camera, scene.camera);
+        assert.equal(anchor, scene.followAnchor);
+        assert.ok(radius > 0);
+        assert.equal(deltaSeconds, 1/60);
+        return 2;
+      },
+      reset() { resets++; },
     };
     scene.updateFollowCamera(1/60);
-    assert.ok(point.w > 0, "activate the fade only after an obstruction");
+    assert.ok(point.w > 0, "activate module hiding only after an obstruction");
     assert.ok(scene.camera.position.equals(cameraBefore), "an obstruction must never move the fixed camera");
     const width = point.w;
     scene.camera.aspect = .45;
     scene.updateFollowCamera(1 / 60);
-    assert.ok(point.w < width, "the fade stays local on portrait displays");
+    assert.ok(point.w < width, "the detection region stays local on portrait displays");
     scene.setFollowTarget(null);
     assert.equal(point.w, 0);
+    assert.equal(resets, 1, "leaving follow restores hidden modules");
   } finally { f.cleanup(); }
 });
 

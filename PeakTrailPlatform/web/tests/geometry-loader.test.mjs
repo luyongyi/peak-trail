@@ -8,7 +8,7 @@ import { decodeGeometryBytes, GEOMETRY_FORMATS, readGeometryResponse, checkGeome
 import { positiveInstanceTransform } from "../src/geometry-matrices.js";
 import { getSourceEffectMaterial, supportsSourceEffect } from "../src/source-materials.js";
 import { isExplosiveMineMaterial, recordedHiddenMineIndices } from "../src/mine-visibility.js";
-import { applyFollowOcclusion } from "../src/follow-occlusion.js";
+import { applyFollowOcclusion, prepareFollowOcclusionMesh } from "../src/follow-occlusion.js";
 import { sectionMaterial } from "../src/section-material.js";
 import { isInteriorLayer } from "../src/camera-placement.js";
 import { sha256Hex } from "../src/sha256.js";
@@ -23,9 +23,106 @@ const waterSource = (await readFile(new URL("../src/source-water-material.js", i
   .replace(/^import .*;\r?\n/gm, "").replace(/^export (?=function )/gm, "");
 const applySourceWaterDepth = new Function("THREE", "supportsSourceEffect", `${waterSource}\nreturn applySourceWaterDepth;`)(THREE, supportsSourceEffect);
 const compile = (ports = {}) => new Function(
-  "THREE", "GLTFLoader", "MeshoptDecoder", "decodeGeometryBytes", "GEOMETRY_FORMATS", "positiveInstanceTransform", "getSourceEffectMaterial", "supportsSourceEffect", "isExplosiveMineMaterial", "recordedHiddenMineIndices", "sha256Hex", "fetch", "crypto", "isProjectionProxyMaterial", "shadowOnlyNodeIndices", "applySourceWaterDepth", "readGeometryResponse", "checkGeometryAbort", "reportGeometryProgress", "yieldGeometryTask", "applySharedTerrainMaterial", "sharedVerifiableTopBlend", "sectionMaterial", "applyFollowOcclusion", "isInteriorLayer",
+  "THREE", "GLTFLoader", "MeshoptDecoder", "decodeGeometryBytes", "GEOMETRY_FORMATS", "positiveInstanceTransform", "getSourceEffectMaterial", "supportsSourceEffect", "isExplosiveMineMaterial", "recordedHiddenMineIndices", "sha256Hex", "fetch", "crypto", "isProjectionProxyMaterial", "shadowOnlyNodeIndices", "applySourceWaterDepth", "readGeometryResponse", "checkGeometryAbort", "reportGeometryProgress", "yieldGeometryTask", "applySharedTerrainMaterial", "sharedVerifiableTopBlend", "sectionMaterial", "applyFollowOcclusion", "prepareFollowOcclusionMesh", "isInteriorLayer",
   `${source}\nreturn { loadGameGeometry, batchStaticMeshes, sourceFacade, updateRecordedMineVisibility, updateMapFogSurfaceVisibility, verifiableTopBlend };`,
-)(THREE, ports.GLTFLoader, {}, ports.decode || decodeGeometryBytes, GEOMETRY_FORMATS, positiveInstanceTransform, getSourceEffectMaterial, supportsSourceEffect, isExplosiveMineMaterial, recordedHiddenMineIndices, sha256Hex, ports.fetch, ports.crypto || webcrypto, isProjectionProxyMaterial, ports.shadowOnlyNodeIndices || shadowOnlyNodeIndices, applySourceWaterDepth, readGeometryResponse, checkGeometryAbort, reportGeometryProgress, yieldGeometryTask, applySharedTerrainMaterial, sharedVerifiableTopBlend, sectionMaterial, applyFollowOcclusion, isInteriorLayer);
+)(THREE, ports.GLTFLoader, {}, ports.decode || decodeGeometryBytes, GEOMETRY_FORMATS, positiveInstanceTransform, getSourceEffectMaterial, supportsSourceEffect, isExplosiveMineMaterial, recordedHiddenMineIndices, sha256Hex, ports.fetch, ports.crypto || webcrypto, isProjectionProxyMaterial, ports.shadowOnlyNodeIndices || shadowOnlyNodeIndices, applySourceWaterDepth, readGeometryResponse, checkGeometryAbort, reportGeometryProgress, yieldGeometryTask, applySharedTerrainMaterial, sharedVerifiableTopBlend, sectionMaterial, applyFollowOcclusion, ports.prepareFollowOcclusionMesh || prepareFollowOcclusionMesh, isInteriorLayer);
+
+test("follow modules join every material primitive of one source instance without hiding its repeated neighbors", () => {
+  const { batchStaticMeshes } = compile();
+  const build = () => {
+    const geometry = new THREE.BoxGeometry(), scene = new THREE.Group(), associations = new Map();
+    const materials = [new THREE.MeshStandardMaterial({ name: "stone" }), new THREE.MeshStandardMaterial({ name: "trim" })];
+    const instancedNode = new THREE.Group(), singleNode = new THREE.Group();
+    for (const material of materials) {
+      const instances = new THREE.InstancedMesh(geometry, material, 2);
+      instances.setMatrixAt(0, new THREE.Matrix4().makeTranslation(10, 0, 0));
+      instances.setMatrixAt(1, new THREE.Matrix4().makeScale(-1, 1, 1).setPosition(20, 0, 0));
+      instancedNode.add(instances);
+      singleNode.add(new THREE.Mesh(geometry, material));
+    }
+    singleNode.position.set(30, 0, 0);
+    scene.add(instancedNode, singleNode);
+    associations.set(instancedNode, { nodes: 12 }); associations.set(singleNode, { nodes: 13 });
+    const root = batchStaticMeshes(scene, "26542162", new Set(), associations,
+      { followOcclusion: { value: new THREE.Vector4() } });
+    return { root, geometry };
+  };
+  const { root, geometry } = build();
+  const byModule = new Map();
+  for (const mesh of root.children) {
+    assert.equal(mesh.userData.followModules.length, mesh.count);
+    assert.equal(mesh.geometry.getAttribute("peakFollowHidden").count, mesh.count);
+    assert.notEqual(mesh.geometry, geometry, "instance visibility must not mutate a shared source geometry");
+    for (const token of mesh.userData.followModules) {
+      const key = `${token.sourceNode}:${token.sourceInstance}`;
+      if (!byModule.has(key)) byModule.set(key, { token, materials: [] });
+      const module = byModule.get(key);
+      assert.equal(token, module.token, "material primitives share the exact interned token");
+      assert.equal(token.role, "object");
+      module.materials.push(mesh.material.name);
+    }
+  }
+  assert.deepEqual([...byModule.keys()].sort(), ["12:0", "12:1", "13:0"]);
+  assert.equal(new Set([...byModule.values()].map(entry => entry.token)).size, 3);
+  for (const entry of byModule.values()) assert.deepEqual(entry.materials.sort(), ["stone", "trim"]);
+  assert.equal(geometry.getAttribute("peakFollowHidden"), undefined);
+  const again = build().root;
+  const earlier = new Set([...byModule.values()].map(entry => entry.token));
+  for (const mesh of again.children) for (const token of mesh.userData.followModules) {
+    assert.ok(!earlier.has(token), "another geometry load has its own module namespace");
+  }
+});
+
+test("facade modules keep the interior, exterior and protected entrance floor independent", () => {
+  const prepared = [], { batchStaticMeshes } = compile({ prepareFollowOcclusionMesh: mesh => prepared.push(mesh) });
+  const geometry = new THREE.BufferGeometry(), stone = new THREE.MeshStandardMaterial();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute([
+    0, 0, 0, 1, 0, 0, 0, 1, 0,       // inner shaft
+    20, 0, 0, 21, 0, 0, 20, 1, 0,    // outer wall
+    10, 1, 0, 11, 1, 0, 10, 2, 0,    // protected upward-facing entrance
+  ], 3));
+  geometry.setIndex([0, 1, 2, 3, 4, 5, 6, 7, 8]);
+  const scene = new THREE.Group(), sourceMesh = new THREE.Mesh(geometry, stone);
+  scene.add(sourceMesh);
+  const root = batchStaticMeshes(scene, "26542162", new Set(), new Map([[sourceMesh, { nodes: 5 }]]), {
+    followOcclusion: { value: new THREE.Vector4() },
+    facade: { nodes: new Set([5]), coreRadius: 2, floorMin: [9, 1, -1], floorMax: [12, 3, 1], kilnOuterSkin: true },
+  });
+  const roles = new Map(root.children.map(mesh => [mesh.userData.followModules[0].role, mesh]));
+  assert.deepEqual([...roles.keys()].sort(), ["core", "exterior", "passage"]);
+  assert.equal(new Set(root.children.map(mesh => mesh.userData.followModules[0])).size, 3);
+  assert.equal(roles.get("passage").userData.followOcclusionProtected, true);
+  assert.equal(roles.get("core").userData.followOcclusionProtected, undefined);
+  assert.equal(roles.get("exterior").userData.kilnOuterSkin, true);
+  assert.equal(roles.get("exterior").userData.exteriorFacade, true);
+  assert.deepEqual(new Set(prepared), new Set(root.children));
+  assert.deepEqual([...roles.get("passage").geometry.index.array], [6, 7, 8]);
+});
+
+test("unassociated source objects stay separate and non-follow loads create no module visibility data", () => {
+  const prepared = [], { batchStaticMeshes } = compile({ prepareFollowOcclusionMesh: mesh => prepared.push(mesh) });
+  const build = follow => {
+    const scene = new THREE.Group(), geometry = new THREE.BoxGeometry(), material = new THREE.MeshStandardMaterial();
+    const sources = [new THREE.Mesh(geometry, material), new THREE.Mesh(geometry, material)];
+    sources[1].position.x = 3; scene.add(...sources);
+    const root = batchStaticMeshes(scene, "26542162", new Set(), new Map(),
+      follow ? { followOcclusion: { value: new THREE.Vector4() } } : {});
+    return { root, sources, geometry };
+  };
+  const active = build(true), mesh = active.root.children[0];
+  assert.equal(active.root.children.length, 1, "source identities do not prevent efficient batching");
+  assert.deepEqual(mesh.userData.followModules.map(token => token.sourceNode), active.sources.map(object => object.uuid));
+  assert.notEqual(mesh.userData.followModules[0], mesh.userData.followModules[1]);
+  assert.equal(prepared.length, 1);
+  const inactive = build(false);
+  assert.equal(prepared.length, 1);
+  for (const draw of inactive.root.children) {
+    assert.equal(draw.userData.followModules, undefined);
+    assert.equal(draw.userData.followOcclusionProtected, undefined);
+    assert.equal(draw.geometry, inactive.geometry);
+    assert.equal(draw.geometry.getAttribute("peakFollowHidden"), undefined);
+  }
+});
 
 test("only the verified original split shell participates in facade removal", () => {
   const { sourceFacade } = compile();
@@ -203,7 +300,7 @@ test("transparent surfaces, lava, crystals and unverified rocks never receive th
   assert.equal(classify("M_RopeBridgeWood", "W/Peak_Standard", "Bridge"), false);
 });
 
-test("the following player's foreground fade shares its uniform with instanced map materials and cutaway variants", () => {
+test("whole-module hiding shares its uniform with instanced map materials and cutaway variants", () => {
   const { batchStaticMeshes } = compile(), scene = new THREE.Group();
   const stone = new THREE.MeshStandardMaterial(), geo = new THREE.BoxGeometry(), object = new THREE.Mesh(geo, stone);
   stone.userData.peakTerrain = { sourceMaterial: "M_Rock", sourceColors: { shader: "W/Peak_Rock" } };
@@ -212,24 +309,26 @@ test("the following player's foreground fade shares its uniform with instanced m
   const sectionPlane = { value: new THREE.Vector4(), footing: { value: new THREE.Vector4() } };
   const output = batchStaticMeshes(scene, "26542162", new Set(), new Map([[object, { nodes: 0 }]]),
     { sectionPlane, followOcclusion, sectionMeshNames: ["Rock_Hill"] });
-  const marked = output.children[0], shader = { uniforms: {}, fragmentShader: "#include <clipping_planes_fragment>", vertexShader: "" };
+  const marked = output.children[0], shader = { uniforms: {}, fragmentShader: "#include <clipping_planes_fragment>", vertexShader: "#include <begin_vertex>" };
   marked.material.onBeforeCompile(shader, {});
   assert.ok(marked.isInstancedMesh && marked.material.depthWrite && !marked.material.transparent);
   assert.equal(shader.uniforms.peakSectionPlane, sectionPlane);
   assert.equal(shader.uniforms.peakFollowSubject, followOcclusion);
-  assert.match(shader.fragmentShader, /peakFollowSubject\.w > 0\.0/);
-  assert.match(marked.material.customProgramCacheKey(), /follow-fade.*section/);
+  assert.match(shader.vertexShader, /vPeakFollowHidden = peakFollowHidden/);
+  assert.match(shader.fragmentShader, /peakFollowSubject\.w > 0\.0 && vPeakFollowHidden > 0\.5/);
+  assert.match(marked.material.customProgramCacheKey(), /follow-module.*section/);
+  assert.equal(marked.geometry.getAttribute("peakFollowHidden").count, marked.count);
 });
 
-test("unlit map props use their projected position for the foreground fade, leaving source effects alone", () => {
+test("unlit map props use the same whole-module mask, leaving source effects alone", () => {
   const followOcclusion = { value: new THREE.Vector4(0, 0, -20, 3) };
   const material = new THREE.MeshBasicMaterial();
-  const shader = { uniforms: {}, fragmentShader: "#include <clipping_planes_fragment>", vertexShader: "#include <project_vertex>" };
+  const shader = { uniforms: {}, fragmentShader: "#include <clipping_planes_fragment>", vertexShader: "#include <begin_vertex>\n#include <project_vertex>" };
   applyFollowOcclusion(material, followOcclusion);
   material.onBeforeCompile(shader, {});
   assert.equal(shader.uniforms.peakFollowSubject, followOcclusion);
-  assert.match(shader.vertexShader, /vPeakFollowView = mvPosition.xyz/);
-  assert.match(shader.fragmentShader, /vec3 at = vPeakFollowView/);
+  assert.match(shader.vertexShader, /vPeakFollowHidden = peakFollowHidden/);
+  assert.match(shader.fragmentShader, /vPeakFollowHidden > 0\.5/);
   assert.equal(material.transparent, false);
   assert.equal(material.depthWrite, true);
   const effect = new THREE.MeshBasicMaterial();

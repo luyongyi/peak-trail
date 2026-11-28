@@ -16,6 +16,7 @@ import { latestLifeEventBefore, MARKER_LIFE_EVENT_TYPES } from "./protocol.js";
 import { SpectatorCamera, FOLLOW_DISTANCE, FOLLOW_MIN_DISTANCE, FOLLOW_MAX_DISTANCE, FOLLOW_INTERIOR_DISTANCE, FOLLOW_INTERIOR_MIN_DISTANCE, FOLLOW_INTERIOR_MAX_DISTANCE } from "./spectator-camera.js";
 import { followLayerAtPosition } from "./map-enclosures.js";
 import { FollowTerrainQuery } from "./follow-terrain.js";
+import { FollowOcclusionModules } from "./follow-occlusion.js";
 import { createSectionPlane, orientSectionPlane } from "./section-plane.js";
 import { SourceWaterRenderer } from "./source-water-renderer.js";
 import { nadirCameraBounds, nadirCameraParts, supportsNadirCameraBuild } from "./nadir-camera-bounds.js";
@@ -57,7 +58,6 @@ const PLAYER_COLORS = [
 ];
 
 const OPEN_FINALE_FOLLOW_DISTANCE = 36;
-const FOLLOW_FADE_CONTACT_MARGIN = 0.65;
 // The serialized progress points in these builds all advance along Unity +Z.
 // Web map Z is reflected, so a camera behind the climber has azimuth zero.
 const uphillLandmarkBuilds = new Set(["25739797", "26134529", "26155610", "26542162"]);
@@ -218,6 +218,7 @@ export class TrailScene {
     this.followTmp = new THREE.Vector3();
     this.sectionPlane = createSectionPlane(THREE);
     this.followOcclusion = { value: new THREE.Vector4(0, 0, 0, 0) };
+    this.followOcclusionModules = new FollowOcclusionModules(THREE);
     this.followAzimuth = 0.6;
     this.followPitch = 0.22;
     this.followDistance = FOLLOW_DISTANCE;
@@ -524,6 +525,7 @@ export class TrailScene {
     this.geometryAbort = new AbortController();
     this.geometryLoads.clear();
     this.campfireIndexError = null;
+    this.followOcclusionModules?.dispose();
     this.followTerrain?.setRoots([]);
     this.followTerrainDirty = true;
     this.enclosureContext?.clear();
@@ -1280,6 +1282,7 @@ export class TrailScene {
     this.clearMapLootFocus();
     this.followTargetId = next;
     if (this.followOcclusion) this.followOcclusion.value.w = 0;
+    this.followOcclusionModules?.reset();
     if (this.sectionPlane) this.sectionPlane.footing.value.w = 0;
     this.surveyPreset = null;
     ++this.cameraSelectionRevision;
@@ -1477,21 +1480,17 @@ export class TrailScene {
       this.camera.updateWorldMatrix(true, false);
       const subject = this.followOcclusion.value;
       subject.set(this.followAnchor.x, this.followAnchor.y, this.followAnchor.z, 1).applyMatrix4(this.camera.matrixWorldInverse);
-      const ray = this.followTmp.copy(this.followAnchor).sub(this.camera.position);
-      const distance = ray.length();
-      // Use the current camera's building cut, which normally updates later
-      // in animate(). A hidden face must not activate the foreground fade.
+      // Match the building cut used by this frame before finding whole objects.
       if (fixedFollow && section) {
         const back = result.position, target = result.target;
         orientSectionPlane(section, back.x - target.x, back.z - target.z, back);
       }
-      const blocked = !fixedFollow || distance > FOLLOW_FADE_CONTACT_MARGIN &&
-        terrain.cast(this.camera.position, ray, distance - FOLLOW_FADE_CONTACT_MARGIN, section,
-          { renderedFacesOnly: true, minimumDistance: this.camera.near });
       const halfFov = THREE.MathUtils.degToRad(this.camera.getEffectiveFOV() / 2);
       const shortAxis = Math.min(1, this.camera.aspect);
-      // Open half of the viewport's short axis (previously one third).
-      subject.w = blocked ? THREE.MathUtils.clamp(-subject.z * Math.tan(halfFov) * shortAxis * .5, 1.75, 9) : 0;
+      const radius = THREE.MathUtils.clamp(-subject.z * Math.tan(halfFov) * shortAxis * .5, 1.75, 9);
+      const hidden = this.followOcclusionModules?.update({ query: terrain, camera: this.camera,
+        anchor: this.followAnchor, section, radius, deltaSeconds });
+      subject.w = hidden ? radius : 0;
     }
     // OrbitControls 目标同步：退出跟随时无缝交还。
     this.controls.target.copy(result.target);
@@ -1715,6 +1714,7 @@ export class TrailScene {
       const visible = this.terrainRoot.children.filter(group => group.visible);
       if (this.enclosureContext?.root?.visible && this.enclosureContext.root.userData.loaded) visible.push(this.enclosureContext.root);
       this.followTerrain.setRoots(visible);
+      this.followOcclusionModules?.setRoots(visible);
       this.followTerrainDirty = false;
       this.followRig.invalidate();
     }
@@ -1957,6 +1957,7 @@ export class TrailScene {
 
   applyLayerVisibility() {
     this.syncMapLootContext();
+    this.followOcclusionModules?.dispose();
     this.followTerrain?.dispose?.();
     this.followTerrainDirty = true;
     this.sourceWater?.setSegment(this.activeSegment);
@@ -2357,6 +2358,7 @@ export class TrailScene {
     this.contextListeners = [];
     this.resizeObserver.disconnect();
     this.setFollowTarget(null);
+    this.followOcclusionModules?.dispose();
     this.followTerrain?.dispose();
     for (const [target, name, handler] of this.followListeners || []) target.removeEventListener(name, handler);
     this.followListeners = [];

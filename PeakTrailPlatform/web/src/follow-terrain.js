@@ -2,8 +2,9 @@ import { cutsSectionPoint } from "./section-plane.js";
 
 // Camera-only queries against the same static triangles the map renders. Bounds
 // prune the search; they are never returned as a substitute collision surface.
-// The WeakMap does not retain unloaded GPU geometry and does not modify it.
-const geometryTrees = new WeakMap();
+// Per-batch visibility wrappers share immutable triangle buffers. Weak keys
+// share their BVH too, without retaining unloaded geometry or modifying it.
+const positionTrees = new WeakMap();
 const LEAF_SIZE = 8;
 const FRONT_SIDE = 0, DOUBLE_SIDE = 2;
 // Source shader evidence, not a name/biome guess. The recorded shore route
@@ -81,7 +82,10 @@ function attributeVersion(attribute) {
 function triangleTree(geometry) {
   const position = geometry.getAttribute("position"), index = geometry.getIndex();
   if (!position || position.itemSize < 3) return null;
-  const previous = geometryTrees.get(geometry);
+  let byIndex = positionTrees.get(position);
+  if (!byIndex) { byIndex = new WeakMap(); positionTrees.set(position, byIndex); }
+  const key = index ?? position;
+  const previous = byIndex.get(key);
   if (previous?.position === position && previous.index === index
       && previous.positionVersion === attributeVersion(position)
       && previous.indexVersion === attributeVersion(index)) return previous;
@@ -104,7 +108,7 @@ function triangleTree(geometry) {
   const tree = { position, index, positionVersion: attributeVersion(position), indexVersion: attributeVersion(index),
     ids: ids.subarray(0, valid), bounds };
   tree.root = buildTree(tree.ids, bounds);
-  geometryTrees.set(geometry, tree);
+  byIndex.set(key, tree);
   return tree;
 }
 
@@ -184,7 +188,7 @@ export class FollowTerrainQuery {
         // rebuild. The same applies to a material's visible flag.
         const geometry = triangleTree(mesh.geometry);
         if (!geometry?.root) return;
-        geometries.add(mesh.geometry);
+        geometries.add(geometry);
         if (mesh.isInstancedMesh) this.instances.push({ mesh, version: mesh.instanceMatrix.version, count: mesh.count });
         const count = mesh.isInstancedMesh ? mesh.count : 1;
         for (let index = 0; index < count; index++) {
@@ -208,15 +212,28 @@ export class FollowTerrainQuery {
     return this;
   }
 
-  cast(origin, direction, maxDistance, sectionPlane, { renderedFacesOnly = false, minimumDistance = 0 } = {}) {
+  cast(origin, direction, maxDistance, sectionPlane, options) {
+    return this.castHits(origin, direction, maxDistance, sectionPlane, options, false);
+  }
+
+  // One nearest valid surface per output mesh/instance, ordered from the eye.
+  // Rendering-only occlusion masks do not change this geometry evidence: a
+  // hidden foreground module must remain detectable on the following frame.
+  castAll(origin, direction, maxDistance, sectionPlane, options) {
+    return this.castHits(origin, direction, maxDistance, sectionPlane, options, true);
+  }
+
+  castHits(origin, direction, maxDistance, sectionPlane,
+    { renderedFacesOnly = false, minimumDistance = 0 } = {}, collectAll = false) {
+    const hits = collectAll ? [] : null;
     this.lastStats = { worldNodes: 0, instances: 0, triangleNodes: 0, triangles: 0 };
     if (!Number.isFinite(maxDistance) || maxDistance < 0 || !origin || !direction
         || ![origin.x, origin.y, origin.z, direction.x, direction.y, direction.z].every(Number.isFinite)
-        || direction.lengthSq() < 1e-20) return null;
+        || direction.lengthSq() < 1e-20) return hits;
     if (this.instances.some(({ mesh, version, count }) => mesh.instanceMatrix.version !== version || mesh.count !== count)) {
       this.setRoots(this.roots);
     }
-    if (!this.tree) return null;
+    if (!this.tree) return hits;
     this.ray.origin.copy(origin); this.ray.direction.copy(direction).normalize();
     let bestDistance = maxDistance, best = null;
     const stack = [this.tree];
@@ -230,13 +247,17 @@ export class FollowTerrainQuery {
       for (let index = node.start; index < node.end; index++) {
         const entry = this.entries[this.ids[index]];
         if (!visibleMesh(entry.mesh)
+            || (renderedFacesOnly && entry.mesh.userData.followOcclusionProtected === true)
             || boxEntry(entry.bounds, this.ray.origin, this.ray.direction, bestDistance) === Infinity) continue;
         this.lastStats.instances++;
         const hit = this.castInstance(entry, bestDistance, sectionPlane, renderedFacesOnly, minimumDistance);
-        if (hit && hit.distance <= bestDistance) { best = hit; bestDistance = hit.distance; }
+        if (hit && hit.distance <= bestDistance) {
+          if (collectAll) hits.push(hit);
+          else { best = hit; bestDistance = hit.distance; }
+        }
       }
     }
-    return best;
+    return collectAll ? hits.sort((a, b) => a.distance - b.distance) : best;
   }
 
   pushNearest(stack, node, ray, limit) {
@@ -292,7 +313,7 @@ export class FollowTerrainQuery {
         // Use the world point to remove accumulated inverse-transform error.
         const worldDistance = point.distanceTo(this.ray.origin);
         if (worldDistance > maxDistance + 1e-9) continue;
-        best = { distance: worldDistance, point, normal: this.localNormal.clone() };
+        best = { distance: worldDistance, point, normal: this.localNormal.clone(), mesh, instanceId: entry.instanceId };
         limit = distance;
       }
     }

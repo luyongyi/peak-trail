@@ -83,6 +83,72 @@ test('pruning a chapter retains complete campfire instances, their shader, and o
   assert.deepEqual(removed.map(read => read()), [1, 1, 1, 1]);
 });
 
+test('pruning batch wrappers releases only private buffers and preserves the retained camp GPU storage', () => {
+  const source = new THREE.BoxGeometry(), material = new THREE.MeshStandardMaterial();
+  const root = new THREE.Group();
+  function batch(kept) {
+    const geometry = new THREE.BufferGeometry();
+    geometry.setIndex(source.index);
+    for (const [name, attribute] of Object.entries(source.attributes)) geometry.setAttribute(name, attribute);
+    geometry.setAttribute('peakFollowHidden', new THREE.InstancedBufferAttribute(new Float32Array(1), 1));
+    const mesh = new THREE.InstancedMesh(geometry, material, 1);
+    mesh.userData.nativeCampfire = kept;
+    root.add(mesh);
+    return mesh;
+  }
+  const keep = batch(true), drop = batch(false);
+  const originalAttributes = drop.geometry.attributes, originalIndex = drop.geometry.index;
+  const removedBuffers = new Set(), droppedMasks = [];
+  for (const mesh of [keep, drop]) mesh.geometry.addEventListener('dispose', () => {
+    if (mesh.geometry.index) removedBuffers.add(mesh.geometry.index);
+    for (const attribute of Object.values(mesh.geometry.attributes)) removedBuffers.add(attribute);
+    if (mesh === drop) droppedMasks.push(mesh.geometry.getAttribute('peakFollowHidden'));
+  });
+  assert.deepEqual(retainNativeCampfire(root), { batches: 1, instances: 1 });
+  assert.deepEqual([...removedBuffers], [originalAttributes.peakFollowHidden]);
+  assert.deepEqual(droppedMasks, [originalAttributes.peakFollowHidden]);
+  assert.equal(drop.geometry.index, originalIndex);
+  assert.equal(drop.geometry.attributes, originalAttributes, 'JS geometry remains inspectable after disposal');
+  assert.equal(keep.geometry.getAttribute('position'), source.attributes.position);
+  assert.equal(keep.geometry.index, source.index);
+  keep.geometry.dispose();
+  assert.ok(removedBuffers.has(source.index), 'final unload owns the shared index buffer');
+  for (const attribute of Object.values(source.attributes)) assert.ok(removedBuffers.has(attribute));
+});
+
+test('interleaved attributes protect their shared data buffer even when the retained view differs', () => {
+  const data = new THREE.InterleavedBuffer(new Float32Array(18), 6);
+  const keptPosition = new THREE.InterleavedBufferAttribute(data, 3, 0);
+  const droppedPosition = new THREE.InterleavedBufferAttribute(data, 3, 3);
+  const keptGeometry = new THREE.BufferGeometry().setAttribute('position', keptPosition);
+  const droppedGeometry = new THREE.BufferGeometry().setAttribute('position', droppedPosition);
+  const ownNormal = new THREE.Float32BufferAttribute(new Float32Array(9), 3);
+  droppedGeometry.setAttribute('normal', ownNormal);
+  const keep = new THREE.Mesh(keptGeometry, new THREE.MeshBasicMaterial()); keep.userData.nativeCampfire = true;
+  const drop = new THREE.Mesh(droppedGeometry, keep.material), root = new THREE.Group(); root.add(keep, drop);
+  let released;
+  droppedGeometry.addEventListener('dispose', () => {
+    released = Object.values(droppedGeometry.attributes).map(attribute => attribute.isInterleavedBufferAttribute ? attribute.data : attribute);
+  });
+  retainNativeCampfire(root);
+  assert.deepEqual(released, [ownNormal]);
+  assert.equal(droppedGeometry.getAttribute('position'), droppedPosition);
+  assert.equal(keptGeometry.getAttribute('position'), keptPosition);
+});
+
+test('temporary buffer protection restores geometry fields even when a dispose listener throws', () => {
+  const source = new THREE.BoxGeometry(), root = new THREE.Group();
+  const keep = new THREE.Mesh(source, new THREE.MeshBasicMaterial()); keep.userData.nativeCampfire = true;
+  const wrapper = new THREE.BufferGeometry().setIndex(source.index).setAttribute('position', source.attributes.position);
+  const drop = new THREE.Mesh(wrapper, keep.material); root.add(keep, drop);
+  const attributes = wrapper.attributes;
+  wrapper.addEventListener('dispose', () => { throw new Error('dispose fixture'); });
+  assert.throws(() => retainNativeCampfire(root), /dispose fixture/);
+  assert.equal(wrapper.index, source.index);
+  assert.equal(wrapper.attributes, attributes);
+  assert.equal(wrapper.getAttribute('position'), source.attributes.position);
+});
+
 test('unclassified source layers release their whole model', () => {
   const root = new THREE.Group(), model = new THREE.Group();
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial());

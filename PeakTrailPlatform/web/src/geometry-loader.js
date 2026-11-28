@@ -10,7 +10,7 @@ import { isExplosiveMineMaterial, recordedHiddenMineIndices } from "./mine-visib
 import { sha256Hex } from "./sha256.js";
 import { isProjectionProxyMaterial, shadowOnlyNodeIndices } from "./source-render-policy.js";
 import { sectionMaterial } from "./section-material.js";
-import { applyFollowOcclusion } from "./follow-occlusion.js";
+import { applyFollowOcclusion, prepareFollowOcclusionMesh } from "./follow-occlusion.js";
 import { isInteriorLayer } from "./camera-placement.js";
 
 function assertEmbeddedGlb(bytes) {
@@ -290,6 +290,10 @@ async function batchStaticMeshesAsync(scene, build, shadowOnly, associations, co
 function* buildStaticMeshes(scene, gameBuildId, shadowOnlyNodes = new Set(), associations = new Map(), context = {}) {
   scene.updateMatrixWorld(true);
   const batches = new Map();
+  // A GLB node can contain several material primitives; each corresponding
+  // instance is still one source renderer. Intern locally so identical node
+  // numbers in another chapter/load never become the same hiding unit.
+  const followModules = context.followOcclusion ? new Map() : null;
   const instance = new THREE.Matrix4();
   const prepared = new Set();
   const facadePartitions = new Map(), coreMaterials = new Map();
@@ -391,13 +395,20 @@ function* buildStaticMeshes(scene, gameBuildId, shadowOnlyNodes = new Set(), ass
       if (context.campOnly && !campfire) return;
       const transform = positiveInstanceTransform(worldMatrix.elements);
       for (const part of parts) {
+        const role = part.passage ? "passage" : part.core ? "core" : part.exterior ? "exterior" : "object";
         const material = part.passage ? coreMaterial : part.core ? sectionCoreMaterial : drawMaterial;
         const materialKey = Array.isArray(material) ? material.map(item => item.uuid).join(":") : material.uuid;
-        const key = `${part.geometry.uuid}:${materialKey}:${transform.reflected}:${campfire}:${part.exterior === true}`;
+        const key = `${part.geometry.uuid}:${materialKey}:${transform.reflected}:${campfire}:${part.exterior === true}:${followModules ? role : ""}`;
         if (!batches.has(key)) batches.set(key, { geometry: part.geometry, material, exterior: part.exterior,
-          reflected: transform.reflected, campfire, matrices: [], mines: [] });
+          reflected: transform.reflected, campfire, matrices: [], mines: [],
+          followModules: followModules ? [] : null, followOcclusionProtected: Boolean(followModules && part.passage) });
         const batch = batches.get(key);
         batch.matrices.push(new THREE.Matrix4().fromArray(transform.matrix));
+        if (followModules) {
+          const sourceNode = nodeIndex ?? object.uuid, moduleKey = `${sourceNode}:${instanceIndex}:${role}`;
+          if (!followModules.has(moduleKey)) followModules.set(moduleKey, { sourceNode, sourceInstance: instanceIndex, role });
+          batch.followModules.push(followModules.get(moduleKey));
+        }
         if (mineBounds) {
           // Record original Unity-world bounds BEFORE reflection factoring and
           // before scene.js subtracts its display origin from the loaded root.
@@ -430,6 +441,13 @@ function* buildStaticMeshes(scene, gameBuildId, shadowOnlyNodes = new Set(), ass
       ...mine, originalMatrix: batch.matrices[mine.index].clone(), hidden: false,
     }));
     mesh.instanceMatrix.needsUpdate = true;
+    if (batch.followModules) {
+      mesh.userData.followModules = batch.followModules;
+      // Pipe's native split renderer can own both a wall and the entrance
+      // floor. Keep the measured passage separate from all wall modules.
+      if (batch.followOcclusionProtected) mesh.userData.followOcclusionProtected = true;
+      prepareFollowOcclusionMesh(mesh, THREE);
+    }
     setInstanceBounds(mesh, cachedBounds(batch.geometry, Array.isArray(batch.material)));
     root.add(mesh);
     yield;

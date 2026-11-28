@@ -21,9 +21,10 @@ function close(actual, expected, epsilon = 1e-7) {
 
 test("indexed and non-indexed casts hit actual triangle faces, never the empty part of an AABB", () => {
   for (const indexed of [true, false]) {
-    const query = new FollowTerrainQuery(THREE).setRoots([triangle({ indexed })]);
+    const mesh = triangle({ indexed }), query = new FollowTerrainQuery(THREE).setRoots([mesh]);
     const hit = query.cast(vec(0, 0, 10), vec(0, 0, -1), 20);
     close(hit.distance, 10); close(hit.point, [0, 0, 0]); close(hit.normal, [0, 0, 1]);
+    assert.equal(hit.mesh, mesh); assert.equal(hit.instanceId, null);
     assert.equal(query.cast(vec(1.9, 1.9, 10), vec(0, 0, -1), 20), null, "bounds include space outside the triangle");
   }
 });
@@ -87,6 +88,79 @@ test("nearest real triangle wins independent of root order and a far box does no
   query.setRoots([far]);
   assert.equal(query.cast(vec(0, 0, 10), vec(0, 0, -1), 29.99), null);
   close(query.cast(vec(0, 0, 10), vec(0, 0, -1), 30).distance, 30);
+});
+
+test("castAll retains every foreground instance, with one nearest hit per instance and no farther geometry", () => {
+  const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(3, 3, 2), material(), 4);
+  for (const [index, z] of [0, 5, -12, 15].entries()) mesh.setMatrixAt(index, new THREE.Matrix4().makeTranslation(0, 0, z));
+  const ordinary = triangle(); ordinary.position.z = 2;
+  const query = new FollowTerrainQuery(THREE).setRoots([mesh, ordinary]);
+  const origin = vec(0, 0, 10), direction = vec(0, 0, -2);
+  const hits = query.castAll(origin, direction, 10);
+  assert.deepEqual(hits.map(hit => hit.distance), [4, 8, 9]);
+  assert.deepEqual(hits.map(hit => hit.instanceId), [1, null, 0]);
+  assert.deepEqual(hits.map(hit => hit.mesh), [mesh, ordinary, mesh]);
+  assert.equal(query.cast(origin, direction, 10).instanceId, 1, "nearest-only API retains its original semantics");
+  assert.deepEqual(query.castAll(origin, direction, 3), []);
+});
+
+test("castAll applies near-plane, source effect, culling and protected-passage filters without changing collision casts", () => {
+  const beforeNear = triangle(), protectedPassage = triangle(), fog = triangle(), backFacing = triangle(), rock = triangle();
+  beforeNear.position.z = 9.95;
+  protectedPassage.position.z = 8; protectedPassage.userData.followOcclusionProtected = true;
+  fog.position.z = 6; fog.material.userData.peakSourceEffect = { kind: "fog" };
+  backFacing.position.z = 4; backFacing.rotation.y = Math.PI;
+  const parent = new THREE.Group(); parent.add(rock);
+  const query = new FollowTerrainQuery(THREE).setRoots([beforeNear, protectedPassage, fog, backFacing, parent]);
+  const origin = vec(0, 0, 10), direction = vec(0, 0, -1), options = { renderedFacesOnly: true, minimumDistance: 0.08 };
+  assert.deepEqual(query.castAll(origin, direction, 20, null, options).map(hit => hit.mesh), [rock]);
+  assert.equal(query.cast(origin, direction, 20, null, options).mesh, rock);
+  assert.deepEqual(query.castAll(origin, direction, 20, null, { minimumDistance: 0.08 }).map(hit => hit.mesh),
+    [protectedPassage, backFacing, rock], "protected passages remain real collision surfaces");
+  parent.visible = false;
+  assert.deepEqual(query.castAll(origin, direction, 20, null, options), []);
+  parent.visible = true; rock.material.visible = false;
+  assert.deepEqual(query.castAll(origin, direction, 20, null, options), []);
+});
+
+test("castAll looks past section-cut and undrawn triangles within each output mesh", () => {
+  const rock = material({ side: THREE.DoubleSide }); rock.userData.peakSectionPlane = true;
+  const mesh = triangle({ indexed: false, material: [rock, material({ side: THREE.DoubleSide })] });
+  mesh.geometry.setAttribute("position", new THREE.Float32BufferAttribute([
+    -2, -2, 2, 2, -2, 2, 0, 2, 2, -2, -2, 7, 2, -2, 7, 0, 2, 7,
+  ], 3));
+  mesh.geometry.addGroup(0, 3, 0); mesh.geometry.addGroup(3, 3, 1);
+  const behind = triangle({ material: material({ side: THREE.DoubleSide }) }); behind.position.z = 9;
+  const query = new FollowTerrainQuery(THREE).setRoots([mesh, behind]);
+  const section = createSectionPlane(THREE); section.axisZ = -1;
+  orientSectionPlane(section, 0, 1, vec(0, 2, 10));
+  const cast = () => query.castAll(vec(0, 0, 0), vec(0, 0, 1), 10, section, { renderedFacesOnly: true });
+  assert.deepEqual(cast().map(hit => hit.distance), [7, 9]);
+  mesh.geometry.setDrawRange(0, 3);
+  assert.deepEqual(cast().map(hit => hit.mesh), [behind]);
+  mesh.geometry.setDrawRange(3, 3);
+  assert.deepEqual(cast().map(hit => hit.distance), [7, 9]);
+});
+
+test("castAll keeps render-hidden instances detectable but refreshes actual mine transforms", () => {
+  const source = triangle(), mesh = new THREE.InstancedMesh(source.geometry, source.material, 2);
+  mesh.setMatrixAt(0, new THREE.Matrix4().makeTranslation(0, 0, 4));
+  mesh.setMatrixAt(1, new THREE.Matrix4().makeTranslation(0, 0, 2));
+  const mask = new THREE.InstancedBufferAttribute(new Float32Array(2), 1);
+  mesh.geometry.setAttribute("peakFollowHidden", mask);
+  const query = new FollowTerrainQuery(THREE).setRoots([mesh]);
+  const cast = () => query.castAll(vec(0, 0, 10), vec(0, 0, -1), 20, null, { renderedFacesOnly: true });
+  const entries = query.entries, matrixVersion = mesh.instanceMatrix.version;
+  assert.deepEqual(cast().map(hit => hit.instanceId), [0, 1]);
+  mask.setX(0, 1); mask.needsUpdate = true;
+  assert.deepEqual(cast().map(hit => hit.instanceId), [0, 1], "GPU-only hiding cannot erase ray evidence");
+  assert.equal(query.entries, entries); assert.equal(mesh.instanceMatrix.version, matrixVersion);
+  mesh.setMatrixAt(0, new THREE.Matrix4().makeScale(0, 0, 0)); mesh.instanceMatrix.needsUpdate = true;
+  assert.deepEqual(cast().map(hit => hit.instanceId), [1], "recorded mine hiding still changes real geometry");
+  mesh.setMatrixAt(0, new THREE.Matrix4().makeTranslation(0, 0, 7)); mesh.instanceMatrix.needsUpdate = true;
+  assert.deepEqual(cast().map(hit => hit.distance), [3, 8]);
+  mesh.count = 1;
+  assert.deepEqual(cast().map(hit => hit.instanceId), [0]);
 });
 
 test("section placement looks through the near half, retaining the far wall, a same-batch prop and the tracked footing", () => {
@@ -171,6 +245,63 @@ test("material groups and drawRange exclude unrendered triangles without excludi
   mesh.material[1].visible = false; assert.equal(cast(), null);
 });
 
+test("batch wrappers share one triangle tree while their draw ranges and material groups remain independent", () => {
+  for (const indexed of [false, true]) {
+    const position = new THREE.Float32BufferAttribute([
+      -2, -2, 4, 2, -2, 4, 0, 2, 4, -2, -2, 0, 2, -2, 0, 0, 2, 0,
+    ], 3);
+    const index = indexed ? new THREE.Uint16BufferAttribute([0, 1, 2, 3, 4, 5], 1) : null;
+    function wrapper(start, materialIndex) {
+      const geometry = new THREE.BufferGeometry().setAttribute("position", position).setIndex(index);
+      geometry.addGroup(0, 3, 0); geometry.addGroup(3, 3, 1);
+      geometry.setDrawRange(start, 3);
+      const materials = [material(), material()]; materials[materialIndex].visible = false;
+      return new THREE.Mesh(geometry, materials);
+    }
+    const near = wrapper(0, 1), far = wrapper(3, 0);
+    const query = new FollowTerrainQuery(THREE).setRoots([near, far]);
+    assert.equal(query.entries[0].geometry, query.entries[1].geometry, "visibility wrappers reuse the immutable triangle tree");
+    assert.equal(query.stats.geometries, 1, "diagnostics count unique triangle trees, not wrappers");
+    const cast = () => query.castAll(vec(0, 0, 10), vec(0, 0, -1), 20, null, { renderedFacesOnly: true });
+    assert.deepEqual(cast().map(hit => [hit.mesh, hit.distance]), [[near, 6], [far, 10]]);
+    near.geometry.setDrawRange(3, 3);
+    assert.deepEqual(cast().map(hit => hit.mesh), [far], "the near wrapper's far material is independently hidden");
+    far.geometry.setDrawRange(0, 3);
+    assert.deepEqual(cast(), [], "the far wrapper's near material is independently hidden");
+    near.geometry.setDrawRange(0, 3);
+    assert.deepEqual(cast().map(hit => hit.mesh), [near]);
+    const original = query.entries[0].geometry;
+    for (let i = 0; i < 3; i++) position.setZ(i, 7);
+    position.needsUpdate = true; query.setRoots([near, far]);
+    assert.notEqual(query.entries[0].geometry, original);
+    assert.equal(query.entries[0].geometry, query.entries[1].geometry, "one version change refreshes both wrappers to one new tree");
+    close(cast()[0].distance, 3);
+  }
+});
+
+test("source partitions use distinct index trees and an index version change refreshes every matching wrapper", () => {
+  const position = new THREE.Float32BufferAttribute([
+    -2, -2, 4, 2, -2, 4, 0, 2, 4, -2, -2, 0, 2, -2, 0, 0, 2, 0,
+  ], 3);
+  const nearIndex = new THREE.Uint16BufferAttribute([0, 1, 2], 1);
+  const farIndex = new THREE.Uint16BufferAttribute([3, 4, 5], 1);
+  const make = index => new THREE.Mesh(new THREE.BufferGeometry().setAttribute("position", position).setIndex(index), material());
+  const near = make(nearIndex), far = make(farIndex), farWrapper = make(farIndex);
+  const query = new FollowTerrainQuery(THREE).setRoots([near, far, farWrapper]);
+  const [nearTree, farTree] = query.entries.map(entry => entry.geometry);
+  assert.notEqual(nearTree, farTree);
+  assert.equal(farTree, query.entries[2].geometry);
+  assert.equal(query.stats.geometries, 2);
+  const cast = () => query.castAll(vec(0, 0, 10), vec(0, 0, -1), 20);
+  assert.deepEqual(cast().map(hit => hit.distance), [6, 10, 10]);
+  farIndex.array.set([0, 1, 2]); farIndex.needsUpdate = true;
+  query.setRoots([near, far, farWrapper]);
+  assert.equal(query.entries[0].geometry, nearTree, "an unrelated index partition remains cached");
+  assert.notEqual(query.entries[1].geometry, farTree);
+  assert.equal(query.entries[1].geometry, query.entries[2].geometry);
+  assert.deepEqual(cast().map(hit => hit.distance), [6, 6, 6]);
+});
+
 test("instanced triangles retain world reflections and nonuniform scale without per-instance geometry copies", () => {
   const source = triangle(), instances = new THREE.InstancedMesh(source.geometry, source.material, 3);
   const matrix = new THREE.Matrix4();
@@ -181,6 +312,7 @@ test("instanced triangles retain world reflections and nonuniform scale without 
   const query = new FollowTerrainQuery(THREE).setRoots([root]);
   const hit = query.cast(vec(0, 0, -10), vec(0, 0, 1), 20);
   close(hit.distance, 6); close(hit.point, [0, 0, -4]); close(hit.normal, [0, 0, -1]);
+  assert.equal(hit.mesh, instances); assert.equal(hit.instanceId, 1);
   assert.equal(query.stats.instances, 2); assert.equal(query.stats.geometries, 1);
   assert.equal(instances.geometry, source.geometry);
 });
@@ -227,12 +359,21 @@ test("accelerated hits match Three's native triangle raycast over seeded sheared
     const origin = vec(random() * 100 - 60, random() * 80, random() * 100);
     const direction = vec(random() - 0.5, random() - 0.5, random() - 0.5).normalize();
     raycaster.set(origin, direction);
-    const native = raycaster.intersectObject(root, true)[0] || null;
+    const nativeHits = raycaster.intersectObject(root, true), native = nativeHits[0] || null;
     const accelerated = query.cast(origin, direction, 180);
     assert.equal(Boolean(accelerated), Boolean(native));
     if (native) {
       hits++; close(accelerated.distance, native.distance, 1e-6); close(accelerated.point, native.point, 1e-6);
       assert.ok(accelerated.normal.dot(direction) <= 0); close(accelerated.normal.length(), 1);
+    }
+    const expected = new Map();
+    for (const hit of nativeHits) if (!expected.has(hit.instanceId)) expected.set(hit.instanceId, hit);
+    const all = query.castAll(origin, direction, 180);
+    assert.equal(all.length, expected.size);
+    for (const hit of all) {
+      const expectedHit = expected.get(hit.instanceId);
+      assert.equal(hit.mesh, mesh); assert.ok(expectedHit);
+      close(hit.distance, expectedHit.distance, 1e-6); close(hit.point, expectedHit.point, 1e-6);
     }
   }
   assert.ok(hits > 10, `seed must exercise real intersections, got ${hits}`);
@@ -244,8 +385,10 @@ test("invalid, degenerate and empty geometry or invalid ray input never manufact
   for (const [origin, direction, limit] of [[vec(0, 0, 1), vec(0, 0, -1), 10], [vec(NaN, 0, 0), vec(0, 0, 1), 10],
     [vec(), vec(0, 0, 0), 10], [vec(), vec(0, 0, 1), -1], [vec(), vec(0, 0, 1), Infinity]]) {
     assert.equal(query.cast(origin, direction, limit), null);
+    assert.deepEqual(query.castAll(origin, direction, limit), []);
   }
   query.dispose(); assert.equal(query.cast(vec(0, 0, 1), vec(0, 0, -1), 10), null);
+  assert.deepEqual(query.castAll(vec(0, 0, 1), vec(0, 0, -1), 10), []);
 });
 
 test("two-level BVH bounds both instance candidates and triangle work for a large shared mesh", (t) => {
@@ -264,5 +407,8 @@ test("two-level BVH bounds both instance candidates and triangle work for a larg
     assert.ok(query.lastStats.triangles < 50, `${query.lastStats.triangles} triangle candidates`);
   }
   t.diagnostic(`20k triangles × 625 instances: build ${buildMs.toFixed(1)} ms; 250 casts ${(performance.now() - rayStart).toFixed(1)} ms; last ${JSON.stringify(query.lastStats)}`);
+  assert.equal(query.castAll(vec(1200.25, 1200.25, 55), vec(0, 0, -1), 60).length, 1);
+  assert.ok(query.lastStats.instances <= 2);
+  assert.ok(query.lastStats.triangles < 50, "all-hit queries retain both levels of BVH pruning");
   assert.equal(query.stats.geometries, 1);
 });

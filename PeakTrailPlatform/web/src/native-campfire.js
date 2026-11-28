@@ -54,6 +54,21 @@ function collectResources(mesh, geometries, materials, textures) {
   }
 }
 
+const bufferOwner = attribute => attribute?.isInterleavedBufferAttribute ? attribute.data : attribute;
+
+function disposeGeometryKeepingBuffers(geometry, keptBuffers) {
+  const index = geometry.index, attributes = geometry.attributes;
+  // Three releases every attribute buffer visible during the dispose event.
+  // Different batch wrappers can still share those buffers with a kept camp.
+  // Release this wrapper's VAO and private mask without deleting that shared
+  // storage; the retained geometry will release it when it is unloaded.
+  geometry.index = keptBuffers.has(bufferOwner(index)) ? null : index;
+  geometry.attributes = Object.fromEntries(Object.entries(attributes)
+    .filter(([, attribute]) => !keptBuffers.has(bufferOwner(attribute))));
+  try { geometry.dispose(); }
+  finally { geometry.index = index; geometry.attributes = attributes; }
+}
+
 // The chapter loader batches whole instances, partitioned by native campfire
 // membership. Several batches can use the very same GPU buffers or textures.
 // Retain original batches and their ancestor transforms, relinquishing each
@@ -68,6 +83,11 @@ export function retainNativeCampfire(root) {
     collectResources(mesh, keptGeometry, keptMaterials, keptTextures);
     for (let owner = mesh; owner && !ancestors.has(owner); owner = owner.parent) ancestors.add(owner);
   });
+  const keptBuffers = new Set();
+  for (const geometry of keptGeometry) {
+    if (geometry.index) keptBuffers.add(bufferOwner(geometry.index));
+    for (const attribute of Object.values(geometry.attributes)) keptBuffers.add(bufferOwner(attribute));
+  }
   const geometries = new Set(), materials = new Set(), textures = new Set(), detach = [];
   root.traverse(node => {
     if (ancestors.has(node)) return;
@@ -76,7 +96,7 @@ export function retainNativeCampfire(root) {
     if (node.isInstancedMesh) node.dispose();
   });
   for (const node of detach) node.removeFromParent();
-  for (const geometry of geometries) if (!keptGeometry.has(geometry)) geometry.dispose();
+  for (const geometry of geometries) if (!keptGeometry.has(geometry)) disposeGeometryKeepingBuffers(geometry, keptBuffers);
   for (const material of materials) if (!keptMaterials.has(material)) material.dispose();
   for (const texture of textures) if (!keptTextures.has(texture)) texture.dispose();
   return { batches, instances };
