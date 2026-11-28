@@ -113,3 +113,20 @@ test('opaque Standard and Basic shaders discard entire instances without edge gr
     assert.equal(material.transparent, false); assert.equal(material.depthWrite, true);
   }
 });
+
+
+test('transparent material slots follow their solid owner without making unrelated effects obstruct the view', () => {
+  const f = fixture();
+  f.secondFace.material.transparent = true;
+  f.secondFace.material.depthWrite = false;
+  f.secondFace.material.userData.peakSourceEffect = { kind: 'antisphere' };
+  assert.equal(f.controller.update(f.options), 2);
+  assert.deepEqual(f.mask(f.secondFace), [1]);
+  // Put the effect in the ray but remove its solid owner. It cannot trigger
+  // whole-module hiding by itself, even though it accepts a shared hide mask.
+  f.front.visible = false;
+  f.secondFace.setMatrixAt(0, new THREE.Matrix4().makeTranslation(0, 0, 6));
+  f.secondFace.instanceMatrix.needsUpdate = true;
+  assert.equal(f.controller.update(f.options), 1);
+  assert.deepEqual(f.mask(f.secondFace), [0]);
+});

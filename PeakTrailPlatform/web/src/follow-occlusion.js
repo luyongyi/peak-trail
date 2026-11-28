@@ -2,8 +2,10 @@
 // Keep the mask independent of instanceMatrix so CPU queries still see hidden
 // obstructions and unrelated instances in the same batch stay solid.
 export function applyFollowOcclusion(material, subject) {
-  if ((!material.isMeshStandardMaterial && !material.isMeshBasicMaterial)
-      || !material.depthWrite || material.userData.peakSourceEffect) return;
+  // Only opaque rendered faces trigger hiding in FollowTerrainQuery. Once
+  // their source module is hidden, its translucent/effect material slots must
+  // disappear with it too, rather than leaving an isolated shell behind.
+  if (!material.isMeshStandardMaterial && !material.isMeshBasicMaterial) return;
   const compile = material.onBeforeCompile, key = material.customProgramCacheKey();
   material.defaultAttributeValues = { ...material.defaultAttributeValues, peakFollowHidden: [0] };
   material.onBeforeCompile = function(shader, renderer) {

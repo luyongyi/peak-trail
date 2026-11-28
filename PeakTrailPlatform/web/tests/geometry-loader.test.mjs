@@ -320,7 +320,7 @@ test("whole-module hiding shares its uniform with instanced map materials and cu
   assert.equal(marked.geometry.getAttribute("peakFollowHidden").count, marked.count);
 });
 
-test("unlit map props use the same whole-module mask, leaving source effects alone", () => {
+test("unlit props and source effect slots share a mask without changing their render settings", () => {
   const followOcclusion = { value: new THREE.Vector4(0, 0, -20, 3) };
   const material = new THREE.MeshBasicMaterial();
   const shader = { uniforms: {}, fragmentShader: "#include <clipping_planes_fragment>", vertexShader: "#include <begin_vertex>\n#include <project_vertex>" };
@@ -331,11 +331,18 @@ test("unlit map props use the same whole-module mask, leaving source effects alo
   assert.match(shader.fragmentShader, /vPeakFollowHidden > 0\.5/);
   assert.equal(material.transparent, false);
   assert.equal(material.depthWrite, true);
-  const effect = new THREE.MeshBasicMaterial();
+  const effect = new THREE.MeshBasicMaterial({ transparent: true, opacity: .3, depthWrite: false });
   effect.userData.peakSourceEffect = { kind: "fog" };
-  const original = effect.onBeforeCompile;
+  effect.onBeforeCompile = shader => { shader.uniforms.nativeEffect = { value: 1 }; };
   applyFollowOcclusion(effect, followOcclusion);
-  assert.equal(effect.onBeforeCompile, original);
+  const effectShader = { uniforms: {}, vertexShader: "#include <begin_vertex>", fragmentShader: "#include <clipping_planes_fragment>" };
+  effect.onBeforeCompile(effectShader);
+  assert.equal(effectShader.uniforms.nativeEffect.value, 1);
+  assert.equal(effectShader.uniforms.peakFollowSubject, followOcclusion);
+  assert.match(effectShader.fragmentShader, /vPeakFollowHidden > 0\.5/);
+  assert.equal(effect.transparent, true);
+  assert.equal(effect.depthWrite, false);
+  assert.equal(effect.opacity, .3);
 });
 
 test("audited shadow-only affine/GPU panels are omitted, same-name solid props remain", () => {
