@@ -1490,7 +1490,8 @@ export class TrailScene {
           { renderedFacesOnly: true, minimumDistance: this.camera.near });
       const halfFov = THREE.MathUtils.degToRad(this.camera.getEffectiveFOV() / 2);
       const shortAxis = Math.min(1, this.camera.aspect);
-      subject.w = blocked ? THREE.MathUtils.clamp(-subject.z * Math.tan(halfFov) * shortAxis * .33, 1.15, 6) : 0;
+      // Open half of the viewport's short axis (previously one third).
+      subject.w = blocked ? THREE.MathUtils.clamp(-subject.z * Math.tan(halfFov) * shortAxis * .5, 1.75, 9) : 0;
     }
     // OrbitControls 目标同步：退出跟随时无缝交还。
     this.controls.target.copy(result.target);
