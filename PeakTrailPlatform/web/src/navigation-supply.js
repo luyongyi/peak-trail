@@ -4,13 +4,13 @@ import { parseCaptureId } from "./packet-watch-client.js";
 
 const ROOT = "/api/navigation/captures";
 const CATEGORIES = {
-  all: ["全部", "All", ""],
-  climb: ["攀登", "Climbing", "⤴"],
-  food: ["饮食", "Food", "◒"],
-  medical: ["医疗", "Medical", "✚"],
-  gear: ["装备", "Gear", "◈"],
-  mystical: ["奇物", "Mystical", "✦"],
-  other: ["其他", "Other", "◇"],
+  all: ["全部", "All"],
+  climb: ["攀登", "Climbing"],
+  food: ["饮食", "Food"],
+  medical: ["医疗", "Medical"],
+  gear: ["装备", "Gear"],
+  mystical: ["奇物", "Mystical"],
+  other: ["其他", "Other"],
 };
 const ORDER_WAIT_MS = 70_000;
 const REQUEST_TIMEOUT_MS = 6_000;
@@ -49,7 +49,7 @@ export function createNavigationSupply({ menu, actionButtons, airportAction, air
   let context = {};
   let session = null, nextRefresh = 0, refreshing = false;
   let mode = null, category = "all", selected = null, dialogTarget = null, message = null;
-  let order = null, itemButtons = new Map(), filtersKey = "", itemsKey = "", focusOnClose;
+  let order = null, itemButtons = new Map(), filtersKey = "", itemsKey = "", giveKey = "", focusOnClose;
   let wasTargetReady = false, airportPlayerId = null, recipientsKey = "";
   const doc = dialog.ownerDocument;
 
@@ -76,6 +76,22 @@ export function createNavigationSupply({ menu, actionButtons, airportAction, air
     message = { chinese, english, state };
   }
 
+  function itemIcon(item) {
+    return resolveItemAsset(context.gameAssetPack, { itemId: item.itemId, name: item.name })?.iconUrl || null;
+  }
+
+  function iconImage(url, className = "") {
+    const image = doc.createElement("img");
+    image.alt = "";
+    image.className = className;
+    image.decoding = "async";
+    image.hidden = true;
+    image.addEventListener("load", () => { image.hidden = false; }, { once: true });
+    image.addEventListener("error", () => { image.hidden = true; }, { once: true });
+    image.src = url;
+    return image;
+  }
+
   function renderCatalog() {
     const languageKey = tr("zh", "en");
     const shownCategories = ["all", ...new Set(Array.from(session.items.values(), item => item.category))];
@@ -93,9 +109,8 @@ export function createNavigationSupply({ menu, actionButtons, airportAction, air
     }
     for (const button of filters.children) button.setAttribute("aria-pressed", String(button.dataset.supplyCategory === category));
     const query = search.value.trim().normalize("NFKC").toLowerCase();
-    const visible = Array.from(session.items.values(), item => {
-      return [item, resolveItemAsset(context.gameAssetPack, { itemId: item.itemId, name: item.name })?.iconUrl];
-    }).filter(([item]) => itemMatches(item, category, query));
+    const visible = Array.from(session.items.values(), item => [item, itemIcon(item)])
+      .filter(([item]) => itemMatches(item, category, query));
     const listKey = JSON.stringify([languageKey, category, query, visible]);
     if (itemsKey !== listKey) {
       itemsKey = listKey;
@@ -109,14 +124,10 @@ export function createNavigationSupply({ menu, actionButtons, airportAction, air
         const icon = doc.createElement("span");
         icon.className = "navigation-supply-icon";
         icon.setAttribute("aria-hidden", "true");
-        icon.textContent = CATEGORIES[item.category][2];
         if (iconUrl) {
-          const image = doc.createElement("img");
-          image.alt = "";
-          image.hidden = true;
-          image.decoding = "async";
-          image.addEventListener("load", () => { icon.hidden = true; image.hidden = false; }, { once: true });
-          image.src = iconUrl;
+          const image = iconImage(iconUrl);
+          image.addEventListener("load", () => { icon.hidden = true; }, { once: true });
+          image.addEventListener("error", () => { icon.hidden = false; }, { once: true });
           button.append(image);
         }
         const label = doc.createElement("span");
@@ -181,9 +192,17 @@ export function createNavigationSupply({ menu, actionButtons, airportAction, air
       renderCatalog();
       const item = session.items.get(selected);
       give.disabled = !item || !target || Boolean(order);
-      give.textContent = order ? tr("正在发送…", "Sending…")
+      const giveText = order ? tr("正在发送…", "Sending…")
         : item && target ? tr(`给 ${target.name} 1 个${itemLabel(item)}`, `Give ${target.name} 1 × ${itemLabel(item)}`)
         : tr("选择物品", "Select an item");
+      const iconUrl = item && target ? itemIcon(item) : null;
+      const key = JSON.stringify([giveText, iconUrl]);
+      if (giveKey !== key) {
+        giveKey = key;
+        const label = doc.createElement("span");
+        label.textContent = giveText;
+        give.replaceChildren(...(iconUrl ? [iconImage(iconUrl, "navigation-supply-confirm-icon")] : []), label);
+      }
     }
     const statusText = message ? tr(message.chinese, message.english) : "";
     if (status.textContent !== statusText) status.textContent = statusText;

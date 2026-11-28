@@ -186,6 +186,7 @@ test("waiting polls distinguish the verified airport from other scenes and build
     f.client.consume(payload({ manifest: null, records: [], lastSequence: 0, sceneName, gameBuildId }));
     assert.equal(f.states.at(-1).airport, airport);
     assert.equal(f.states.at(-1).airportModelAvailable, available);
+    assert.equal(f.states.at(-1).gameBuildId, gameBuildId === "26542162" ? gameBuildId : null);
     assert.equal(f.states.at(-1).manifest, null);
   }
 });

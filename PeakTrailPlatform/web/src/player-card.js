@@ -1,6 +1,7 @@
 import { renderHeadPreview, headAppearanceFingerprint } from "./avatar-renderer.js";
 import { getLocale, tr, gameItemName } from "./i18n.js";
 import { staminaLayout, conditionPresentation, conditionSummary, appearanceFormPresentation, appearanceVisualPresentation, effectPresentation } from "./player-conditions.js";
+import { updateStaminaHud } from "./stamina-hud.js";
 import {
   gameAssetFingerprint,
   resolveAppearanceAssets,
@@ -496,17 +497,14 @@ export function updatePlayerHud(root, name, player, pack, movement = null) {
   if (nameNode.textContent !== name) nameNode.textContent = name;
   if (heightNode.textContent !== altitude) heightNode.textContent = altitude;
 
-  const { ratio, output } = staminaLayout(player.telemetry, player.status);
+  const { ratio } = staminaLayout(player.telemetry, player.status);
+  updateStaminaHud(root.querySelector(".game-stamina"), player.telemetry, player.status, pack);
   const slots = hudItems(player, pack);
   const values = player.status?.ready === true ? player.status.values.filter(s => s.amount > 0 || s.staminaBlock > 0 || s.extraStaminaBlock > 0)
     : (player.navigationConditions || []).map(type => ({ type }));
   const labels = [];
   if (player.life === "dead") labels.push(tr("已死亡", "Dead"));
   else if (Object.hasOwn(HUD_MOVEMENT, movement)) labels.push(tr(...HUD_MOVEMENT[movement]));
-  if (ratio !== null) {
-    const extra = staminaLayout(player.telemetry, player.status, true);
-    labels.push(tr(`体力 ${output}`, `Stamina ${output}`) + (extra.ratio > 0 ? ` +${extra.output}` : ""));
-  }
   if (values.length) {
     labels.push(...values.slice(0, 2).map(s => conditionPresentation(s.type).label));
     if (values.length > 2) labels.push(`+${values.length - 2}`);
@@ -520,9 +518,6 @@ export function updatePlayerHud(root, name, player, pack, movement = null) {
   }
   const summary = root.querySelector(".player-hud-status span"), label = labels.join(" · ");
   if (summary.textContent !== label) summary.textContent = label;
-  const meter = root.querySelector("meter");
-  if (meter.hidden !== (ratio === null)) meter.hidden = ratio === null;
-  if (ratio !== null && meter.value !== ratio) meter.value = ratio;
   const list = root.querySelector(".player-hud-slots");
   const key = JSON.stringify(slots);
   if (list.dataset.key === key) return;

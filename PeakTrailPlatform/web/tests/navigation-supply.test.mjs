@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { createNavigationSupply } from "../src/navigation-supply.js";
+import { loadGameAssetPack, resolveItemAsset } from "../src/game-assets.js";
 
 class Element {
-  constructor(document) {
+  constructor(document, tagName = "") {
     this.ownerDocument = document;
+    this.tagName = tagName;
     this.children = [];
     this.dataset = {};
     this.listeners = new Map();
@@ -34,7 +38,7 @@ const response = (value, status = 200) => ({ ok: status < 400, status, json: asy
 const tick = () => new Promise(resolve => setImmediate(resolve));
 
 function fixture(fetchImpl) {
-  const document = { createElement: () => new Element(document) };
+  const document = { createElement: tagName => new Element(document, tagName) };
   const elements = Object.fromEntries(["menu", "airportAction", "airportGroup", "dialog", "title", "close", "shop", "recipient", "recipientPicker", "recipientSelect", "search", "filters", "items", "empty", "give", "status"]
     .map(key => [key, new Element(document)]));
   const action = new Element(document);
@@ -46,6 +50,66 @@ function fixture(fetchImpl) {
   };
   return { ...elements, action, api, select };
 }
+
+const gameAssetPack = {
+  gameBuildId: "26542162", source: "local-unity-assets",
+  catalogUrl: new URL("https://example.test/data/game-assets/26542162/catalog.json"),
+  itemIndex: new Map([["65", { itemId: 65, name: "rope spool", prefabName: "RopeSpool", icon: "icons/RopeSpool.png" }]]),
+  ui: { defaultIcon: "ui/default-slot.png" },
+};
+
+test("the published native build includes the exact icons for every current supply item", async () => {
+  const pack = await loadGameAssetPack("26542162", {
+    indexUrl: new URL("../../data/avatar-assets/catalog.json", import.meta.url),
+    fetchImpl: async url => ({ ok: true, json: async () => JSON.parse(await readFile(url, "utf8")) }),
+  });
+  const nativeItems = [[65, "RopeSpool"], [18, "ClimbingSpike"], [63, "RopeShooter"], [0, "Airplane Food"],
+    [73, "TrailMix"], [71, "Sports Drink"], [7, "Bandages"], [29, "FirstAidKit"], [23, "Compass"],
+    [32, "Flare"], [45, "MagicBean"], [13, "BingBong"]];
+  for (const [itemId, prefabName] of nativeItems) {
+    const asset = resolveItemAsset(pack, { itemId });
+    assert.equal(asset?.entry.prefabName, prefabName);
+    assert.ok(asset.iconUrl, `Missing native icon for ${prefabName}`);
+    const declared = pack.catalog.assets.find(entry => entry.path === asset.entry.icon);
+    assert.ok(declared, `Unpublished native icon for ${prefabName}`);
+    const bytes = await readFile(new URL(asset.iconUrl));
+    assert.equal(bytes.subarray(0, 8).toString("hex"), "89504e470d0a1a0a");
+    assert.equal(bytes.length, declared.bytes);
+    assert.equal(createHash("sha256").update(bytes).digest("hex"), declared.sha256);
+  }
+});
+
+test("native item art arriving after the dialog opens replaces empty slots and follows the selected item", async () => {
+  const f = fixture(async () => response(available));
+  f.api.update(context); await tick(); await f.action.fire("click");
+  const missing = f.items.children[0].children.find(child => child.className === "navigation-supply-icon");
+  assert.equal(missing.textContent, undefined, "missing art must not pretend a category glyph is the item");
+  f.api.update({ ...context, gameAssetPack });
+  const button = f.items.children[0], image = button.children.find(child => child.tagName === "img");
+  const fallback = button.children.find(child => child.className === "navigation-supply-icon");
+  assert.equal(image.src, "https://example.test/data/game-assets/26542162/icons/RopeSpool.png");
+  assert.equal(image.hidden, true);
+  await image.fire("load");
+  assert.equal(image.hidden, false); assert.equal(fallback.hidden, true);
+  await f.items.fire("click", button);
+  const selectedImage = f.give.children.find(child => child.tagName === "img");
+  assert.equal(selectedImage.src, image.src);
+  assert.equal(selectedImage.className, "navigation-supply-confirm-icon");
+  assert.equal(f.give.disabled, false);
+});
+
+test("a broken native image keeps its label and neutral empty slot without enlarging the native black pixel", async () => {
+  const f = fixture(async () => response(available));
+  f.api.update({ ...context, gameAssetPack }); await tick(); await f.action.fire("click");
+  const button = f.items.children[0], image = button.children.find(child => child.tagName === "img");
+  const fallback = button.children.find(child => child.className === "navigation-supply-icon");
+  await image.fire("error");
+  assert.equal(image.hidden, true); assert.equal(fallback.hidden, false);
+  assert.equal(fallback.children.length, 0);
+  assert.equal(button.children.at(-1).textContent.length > 0, true);
+  await f.items.fire("click", button);
+  assert.equal(f.give.disabled, false);
+});
 
 test("live supply submits once for the selected scene and actor, then reports only request sent", async () => {
   const calls = [];

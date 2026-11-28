@@ -608,6 +608,23 @@ function syncGameAssetsForTrace(trace, selectionRevision) {
   });
 }
 
+function syncPacketGameAssets(watch, gameBuildId) {
+  if (watch.gameAssetBuildId === gameBuildId) return;
+  watch.gameAssetBuildId = gameBuildId;
+  watch.gameAssetPack = null;
+  const request = { captureId: watch.id, gameBuildId };
+  watch.gameAssetRequest = request;
+  if (!gameBuildId) return;
+  // The airport has no climbing trace. Load only this capture's observed build,
+  // never reuse art left over from a previously opened map or recording.
+  void cachedGameAssetPack(gameBuildId).then(pack => {
+    if (!watch.active || state.watch !== watch || watch.id !== request.captureId || watch.gameAssetRequest !== request) return;
+    watch.gameAssetPack = pack;
+    syncNavigationSupply();
+    syncPlayerHud();
+  }).catch(() => { /* Missing art leaves the labeled item slots usable. */ });
+}
+
 let viewer;
 const liveCameraController = createLiveCameraController();
 let itemEventPanel, communitySnapshot = null;
@@ -1797,6 +1814,7 @@ async function startWatch(id, { replaceUrl = true, watchCode = null, capture = f
   const watch = state.watch;
   Object.assign(watch, { active: true, id, kind: capture ? "packet" : "v2", operator: capture && operator, trace: null, status: "connecting", connection: "connecting",
     captureStatus: null, airport: false, airportModelAvailable: false,
+    gameAssetBuildId: null, gameAssetPack: null, gameAssetRequest: null,
     playout: capture ? createPacketPlayout() : null,
     lastRecordAt: null, following: true, dirty: false, records: 0, playerKey: "", epoch: null,
     initializing: false, awaitingRun: false, message: "", sceneName: null, persistence: null, code: parseWatchCode(watchCode), copiedUntil: 0, copiedKind: null });
@@ -1872,6 +1890,7 @@ async function startWatch(id, { replaceUrl = true, watchCode = null, capture = f
         watch.captureStatus = data.capture?.status;
         watch.airport = data.airport;
         watch.airportModelAvailable = data.airportModelAvailable;
+        syncPacketGameAssets(watch, data.gameBuildId);
       }
       if (!capture && data.epoch === 0 && data.manifest === null) watch.awaitingRun = true;
       if (data.persistence) watch.persistence = data.persistence;
@@ -2986,17 +3005,20 @@ function syncNavigationSupply() {
     followsLive: packet && watch.captureStatus === "recording" && watch.following && !watch.initializing
       && (liveAirport || watch.connection === "connected" && Boolean(watch.trace)),
     liveAirport,
-    playerId: viewer?.followTargetId, gameAssetPack: state.gameAssetPack,
+    playerId: viewer?.followTargetId, gameAssetPack: packet ? watch.gameAssetPack : null,
   });
 }
 function syncPlayerHud() {
+  const watch = state.watch;
   const id = viewer?.followTargetId;
   const visible = id != null && state.trace
     && (document.body.classList.contains("map-expanded") || elements.playerHud.classList.contains("has-navigation-supply"));
   const player = visible ? tracePlayerStateAtTime(state.trace, id, state.currentTime) : null;
   const movement = player && state.watch?.active && state.watch.trace === state.trace
     ? state.watch.client?.movementAt?.(id, state.currentTime, player.sample?.activeSegment) : null;
-  updatePlayerHud(elements.playerHud, visible ? participantName(id) : "", player, state.gameAssetPack, player?.movement ?? movement);
+  const pack = watch.active && watch.kind === "packet" && watch.trace === state.trace
+    ? watch.gameAssetPack : state.gameAssetPack;
+  updatePlayerHud(elements.playerHud, visible ? participantName(id) : "", player, pack, player?.movement ?? movement);
 }
 elements.sceneCanvas.addEventListener("peaktrail-follow-status", (event) => syncFollowHud(event.detail));
 elements.sceneCanvas.addEventListener("peaktrail-airport-status", updateWatchStatus);

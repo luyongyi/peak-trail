@@ -13,16 +13,18 @@ const pack = await loadGameAssetPack("26542162", { indexUrl: new URL("catalog.js
 const baseline = { captured: true, ready: true, skinIndex: 0, eyesIndex: 0, mouthIndex: 0,
   accessoryIndex: 0, outfitIndex: 0, hatIndex: 0 };
 
-test("3.1 portraits are fresh installed-build derivatives with no outfit or world geometry", async () => {
+test("3.1 portraits retain their head-only geometry alongside native navigation UI", async () => {
   const checked = await readGameAssets(fileURLToPath(root));
   assert.ok(checked.characterBuilds.has("26542162"));
   assert.equal(pack.catalog.profile, "head-portraits");
   assert.equal(pack.catalog.sourceEvidence.installedSteamBuildId, "26542162");
   assert.equal(pack.catalog.sourceEvidence.assembly.sha256, "a3643f11dc444d86491270b224c0a0caf9126a10b26731feb97fc85ad1d82038");
   assert.equal(pack.catalog.sourceEvidence.serializedInputs.length, 5);
-  assert.deepEqual(pack.catalog.items, []);
-  assert.deepEqual(pack.catalog.ui, {});
-  assert.ok(pack.catalog.assets.every(asset => !/^(?:models\/(?:world|fit-|sash-|medal-)|icons\/|ui\/)/.test(asset.path)));
+  assert.equal(pack.catalog.items.length, 194);
+  assert.ok(pack.catalog.items.every(item => !item.model && !item.worldModel));
+  assert.equal(pack.catalog.sourceEvidence.navigationUi.selection, "canonical-item-icons-and-serialized-ui-references");
+  assert.ok(pack.ui.staminaFill && pack.ui.staminaOutline && pack.ui.extraStaminaIcon);
+  assert.ok(pack.catalog.assets.every(asset => !/^models\/(?:world|fit-|sash-|medal-)/.test(asset.path)));
   const model = await read(new URL(pack.customization.avatar.model, pack.catalogUrl));
   assert.equal(selectHeadModelParts(model).length, model.parts.length);
   assert.deepEqual(new Set(model.parts.map(part => part.role)), new Set(["skin", "eyes", "mouth", "accessory"]));

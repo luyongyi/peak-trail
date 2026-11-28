@@ -152,7 +152,9 @@ export class PacketWatchClient {
     }
     if (samples.length || records.length && (rebuild || lastSequence > this.seq)) this.lastRecordAt = this.now();
     if (!manifest) this.lastRecordAt = null;
-    const metadata = { status, epoch, capture, manifest, airport: projection.sceneName === "Airport",
+    const rawBuildId = String(manifest?.gameBuildId ?? projection.gameBuildId ?? "");
+    const metadata = { status, epoch, capture, manifest, gameBuildId: /^[1-9][0-9]{0,19}$/.test(rawBuildId) ? rawBuildId : null,
+      airport: projection.sceneName === "Airport",
       airportModelAvailable: projection.sceneName === "Airport" && projection.gameBuildId === "26542162",
       sessionId: this.id, watchId: this.id,
       lastSeq: lastSequence, lastRecordAt: this.lastRecordAt ?? null };

@@ -85,12 +85,12 @@ re-exporting a build still rewrites that build's derived catalog, so rerun addit
 steps before publishing. Raw Unity files, player captures and extraction caches
 are not part of this bundle.
 
-The live-navigation 3.1 pack is **26542162**, with the `head-portraits` profile.
+The live-navigation 3.1 pack is **26542162**, based on the `head-portraits` profile.
 It was freshly extracted from the installed build, rather than relabeled from
 3.0.1. Its source evidence records assembly SHA-256
 `a3643f11dc444d86491270b224c0a0caf9126a10b26731feb97fc85ad1d82038`
-and the five serialized input/texture-stream fingerprints. It contains 226
-allowlisted files (13,472,140 bytes): the independent head and face cards, 9 skin
+and the five serialized input/texture-stream fingerprints. Its portrait portion contains 227
+allowlisted files (13,473,303 bytes): the independent head and face cards, 9 skin
 colors, 18 eye choices, 19 mouth choices, 21 accessories, all 47 hat renderers,
 and 34 outfit entries containing only hat material/override metadata. It does
 not contain outfit/body meshes, item models, world objects, or player data.
@@ -114,6 +114,27 @@ copied. `web/tests/head-pack-310.test.mjs` verifies all recorded cosmetic indice
 and inherited/overridden hat combinations using the actual browser render-plan
 functions. The map catalog's `playerVisualization: { mode: "heads", gameBuildId:
 "26542162" }` requires this exact build's character assets when staging.
+
+The additive navigation UI export follows the same build's `ItemDatabase.Objects`
+for all 194 canonical item entries (192 native icons; the two source null icons
+remain unavailable), `InventoryItemUI` for slot art, and the scene's `StaminaBar`
+and `BarAffliction` references for stamina artwork and colors. It adds 172 unique
+PNG dependencies (12,791,747 bytes), preserves the portrait catalog and all
+existing asset hashes, and does not export item models. Browsers load only the
+icons they display. The complete pack now has 399 allowlisted files.
+
+```powershell
+& local/python/.venv/Scripts/python.exe PeakTrailPlatform/tools/game-assets/export-navigation-ui.py --build 26542162 --output local/head-assets-26542162
+& local/python/.venv/Scripts/python.exe PeakTrailPlatform/tools/game-assets/test_navigation_ui.py
+```
+
+`ui` contains the directly usable sprite paths. `uiStyle.stamina.images` retains
+their original tints, nine-slice borders, pixel dimensions and Unity component /
+sprite references. Native normal stamina is green, extra stamina is yellow-green
+with its own lightning icon, and the outline is cream. The source full bar is
+600 units wide and 45 units high; both fills use absolute fractions of that full
+width, rather than treating a damaged capacity as full. No percentage labels are
+part of the native stamina bar.
 
 The historical 26134529 pack was re-exported from the installed 3.0 build,
 including all 194 canonical items and world models, 192 available native icons,
