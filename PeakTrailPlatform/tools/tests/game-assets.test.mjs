@@ -67,6 +67,18 @@ test("world models and NPC head references must belong to the checksummed allowl
   } finally { await f.clean(); }
 });
 
+test("nested native UI layout textures must remain in the checksummed allowlist", async t => {
+  const f = await fixture(); t.after(f.clean);
+  for (const texture of ["ui/unlisted.png", "../private-save.json", "https://external.invalid/ui.png"]) {
+    f.build.uiStyle = { stamina: { nativeLayout: { children: [{ components: [{ texture }] }] } } };
+    await f.save();
+    await assert.rejects(readGameAssets(f.root), /Unlisted game asset reference/);
+  }
+  f.build.uiStyle.stamina.nativeLayout.children[0].components[0].texture = "icons/item.png";
+  await f.save();
+  assert.equal((await readGameAssets(f.root)).files.length, 3);
+});
+
 test("transformed avatar models and heads remain inside the explicit deployment allowlist", async () => {
   const f = await fixture();
   try {

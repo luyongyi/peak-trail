@@ -120,8 +120,11 @@ for all 194 canonical item entries (192 native icons; the two source null icons
 remain unavailable), `InventoryItemUI` for slot art, and the scene's `StaminaBar`
 and `BarAffliction` references for stamina artwork and colors. It adds 172 unique
 PNG dependencies (12,791,747 bytes), preserves the portrait catalog and all
-existing asset hashes, and does not export item models. Browsers load only the
-icons they display. The complete pack now has 399 allowlisted files.
+existing asset hashes, and does not export item models. The subsequent native UI
+render audit adds 29 derivatives (5,958,805 bytes), including full logical sprite
+rectangles and the original paper/noise textures. Item icons are loaded on demand;
+the stamina material resources load when the HUD first needs this build's art.
+The complete pack now has 428 allowlisted files.
 
 ```powershell
 & local/python/.venv/Scripts/python.exe PeakTrailPlatform/tools/game-assets/export-navigation-ui.py --build 26542162 --output local/head-assets-26542162
@@ -129,8 +132,27 @@ icons they display. The complete pack now has 399 allowlisted files.
 ```
 
 `ui` contains the directly usable sprite paths. `uiStyle.stamina.images` retains
-their original tints, nine-slice borders, pixel dimensions and Unity component /
-sprite references. Native normal stamina is green, extra stamina is yellow-green
+their original tints, nine-slice borders, trim padding, logical pixel dimensions
+and Unity component / sprite references. Tight `Sprite.image` crops must not be
+used with the untrimmed sprite borders: `ui/native/` reconstructs the actual
+source `Sprite.rect` from its unpacked texture. The published outline and cap
+are both 256×256, rather than the 239×239 and 84×247 cropped previews.
+
+`uiStyle.stamina.material` and `conditionMaterial` retain the audited `Scouts/UI`
+parameters. Its output is not raw sprite alpha: normal alpha is
+`smoothstep(Step, Step + StepSmooth, Noise + AlphaStrength * spriteAlpha)`;
+the status-fill variant additionally multiplies the input by decoded sprite red.
+The original bilinear noise/paper textures, texture color spaces, tint conversion
+and clipping parameters are recorded. `nativeLayout` preserves the scene's
+actual transforms, masks, image types, material names and layout ordering;
+`layout` gives compact render dimensions in native UI units. Status fills use
+the native tiled dither texture and their icons sit above the normal bar.
+Petrification uses its own right-side icon with the source preserve-aspect rule.
+The Web renderer evaluates the native material at a fixed phase after slicing,
+keeps a bounded 64-surface cache, and does no continuous texture animation or
+extra WebGL rendering. Only noise and paper textures retain CPU pixel buffers.
+
+Native normal stamina is green, extra stamina is yellow-green
 with its own lightning icon, and the outline is cream. The source full bar is
 600 units wide and 45 units high; both fills use absolute fractions of that full
 width, rather than treating a damaged capacity as full. No percentage labels are

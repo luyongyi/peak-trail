@@ -1,6 +1,7 @@
 import { resolveUiAsset } from "./game-assets.js";
 import { staminaLayout } from "./player-conditions.js";
 import { tr } from "./i18n.js";
+import { updateNativeStaminaCanvas } from "./stamina-canvas.js";
 
 const views = new WeakMap();
 const fallbackColors = { staminaBacking: "#1a444d", staminaFill: "#59c800", staminaOutline: "#dfdac2",
@@ -10,35 +11,18 @@ const color = value => Array.isArray(value) && value.length === 4 && value.every
 const percent = value => `${Math.max(0, Math.min(1, value)) * 100}%`;
 function node(tag, className) { const result = document.createElement(tag); result.className = className; return result; }
 
-// Unity's sliced sprites must retain their corners when a bar shrinks. Nine
-// small CSS masks reuse the original alpha texture and serialized native tint;
-// unlike a stretched image this also works on Safari without mask-border.
+// Semantic/fallback meters remain readable while exact-build art is loading.
+// Native art is rendered after slicing and shader evaluation in Canvas2D;
+// using these sprites as raw CSS alpha masks does not reproduce Scouts/UI.
 function surface(key) {
   const result = node("span", `game-stamina-surface game-stamina-${key}`);
   result.setAttribute("aria-hidden", "true");
-  for (let i = 0; i < 9; i++) result.append(node("i", ""));
   return result;
 }
 
 function paintSurface(element, pack, key) {
-  const art = resolveUiAsset(pack, key), style = pack?.catalog?.uiStyle?.stamina?.images?.[key];
+  const style = pack?.catalog?.uiStyle?.stamina?.images?.[key];
   element.style.setProperty("--native-tint", color(style?.color) || fallbackColors[key]);
-  const valid = art && style?.size?.length === 2 && style?.border?.length === 4
-    && [...style.size, ...style.border].every(Number.isFinite) && style.size.every(v => v > 0);
-  element.classList.toggle("has-art", !!valid);
-  if (!valid) return;
-  const [w, h] = style.size, [left, bottom, right, top] = style.border;
-  const widths = [left, w - left - right, right], heights = [top, h - top - bottom, bottom];
-  if ([...widths, ...heights].some(v => v <= 0)) { element.classList.remove("has-art"); return; }
-  const ppu = style.pixelsPerUnitMultiplier > 0 ? style.pixelsPerUnitMultiplier : 8;
-  // The rendered 18px bar is 0.4 times the native 45px height.
-  element.style.gridTemplateColumns = `${left / ppu * .4}px 1fr ${right / ppu * .4}px`;
-  element.style.gridTemplateRows = `${top / ppu * .4}px 1fr ${bottom / ppu * .4}px`;
-  element.style.setProperty("--native-art", `url("${art.url}")`);
-  [...element.children].forEach((part, i) => {
-    part.style.setProperty("--mask-size", `${w / widths[i % 3] * 100}% ${h / heights[Math.floor(i / 3)] * 100}%`);
-    part.style.setProperty("--mask-position", `${i % 3 * 50}% ${Math.floor(i / 3) * 50}%`);
-  });
 }
 
 function track(extra = false) {
@@ -56,8 +40,10 @@ function build(root) {
   const main = track(), extra = track(true), extraRow = node("div", "game-stamina-extra");
   const lightning = node("i", "game-stamina-lightning"), pending = node("span", "game-stamina-pending");
   lightning.setAttribute("aria-hidden", "true");
-  extraRow.append(lightning, extra.root); root.replaceChildren(main.root, extraRow, pending);
-  const view = { main, extra, extraRow, lightning, pending, pack: undefined };
+  const canvas = node("canvas", "game-stamina-native");
+  canvas.hidden = true; canvas.setAttribute("aria-hidden", "true");
+  extraRow.append(lightning, extra.root); root.replaceChildren(main.root, extraRow, pending, canvas);
+  const view = { main, extra, extraRow, lightning, pending, canvas, pack: undefined };
   views.set(root, view); return view;
 }
 
@@ -123,4 +109,5 @@ export function updateStaminaHud(root, telemetry, status, pack = null) {
   view.pending.hidden = !unavailable;
   view.pending.textContent = telemetry?.ready === false ? tr("体力同步中", "Stamina syncing") : tr("体力未记录", "Stamina not recorded");
   root.hidden = unavailable && !telemetry?.captured && telemetry?.ready !== false;
+  updateNativeStaminaCanvas(view.canvas, pack, { main, extra, status }, rendered => root.classList.toggle("is-native-rendered", rendered));
 }

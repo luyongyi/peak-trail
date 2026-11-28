@@ -55,6 +55,7 @@ export async function readGameAssets(directory) {
     checkReferences(build.items);
     checkReferences(build.customization);
     checkReferences(build.worldObjects);
+    checkReferences(build.uiStyle);
     // A model is not complete just because its JSON checksum is valid: its
     // material textures and decoded face previews must be staged as well.
     for (const asset of build.assets) if (/\.json$/i.test(asset.path)) {

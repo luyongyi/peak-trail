@@ -101,7 +101,7 @@ test("native stamina bars preserve damage, bonus scale and unknown state without
   } finally { setLocale("zh-CN"); globalThis.document = previous; }
 });
 
-test("native stamina art uses the exact build textures and clears them when the build changes", () => {
+test("fallback stamina never treats unshaded native sprites as CSS alpha masks", () => {
   const previous = globalThis.document;
   globalThis.document = { createElement: name => new Node(name), documentElement: {} };
   try {
@@ -112,7 +112,8 @@ test("native stamina art uses the exact build textures and clears them when the 
       catalog: { uiStyle: { stamina: { images: { staminaFill: style, staminaOutline: style } } } } };
     updateStaminaHud(root, { stamina: .5, maxStamina: 1 }, null, pack);
     const fill = root.children[0].querySelector(".game-stamina-fill");
-    assert.equal(fill.classList.contains("has-art"), true); assert.equal(fill.children.length, 9);
+    assert.equal(fill.classList.contains("has-art"), false); assert.equal(fill.children.length, 0);
+    assert.equal(root.children[3].hidden, true, "unsupported Canvas must retain the semantic fallback meter");
     updateStaminaHud(root, { stamina: .5, maxStamina: 1 }, null, null);
     assert.equal(fill.classList.contains("has-art"), false);
   } finally { globalThis.document = previous; }

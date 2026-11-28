@@ -3351,19 +3351,16 @@ body:has(.app-shell[data-workspace-mode="watch"]) { overflow: hidden; }
 .player-hud-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .player-hud-altitude { flex: none; color: var(--accent-strong); font-variant-numeric: tabular-nums; }
 .player-hud-status { font-size: 11px; color: var(--muted-strong); }
-.game-stamina { display: grid; gap: 5px; width: 260px; max-width: 100%; padding: 3px 0 3px 20px; }
+.game-stamina { position: relative; display: grid; gap: 5px; width: 300px; max-width: 100%; padding: 3px 0; }
 .game-stamina-track { position: relative; height: 18px; min-width: 0; }
-.game-stamina-surface { position: absolute; inset: 0; display: grid; min-width: 0; pointer-events: none; overflow: hidden; }
-.game-stamina-surface.has-art > i {
-  display: block; min-width: 0; min-height: 0; background: var(--native-tint);
-  -webkit-mask-image: var(--native-art); mask-image: var(--native-art);
-  -webkit-mask-size: var(--mask-size); mask-size: var(--mask-size);
-  -webkit-mask-position: var(--mask-position); mask-position: var(--mask-position);
-  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+.game-stamina-native { display: block; max-width: 100%; height: auto; }
+.game-stamina-native[hidden], .game-stamina [hidden] { display: none; }
+.game-stamina.is-native-rendered > .game-stamina-track,
+.game-stamina.is-native-rendered > .game-stamina-extra {
+  position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%);
 }
-.game-stamina-surface:not(.has-art) { border-radius: 4px; background: var(--native-tint); }
-.game-stamina-surface:not(.has-art) > i { display: none; }
-.game-stamina-outline:not(.has-art) { background: transparent; border: 2px solid var(--native-tint); }
+.game-stamina-surface { position: absolute; inset: 0; min-width: 0; pointer-events: none; overflow: hidden; border-radius: 4px; background: var(--native-tint); }
+.game-stamina-outline { background: transparent; border: 2px solid var(--native-tint); }
 .game-stamina-content { position: absolute; inset: 2px; border-radius: 3px; overflow: hidden; }
 .game-stamina-fill { right: auto; transition: width .12s linear; }
 .game-stamina-blocked { position: absolute; right: 0; height: 100%; background: #69747c; }
@@ -3373,7 +3370,7 @@ body:has(.app-shell[data-workspace-mode="watch"]) { overflow: hidden; }
   display: block; width: 14px; height: 14px; background: currentColor; color: #dfdac2;
   -webkit-mask: var(--native-icon) center / contain no-repeat; mask: var(--native-icon) center / contain no-repeat;
 }
-.game-stamina-extra { position: relative; }
+.game-stamina-extra { position: relative; margin-left: 20px; }
 .game-stamina-extra .game-stamina-track { transition: width .12s linear; }
 .game-stamina-lightning { position: absolute; left: -18px; top: 2px; }
 .game-stamina-pending { color: var(--muted); font-size: 11px; }
